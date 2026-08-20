@@ -249,3 +249,4 @@
 | 0265 | SVG диаграмм не несут версию graphviz | [0265-book-svg-graphviz-version.md](0265-book-svg-graphviz-version.md) | Готово: молчаливая поломка регенерации устранена |
 | 0271 | Устройство интеграционных тестов сторожится машиной | [0271-test-target-gate.md](0271-test-target-gate.md) | Готово: T1 и T2 ловятся пробой |
 | 0272 | Обвязка замера: прогрев, два прогона, вердикт | [0272-build-measurement-harness.md](0272-build-measurement-harness.md) | Готово: вердикт по разбросу, сторож на быстрых командах |
+| 0288 | Сторожа фикстур проверяют обещание, а не разбор | [0288-fixture-guards-audit.md](0288-fixture-guards-audit.md) | Готово: 5 усилено, 28 в ратчете |

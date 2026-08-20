@@ -159,6 +159,15 @@ if require_tool python3 "проверка ссылок, правило 14; apt i
   "$(dirname "$0")/check-test-targets.py" --self-test
   "$(dirname "$0")/check-test-targets.py"
 
+  # Сторожа фикстур (фича 0288). Фикстура `valid/` что-то ОБЕЩАЕТ, и сторож
+  # обязан проверять обещание, а не факт разбора: `example_ce6_type_inference_
+  # chain_valid` был зелёным всё время, пока обещанный им вывод типа не работал
+  # вовсе (фича 0204). Гейт — ратчет: список констатаций заморожен, новые
+  # роняют прогон.
+  echo "Сторожа фикстур: обещание против констатации (фича 0288)..."
+  "$(dirname "$0")/check-fixture-guards.py" --self-test
+  "$(dirname "$0")/check-fixture-guards.py"
+
   echo "Статус фич: карточка ↔ реестр ↔ витрина (фича 0177)..."
   "$(dirname "$0")/check-feature-status.py" --self-test
   "$(dirname "$0")/check-feature-status.py"
