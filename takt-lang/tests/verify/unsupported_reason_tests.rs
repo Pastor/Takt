@@ -76,15 +76,24 @@ fn three_u8_is_size_over_limit() {
     );
 }
 
-/// A4: инициализатор-вызов — `InitialValueUnknown`.
+/// A4: `InitialValueUnknown` стала **недостижимой** — и это проверяется.
+///
+/// Прежде её давал единственный вход — вызов внешней функции в инициализаторе.
+/// Фича 0305 отвергает его **семантикой** (`SE-084`): значение `extern` при
+/// компиляции неизвестно по определению, и прежде потребители расходились на
+/// нём молча (эталон — ноль, `st` — потерянный инициализатор, прочие — отказ).
+///
+/// ⚠️ Тест проверяет **причину недостижимости**, а не молчит о ней: вход обязан
+/// отвергаться на построении дерева, с кодом `SE-084`. Если запрет когда-нибудь
+/// ослабят, тест упадёт — и ветвь причины снова станет живой.
 #[test]
-fn call_initializer_is_initial_value_unknown() {
+fn extern_call_initializer_is_rejected_before_verification() {
     let src = "extern fn src() -> u8; var x: u8 := src(); \
                cond P = x = 0; start A { ref A; }";
-    assert_eq!(
-        reason_of(src, "G P"),
-        Some(UnsupportedReason::InitialValueUnknown)
-    );
+    let (ast, _) = parse(src, 0).expect("разбор модели");
+    let diagnostic = construct_model(&ast, None, &[])
+        .expect_err("вызов внешней функции в инициализаторе обязан отвергаться");
+    assert_eq!(diagnostic.code.as_deref(), Some("SE-084"), "{diagnostic:?}");
 }
 
 /// A5 (**контроль**): проверяемое свойство причины не получает вовсе.
