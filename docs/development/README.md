@@ -545,3 +545,4 @@
 | 0311-01 | 0311 | Запись реестра диагностик называет смысл | [0311-01-diagnostic-descriptions.md](0311-01-diagnostic-descriptions.md) |
 | 0312-01 | 0312 | Гейты цели c проверяют и релизный режим | [0312-01-c-gate-release-mode.md](0312-01-c-gate-release-mode.md) |
 | 0313-01 | 0313 | Число аргументов вызова сверяется с объявлением | [0313-01-call-arity-check.md](0313-01-call-arity-check.md) |
+| 0314-01 | 0314 | Цель c говорит о выброшенном вызове встроенной функции | [0314-01-c-dropped-builtin-warning.md](0314-01-c-dropped-builtin-warning.md) |
