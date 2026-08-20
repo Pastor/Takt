@@ -274,3 +274,4 @@
 | [0173](./0173-rust-generator-arg-count.md) | Заглушка too_many_arguments снята в цели rust | Accepted | фича 0173 |
 | [0252](./0252-ci-windows-test-threads.md) | CI и замер покрытия приведены к снятому правилу однопоточности | Accepted | фича 0252 |
 | [0261](./0261-module-size-warning-zone.md) | Жёлтая зона гейта размера модулей и его сторож | Accepted | фича 0261 |
+| [0265](./0265-book-svg-graphviz-version.md) | SVG диаграмм не несут версию graphviz | Accepted | фича 0265 |

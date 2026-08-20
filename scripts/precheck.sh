@@ -1245,13 +1245,39 @@ fi
 if [ -d book/src ]; then
   if require_tool typst "сборка документа book/, фича 0240; brew install typst"; then
     echo "Гейт сборки документа book/ (фича 0240)..."
-    # Цель `pdf`, а не `build`: регенерация графов (`graphs`) переписывает SVG в
-    # дереве — гейт, меняющий файлы репозитория, оставляет за собой мусорный
-    # `git status` (проверено: строка версии graphviz).
+    # Цель `pdf`, а не `build`: регенерация графов (`graphs`) читает шрифт ГОСТ,
+    # которого на чужой машине может не быть, и требует собранного `taktc`.
+    #
+    # ⚠️ Прежде здесь стояла вторая причина — «регенерация переписывает SVG
+    # строкой версии graphviz». Фича 0265 её сняла: строка вычищается при
+    # генерации, и повторный прогон дерева не пачкает (проверено дважды).
     book_log="$(mktemp)"
     if make -C book pdf >/dev/null 2>"$book_log"; then
       echo "  документ собран: book/book/pdf/takt-language.pdf"
       rm -f "$book_log"
+      # Диаграммы верификации (фича 0265): в committed SVG не должно быть строки
+      # версии graphviz — иначе прогон на машине с другим `dot` пачкает рабочее
+      # дерево посторонним диффом. И `.dot`-исходник не бывает пустым: пустой
+      # файл — след молча не работавшей регенерации (`taktc` искался в чужом
+      # каталоге, а код возврата оставался нулевым).
+      diag_failed=0
+      for svg in book/src/*/images/*.svg; do
+        [ -f "$svg" ] || continue
+        if grep -q 'graphviz version' "$svg"; then
+          echo "  ОШИБКА: $svg несёт версию graphviz — перегенерируйте:" >&2
+          echo "          book/scripts/render_verify_graphs.sh" >&2
+          diag_failed=1
+        fi
+      done
+      for dot in book/src/*/images/*.dot; do
+        [ -f "$dot" ] || continue
+        if [ ! -s "$dot" ]; then
+          echo "  ОШИБКА: $dot пуст — регенерация диаграмм молча не сработала." >&2
+          diag_failed=1
+        fi
+      done
+      [ "$diag_failed" -eq 0 ] || exit 1
+      echo "  диаграммы верификации: версии graphviz нет, исходники непусты"
     else
       echo "  ОШИБКА: документ book/ не собирается:" >&2
       cat "$book_log" >&2
