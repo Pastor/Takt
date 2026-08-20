@@ -167,7 +167,7 @@
 | `RS-004` | имя даёт `Self`/`self` — непредставимо ни как идентификатор, ни как `r#Self` (отдельное правило языка). Прочие ключевые слова спасает регистр (`type` → `Type`) или `r#type` | `takt-lang/src/generator/rust/rust_name.rs:60` |
 | `RS-005` | два имени слипаются после приведения регистра (`floor_sensor` и `FloorSensor`) | `takt-lang/src/generator/rust/rust_name.rs:73` |
 | `RS-010` | LTL-формула в теле блока не транслируется в Rust (проверять через `taktc verify`) | `takt-lang/src/generator/rust/rust_stmt.rs:661` |
-| `RS-011` | конструкция не транслируется (срез массива, `**`, строка вне `debug`) | `takt-lang/src/generator/rust/rust_expr.rs:38` |
+| `RS-011` | Конструкция не транслируется в Rust: срез массива (в Takt у него нет типа-владельца, а в `no_std` нет `alloc`), строковый литерал вне `debug`, неразрешённый узел. ⚠️ Состав менялся: степень переводится с фичи 0329 (`wrapping_pow`), запись разряда — с 0250 | `takt-lang/src/generator/rust/rust_expr.rs` |
 | `RS-012` | Корневой элемент карты не является моделью | `takt-lang/src/generator/rust/mod.rs:112` |
 | `RS-013` | Состояние '…' не найдено | `takt-lang/src/generator/rust/rust_map.rs:125` |
 | `RS-014` | тип не представим; `RS-015` — `--float-width=32` (цель всегда даёт `f64`) | `takt-lang/src/generator/rust/rust_decl.rs:372` |
