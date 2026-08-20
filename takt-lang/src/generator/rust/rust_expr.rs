@@ -575,10 +575,11 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::NamedFunctionBox(_, _) => {
             Err(unsupported("вызов с именованными аргументами"))
         }
-        ExpressionNode::Power(_, _) => Err(unsupported(
-            "возведение в степень: в no_std нет f64::powf (нужен libm), \
-             а целочисленный pow отличается семантикой переполнения",
-        )),
+        // Целая степень — `wrapping_pow` (фича 0329); довод — в заголовке
+        // `rust_shift`.
+        ExpressionNode::Power(base, exp) => {
+            crate::generator::rust::rust_shift::power(base, exp, scope)
+        }
         ExpressionNode::String(_) => Err(unsupported(
             "строковый литерал вне вызова debug: в no_std нет владеющей строки",
         )),

@@ -89,3 +89,54 @@ pub(in crate::generator::sv) fn shift_right_operator(left: &ExpressionNode) -> &
         ">>"
     }
 }
+
+/// Целая степень с литеральным показателем — разворот в умножения (фича 0329).
+///
+/// # Почему разворот
+///
+/// В синтезируемом RTL `**` требует константы, и синтезаторы поддерживают его
+/// неодинаково; умножения выразимы всегда и дают ту же схему, какую построил бы
+/// синтезатор из константной степени.
+///
+/// `a ** 0` — `1`; показатель, не являющийся неотрицательным литералом, —
+/// прежний отказ с названной причиной.
+///
+/// # Ошибки
+///
+/// `SV-002` — показатель переменный либо отрицательный.
+pub(in crate::generator::sv) fn power(
+    base: &ExpressionNode,
+    exp: &ExpressionNode,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    let Some(value) = literal(exp) else {
+        return Err(sv002(
+            "возведение в степень с ПЕРЕМЕННЫМ показателем: в синтезируемом RTL \
+             степень обязана разворачиваться в схему, то есть иметь показатель, \
+             известный при синтезе",
+        ));
+    };
+    if !(0..=64).contains(&value) {
+        return Err(sv002(
+            "возведение в такую степень: показатель обязан быть неотрицательным \
+             и не больше 64 — разворот в умножения иначе не выразим",
+        ));
+    }
+    if value == 0 {
+        return Ok(String::from("1"));
+    }
+    let printed = print_expression(base, scope)?;
+    let factors = std::iter::repeat_n(printed, usize::try_from(value).unwrap_or(1))
+        .collect::<Vec<_>>()
+        .join(" * ");
+    Ok(format!("({factors})"))
+}
+
+/// Целое значение литерала показателя.
+fn literal(expr: &ExpressionNode) -> Option<i128> {
+    match expr {
+        ExpressionNode::Number(v) => Some(*v),
+        ExpressionNode::Parenthesis(inner) => literal(inner),
+        _ => None,
+    }
+}

@@ -283,3 +283,4 @@
 | 0326 | Сдвиг на ширину типа в цели rust | [0326-rust-shift-width.md](0326-rust-shift-width.md) | Пройден: 6/6 условий, прогон rustc |
 | 0327 | Описание SV-002 | [0327-sv002-description.md](0327-sv002-description.md) | Пройден: 4/4 условия |
 | 0328 | Целая степень | [0328-integer-power.md](0328-integer-power.md) | Пройден: 5/5 условий, прогон iec2c |
+| 0329 | Степень в целях rust и sv | [0329-power-in-rust-sv.md](0329-power-in-rust-sv.md) | Пройден: 5/5 условий |

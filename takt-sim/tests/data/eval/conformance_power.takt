@@ -10,7 +10,9 @@
 var wide: u64 := 3;
 var narrow: u8 := 2;
 var big: u64 := 0;
-var small: u8 := 0;
+// ⚠️ Имя `cube_v`, а не `small`: `small` — ключевое слово SystemVerilog
+// (`SV-012`), и модель не переводилась бы целью `sv`.
+var cube_v: u8 := 0;
 var i: u8 := 0;
 
 out probe: u64 at 0;
@@ -20,9 +22,9 @@ start Run {
     always {
         i := i + 1;
         big := wide ** 40;
-        small := narrow ** 3;
+        cube_v := narrow ** 3;
         probe := big;
-        cube := small;
+        cube := cube_v;
     }
     ref Run: i < 100;
 }
