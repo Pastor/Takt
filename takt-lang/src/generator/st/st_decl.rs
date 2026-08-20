@@ -100,13 +100,14 @@ pub(crate) fn emit_struct_types(
     let mut declared: Vec<(String, Vec<(String, String)>)> = Vec::new();
     for (_, model_rc) in models {
         let model = &*model_rc.borrow();
-        let mut names: Vec<&String> = model.structs.keys().collect();
-        names.sort();
-        for name in names {
+        // Порядок — по ЗАВИСИМОСТЯМ (фича 0341), а не алфавитный: вложенная
+        // структура обязана быть объявлена раньше вмещающей, иначе `iec2c`
+        // отвечает «invalid specification in structure element declaration».
+        for node in crate::generator::struct_order::sorted(&model.structs) {
+            let name = &node.name;
             if declared.iter().any(|(n, _)| n == name) {
                 continue;
             }
-            let node = &model.structs[name];
             let mut fields = Vec::new();
             for (field, ty) in &node.fields {
                 fields.push((field.clone(), get_st_type(ty, model)?));
@@ -123,7 +124,10 @@ pub(crate) fn emit_struct_types(
     if declared.is_empty() && arrays.is_empty() {
         return Ok(false);
     }
-    declared.sort_by(|a, b| a.0.cmp(&b.0));
+    // ⚠️ Сортировки по имени здесь НЕТ (фича 0341): порядок уже задан
+    // зависимостями — вложенная структура собрана раньше вмещающей, — и
+    // алфавитная сортировка на выходе его бы разрушила. Детерминированность
+    // (инвариант 0048) обеспечивает сам обход: он идёт по `BTreeMap`.
     p.ident("TYPE").nl();
     p.up();
     for (name, fields) in &declared {

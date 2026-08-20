@@ -158,10 +158,14 @@ pub(crate) fn emit_structs(
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for (_, model_rc) in blocks {
         let model = model_rc.borrow();
-        for def in model.structs.values() {
+        // Порядок — по ЗАВИСИМОСТЯМ (фича 0341): verilator отвечает «Reference
+        // to 'point_t' before declaration», если вмещающая структура объявлена
+        // раньше вложенной.
+        for def in crate::generator::struct_order::sorted(&model.structs) {
             if !seen.insert(def.name.clone()) {
                 continue;
             }
+            let def = &def;
             p.ident("typedef struct packed {").nl();
             p.up();
             for (field, ty) in &def.fields {

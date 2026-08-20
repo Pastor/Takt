@@ -289,3 +289,4 @@
 | 0338 | Перечисление внутри функции | [0338-enum-in-function.md](0338-enum-in-function.md) | Готово: две цели чинены, кандидат исправлен |
 | 0339 | Шаблон отказа цели `sv` | [0339-sv-refusal-template.md](0339-sv-refusal-template.md) | Готово: носитель один, текст читается |
 | 0340 | Место записи агрегата | [0340-aggregate-assign-place.md](0340-aggregate-assign-place.md) | Готово: три цели, общий носитель |
+| 0341 | Вложенная структура | [0341-nested-struct-order.md](0341-nested-struct-order.md) | Готово: четыре цели переводят |

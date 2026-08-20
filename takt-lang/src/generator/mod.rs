@@ -5,6 +5,7 @@ mod plantuml;
 mod rust;
 mod site;
 mod st;
+mod struct_order;
 mod sv;
 
 use crate::diagnostics::Diagnostic;
