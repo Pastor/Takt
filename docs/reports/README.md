@@ -281,3 +281,4 @@
 | 0330 | Присваивание агрегата | [0330-aggregate-assignment.md](0330-aggregate-assignment.md) | Готово: переводят все восемь целей |
 | 0331 | Именованное условие в теле | [0331-named-condition-in-body.md](0331-named-condition-in-body.md) | Готово: девять потребителей согласны |
 | 0332 | Обещание задачи в диагностике | [0332-stub-task-promise.md](0332-stub-task-promise.md) | Готово: заглушка с обещанием ловится |
+| 0333 | Раздел об ошибках программы | [0333-book-runtime-errors.md](0333-book-runtime-errors.md) | Готово: разница прогона и прошивки описана |

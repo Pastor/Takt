@@ -564,3 +564,4 @@
 | 0330-01 | 0330 | Присваивание агрегата массива в целях st и sv | [0330-01-aggregate-assignment.md](0330-01-aggregate-assignment.md) |
 | 0331-01 | 0331 | Именованное условие в теле переводят все цели | [0331-01-named-condition-in-body.md](0331-01-named-condition-in-body.md) |
 | 0332-01 | 0332 | Заглушка, обещающая задачу, ловится гейтом | [0332-01-stub-task-promise.md](0332-01-stub-task-promise.md) |
+| 0333-01 | 0333 | Документ называет, где симулятор строже прошивки | [0333-01-book-runtime-errors.md](0333-01-book-runtime-errors.md) |
