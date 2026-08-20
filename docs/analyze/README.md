@@ -266,3 +266,4 @@
 | 0298 | Списки лексики раздела «Лексика» сверяются с языком | [0298-book-lexicon-lists-sync.md](0298-book-lexicon-lists-sync.md) | — (новая фича) |
 | 0215 | Потактовые сверки длительностей для целей st и sv | [0215-duration-per-tick-conformance-st-sv.md](0215-duration-per-tick-conformance-st-sv.md) | — (новая фича) |
 | 0216 | Печатник живости цели rust получает сторожа поведения | [0216-rust-live-printer-coverage.md](0216-rust-live-printer-coverage.md) | — (новая фича) |
+| 0254 | Старое имя изъято из служебных идентификаторов | [0254-legacy-names-internal-identifiers.md](0254-legacy-names-internal-identifiers.md) | — (новая фича) |

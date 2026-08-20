@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use lam_generated::extend_complex::{ExtendComplex, Hal, InBitPort, OutBitPort};
+use takt_generated::extend_complex::{ExtendComplex, Hal, InBitPort, OutBitPort};
 
 /// Записи в выходные порты: (порт, значение).
 #[derive(Default)]

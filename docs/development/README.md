@@ -505,3 +505,5 @@
 | 0215-02 | 0215 | Сверка значений duration цели sv | [0215-02-duration-per-tick-conformance-st-sv.md](0215-02-duration-per-tick-conformance-st-sv.md) |
 | 0216-01 | 0216 | Сторож поведения печатника живости | [0216-01-rust-live-printer-coverage.md](0216-01-rust-live-printer-coverage.md) |
 | 0216-02 | 0216 | match и for-init признаются перезаписью | [0216-02-rust-live-printer-coverage.md](0216-02-rust-live-printer-coverage.md) |
+| 0254-01 | 0254 | Переименование служебных идентификаторов | [0254-01-legacy-names-internal-identifiers.md](0254-01-legacy-names-internal-identifiers.md) |
+| 0254-02 | 0254 | Гейт ловит служебные имена | [0254-02-legacy-names-internal-identifiers.md](0254-02-legacy-names-internal-identifiers.md) |

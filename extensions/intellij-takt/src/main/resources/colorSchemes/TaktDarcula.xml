@@ -8,7 +8,7 @@
 -->
 <scheme name="Darcula" version="142" parent_scheme="Darcula">
     <attributes>
-        <option name="LAM_TYPE">
+        <option name="TAKT_TYPE">
             <value>
                 <option name="FOREGROUND" value="4EC9B0"/>
             </value>

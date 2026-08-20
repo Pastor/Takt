@@ -73,7 +73,7 @@ pub fn parse_fmt_args(args: &[String]) -> Result<FmtOptions, String> {
 }
 
 /// Рекурсивно собирает `*.takt` из файла или каталога.
-fn collect_lam_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+fn collect_takt_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     if path.is_file() {
         out.push(path.to_path_buf());
         return Ok(());
@@ -85,7 +85,7 @@ fn collect_lam_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> 
     for entry in entries.flatten() {
         let child = entry.path();
         if child.is_dir() {
-            collect_lam_files(&child, out)?;
+            collect_takt_files(&child, out)?;
         } else if child.extension().is_some_and(|e| e == "takt") {
             out.push(child);
         }
@@ -180,7 +180,7 @@ fn run_fmt(options: &FmtOptions) -> i32 {
 
     let mut files = Vec::new();
     for path in &options.paths {
-        if let Err(e) = collect_lam_files(Path::new(path), &mut files) {
+        if let Err(e) = collect_takt_files(Path::new(path), &mut files) {
             eprintln!("Ошибка: {e}");
             return 1;
         }

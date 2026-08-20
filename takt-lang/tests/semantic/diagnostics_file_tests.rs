@@ -13,7 +13,7 @@ const DIR: &str = "tests/data/diag53";
 fn error_of(fixture: &str) -> takt_lang::diagnostics::Diagnostic {
     let path = format!("{DIR}/{fixture}");
     let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let out = std::env::temp_dir().join("lam_diag53_out.c");
+    let out = std::env::temp_dir().join("takt_diag53_out.c");
     takt_lang::compile_to_c(
         &path,
         &source,

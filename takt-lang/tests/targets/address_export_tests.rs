@@ -348,7 +348,7 @@ fn cli_output_to_file_matches_stdout() {
         .args(["address-map", &format!("{DIR}/probe.takt")])
         .output()
         .expect("запуск stdout");
-    let out_file = std::env::temp_dir().join("lam_0043_out.map");
+    let out_file = std::env::temp_dir().join("takt_0043_out.map");
     let file_run = taktc()
         .args([
             "address-map",

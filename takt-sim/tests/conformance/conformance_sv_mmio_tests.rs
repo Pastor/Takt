@@ -74,7 +74,7 @@ fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i128>> {
 
 /// Каталог сборки под конкретный тест.
 fn build_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("lam_conformance_sv_mmio_{tag}"));
+    let dir = std::env::temp_dir().join(format!("takt_conformance_sv_mmio_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     dir

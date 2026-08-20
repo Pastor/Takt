@@ -345,7 +345,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         }
         // Встроенный тип (u8, i32, bit, bool и т.д.)
         else if let Some((_, description)) =
-            BUT_BUILTIN_TYPES.iter().find(|(t, _)| *t == word.as_str())
+            TAKT_BUILTIN_TYPES.iter().find(|(t, _)| *t == word.as_str())
         {
             hover_text = format!("```but\n{}\n```\n\n{}", word, description);
         }

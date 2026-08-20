@@ -12,7 +12,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
     let mut items: Vec<CompletionItem> = Vec::new();
 
     // Добавляем ключевые слова
-    for (keyword, description) in BUT_KEYWORDS {
+    for (keyword, description) in TAKT_KEYWORDS {
         items.push(CompletionItem {
             label: keyword.to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
@@ -22,7 +22,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
     }
 
     // Добавляем встроенные типы
-    for (type_name, description) in BUT_BUILTIN_TYPES {
+    for (type_name, description) in TAKT_BUILTIN_TYPES {
         items.push(CompletionItem {
             label: type_name.to_string(),
             kind: Some(CompletionItemKind::TYPE_PARAMETER),

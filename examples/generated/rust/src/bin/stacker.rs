@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use lam_generated::stacker::{Hal, InBitPort, InU8Port, OutBitPort, OutU8Port, Stacker};
+use takt_generated::stacker::{Hal, InBitPort, InU8Port, OutBitPort, OutU8Port, Stacker};
 
 /// Эмулятор штабелятора.
 #[derive(Default)]

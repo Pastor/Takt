@@ -85,7 +85,7 @@ start Entry = ArrConf;
     };
 
     // Порождённый C: собираем харнесс, печатающий data[i] и counter.
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0076_array");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0076_array");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     takt_lang::compile_to_c(
         "arrconf",

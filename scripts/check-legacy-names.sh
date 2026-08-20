@@ -23,11 +23,13 @@
 # `scripts/test-legacy-names.sh` (проверка 5): пока класс был исключён,
 # новый хелпер заводился по образцу соседа — вместе со старым префиксом.
 #
-# ⚠️ Чему шаблоны намеренно НЕ отвечают: служебные идентификаторы
-# самих инструментов — `lam_generated`/`lam_file` в путях и аргументах,
-# `BUT_KEYWORDS` (`takt-lang/src/lsp/keywords.rs`). Это предмет фичи 0254, и
-# граница между ними простая: 0253 — то, что уезжает в файл пользователя,
-# 0254 — то, что видит только разработчик инструмента.
+# ⚠️ СЛУЖЕБНЫЕ ИДЕНТИФИКАТОРЫ ГЕЙТ ПРОВЕРЯЕТ ТОЖЕ (фича 0254). До неё класс был
+# исключён — «это видит только разработчик инструмента», — и держал 114
+# вхождений: `LAMC`/`lam_file` в скриптах, префикс `lam_` у временных каталогов
+# сорока с лишним тестов, `BUT_KEYWORDS`/`BUT_BUILTIN_TYPES` в LSP, крейт
+# порождённых примеров `lam_generated`, ключи цветов `LAM_*` плагина IntelliJ.
+# Исключение и было причиной живучести: новый временный каталог заводили по
+# образцу соседнего теста — вместе со старым префиксом.
 #
 # ⚠️ ИСКЛЮЧЕНИЯ ЗАДАНЫ ПРЕФИКСАМИ ПУТЕЙ, а не пофайловым списком. В `docs/` и
 # журналах старое имя — СВИДЕТЕЛЬСТВО (правило 21), а не ошибка, и цитировать
@@ -47,7 +49,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # ERE. Границы слова записаны классами POSIX `[[:<:]]`/`[[:>:]]`? НЕТ: они есть у
 # BSD grep и отсутствуют у GNU. Переносимо и достаточно — обрамление символами,
 # не входящими в идентификатор, через отрицаемые классы.
-LEGACY='(^|[^A-Za-z0-9_])(BuT|Lam|butc|lamc|lam-lsp|lam-sim)($|[^A-Za-z0-9_-])|\.(but|lam)($|[^A-Za-z0-9_])|(^|[^A-Za-z0-9_/])(grammar|simulation)/(src|tests)/|-p +(grammar|simulation)( |$)|[Ll][Aa][Mm]_[Qq]_'
+LEGACY='(^|[^A-Za-z0-9_])(BuT|Lam|butc|lamc|lam-lsp|lam-sim)($|[^A-Za-z0-9_-])|\.(but|lam)($|[^A-Za-z0-9_])|(^|[^A-Za-z0-9_/])(grammar|simulation)/(src|tests)/|-p +(grammar|simulation)( |$)|(^|[^A-Za-z0-9_])[Ll][Aa][Mm]_[A-Za-z0-9_]|(^|[^A-Za-z0-9_])LAMC($|[^A-Za-z0-9_])|(^|[^A-Za-z0-9_])BUT_[A-Za-z0-9_]|(^|[^A-Za-z0-9_-])lam-generated($|[^A-Za-z0-9_])'
 
 # --- Где не проверяем -------------------------------------------------------
 # docs/, CHANGES.md — история фичи 0100 и всех, кто её цитирует (правило 21).
@@ -59,7 +61,12 @@ is_excluded() {
     case "$1" in
         docs/*|CHANGES.md|CLAUDE.md|AGENTS.md|FEATURES.md|.claude/*) return 0 ;;
         scripts/check-repo-url.sh|scripts/check-legacy-names.sh) return 0 ;;
-        scripts/test-legacy-names.sh|scripts/precheck.sh) return 0 ;;
+        scripts/test-legacy-names.sh) return 0 ;;
+        # `precheck.sh` исключён ЧАСТИЧНО: он описывает переезд хелперов
+        # (фича 0253) и обязан называть прежний префикс. Исключение сузилось до
+        # этого повода — прежде оно покрывало весь файл и прятало 16 живых
+        # `LAMC` (фича 0254).
+        scripts/precheck.sh) return 1 ;;
         *) return 1 ;;
     esac
 }
@@ -95,7 +102,8 @@ if [ "$BAD" -ne 0 ]; then
     echo "  Старое имя языка/инструмента в рабочем файле (ADR 0161)." >&2
     echo "  Замены: BuT|Lam → Takt, butc|lamc → taktc, lam-lsp → takt-lsp," >&2
     echo "          .but|.lam → .takt, grammar/ → takt-lang/, simulation/ → takt-sim/," >&2
-    echo "          lam_q_*|LAM_Q_* → takt_q_*|TAKT_Q_* (хелперы целей c и st)." >&2
+    echo "          lam_q_*|LAM_Q_* → takt_q_*|TAKT_Q_* (хелперы целей c и st)," >&2
+    echo "          lam_*|LAM_*|LAMC|BUT_* → takt_*|TAKT_*|TAKTC (служебные имена)." >&2
     echo "  Историю цитировать в docs/ — там гейт не смотрит." >&2
     exit 1
 fi

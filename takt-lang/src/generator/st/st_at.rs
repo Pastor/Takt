@@ -219,7 +219,7 @@ mod tests {
 
     /// Размер — из `TypeNode`: `u8` → `B`, `u16` → `W`, `u32` → `D`, `u64` → `L`.
     #[test]
-    fn test_size_letter_comes_from_lam_type() {
+    fn test_size_letter_comes_from_takt_type() {
         let cases = [(8u8, "B"), (16, "W"), (32, "D"), (64, "L")];
         for (bits, letter) in cases {
             let ty = TypeNode::Integer {

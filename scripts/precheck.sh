@@ -218,8 +218,9 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 "$(dirname "$0")/test-version-tag.sh"
 
 # Адрес репозитория (фича 0179): в рабочих файлах он ОДИН — эталон берётся из
-# поля repository манифеста takt-lang. Ловит рассинхрон после переезда (BuT →
-# Takt оставил старое имя в 16 местах, включая сломанный `cd` после `git clone`).
+# поля repository манифеста takt-lang. Ловит рассинхрон после переименования
+# (фича 0100 оставила прежнее имя в 16 местах, включая сломанный `cd` после
+# `git clone`).
 # ⚠️ Проверяет согласованность, а не правильность: переименование во всех местах
 # разом гейт не заметит — это его граница, см. заголовок скрипта. Быстрая.
 "$(dirname "$0")/check-repo-url.sh"
@@ -235,14 +236,16 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # вход, правило 30). Гоняется в temp-репозитории.
 "$(dirname "$0")/test-commit-trailers.sh"
 
-# Старые имена языка и инструментов (фича 0161): `BuT`/`Lam`, `butc`/`lamc`,
-# `lam-lsp`, расширения `.but`/`.lam`, пути упразднённых крейтов `grammar/…` и
-# `simulation/…` не встречаются в РАБОЧИХ файлах; `docs/` и журналы исключены —
-# там старое имя есть свидетельство (правило 21). Повод не косметический: замер
+# Старые имена языка и инструментов (фича 0161): упразднённые имена языка,
+# бинарников, расширений и путей крейтов не встречаются в РАБОЧИХ файлах;
+# `docs/` и журналы исключены — там прежнее имя есть свидетельство (правило 21).
+# ⚠️ Перечень запрещённых имён живёт ТОЛЬКО в заголовке самого гейта: второй
+# список одного набора разошёлся бы с первым (класс 0084/0193/0195), и повторять
+# его здесь нельзя — гейт проверяет и этот файл. Повод не косметический: замер
 # нашёл 36 мест, и одним из них была команда `--gif-config` в README примеров, у
-# которой неверны все четыре элемента. ⚠️ С фичи 0253 гейт проверяет и имена в
-# ПОРОЖДАЕМОМ коде: хелперы целей `c`/`st` переименованы (`lam_q_*` →
-# `takt_q_*`, `LAM_Q_*` → `TAKT_Q_*`), исключение снято. Быстрая — до тестов.
+# которой неверны все четыре элемента. ⚠️ С фичи 0253 гейт смотрит и в
+# ПОРОЖДАЕМЫЙ код (хелперы фиксированной точки), с фичи 0254 — в служебные
+# идентификаторы инструментов. Быстрая — до тестов.
 "$(dirname "$0")/check-legacy-names.sh"
 
 # Сторож гейта выше (фича 0161): мутацией доказывает, что каждый запрещённый
@@ -312,7 +315,7 @@ $CARGO_CMD build --all-features --bin taktc --bin takt-sim --bin takt-lsp
 # в `$PRECHECK_TARGET_DIR`. Работало это лишь потому, что в рабочем каталоге
 # случайно лежал ранее собранный бинарник; после первой его чистки гейт падал —
 # и падал С ЛОЖНОЙ ПРИЧИНОЙ: «Примеры не в каноне» вместо «нет taktc».
-LAMC="$PRECHECK_TARGET_DIR/debug/taktc"
+TAKTC="$PRECHECK_TARGET_DIR/debug/taktc"
 TAKT_SIM="$PRECHECK_TARGET_DIR/debug/takt-sim"
 
 # Инструмент снятия замера (фича 0301, правило 30): сторож проверяет, что
@@ -334,8 +337,8 @@ TAKT_SIM="$PRECHECK_TARGET_DIR/debug/takt-sim"
 # (правила 15, 16) и обязаны быть в каноне. Фикстуры `tests/data/` намеренно НЕ
 # проверяются: часть тестов завязана на их раскладку и позиции.
 echo "Проверка формата примеров (taktc fmt --check)..."
-$LAMC fmt --check examples/ || {
-  echo "  Примеры не в каноне. Исправить: $LAMC fmt examples/"
+$TAKTC fmt --check examples/ || {
+  echo "  Примеры не в каноне. Исправить: $TAKTC fmt examples/"
   exit 1
 }
 
@@ -405,29 +408,29 @@ sv_float_flags() {  # $1 = имя примера
 }
 
 echo "Генерация C-кода из примеров Takt..."
-for lam_file in examples/*.takt; do
-  name="$(basename "$lam_file" .takt)"
-  echo "  $lam_file → $C_OUTPUT/${name}.c / ${name}.h"
-  $LAMC compile "$lam_file" -o "$C_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
-  $LAMC compile "$lam_file" -t plantuml -o "$PLANTUML_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
+for takt_file in examples/*.takt; do
+  name="$(basename "$takt_file" .takt)"
+  echo "  $takt_file → $C_OUTPUT/${name}.c / ${name}.h"
+  $TAKTC compile "$takt_file" -o "$C_OUTPUT" || echo "    [предупреждение] ошибка генерации $takt_file"
+  $TAKTC compile "$takt_file" -t plantuml -o "$PLANTUML_OUTPUT" || echo "    [предупреждение] ошибка генерации $takt_file"
   # Цель st (фича 0041). Отказ не валит предкоммит: бэкенд дописывается
   # (задачи 0041-03, 0041-04 часть 3), и на непокрытом узле он ЗАКОНОМЕРНО
   # отвечает ST-011 — это замысел («никакого тихого пропуска»), а не поломка.
-  $LAMC compile "$lam_file" -t st -o "$ST_OUTPUT" \
-    || echo "    [предупреждение] цель st: $lam_file не транслируется (бэкенд не закончен)"
+  $TAKTC compile "$takt_file" -t st -o "$ST_OUTPUT" \
+    || echo "    [предупреждение] цель st: $takt_file не транслируется (бэкенд не закончен)"
   # Цель rust (фича 0050). Отказ не валит предкоммит по той же причине, что и у
   # st: на непокрытом узле бэкенд ЗАКОНОМЕРНО отвечает RS-0xx — это замысел
   # («никакого тихого пропуска»), а не поломка. Что именно не покрыто —
   # перечислено в README, раздел «Генерация Rust».
-  $LAMC compile "$lam_file" -t rust -o "$RUST_OUTPUT" \
-    || echo "    [предупреждение] цель rust: $lam_file не транслируется (бэкенд не закончен)"
+  $TAKTC compile "$takt_file" -t rust -o "$RUST_OUTPUT" \
+    || echo "    [предупреждение] цель rust: $takt_file не транслируется (бэкенд не закончен)"
   # Цель sv (фича 0045). Отказ здесь не валит предкоммит, но и не остаётся
   # безнаказанным: список обязательных примеров проверяется ниже отдельно
   # ($SV_TRANSLATABLE) — иначе выпадение примера из гейта прошло бы молча.
   # float-примерам (0096) добавляется --float-as-q (иначе SV-003).
   # shellcheck disable=SC2046,SC2086
-  $LAMC compile "$lam_file" -t sv $(sv_float_flags "$name") -o "$SV_OUTPUT" \
-    || echo "    [предупреждение] цель sv: $lam_file не транслируется"
+  $TAKTC compile "$takt_file" -t sv $(sv_float_flags "$name") -o "$SV_OUTPUT" \
+    || echo "    [предупреждение] цель sv: $takt_file не транслируется"
 done
 
 # Цель sv-mmio (фича 0062): регистровый файл из адресов портов — только stacker
@@ -437,7 +440,7 @@ done
 # добавляет рядом с ядром обёртку `<name>_apb.sv`, ядро при этом не меняется.
 # Гейты ниже проверяют оба файла — и линтом с синтезом, и тестбенчем.
 for name in $SV_MMIO_TRANSLATABLE; do
-  $LAMC compile "examples/${name}.takt" -t sv-mmio --bus=apb -o "$SV_MMIO_OUTPUT" \
+  $TAKTC compile "examples/${name}.takt" -t sv-mmio --bus=apb -o "$SV_MMIO_OUTPUT" \
     || echo "    [предупреждение] цель sv-mmio: examples/${name}.takt не транслируется"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
@@ -471,8 +474,8 @@ echo "Готово. Файлы в $C_OUTPUT/"
 # сообщение.
 echo "Гейт воспроизводимости: два прогона (+ режим specialize) на пример × цель..."
 repro_failed=0
-for lam_file in examples/*.takt; do
-  name="$(basename "$lam_file" .takt)"
+for takt_file in examples/*.takt; do
+  name="$(basename "$takt_file" .takt)"
   for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust" "sv:-t sv" "sv-mmio:-t sv-mmio"; do
     tgt="${spec%%:*}"
     flag="${spec#*:}"
@@ -486,17 +489,17 @@ for lam_file in examples/*.takt; do
     d3="$(mktemp -d)"
     d4="$(mktemp -d)"
     # shellcheck disable=SC2086
-    $LAMC compile "$lam_file" $flag -o "$d1" >/dev/null 2>&1 || true
+    $TAKTC compile "$takt_file" $flag -o "$d1" >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
-    $LAMC compile "$lam_file" $flag -o "$d2" >/dev/null 2>&1 || true
+    $TAKTC compile "$takt_file" $flag -o "$d2" >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
-    $LAMC compile "$lam_file" $flag --parameters=specialize -o "$d3" >/dev/null 2>&1 || true
+    $TAKTC compile "$takt_file" $flag --parameters=specialize -o "$d3" >/dev/null 2>&1 || true
     # Объявляет ли параметры сам пример ЛИБО файл, который он подключает:
     # параметры может объявлять библиотека, а форма вывода меняется у импортёра.
     # Проверяется именно этот пример, а не корпус целиком — иначе один
     # параметризованный файл снял бы проверку R7 со всех остальных.
-    check_files="$lam_file"
-    for imported in $(grep -oE 'from[[:space:]]+"[^"]+"' "$lam_file" 2>/dev/null \
+    check_files="$takt_file"
+    for imported in $(grep -oE 'from[[:space:]]+"[^"]+"' "$takt_file" 2>/dev/null \
                       | sed -E 's/from[[:space:]]+"([^"]+)"/\1/'); do
       [ -f "examples/$imported" ] && check_files="$check_files examples/$imported"
     done
@@ -507,7 +510,7 @@ for lam_file in examples/*.takt; do
     fi
     if [ "$parameterized" -eq 1 ]; then
       # shellcheck disable=SC2086
-      $LAMC compile "$lam_file" $flag --parameters=specialize -o "$d4" >/dev/null 2>&1 || true
+      $TAKTC compile "$takt_file" $flag --parameters=specialize -o "$d4" >/dev/null 2>&1 || true
     fi
     if ! diff -r "$d1" "$d2" >/dev/null 2>&1; then
       echo "  $name [$tgt] → НЕДЕТЕРМИНИЗМ (два прогона разошлись):"
@@ -548,7 +551,7 @@ float_embed_failed=0
 for name in $FLOAT_AS_Q_EXAMPLES; do
   for etgt in c-hal st-at; do
     d="$(mktemp -d)"
-    if $LAMC compile "examples/${name}.takt" -t "$etgt" \
+    if $TAKTC compile "examples/${name}.takt" -t "$etgt" \
          --float-embedded --float-as-q="$FLOAT_AS_Q_PREC" -o "$d" >/dev/null 2>&1; then
       echo "  $name [$etgt] → q сформирован (--float-embedded --float-as-q=$FLOAT_AS_Q_PREC)"
     else
@@ -772,7 +775,7 @@ fi
 # ГЕЙТ ЦЕЛИ SV-MMIO (фича 0062): регистровый файл из адресов портов обязан
 # приниматься verilator И yosys, как и цель `sv` (те же два инструмента ловят
 # непересекающиеся классы). Наблюдение поведения — потактовая сверка ЧЕРЕЗ
-# РЕГИСТРЫ (simulation/tests/conformance_sv_mmio_tests.rs), а не этот гейт: линт и
+# РЕГИСТРЫ (takt-sim/tests/conformance/conformance_sv_mmio_tests.rs), а не гейт: линт и
 # синтез верности не доказывают (урок 0045). Тот же $sv_failed и мягкая
 # деградация, что у гейта `sv`.
 echo "Гейт цели sv-mmio: verilator (линт) + yosys (синтез) по регистровым файлам..."
@@ -978,10 +981,10 @@ cd -
 if require_tool cc "гейт c-hal, фикс 0020-01; обычно есть на всех платформах"; then
   echo "Гейт c-hal: компиляция порождённого дефолтного HAL (фикс 0020-01)..."
   chal_failed=0
-  for lam_file in examples/*.takt; do
-    name="$(basename "$lam_file" .takt)"
+  for takt_file in examples/*.takt; do
+    name="$(basename "$takt_file" .takt)"
     chal_dir="$(mktemp -d)"
-    if ! "$LAMC" compile "$lam_file" -t c-hal -o "$chal_dir" >"$chal_dir/gen.log" 2>&1; then
+    if ! "$TAKTC" compile "$takt_file" -t c-hal -o "$chal_dir" >"$chal_dir/gen.log" 2>&1; then
       echo "  $name [c-hal] → пропуск (не транслируется: $(head -1 "$chal_dir/gen.log" | cut -c1-40))"
       rm -rf "$chal_dir"
       continue
@@ -1151,7 +1154,7 @@ if [ -d book/src ]; then
       tick_flag="--tick-hz=$clock_hz"
       echo "  $base → объявляет $clock_lit, передаю $tick_flag"
     fi
-    if ! "$LAMC" compile "$takt_file" -t c $tick_flag -o "$out_dir" >"$out_dir/gen.log" 2>&1; then
+    if ! "$TAKTC" compile "$takt_file" -t c $tick_flag -o "$out_dir" >"$out_dir/gen.log" 2>&1; then
       echo "  $base → НЕ КОМПИЛИРУЕТСЯ:"
       sed 's/^/    /' "$out_dir/gen.log" | head -3
       book_failed=1

@@ -318,7 +318,7 @@ fn taktc(args: &[&str]) -> std::process::Output {
 
 #[test]
 fn a4_fmt_check_exit_codes() {
-    let dir = std::env::temp_dir().join("lam_fmt_0024_03");
+    let dir = std::env::temp_dir().join("takt_fmt_0024_03");
     std::fs::create_dir_all(&dir).unwrap();
 
     let messy = dir.join("messy.takt");
@@ -342,7 +342,7 @@ fn a4_fmt_check_exit_codes() {
 #[test]
 fn a4_fmt_check_does_not_write() {
     // `--check` — режим для CI: он обязан быть НЕразрушающим.
-    let dir = std::env::temp_dir().join("lam_fmt_0024_03_nowrite");
+    let dir = std::env::temp_dir().join("takt_fmt_0024_03_nowrite");
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("messy.takt");
     let original = "var   x :u8:=0;\n";
@@ -358,7 +358,7 @@ fn a4_fmt_check_does_not_write() {
 
 #[test]
 fn fmt_rewrites_file_in_place() {
-    let dir = std::env::temp_dir().join("lam_fmt_0024_03_inplace");
+    let dir = std::env::temp_dir().join("takt_fmt_0024_03_inplace");
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("messy.takt");
     std::fs::write(&file, "var   x :u8:=0;\nstart   S ;\n").unwrap();
