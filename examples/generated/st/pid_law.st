@@ -1,0 +1,138 @@
+(*
+ * Порождено компилятором Takt (taktc) — цель: Structured Text (IEC 61131-3).
+ * Не редактировать вручную: файл перезаписывается при каждой генерации.
+ *)
+
+TYPE
+    PidState :
+    STRUCT
+        kp : LREAL;
+        ki : LREAL;
+        kd : LREAL;
+        ts : LREAL;
+        out_min : LREAL;
+        out_max : LREAL;
+        i_acc : LREAL;
+        err_prev : LREAL;
+        output : LREAL;
+    END_STRUCT;
+END_TYPE
+
+FUNCTION PidLaw_pid_compute : PidState
+VAR_INPUT
+    p : PidState;
+    sp : LREAL;
+    pv : LREAL;
+END_VAR
+VAR
+    r : PidState;
+    err : LREAL;
+    prop : LREAL;
+    i_new : LREAL;
+    deriv : LREAL;
+    raw : LREAL;
+END_VAR
+    r := p;
+    err := sp - pv;
+    prop := (p.kp) * err;
+    i_new := (p.i_acc) + (((p.ki) * err) * (p.ts));
+    deriv := (err - (p.err_prev)) / (p.ts);
+    raw := (prop + i_new) + ((p.kd) * deriv);
+    IF raw > (p.out_max) THEN
+        r.output := p.out_max;
+        IF err <= 0.0 THEN
+            r.i_acc := i_new;
+        END_IF;
+    ELSE
+        IF raw < (p.out_min) THEN
+            r.output := p.out_min;
+            IF err >= 0.0 THEN
+                r.i_acc := i_new;
+            END_IF;
+        ELSE
+            r.output := raw;
+            r.i_acc := i_new;
+        END_IF;
+    END_IF;
+    r.err_prev := err;
+    PidLaw_pid_compute := r;
+    RETURN;
+END_FUNCTION
+
+FUNCTION PidLaw_pid_init : PidState
+VAR_INPUT
+    kp : LREAL;
+    ki : LREAL;
+    kd : LREAL;
+    ts : LREAL;
+    lo : LREAL;
+    hi : LREAL;
+END_VAR
+VAR
+    p : PidState;
+END_VAR
+    p.kp := 0.0;
+    p.ki := 0.0;
+    p.kd := 0.0;
+    p.ts := 1.0;
+    p.out_min := 0.0;
+    p.out_max := 0.0;
+    p.i_acc := 0.0;
+    p.err_prev := 0.0;
+    p.output := 0.0;
+    p.kp := kp;
+    p.ki := ki;
+    p.kd := kd;
+    p.ts := ts;
+    p.out_min := lo;
+    p.out_max := hi;
+    PidLaw_pid_init := p;
+    RETURN;
+END_FUNCTION
+
+FUNCTION PidLaw_pid_reset : PidState
+VAR_INPUT
+    p : PidState;
+END_VAR
+VAR
+    r : PidState;
+END_VAR
+    r := p;
+    r.i_acc := 0.0;
+    r.err_prev := 0.0;
+    r.output := 0.0;
+    PidLaw_pid_reset := r;
+    RETURN;
+END_FUNCTION
+
+FUNCTION_BLOCK PidLaw
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    ctrl : LREAL := 0.0;
+    hold : BOOL := FALSE;
+    loop_pid : PidState := (kp := 3.0, ki := 0.75, kd := 1.5, ts := 0.1, out_min := 0.0, out_max := 100.0, i_acc := 0.0, err_prev := 0.0, output := 0.0);
+    meas : LREAL := 25.0;
+    target : LREAL := 80.0;
+END_VAR
+    IF state = 0 THEN (* первый скан *)
+        loop_pid := PidLaw_pid_init(3.0, 0.75, 1.5, 0.1, 0.0, 100.0);
+        state := 1; (* Run *)
+    END_IF;
+    CASE state OF
+        1: (* Run *)
+            loop_pid := PidLaw_pid_compute(loop_pid, target, meas);
+            ctrl := loop_pid.output;
+            IF hold THEN
+                loop_pid := PidLaw_pid_reset(loop_pid);
+                ctrl := 0.0;
+            END_IF;
+            state := 2; (* END *)
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
+END_FUNCTION_BLOCK
+

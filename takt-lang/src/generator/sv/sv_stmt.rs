@@ -103,6 +103,29 @@ pub(crate) fn print_statement(
                 // варианта у `ExpressionNode` нет вовсе), и `res = 0;`
                 // verilator отвергает **ошибкой** `ENUMVALUE` — при нулевом
                 // коде возврата `taktc`.
+                // Агрегат — поэлементно (фича 0345): `'{…}` в `always_comb`
+                // пришлось бы согласовывать по ширине, а печатник выражений
+                // отвечал `SV-002` «инициализатор структуры» — отказ на записи,
+                // которую эталон, `c` и `rust` исполняют.
+                if let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = &**expr {
+                    let fields = match ty {
+                        TypeNode::Struct(sname) => scope.structs.get(sname),
+                        _ => None,
+                    };
+                    let places = crate::generator::aggregate::places(
+                        fields.map(Vec::as_slice),
+                        Some(ty),
+                        items.len(),
+                    );
+                    for (item, place) in items.iter().zip(places) {
+                        let value = match &place.ty {
+                            Some(elem) => scope.coerce(elem, item)?,
+                            None => print_expression(item, scope)?,
+                        };
+                        p.ident(&format!("{name}{} = {value};", place.suffix)).nl();
+                    }
+                    return Ok(());
+                }
                 let value = scope.coerce(ty, expr)?;
                 p.ident(&format!("{name} = {value};")).nl();
             }

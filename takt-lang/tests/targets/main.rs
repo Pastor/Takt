@@ -41,6 +41,7 @@ mod enum_in_function_tests;
 mod generator_warnings_tests;
 mod guard_targets_tests;
 mod hal_bit_range_tests;
+mod local_aggregate_tests;
 mod nested_struct_targets_tests;
 mod port_initial_value_hdl_tests;
 mod rust_default_impl_tests;
