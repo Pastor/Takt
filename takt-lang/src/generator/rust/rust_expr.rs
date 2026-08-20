@@ -33,7 +33,7 @@ use crate::semantic::{
 // `rust_expr::condition_as_bool` для потребителей (правило 11) — импорт в
 // `rust_model.rs` не меняется.
 pub(crate) use crate::generator::rust::rust_bit::{bit_mask, member_index};
-pub(crate) use crate::generator::rust::rust_cond::condition_as_bool;
+pub(crate) use crate::generator::rust::rust_cond::{condition_as_bool, print_as_bool};
 
 /// Строит диагностику `RS-011` — конструкция не транслируется в Rust.
 ///
@@ -595,7 +595,11 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
              доступ по адресу дают цели 'c-hal', 'st-at' и 'sv-mmio'",
         )),
         ExpressionNode::Model(_) => Err(unsupported("модель в позиции выражения")),
-        ExpressionNode::Condition(_) => Err(unsupported("именованное условие в позиции выражения")),
+        // Именованное условие печатается печатником условий (фича 0331);
+        // `condition_as_bool` тут не годится — довод в ADR 0331.
+        ExpressionNode::Condition(cond) => {
+            crate::generator::rust::rust_cond::print_condition(&cond.borrow().value, scope)
+        }
         ExpressionNode::List(_) => Err(unsupported("список параметров в позиции выражения")),
     }
 }
@@ -977,23 +981,3 @@ fn escape(text: &str) -> String {
 // с детектором Q-формата. (`function_return` уехал вместе с печатником условий в
 // `rust_cond`, фича 0088.)
 pub(crate) use crate::generator::rust::rust_fixed::expression_type;
-
-/// Печатает выражение в позиции **условия**, приводя его к `bool`.
-///
-/// `if x` при `x : u8` в C законно, в Rust — ошибка типа. Приведение делается
-/// здесь, а не в общем печатнике: в позиции значения то же `x` обязано остаться
-/// числом.
-pub(crate) fn print_as_bool(expr: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
-    let printed = print_expression(expr, scope)?;
-    match expression_type(expr) {
-        Some(TypeNode::Bool) | Some(TypeNode::Bit) => Ok(printed),
-        Some(TypeNode::Rational) => Ok(format!("({} != 0.0)", printed)),
-        Some(TypeNode::Integer { .. }) => Ok(format!("({} != 0)", printed)),
-        // Тип не выведен — угадывать нельзя. Молчаливое `!= 0` при `bool` дало бы
-        // ошибку сборки в порождённом коде, то есть у пользователя, а не здесь.
-        _ => Err(unsupported(&format!(
-            "условие '{}': тип не выводится, приведение к bool построить нельзя",
-            printed
-        ))),
-    }
-}

@@ -285,3 +285,4 @@
 | 0328 | Целая степень | [0328-integer-power.md](0328-integer-power.md) | Пройден: 5/5 условий, прогон iec2c |
 | 0329 | Степень в целях rust и sv | [0329-power-in-rust-sv.md](0329-power-in-rust-sv.md) | Пройден: 5/5 условий |
 | 0330 | Присваивание агрегата | [0330-aggregate-assignment.md](0330-aggregate-assignment.md) | Пройден: 3/3 условия, прогон iec2c |
+| 0331 | Именованное условие в теле | [0331-named-condition-in-body.md](0331-named-condition-in-body.md) | Пройден: 3/3 условия |

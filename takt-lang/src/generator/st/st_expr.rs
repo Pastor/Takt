@@ -186,9 +186,9 @@ pub(crate) fn print_expression(
         // протянутого через все печатники.
         ExpressionNode::AnonPort(access) => Ok(access.synthetic_name()),
         ExpressionNode::Model(_) => Err(unsupported("модель как выражение")),
-        ExpressionNode::Condition(_) => Err(unsupported(
-            "именованное условие в выражении: печать — часть 2 задачи 0041-04",
-        )),
+        // Именованное условие печатается печатником условий (фича 0331).
+        // Прежний текст обещал «часть 2 задачи 0041-04» — работу, которой нет.
+        ExpressionNode::Condition(cond) => print_condition(&cond.borrow().value, model),
         ExpressionNode::List(_) => Err(unsupported("список параметров как выражение")),
         ExpressionNode::Array(_) => Err(unsupported(
             "массивный литерал: агрегатная инициализация — часть 2 задачи 0041-04",

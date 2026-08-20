@@ -343,3 +343,4 @@
 | [0328](./0328-integer-power.md) | Целая степень считается целочисленно | [ADR](../adr/0328-integer-power.md), [анализ](../analyze/0328-integer-power.md), [отчёт](../reports/0328-integer-power.md) | ГОТОВО |
 | [0329](./0329-power-in-rust-sv.md) | Цели rust и sv переводят целую степень | [ADR](../adr/0329-power-in-rust-sv.md), [анализ](../analyze/0329-power-in-rust-sv.md), [отчёт](../reports/0329-power-in-rust-sv.md) | ГОТОВО |
 | [0330](./0330-aggregate-assignment.md) | Присваивание агрегата массива в целях st и sv | [ADR](../adr/0330-aggregate-assignment.md), [анализ](../analyze/0330-aggregate-assignment.md), [отчёт](../reports/0330-aggregate-assignment.md) | ГОТОВО |
+| [0331](./0331-named-condition-in-body.md) | Именованное условие в теле переводят все цели | [ADR](../adr/0331-named-condition-in-body.md), [анализ](../analyze/0331-named-condition-in-body.md), [отчёт](../reports/0331-named-condition-in-body.md) | ГОТОВО |

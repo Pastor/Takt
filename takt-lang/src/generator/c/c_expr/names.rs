@@ -38,23 +38,6 @@ pub(in crate::generator::c) fn field_name_in_parent(
     None
 }
 
-/// Генерирует имя макроса условия вида `COND_{MODEL}_{NAME}`.
-pub(in crate::generator::c) fn condition_macro_name(cond: &ConditionDefinitionNode) -> String {
-    if let Some(model_rc) = cond.upper.as_ref().and_then(|w| w.upgrade()) {
-        let model_name = Name::from(model_rc);
-        format!(
-            "COND_{}_{}",
-            model_name.unique_uppercase_snakecase(),
-            normalize_lowercase_snakecase(cond.name.clone()).to_uppercase()
-        )
-    } else {
-        format!(
-            "COND_{}",
-            normalize_lowercase_snakecase(cond.name.clone()).to_uppercase()
-        )
-    }
-}
-
 /// Путь к структуре модели **от корня**: `поле.поле…` (для корня — пустая строка).
 ///
 /// Корневая структура владеет всеми под-моделями **по значению**

@@ -18,8 +18,8 @@ use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
-    MatchArmNode, MatchPatternNode, ModelNode, StateNode, StatementNode, VariableNode,
+    ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode, MatchArmNode, MatchPatternNode,
+    ModelNode, StateNode, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -45,7 +45,7 @@ use resolve::find_in_extend;
 pub(super) use condition::generate_condition_expr;
 pub(super) use expr::generate_expr;
 pub(super) use fixed::insert_fixed_helpers;
-pub(super) use names::{condition_macro_name, field_name_in_parent, get_function_name};
+pub(super) use names::{field_name_in_parent, get_function_name};
 pub(super) use precedence::expr_precedence;
 pub(super) use resolve::{resolve_simple_var_in_context, resolve_variable_c_expr};
 pub(super) use stmt::{generate_code_block, generate_formula_check, generate_stmt_expression};
