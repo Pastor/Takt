@@ -244,3 +244,4 @@
 | 0294 | SE-102 называет файл, подключающий библиотеку | [0294-se102-suggest-importer.md](0294-se102-suggest-importer.md) | Готово: подсказка у taktc и takt-sim |
 | 0164 | Реестры стадий сверяются с файлами на диске | [0164-registry-rebuild-gate.md](0164-registry-rebuild-gate.md) | Готово: 42 записи восполнены, гейт заведён |
 | 0173 | Заглушка too_many_arguments снята в цели rust | [0173-rust-generator-arg-count.md](0173-rust-generator-arg-count.md) | Готово: 7 заглушек снято, вывод не изменился |
+| 0252 | CI и замер покрытия приведены к снятому правилу однопоточности | [0252-ci-windows-test-threads.md](0252-ci-windows-test-threads.md) | Готово: флаг снят в двух местах |

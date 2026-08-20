@@ -33,20 +33,26 @@ fi
 # выпадают из измерения целиком — та же ловушка, что с их тестами.
 COMMON="--workspace --features lsp"
 
+# ⚠️ Тесты идут ПАРАЛЛЕЛЬНО (фича 0252). Прежде здесь стоял `--test-threads=1`,
+# перенесённый из времён, когда его требовал предкоммит; фича 0190 флаг сняла —
+# гонки были в каталогах тестов, а не в параллелизме, и ключ уникальности
+# каталога — имя потока, которого в однопоточном режиме нет.
+
+
 case "${1:-}" in
   --html)
     echo "Покрытие: HTML-отчёт (target/llvm-cov/html/index.html)…"
     # shellcheck disable=SC2086
-    cargo llvm-cov $COMMON --html -- --test-threads=1
+    cargo llvm-cov $COMMON --html
     ;;
   --files)
     echo "Покрытие: таблица по файлам…"
     # shellcheck disable=SC2086
-    cargo llvm-cov $COMMON -- --test-threads=1
+    cargo llvm-cov $COMMON
     ;;
   *)
     echo "Покрытие: сводка (это не гейт — порога нет)…"
     # shellcheck disable=SC2086
-    cargo llvm-cov $COMMON --summary-only -- --test-threads=1
+    cargo llvm-cov $COMMON --summary-only
     ;;
 esac
