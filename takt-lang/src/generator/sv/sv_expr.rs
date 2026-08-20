@@ -50,7 +50,7 @@ use crate::generator::sv::sv_state_of;
 use crate::generator::sv::sv_type::sv_enum_type_name;
 use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ConditionNode, ExpressionNode, FunctionDefinitionNode, VariableNode};
+use crate::semantic::{ConditionNode, ExpressionNode, VariableNode};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Строит диагностику `SV-002` — узел АСД не покрыт печатью.
@@ -68,7 +68,7 @@ pub(crate) fn sv002(what: &str) -> Diagnostic {
 }
 
 /// Строит диагностику `SV-005` — `extern fn` в синтезируемом RTL невыразима.
-fn sv005(name: &str, loc: Location) -> Diagnostic {
+pub(in crate::generator::sv) fn sv005(name: &str, loc: Location) -> Diagnostic {
     Diagnostic::error(
         loc,
         format!(
@@ -272,80 +272,6 @@ pub(crate) fn sv_enum_variant_name(enum_name: &str, variant: &str) -> String {
     )
 }
 
-/// Возвращает имя вызываемой функции, отвергая невыразимые случаи.
-///
-/// # Ошибки
-/// - [`SV-005`](sv005) — `extern fn`: в синтезируемом RTL вызова внешнего кода
-///   не существует;
-/// - [`SV-002`](sv002) — неразрешённое определение функции.
-fn local_function_name(func: &FunctionDefinitionNode, loc: Location) -> Result<String, Diagnostic> {
-    match func {
-        FunctionDefinitionNode::Local { name, .. } => Ok(name.clone()),
-        FunctionDefinitionNode::External { name, .. } => Err(sv005(name, loc)),
-        // Встроенные (`min`/`max`/`abs`/`debug`) требуют каждая своего
-        // разворачивания и разбираются отдельно (`print_builtin`); сюда попасть
-        // не должны.
-        FunctionDefinitionNode::Builtin(name, _, _) => Err(sv002(&format!(
-            "встроенная функция '{}' в этой позиции",
-            name
-        ))),
-        FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => {
-            Err(sv002("неразрешённый вызов функции"))
-        }
-    }
-}
-
-/// Печатает вызов функции по уже напечатанным аргументам.
-///
-/// Общий хвост обоих печатающих путей (условие и выражение): грамматики разные,
-/// а правила вызова — одни.
-///
-/// # Ошибки
-/// [`SV-005`](sv005) на `extern fn`, [`SV-002`](sv002) на непереводимой
-/// встроенной функции.
-fn print_call(
-    func: &FunctionDefinitionNode,
-    args: &[String],
-    loc: Location,
-) -> Result<String, Diagnostic> {
-    if let FunctionDefinitionNode::Builtin(name, _, _) = func {
-        return print_builtin(name, args, loc);
-    }
-    Ok(format!(
-        "{}({})",
-        local_function_name(func, loc)?,
-        args.join(", ")
-    ))
-}
-
-/// Разворачивает встроенную функцию языка в выражение SystemVerilog.
-///
-/// Функции языка (`min`/`max`/`abs`) в SV не существуют — там они
-/// **разворачиваются** в тернарный оператор, то есть в мультиплексор. Это не
-/// обход, а прямое соответствие: в RTL выбор меньшего из двух и есть
-/// мультиплексор со сравнителем.
-///
-/// # Ошибки
-/// [`SV-002`](sv002) на `debug` и на неизвестной встроенной функции.
-fn print_builtin(name: &str, args: &[String], _loc: Location) -> Result<String, Diagnostic> {
-    match (name, args) {
-        ("min", [a, b]) => Ok(format!("(({} < {}) ? {} : {})", a, b, a, b)),
-        ("max", [a, b]) => Ok(format!("(({} > {}) ? {} : {})", a, b, a, b)),
-        ("abs", [a]) => Ok(format!("(({} < 0) ? -{} : {})", a, a, a)),
-        // Молчаливо отбросить нельзя: ровно эту тихую потерю закрыла фича 0035.
-        ("debug", _) => Err(sv002(
-            "встроенная функция 'debug': в синтезируемом RTL вывода текста не \
-             существует — печатать некуда и нечем. Отладка RTL ведётся \
-             осциллограммой сигналов, а не печатью; используйте цель \
-             'c'/'rust', если нужен вывод",
-        )),
-        (other, _) => Err(sv002(&format!(
-            "встроенная функция '{}' с таким числом аргументов",
-            other
-        ))),
-    }
-}
-
 /// Извлекает имя элемента Takt из узла переменной.
 ///
 /// Возвращает **имя Takt**, а не имя сигнала: отображение в сигнал делает
@@ -501,7 +427,7 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::Function(func, args, loc) => {
             let printed: Result<Vec<String>, Diagnostic> =
                 args.iter().map(|a| print_condition(a, scope)).collect();
-            print_call(&func.borrow(), &printed?, *loc)
+            super::sv_call::print_call(&func.borrow(), &printed?, *loc)
         }
         // Ветки `_` нет намеренно: `ConditionNode` объявлен в этом же крейте,
         // поэтому исчерпывающий разбор возможен — и обязан валить сборку при
@@ -582,7 +508,9 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Subtract(l, r) => fixed_bin(node, super::sv_fixed::FixedOp::Subtract, l, r)
             .unwrap_or_else(|| bin(l, "-", r)),
         ExpressionNode::ShiftLeft(l, r) => bin(l, "<<", r),
-        ExpressionNode::ShiftRight(l, r) => bin(l, ">>", r),
+        // Знаковый операнд требует арифметического сдвига (`>>>`, фича 0324);
+        // выбор оператора — в `sv_cast`, рядом со знаковостью.
+        ExpressionNode::ShiftRight(l, r) => bin(l, super::sv_cast::shift_right_operator(l), r),
         ExpressionNode::BitwiseAnd(l, r) => bin(l, "&", r),
         ExpressionNode::BitwiseOr(l, r) => bin(l, "|", r),
         ExpressionNode::BitwiseXor(l, r) => bin(l, "^", r),
@@ -620,7 +548,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
                 args.iter().map(|a| print_expression(a, scope)).collect();
             let f = func.borrow();
             let loc = f.loc();
-            print_call(&f, &printed?, loc)
+            super::sv_call::print_call(&f, &printed?, loc)
         }
         // Присваивание — оператор, а не выражение: печатается в `sv_stmt`.
         // Здесь оно означало бы `x = (y = 1)`, чего Takt не строит.

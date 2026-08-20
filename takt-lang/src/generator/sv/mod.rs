@@ -37,6 +37,7 @@
 // Адаптер шины APB (фича 0169): обёртка над регистровым интерфейсом ядра.
 mod sv_apb;
 mod sv_blocks;
+mod sv_call;
 mod sv_cast;
 mod sv_compose;
 mod sv_const;
