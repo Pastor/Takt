@@ -511,3 +511,4 @@
 | 0269-02 | 0269 | Гейт языков блоков кода | [0269-02-book-st-syntax-highlight.md](0269-02-book-st-syntax-highlight.md) |
 | 0270-01 | 0270 | Сборка PDF без тегов доступности | [0270-01-book-pdf-size.md](0270-01-book-pdf-size.md) |
 | 0283-01 | 0283 | Слияние report_simple_result и report_hal_result | [0283-01-cli-report-result-merge.md](0283-01-cli-report-result-merge.md) |
+| 0294-01 | 0294 | Поиск импортёров и заметка диагностики | [0294-01-se102-suggest-importer.md](0294-01-se102-suggest-importer.md) |

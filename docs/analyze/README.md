@@ -270,3 +270,4 @@
 | 0269 | Подсветка блоков st и ebnf в документе | [0269-book-st-syntax-highlight.md](0269-book-st-syntax-highlight.md) | — (новая фича) |
 | 0270 | Вес PDF документа: причина найдена, теги отключены | [0270-book-pdf-size.md](0270-book-pdf-size.md) | — (новая фича) |
 | 0283 | Печать результата компиляции сведена к одной функции | [0283-cli-report-result-merge.md](0283-cli-report-result-merge.md) | — (новая фича) |
+| 0294 | SE-102 называет файл, подключающий библиотеку | [0294-se102-suggest-importer.md](0294-se102-suggest-importer.md) | — (новая фича) |

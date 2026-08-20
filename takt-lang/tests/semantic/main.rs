@@ -42,6 +42,7 @@ mod import_adopt_tests;
 mod import_enum_match_tests;
 mod import_function_tests;
 mod import_type_definition_tests;
+mod importers_hint_tests;
 mod init_forward_reference_tests;
 mod init_port_read_tests;
 mod library_entry_tests;

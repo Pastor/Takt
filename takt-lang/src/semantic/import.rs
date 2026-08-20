@@ -5,6 +5,7 @@
 
 pub(in crate::semantic) mod adopt;
 pub(in crate::semantic) mod build;
+pub mod importers; // «кто подключает эту библиотеку» — подсказка SE-102 (0294)
 pub(in crate::semantic) mod select;
 
 use crate::diagnostics::Diagnostic;

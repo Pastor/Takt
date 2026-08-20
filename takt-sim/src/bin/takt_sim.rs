@@ -120,7 +120,20 @@ fn run(args: Args) -> Result<RunResult, String> {
     // разойтись двум ответам на один вход не по чему. ⚠️ Прежде симулятор такой
     // файл принимал и рапортовал «Завершено: модель достигла терминального
     // состояния за 1 шагов» — прогон автомата, которого в файле нет.
-    if let Some(d) = takt_lang::pipeline::validate_entry_model(&model_rc) {
+    if let Some(mut d) = takt_lang::pipeline::validate_entry_model(&model_rc) {
+        // Подсказка «кто эту библиотеку подключает» — та же, что у `taktc`
+        // (фича 0294). Два ответа на один вход расходиться не должны: если
+        // компилятор называет импортёра, а симулятор молчит, автор получает
+        // разную помощь от инструментов одного проекта.
+        if let Some(note) =
+            takt_lang::pipeline::importers_note(&args.model_file.to_string_lossy(), &search_paths)
+        {
+            d.notes.push(takt_lang::diagnostics::Note {
+                // Позиции нет по существу: заметка говорит о другом файле.
+                loc: takt_lang::diagnostics::Location::Codegen,
+                message: note,
+            });
+        }
         return Err(format_diagnostic(&d, &files));
     }
 
