@@ -286,3 +286,4 @@
 | 0329 | Степень в целях rust и sv | [0329-power-in-rust-sv.md](0329-power-in-rust-sv.md) | Пройден: 5/5 условий |
 | 0330 | Присваивание агрегата | [0330-aggregate-assignment.md](0330-aggregate-assignment.md) | Пройден: 3/3 условия, прогон iec2c |
 | 0331 | Именованное условие в теле | [0331-named-condition-in-body.md](0331-named-condition-in-body.md) | Пройден: 3/3 условия |
+| 0332 | Обещание задачи в диагностике | [0332-stub-task-promise.md](0332-stub-task-promise.md) | Пройден: 6/6 условий |
