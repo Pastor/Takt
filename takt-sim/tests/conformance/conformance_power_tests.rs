@@ -209,3 +209,45 @@ fn generated_st_expands_power_into_multiplications() {
         "порождённый ST не принят арбитром:\n{log}"
     );
 }
+
+/// Цели `rust` и `sv` тоже переводят степень (фича 0329).
+///
+/// ⚠️ `rust` печатает `wrapping_pow`: он даёт **ровно** семантику эталона
+/// (обёртка `mod 2ⁿ`), тогда как обычный `pow` паникует при переполнении в
+/// отладке — то есть прошивка и прогон разошлись бы падением.
+///
+/// ⚠️ `sv` разворачивает степень в умножения: синтезатору нужна константа, и
+/// при литеральном показателе она есть.
+#[test]
+fn rust_and_sv_translate_power() {
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    let dir = build_dir("power_targets");
+
+    takt_lang::compile_to_rust(
+        UNIT,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение Rust");
+    let rust = std::fs::read_to_string(dir.join(format!("{UNIT}.rs"))).expect("чтение Rust");
+    assert!(
+        rust.contains("wrapping_pow"),
+        "цель rust обязана печатать wrapping_pow:\n{rust}"
+    );
+
+    takt_lang::compile_to_sv(
+        UNIT,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+    let sv = std::fs::read_to_string(dir.join(format!("{UNIT}.sv"))).expect("чтение SV");
+    assert!(
+        !sv.contains("**"),
+        "оператор `**` синтезатору не годится — его в выводе быть не должно:\n{sv}"
+    );
+}

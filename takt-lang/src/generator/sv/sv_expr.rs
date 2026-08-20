@@ -555,10 +555,9 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Assign(_, _) => Err(sv002(
             "присваивание внутри выражения (в SystemVerilog присваивание — оператор)",
         )),
-        ExpressionNode::Power(_, _) => Err(sv002(
-            "возведение в степень: в синтезируемом RTL оператора `**` над \
-             переменными не существует (синтезатор требует константу)",
-        )),
+        // Степень с ЛИТЕРАЛЬНЫМ показателем разворачивается в умножения
+        // (фича 0329) — синтезатору нужна константа, и она здесь есть.
+        ExpressionNode::Power(base, exp) => super::sv_cast::power(base, exp, scope),
         ExpressionNode::Rational(_, _) => Err(sv002(
             "вещественный литерал: в синтезируемом RTL плавающей точки нет (см. SV-003)",
         )),
