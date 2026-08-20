@@ -552,3 +552,4 @@
 | 0318-01 | 0318 | Приведение к duration и обратно вычисляется при компиляции | [0318-01-duration-cast-folding.md](0318-01-duration-cast-folding.md) |
 | 0319-01 | 0319 | Приведение агрегата к массиву вычисляется при компиляции | [0319-01-array-cast-folding.md](0319-01-array-cast-folding.md) |
 | 0320-01 | 0320 | Длина агрегата сверяется с объявлением | [0320-01-aggregate-length-check.md](0320-01-aggregate-length-check.md) |
+| 0321-01 | 0321 | Цель sv разворачивает for со статическими границами | [0321-01-sv-for-unroll.md](0321-01-sv-for-unroll.md) |

@@ -50,6 +50,7 @@ mod sv_state_of;
 mod sv_stmt;
 mod sv_time;
 mod sv_type;
+mod sv_unroll;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::GenerateOptions;
