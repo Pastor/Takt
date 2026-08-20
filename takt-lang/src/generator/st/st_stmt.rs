@@ -128,16 +128,28 @@ pub(crate) fn print_statement(
                     rhs.as_ref()
             {
                 let name = variable_ident(&var.borrow());
-                let elem = match assign_target_type(&var.borrow()) {
-                    Some(TypeNode::Array(_, elem)) => Some(*elem),
+                // Место записи выбирает ОБЩИЙ носитель (фича 0340): у массива
+                // это индекс, у структуры — имя поля. Прежде здесь стоял
+                // индекс всегда, и `body[0] := 3;` для структуры `iec2c`
+                // отвергал — при нулевом коде возврата `taktc`.
+                let target_ty = assign_target_type(&var.borrow());
+                let fields = match &target_ty {
+                    Some(TypeNode::Struct(sname)) => {
+                        model.search_struct(sname).map(|def| def.fields)
+                    }
                     _ => None,
                 };
-                for (index, item) in items.iter().enumerate() {
-                    let value = match &elem {
+                let places = crate::generator::aggregate::places(
+                    fields.as_deref(),
+                    target_ty.as_ref(),
+                    items.len(),
+                );
+                for (item, place) in items.iter().zip(places) {
+                    let value = match &place.ty {
                         Some(ty) => coerce_to(item, ty, model)?,
                         None => print_expression(item, model)?,
                     };
-                    p.ident(&format!("{name}[{index}] := {value};")).nl();
+                    p.ident(&format!("{name}{} := {value};", place.suffix)).nl();
                 }
                 return Ok(());
             }

@@ -89,6 +89,8 @@ pub(crate) struct Fsm {
     pub(crate) state_reg: BTreeMap<String, String>,
     /// Варианты перечислений модели — для восстановления варианта по значению.
     enums: BTreeMap<String, Vec<(String, i128)>>,
+    /// Поля структур: `имя → [(поле, тип)]` (фича 0340).
+    structs: BTreeMap<String, Vec<(String, crate::semantic::type_node::TypeNode)>>,
     /// Цепочки `+`: несущее состояние и число шагов (для эмиссии enum шага,
     /// задача 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
     step_enums: Vec<(Name, usize)>,
@@ -263,6 +265,7 @@ impl Fsm {
             registered: BTreeSet::new(),
             state_reg: BTreeMap::new(),
             enums: BTreeMap::new(),
+            structs: BTreeMap::new(),
             step_enums: Vec::new(),
             warnings: std::cell::RefCell::new(Vec::new()),
         };
@@ -278,6 +281,13 @@ impl Fsm {
                 fsm.enums
                     .entry(def.name.clone())
                     .or_insert_with(|| def.variants.clone());
+            }
+            // Поля структур — тем же обходом (фича 0340): присваивание агрегата
+            // адресует структуру по имени поля.
+            for def in model_rc.borrow().structs.values() {
+                fsm.structs
+                    .entry(def.name.clone())
+                    .or_insert_with(|| def.fields.clone());
             }
         }
 
@@ -444,6 +454,7 @@ impl Fsm {
             function: None,
             function_ret: None,
             enums: &self.enums,
+            structs: &self.structs,
             warnings: &self.warnings,
         }
     }
@@ -566,6 +577,7 @@ pub(crate) fn emit_functions(
                 function: Some(name),
                 function_ret: Some(ret),
                 enums: &fsm.enums,
+                structs: &fsm.structs,
                 warnings: &fsm.warnings,
             };
             // Тело печатается в буфер: параметру, которым тело не

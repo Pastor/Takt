@@ -294,3 +294,4 @@
 | 0337 | Неиспользуемый параметр функции | [0337-unused-function-parameter.md](0337-unused-function-parameter.md) | Пройден: 7/7 условий |
 | 0338 | Перечисление внутри функции | [0338-enum-in-function.md](0338-enum-in-function.md) | Пройден: 5/5 условий, значения сверены |
 | 0339 | Шаблон отказа цели `sv` | [0339-sv-refusal-template.md](0339-sv-refusal-template.md) | Пройден: 5/5 условий |
+| 0340 | Место записи агрегата | [0340-aggregate-assign-place.md](0340-aggregate-assign-place.md) | Пройден: 6/6 условий, значения сверены |
