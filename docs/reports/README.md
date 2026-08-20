@@ -246,3 +246,4 @@
 | 0173 | Заглушка too_many_arguments снята в цели rust | [0173-rust-generator-arg-count.md](0173-rust-generator-arg-count.md) | Готово: 7 заглушек снято, вывод не изменился |
 | 0252 | CI и замер покрытия приведены к снятому правилу однопоточности | [0252-ci-windows-test-threads.md](0252-ci-windows-test-threads.md) | Готово: флаг снят в двух местах |
 | 0261 | Жёлтая зона гейта размера модулей и его сторож | [0261-module-size-warning-zone.md](0261-module-size-warning-zone.md) | Готово: зона 970…1000, сторож заведён |
+| 0265 | SVG диаграмм не несут версию graphviz | [0265-book-svg-graphviz-version.md](0265-book-svg-graphviz-version.md) | Готово: молчаливая поломка регенерации устранена |
