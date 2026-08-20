@@ -6,6 +6,12 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast::{Identifier, VariableDefine};
+mod init_refusal;
+
+use crate::semantic::declaration::init_refusal::{
+    forward_reference, initializer_calls_extern, initializer_calls_function, unfoldable_call,
+    unfoldable_fractional,
+};
 use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::{
     ExpressionNode, ModelNode, ParameterNode, PortDirection, VariableNode, const_eval,
@@ -409,40 +415,54 @@ pub(crate) fn fold_variable_initializers(
         if let Some(diagnostic) = forward_reference(source, name, variables) {
             return Err(diagnostic);
         }
-        let Ok(literal) = const_eval::fold_to_literal_in(source, model, &known) else {
-            // Дробное объявление, инициализатор которого не свернулся, —
-            // ошибка `SE-114` (фича 0300). Здесь молчание стоит дороже всего:
-            // эталон оставляет ноль, а цель печатает выражение и считает его
-            // сама, то есть прогон и прошивка расходятся БЕЗ единого слова.
-            // Точную арифметику свёртка уже выполнила (`decimal.rs`); сюда
-            // доходит лишь то, что требует ОКРУГЛЕНИЯ, а оно задано эталоном.
-            if let Some(diagnostic) =
-                unfoldable_fractional(source, name, declared_type(&variables[name]), loc)
-            {
-                return Err(diagnostic);
+        let literal = match const_eval::fold_to_literal_in(source, model, &known) {
+            Ok(literal) => literal,
+            Err(cause) => {
+                // Дробное объявление, инициализатор которого не свернулся, —
+                // ошибка `SE-114` (фича 0300). Здесь молчание стоит дороже всего:
+                // эталон оставляет ноль, а цель печатает выражение и считает его
+                // сама, то есть прогон и прошивка расходятся БЕЗ единого слова.
+                // Точную арифметику свёртка уже выполнила (`decimal.rs`); сюда
+                // доходит лишь то, что требует ОКРУГЛЕНИЯ, а оно задано эталоном.
+                if let Some(diagnostic) =
+                    unfoldable_fractional(source, name, declared_type(&variables[name]), loc)
+                {
+                    return Err(diagnostic);
+                }
+                // Вызов ВНЕШНЕЙ функции в инициализаторе — `SE-084` (фича 0305):
+                // её значение при компиляции неизвестно по определению, а молчание
+                // здесь дороже всего — цель `st` теряла инициализатор без единого
+                // слова, тогда как `c`, `rust` и `sv` отказывали.
+                if let Some(func) = initializer_calls_extern(source, model) {
+                    return Err(Diagnostic::error(
+                        loc,
+                        format!(
+                            "инициализатор '{name}' зовёт внешнюю функцию '{func}': её значение \
+                             при компиляции неизвестно — тело живёт вне программы, и начальное \
+                             значение выставляется до первого такта. Присвойте в теле состояния: \
+                             'always {{ {name} := {func}(); }}'"
+                        ),
+                    )
+                    .with_code("SE-084"));
+                }
+                // Невычислимый вызов ЛОКАЛЬНОЙ функции — `SE-084` с ПРИЧИНОЙ
+                // (фича 0306). Вычислитель уже назвал, почему тело не
+                // исполняется (чтение переменной, порт, неподдержанный
+                // оператор, исчерпанный бюджет), и до этой фичи его слова
+                // выбрасывались вместе с ошибкой: эталон оставлял ноль МОЛЧА,
+                // `st` теряла инициализатор, а `c`, `rust` и `sv` отвечали
+                // внутренними кодами (`CC-023`, `RS-011`, `SV-002`), которые
+                // называют дефект инструмента, а не запись автора.
+                if initializer_calls_function(source) {
+                    return Err(unfoldable_call(name, &cause, loc));
+                }
+                // Прочее невычислимое оставляем как есть: диагностику о нём (если
+                // она нужна) поднимает разрешение выражения ниже по конвейеру.
+                // Отвергать всякую невычислимую форму значило бы ломать входы,
+                // которых нет в корпусе (решение заказчика: Option D расширяет
+                // язык, а не ужесточает).
+                continue;
             }
-            // Вызов ВНЕШНЕЙ функции в инициализаторе — `SE-084` (фича 0305):
-            // её значение при компиляции неизвестно по определению, а молчание
-            // здесь дороже всего — цель `st` теряла инициализатор без единого
-            // слова, тогда как `c`, `rust` и `sv` отказывали.
-            if let Some(func) = initializer_calls_extern(source, model) {
-                return Err(Diagnostic::error(
-                    loc,
-                    format!(
-                        "инициализатор '{name}' зовёт внешнюю функцию '{func}': её значение \
-                         при компиляции неизвестно — тело живёт вне программы, и начальное \
-                         значение выставляется до первого такта. Присвойте в теле состояния: \
-                         'always {{ {name} := {func}(); }}'"
-                    ),
-                )
-                .with_code("SE-084"));
-            }
-            // Прочее невычислимое оставляем как есть: диагностику о нём (если
-            // она нужна) поднимает разрешение выражения ниже по конвейеру.
-            // Отвергать всякую невычислимую форму значило бы ломать входы,
-            // которых нет в корпусе (решение заказчика: Option D расширяет
-            // язык, а не ужесточает).
-            continue;
         };
         // Значение запоминается ВСЕГДА — в том числе у литерала: на него могут
         // сослаться объявления ниже (`var base := 5; var probe := base + 1;`).
@@ -541,130 +561,6 @@ fn retype_declaration(var: &mut VariableNode, ty: crate::semantic::type_node::Ty
     }
 }
 
-/// Несвёрнутая дробная АРИФМЕТИКА в инициализаторе — `SE-114` (фича 0300).
-///
-/// # Почему именно дробное и почему ошибка
-///
-/// Замер ADR 0300: `var d: float := 1.0 / 3.0;` даёт `0.0` у эталона и
-/// `model->d = 1.0 / 3.0;` (то есть `0.333…`) у цели `c` — молча. Общего
-/// поведения у такой записи не существует: эталон вычисляет дробное **своими**
-/// правилами округления, а свернуть их при компиляции значит завести второй
-/// источник истины (довод фичи 0185, он же в `const_eval`).
-///
-/// Точная арифметика (`+`, `-`, `*` над десятичными литералами, в том числе
-/// смешанная с целым) сюда не доходит — её свернул `const_eval::decimal`.
-/// Остаётся то, что требует **округления**: прежде всего деление.
-///
-/// ⚠️ **Отказ узкий, и это замер, а не осторожность.** Отвергается только
-/// **арифметика**: формы, которые эталон вычислять умеет, обязаны остаться
-/// законными. Приведение `as` — ровно такая форма (фича 0205 научила ей второй
-/// вычислитель), и первая, слишком широкая редакция проверки отвергла
-/// `var v := 3 as q(4, 4);` — вход, на котором эталон и цель **уже согласны**
-/// (48 у обоих). Поймали это сторожа 0205, а не чтение.
-///
-/// ⚠️ Целых это не касается: их свёртка (0192) точна всегда, а невычислимое
-/// целое остаётся законным — сужать язык там повода нет.
-///
-/// ⚠️ **Граница:** невычислимая НЕарифметическая форма (вызов функции в
-/// дробном инициализаторе) остаётся с прежним поведением — она вне объёма
-/// фичи и вынесена кандидатом.
-/// Инициализатор, зовущий **внешнюю** функцию, — ошибка `SE-084` (фича 0305).
-///
-/// # Почему запрет, а не молчание
-///
-/// Значение `extern`-функции при компиляции неизвестно **по определению**: её
-/// тело живёт вне программы. Замер 2026-08-20 на входе
-/// `var mirror: u8 := sensor();` дал **три** разных ответа:
-///
-/// | Потребитель | Ответ |
-/// |---|---|
-/// | эталон | `mirror = 0` — молча |
-/// | `c`, `c-hal` | `CC-023` |
-/// | `rust` | `RS-011` |
-/// | `sv`, `sv-mmio` | `SV-002` |
-/// | **`st`, `st-at`** | **код 0 и потерянный инициализатор** (`mirror : USINT;`) |
-///
-/// Худший ответ — молчаливая потеря: прошивка получает необъявленное начальное
-/// значение, и никто об этом не говорит. Отказ приводит девять потребителей к
-/// одному ответу, и он же указывает автору штатный путь — присвоить в теле.
-///
-/// ⚠️ Запрет **узкий**: только вызов внешней функции. Вызов локальной
-/// вычисляется (`const_eval::call`), и `var x := seed();` работает — проверено
-/// контрольным входом. Прочие невычислимые формы остаются как есть: решение
-/// заказчика (Option D фичи 0192) расширяет язык, а не ужесточает.
-fn initializer_calls_extern(
-    source: &crate::parser::ast::Expression,
-    model: &Rc<RefCell<ModelNode>>,
-) -> Option<String> {
-    use crate::parser::ast::Expression as E;
-    if let E::Function(_, id, _) = source
-        && let Some(def) = model.borrow().search_func(&id.name)
-        && matches!(
-            &*def.borrow(),
-            crate::semantic::FunctionDefinitionNode::External { .. }
-        )
-    {
-        return Some(id.name.clone());
-    }
-    let (left, right) = source.components();
-    left.and_then(|e| initializer_calls_extern(e, model))
-        .or_else(|| right.and_then(|e| initializer_calls_extern(e, model)))
-}
-
-fn unfoldable_fractional(
-    source: &crate::parser::ast::Expression,
-    name: &str,
-    ty: Option<&crate::semantic::type_node::TypeNode>,
-    loc: Location,
-) -> Option<Diagnostic> {
-    use crate::semantic::type_node::TypeNode;
-    if is_literal(source) {
-        return None;
-    }
-    if !matches!(ty, Some(TypeNode::Rational | TypeNode::Fixed { .. })) {
-        return None;
-    }
-    if !contains_arithmetic(source) {
-        return None;
-    }
-    Some(
-        Diagnostic::error(
-            loc,
-            format!(
-                "инициализатор '{name}' — дробное выражение, которое компилятор не может \
-                 вычислить точно: округление дробных задано эталоном симулятора, и \
-                 посчитав здесь, компилятор дал бы значение, которого симулятор не \
-                 вычислит (прогон показал бы ноль, а прошивка — своё число, и молча). \
-                 Задайте готовый литерал — например 'var {name}: … := 0.333;' — либо \
-                 вычисляйте в теле состояния: 'always {{ {name} := …; }}'"
-            ),
-        )
-        .with_code("SE-114"),
-    )
-}
-
-/// Есть ли в выражении бинарная арифметика.
-///
-/// Обход идёт общим разбором [`ast::Expression::components`], поэтому новый узел
-/// АСД сам собой попадает под спуск, а список арифметических форм остаётся
-/// коротким и явным.
-fn contains_arithmetic(expr: &crate::parser::ast::Expression) -> bool {
-    use crate::parser::ast::Expression as E;
-    if matches!(
-        expr,
-        E::Power(..)
-            | E::Multiply(..)
-            | E::Divide(..)
-            | E::Modulo(..)
-            | E::Add(..)
-            | E::Subtract(..)
-    ) {
-        return true;
-    }
-    let (left, right) = expr.components();
-    left.is_some_and(contains_arithmetic) || right.is_some_and(contains_arithmetic)
-}
-
 /// Понижает **свёрнутый** дробный литерал в целое q-представление (фича 0300).
 ///
 /// Возвращает выражение как есть, если тип объявления не `q(m, n)` либо
@@ -742,7 +638,7 @@ fn normalize_computed(
 /// ⚠️ Дробный литерал к моменту свёртки уже понижен в q-представление
 /// (фича 0096), поэтому «свёртка» вернула бы его в дробный вид и отменила
 /// понижение — сверка Q-арифметики с целью `c` это ловит.
-fn is_literal(expr: &crate::parser::ast::Expression) -> bool {
+pub(super) fn is_literal(expr: &crate::parser::ast::Expression) -> bool {
     use crate::parser::ast::Expression as E;
     matches!(
         expr,
@@ -754,7 +650,7 @@ fn is_literal(expr: &crate::parser::ast::Expression) -> bool {
 ///
 /// Синтезированные узлы (без позиции) идут последними: ссылаться на них
 /// инициализатору всё равно нечем.
-fn declaration_position(var: &VariableNode) -> (u32, u32) {
+pub(super) fn declaration_position(var: &VariableNode) -> (u32, u32) {
     let loc = match var {
         VariableNode::Simple { loc, .. }
         | VariableNode::Const { loc, .. }
@@ -767,65 +663,15 @@ fn declaration_position(var: &VariableNode) -> (u32, u32) {
     }
 }
 
-/// Ссылка вперёд: имя переменной, объявленной НИЖЕ по тексту (фича 0246).
-///
-/// Возвращает диагностику `SE-109`, если инициализатор `source` упоминает
-/// переменную (`var`) той же карты объявлений, чьё объявление стоит после
-/// объявления `owner`.
-///
-/// # Что проверяется точно, а что оставлено законным
-///
-/// Правило 0192 — «имя в инициализаторе значит начальное значение и ссылается
-/// только НАЗАД по тексту» — до этой фичи не проверялось ничем.
-///
-/// ⚠️ **Константы исключены намеренно:** у них ссылка вперёд разрешается
-/// проходами до неподвижной точки (фича 0204) и даёт согласованный результат у
-/// эталона и целей — проверено пробой. Запрет сломал бы работающие входы.
-///
-/// ⚠️ **Прочие невычислимые формы (порт, вызов функции, обращение к полю)
-/// остаются законными:** фича не ужесточает язык, а исполняет уже принятое
-/// правило. Отвергать всё невычислимое значило бы ломать входы, которых нет в
-/// корпусе, — тот же довод, по которому 0192 выбрала расширение, а не запрет.
-fn forward_reference(
-    source: &crate::parser::ast::Expression,
-    owner: &str,
-    variables: &BTreeMap<String, VariableNode>,
-) -> Option<Diagnostic> {
-    let after = declaration_position(&variables[owner]);
-    let mut names = Vec::new();
-    collect_identifiers(source, &mut names);
-    for (name, loc) in names {
-        let Some(other) = variables.get(&name) else {
-            continue;
-        };
-        // Только переменные: константа вперёд законна (см. заголовок функции).
-        if !matches!(other, VariableNode::Simple { .. }) {
-            continue;
-        }
-        if declaration_position(other) <= after {
-            continue;
-        }
-        return Some(
-            Diagnostic::error(
-                loc,
-                format!(
-                    "переменная '{name}' объявлена ниже: в инициализаторе имя значит \
-                     НАЧАЛЬНОЕ значение и ссылается только назад по тексту. \
-                     Переставьте объявления либо возьмите константу"
-                ),
-            )
-            .with_code("SE-109"),
-        );
-    }
-    None
-}
-
 /// Собирает идентификаторы выражения вместе с их позициями (фича 0246).
 ///
 /// Разбор намеренно **не** исчерпывающий по `Expression`: интересны только
 /// имена, а формы, их не содержащие, к делу не относятся. Пропущенная форма
 /// даёт прежнее поведение (молчание), а не ложный отказ.
-fn collect_identifiers(expr: &crate::parser::ast::Expression, out: &mut Vec<(String, Location)>) {
+pub(super) fn collect_identifiers(
+    expr: &crate::parser::ast::Expression,
+    out: &mut Vec<(String, Location)>,
+) {
     use crate::parser::ast::Expression;
     match expr {
         Expression::Variable(id) => out.push((id.name.clone(), id.loc)),

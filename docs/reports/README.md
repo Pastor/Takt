@@ -254,3 +254,4 @@
 | 0297 | Гейт живого контекста читает абзацы, а не строки | [0297-check-claude-md-line-blindness.md](0297-check-claude-md-line-blindness.md) | Готово: сверка версий заработала, бутафория снята |
 | 0304 | Локальное объявление в теле блока получает тип | [0304-local-declaration-type-inference.md](0304-local-declaration-type-inference.md) | Готово: один вход — один ответ у девяти потребителей |
 | 0305 | Вызов внешней функции в инициализаторе — SE-084 | [0305-extern-call-in-initializer.md](0305-extern-call-in-initializer.md) | Готово: девять потребителей отвечают одинаково |
+| 0306 | Невычислимый вызов функции в инициализаторе | [0306-unfoldable-call-in-initializer.md](0306-unfoldable-call-in-initializer.md) | Готово: девять потребителей отвечают одинаково, причина названа |

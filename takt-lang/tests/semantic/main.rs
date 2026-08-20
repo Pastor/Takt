@@ -76,6 +76,7 @@ mod stage_recovery_tests;
 mod type_inference_chain_tests;
 mod type_redefinition_tests;
 mod unconditional_edge_tests;
+mod unfoldable_call_tests;
 mod unreachable_edge_tests;
 mod unused_formula_tests;
 mod validate_batch_tests;

@@ -1,6 +1,11 @@
 //! Чтение **неопределённой памяти** в инициализаторе объявления: `SE-099`
 //! (ячейка по адресу, фича 0189) и `SE-113` (порт, фича 0266).
 //!
+//! ⚠️ Вызов функции, который компилятор исполнить не может, сюда **не
+//! относится**: его отвергает свёртка инициализаторов (`semantic/declaration.rs`,
+//! фичи 0305 и 0306) стадией 2 — там же, где вычислитель называет причину.
+//! Место эмиссии `SE-084` одно; вторая копия правила разъехалась бы текстом.
+//!
 //! ## Почему это ошибка, а не значение
 //!
 //! Инициализатор объявления вычисляется **до первого такта**: эталон делает это
@@ -83,9 +88,6 @@ enum UndefinedRead {
     Cell,
     /// Чтение порта по имени (фича 0266).
     Port(String),
-    /// Вызов **внешней** функции (фича 0305): её значение при компиляции
-    /// неизвестно по определению — тело живёт вне программы.
-    ExternCall(String),
 }
 
 /// Ищет чтение неопределённой памяти в выражении инициализатора.
@@ -112,18 +114,6 @@ fn check(expr: &ExpressionNode, loc: Location, name: &str) -> Result<(), Diagnos
             ),
         )
         .with_code("SE-113")),
-        Some(UndefinedRead::ExternCall(func)) => Err(Diagnostic::error(
-            loc,
-            format!(
-                "инициализатор '{name}' зовёт внешнюю функцию '{func}': её значение при \
-                 компиляции неизвестно — тело живёт вне программы, а начальное значение \
-                 выставляется до первого такта. Прежде потребители расходились молча: \
-                 эталон давал ноль, 'st' теряла инициализатор без единого слова, а 'c', \
-                 'rust' и 'sv' отказывали. Зовите функцию в теле состояния — например, \
-                 'always {{ {name} := {func}(); }}'"
-            ),
-        )
-        .with_code("SE-084")),
     }
 }
 
@@ -178,28 +168,13 @@ fn find_undefined_read(expr: &ExpressionNode) -> Option<UndefinedRead> {
         ExpressionNode::ConditionalOperator(cond, then_, else_) => find_undefined_read(cond)
             .or_else(|| find_undefined_read(then_))
             .or_else(|| find_undefined_read(else_)),
-        // Вызов функции: сперва спрашиваем САМУ функцию — внешняя запрещена
-        // здесь целиком (фича 0305), — затем обходим аргументы.
-        ExpressionNode::Function(def, args) => {
-            // ⚠️ Форм внешней функции в ячейке ДВЕ. Инициализатор разрешается на
-            // стадии 2, а тела функций строятся на стадии 5 — поэтому в снимке
-            // ячейки лежит `Unresolved(FunctionDefine { external: true, … })`, а
-            // не `External`. Проверять только второй вариант значит не поймать
-            // ничего: первая редакция так и делала, и проба молчала.
-            let external = match &*def.borrow() {
-                FunctionDefinitionNode::External { name, .. } => Some(name.clone()),
-                FunctionDefinitionNode::Unresolved(raw) if raw.external => raw
-                    .name
-                    .as_ref()
-                    .map(|id| id.name.clone())
-                    .or(Some(String::from("внешняя функция"))),
-                _ => None,
-            };
-            if let Some(func) = external {
-                return Some(UndefinedRead::ExternCall(func));
-            }
-            args.iter().find_map(find_undefined_read)
-        }
+        // Вызов функции: обходятся только АРГУМЕНТЫ. Саму функцию здесь не
+        // спрашивают — вызов, который компилятор исполнить не может (внешний
+        // либо невычислимый), отвергает свёртка инициализаторов стадией 2, то
+        // есть **раньше** этого обхода (фичи 0305 и 0306). Пока проверка стояла
+        // и здесь, у одного кода было два места эмиссии с разными текстами; их
+        // расхождение — класс 0084/0193/0195.
+        ExpressionNode::Function(_, args) => args.iter().find_map(find_undefined_read),
         ExpressionNode::Array(args) | ExpressionNode::Initializer(args) => {
             args.iter().find_map(find_undefined_read)
         }
