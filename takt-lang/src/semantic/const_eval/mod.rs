@@ -722,6 +722,42 @@ fn cast_identity(
     {
         return Ok(text);
     }
+    // Приведение к `duration` — мост через МИЛЛИСЕКУНДЫ (решение ADR 0134), и
+    // пересчёт делает единственный носитель `semantic::duration` (фича 0318).
+    // Прежде компилятор его не считал, и `250 as duration` отвергала цель `sv`
+    // (`SV-002`), тогда как остальные семь потребителей вход исполняли.
+    if matches!(target_of(ty, scope), TypeNode::Duration)
+        && let ConstValue::Int(millis) = value
+        && let Ok(millis) = i64::try_from(*millis)
+        && let Some(nanos) = crate::semantic::duration::from_millis(millis)
+    {
+        return Ok(ConstValue::Duration(nanos));
+    }
+    // Обратное направление — `duration as ЦЕЛОЕ` — тот же мост и тот же
+    // носитель. Замер 2026-08-20: `D as u32` цели `c`/`c-hal` отвергали
+    // `CC-023` (код «узел не прошёл понижение», то есть дефект инструмента),
+    // `sv` — `SV-002`, а эталон, `st` и `rust` давали 250.
+    //
+    // ⚠️ Дальше значение идёт ОБЩИМ путём целочисленного приведения (0310):
+    // миллисекунды могут не поместиться в узкий тип, и правило переноса тут
+    // ровно то же.
+    if let ConstValue::Duration(nanos) = value
+        && let TypeNode::Integer { bits, signed } = target_of(ty, scope)
+    {
+        let millis = i128::from(crate::semantic::duration::to_millis(*nanos));
+        return match int_cast::integer(millis, bits, signed) {
+            Ok(value) => Ok(ConstValue::Int(value)),
+            Err(overflow) => Err(Diagnostic::error(
+                loc,
+                format!(
+                    "приведение длительности к знаковому {}-битному типу переполняет его: \
+                     {} мс в него не помещаются",
+                    overflow.bits, overflow.value
+                ),
+            )
+            .with_code("SE-121")),
+        };
+    }
     let ConstValue::Int(n) = value else {
         return Err(not_constant(
             loc,

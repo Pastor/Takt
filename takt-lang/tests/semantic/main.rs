@@ -32,6 +32,7 @@ mod diagnostic_text_tests;
 mod diagnostics_batch_tests;
 mod diagnostics_file_tests;
 mod diagnostics_tests;
+mod duration_cast_tests;
 mod empty_enum_tests;
 mod empty_struct_tests;
 mod extern_initializer_tests;
