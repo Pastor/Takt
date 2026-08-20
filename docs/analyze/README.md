@@ -301,3 +301,4 @@
 | 0315 | Гейты без сторожей получают сторожей | [0315-gate-guards.md](0315-gate-guards.md) | — (новая фича) |
 | 0316 | Комментарий шага не пересказывает заголовок гейта | [0316-precheck-comment-duplication.md](0316-precheck-comment-duplication.md) | — (новая фича) |
 | 0317 | Правило представления q — общий носитель | [0317-fixed-cast-shared-layer.md](0317-fixed-cast-shared-layer.md) | — (новая фича) |
+| 0318 | Приведение к duration и обратно вычисляется при компиляции | [0318-duration-cast-folding.md](0318-duration-cast-folding.md) | — (новая фича) |
