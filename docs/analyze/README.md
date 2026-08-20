@@ -262,3 +262,4 @@
 | 0268 | У SE-033 нет описания в приложении «Ошибки» | [0268-se033-appendix-description.md](0268-se033-appendix-description.md) | зависимостей нет; замер нашёл ещё два места |
 | 0274 | Снимки порождённого кода в book/ никем не сверяются | [0274-book-generated-snapshots-gate.md](0274-book-generated-snapshots-gate.md) | зависимостей нет; замер нашёл три отставших снимка вместо названного одного |
 | 0275 | Команды в README.md никем не проверяются | [0275-readme-commands-gate.md](0275-readme-commands-gate.md) | зависимостей нет; гейт нашёл панику компилятора на команде документа |
+| 0290 | Приложение «Ошибки» сверяется с реестром диагностик | [0290-book-diagnostics-codes-gate.md](0290-book-diagnostics-codes-gate.md) | — (новая фича) |
