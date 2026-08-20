@@ -299,3 +299,4 @@
 | [0320](./0320-aggregate-length-check.md) | Длину агрегата сверяет семантика | Accepted | фича 0320 |
 | [0321](./0321-sv-for-unroll.md) | Цель sv разворачивает for со статическими границами | Accepted | фича 0321 |
 | [0322](./0322-sv-match-case.md) | match цели sv — это case | Accepted | фича 0322 |
+| [0323](./0323-sv-integer-cast.md) | Приведение as в цели sv — размерная форма | Accepted | фича 0323 |
