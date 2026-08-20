@@ -662,7 +662,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             {
                 super::sv_fixed::cast(inner, ty, scope)
             } else {
-                Err(sv002("приведение типа (`as`)"))
+                crate::generator::sv::sv_cast::integer_cast(inner, ty, scope)
             }
         }
     }
