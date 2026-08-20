@@ -22,6 +22,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
+use crate::generator::rust::rust_ctx::ModelEmit;
 use crate::generator::rust::rust_decl::{PortSet, default_value, model_fields};
 use crate::generator::rust::rust_expr::{Scope, coerce_to};
 use crate::generator::rust::rust_map::RustMap;
@@ -345,7 +346,6 @@ use crate::generator::rust::rust_shared::{
 };
 
 /// Печатает `struct` модели и её `impl`.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_model(
     p: &mut Printer,
     map: &RustMap,
@@ -477,14 +477,28 @@ pub(crate) fn emit_model(
     p.ident(&format!("impl{} {}{} {{", generics, struct_name, type_args))
         .nl();
     p.up();
-    emit_new(
-        p, map, model, &table, &instances, &concats, name, is_root, uses_hal,
-    )?;
-    emit_init(p, map, model, &table, &instances, &concats, name, is_root)?;
-    emit_tick(
-        p, map, name, model, &element, &table, &instances, &concats, start, states, &shared,
-        is_root, uses_hal, ports, warnings,
-    )?;
+    // Снимок «что печатаем» (фича 0173): набор назван один раз, и печатники
+    // берут его целиком. Прежде те же двенадцать значений ходили позиционным
+    // списком, а `#[allow(clippy::too_many_arguments)]` снимал сигнал, оставляя
+    // причину.
+    let ctx = ModelEmit {
+        map,
+        name,
+        model,
+        element: &element,
+        table: &table,
+        instances: &instances,
+        concats: &concats,
+        states,
+        start,
+        shared: &shared,
+        is_root,
+        uses_hal,
+        ports,
+    };
+    emit_new(p, &ctx)?;
+    emit_init(p, &ctx)?;
+    emit_tick(p, &ctx, warnings)?;
     emit_reset(p, is_root)?;
     emit_is_done(p, &table, is_root)?;
     p.down();
@@ -587,18 +601,17 @@ pub(crate) fn submodel_name(map: &RustMap, unique: &str) -> Option<Name> {
 }
 
 /// Печатает конструктор.
-#[allow(clippy::too_many_arguments)]
-fn emit_new(
-    p: &mut Printer,
-    map: &RustMap,
-    model: &ModelNode,
-    table: &StateTable,
-    instances: &[(Name, Vec<Instance>)],
-    concats: &[(Name, Vec<ConcatStep>)],
-    model_name: &Name,
-    is_root: bool,
-    uses_hal: bool,
-) -> Result<(), Diagnostic> {
+fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
+    let (map, model, table, instances, concats, model_name, is_root, uses_hal) = (
+        ctx.map,
+        ctx.model,
+        ctx.table,
+        ctx.instances,
+        ctx.concats,
+        ctx.name,
+        ctx.is_root,
+        ctx.uses_hal,
+    );
     let scope = Scope {
         model,
         shared: Vec::new(),
@@ -777,17 +790,16 @@ fn emit_default_impl(p: &mut Printer, struct_name: &str, is_root: bool, uses_hal
 /// Блоков `enter` здесь нет **намеренно**: по ADR 0033 (R6) в `_init` живёт
 /// только память, а поведение входа — в такте. Иначе вход в стартовое состояние
 /// стоил бы такта, и трасса разошлась бы с симулятором.
-#[allow(clippy::too_many_arguments)]
-fn emit_init(
-    p: &mut Printer,
-    map: &RustMap,
-    model: &ModelNode,
-    table: &StateTable,
-    instances: &[(Name, Vec<Instance>)],
-    concats: &[(Name, Vec<ConcatStep>)],
-    model_name: &Name,
-    is_root: bool,
-) -> Result<(), Diagnostic> {
+fn emit_init(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
+    let (map, model, table, instances, concats, model_name, is_root) = (
+        ctx.map,
+        ctx.model,
+        ctx.table,
+        ctx.instances,
+        ctx.concats,
+        ctx.name,
+        ctx.is_root,
+    );
     let scope = Scope {
         model,
         shared: Vec::new(),

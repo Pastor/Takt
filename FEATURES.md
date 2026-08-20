@@ -68,7 +68,6 @@ to a billing issue`), а разблокировка биллинга — дей�
 | № | Фича | Зависит от | Класс | Tier | Статус |
 |---|------|------------|-------|------|--------|
 | [0175](docs/features/0175-ci-verification-followup.md) | Дожатие CI-верификации 0090 после разблокировки Actions (**вне очереди решением заказчика 2026-08-19**; ждёт разблокировки биллинга — исполнителю недоступна) | — | прочее | proc | СОЗДАНА |
-| [0173](docs/features/0173-rust-generator-arg-count.md) | Снятие `allow(too_many_arguments)` в генераторе `rust` | — | прочее | proc | СОЗДАНА |
 | [0252](docs/features/0252-ci-windows-test-threads.md) | Задание windows в CI гонит тесты однопоточно по снятому правилу | — | прочее | proc | СОЗДАНА |
 | [0261](docs/features/0261-module-size-warning-zone.md) | Гейт размера модуля молчит до отказа: жёлтой зоны нет | — | прочее | proc | СОЗДАНА |
 | [0265](docs/features/0265-book-svg-graphviz-version.md) | Сборка документа переписывает committed SVG при смене graphviz | — | прочее | proc | СОЗДАНА |

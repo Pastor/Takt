@@ -93,16 +93,15 @@ pub(super) fn emit_reset(p: &mut Printer, model: &ModelNode) {
 ///
 /// `hal_access` — получатель HAL-вызова (`self.hal`/`hal`); нужен для `elapsed`
 /// профиля «часы».
-#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_state_body(
     p: &mut Printer,
-    map: &RustMap,
-    model: &ModelNode,
+    ctx: &crate::generator::rust::rust_ctx::ModelEmit,
     state_local: &str,
     hal_access: &str,
     scope: &mut Scope,
     out: &mut StmtOutput,
 ) -> Result<(), Diagnostic> {
+    let (map, model) = (ctx.map, ctx.model);
     let profile = map.time_profile();
     for e in every_blocks(model)
         .iter()

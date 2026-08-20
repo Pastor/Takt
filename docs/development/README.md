@@ -526,3 +526,4 @@
 | 0294-01 | 0294 | Поиск импортёров и заметка диагностики | [0294-01-se102-suggest-importer.md](0294-01-se102-suggest-importer.md) |
 | 0164-01 | 0164 | Гейт согласованности реестров | [0164-01-registry-rebuild-gate.md](0164-01-registry-rebuild-gate.md) |
 | 0164-02 | 0164 | Восполнение 42 пропущенных записей | [0164-02-registry-rebuild-gate.md](0164-02-registry-rebuild-gate.md) |
+| 0173-01 | 0173 | Снимок ModelEmit вместо позиционных списков | [0173-01-rust-generator-arg-count.md](0173-01-rust-generator-arg-count.md) |

@@ -41,6 +41,7 @@
 mod rust_bit;
 mod rust_blocks;
 mod rust_cond;
+mod rust_ctx;
 mod rust_decl;
 mod rust_every;
 mod rust_expr;
