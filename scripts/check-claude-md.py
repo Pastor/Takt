@@ -164,6 +164,53 @@ def check_line_references(lines, problems):
             )
 
 
+def check_invariant_checklist(lines, problems):
+    """Класс 5: чек-лист критических инвариантов ↔ подробные пункты (фича 0289).
+
+    Раздел «Критические инварианты» — **указатель**: подробный разбор живёт в
+    «Технических подводных камнях» (решение фичи 0238). Значит новый
+    критический инвариант вносится **дважды**, и до этой проверки забытая
+    половина молчала — класс 0084/0193/0195, только списки не в коде, а в
+    контексте.
+
+    Связь двусторонняя: номер строки чек-листа ↔ метка
+    `` `[критический инвариант N]` `` у подробного пункта.
+    """
+    listed = set()
+    in_checklist = False
+    for number, line in enumerate(lines, start=1):
+        if line.startswith("### Критические инварианты"):
+            in_checklist = True
+            continue
+        if in_checklist and line.startswith("### "):
+            in_checklist = False
+        if in_checklist:
+            match = re.match(r"(\d+)\.\s+\*\*", line)
+            if match:
+                listed.add(int(match.group(1)))
+
+    marked = {}
+    for number, line in enumerate(lines, start=1):
+        for found in re.findall(r"`\[критический инвариант (\d+)\]`", line):
+            marked.setdefault(int(found), []).append(number)
+
+    if not listed:
+        problems.append((0, "раздел «Критические инварианты» не найден или пуст — "
+                            "проверка чек-листа вырождена"))
+        return
+
+    for num in sorted(listed - set(marked)):
+        problems.append((0, f"инвариант {num} есть в чек-листе, но подробного пункта "
+                            f"с меткой `[критический инвариант {num}]` нет"))
+    for num in sorted(set(marked) - listed):
+        problems.append((marked[num][0], f"пункт помечен `[критический инвариант {num}]`, "
+                                         "но строки с этим номером в чек-листе нет"))
+    for num, places in sorted(marked.items()):
+        if len(places) > 1:
+            problems.append((places[1], f"метка `[критический инвариант {num}]` стоит "
+                                        f"{len(places)} раз — номер обязан быть один"))
+
+
 def run_checks(lines):
     statuses = feature_statuses()
     index = build_file_index()
@@ -172,6 +219,7 @@ def run_checks(lines):
     check_paths(lines, index, problems)
     check_crate_versions(lines, problems)
     check_line_references(lines, problems)
+    check_invariant_checklist(lines, problems)
     return sorted(set(problems))
 
 
@@ -197,6 +245,17 @@ def self_test():
             "- Крейт `takt-lang` (`CARGO_PKG_VERSION`, сейчас `0.0.1`) — заведомо не тот."
         ],
         "номер строки": ["- Проба `semantic/tree.rs:999` — запрещённая форма."],
+        # Класс 5 (фича 0289): чек-лист и метки обязаны совпадать в обе стороны.
+        "инвариант без подробного пункта": [
+            "### Критические инварианты (НЕ нарушать)",
+            "1. **Проба** — пункта с меткой нет.",
+        ],
+        "метка без строки чек-листа": [
+            "### Критические инварианты (НЕ нарушать)",
+            "1. **Проба** — пункт есть.",
+            "- Подробный пункт `[критический инвариант 1]`.",
+            "- Лишний пункт `[критический инвариант 9]`.",
+        ],
     }
     for name, planted in cases.items():
         found = run_checks(planted)
@@ -207,11 +266,17 @@ def self_test():
     clean = [
         "- Проба `semantic/tree.rs` — сокращённая форма, обязана разрешаться.",
         "- Плоских списков задач (`TASKS.md`/`STATUS.md`) нет.",
+        # Чек-лист обязателен: без него проверка класса 5 вырождена, и это
+        # ошибка — значит законный образец несёт согласованную пару.
+        "### Критические инварианты (НЕ нарушать)",
+        "1. **Проба** — подробный пункт ниже.",
+        "### Прочее",
+        "- Подробный пункт `[критический инвариант 1]`.",
     ]
     noise = run_checks(clean)
     if noise:
         sys.exit(f"САМОПРОВЕРКА ПРОВАЛЕНА: законный текст дал ложные находки: {noise}")
-    print("  самопроверка гейта: ловушка взведена (4 класса ловятся, законный текст — нет)")
+    print("  самопроверка гейта: ловушка взведена (5 классов ловятся, законный текст — нет)")
 
 
 def main():
