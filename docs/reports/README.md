@@ -259,3 +259,4 @@
 | 0308 | Координата отказа целей rust, st, sv | [0308-target-refusal-position.md](0308-target-refusal-position.md) | Готово: место отказа указывают все четыре цели |
 | 0309 | Массив с агрегатом в цели sv | [0309-sv-array-initializer.md](0309-sv-array-initializer.md) | Готово: восемь целей переводят, трасса совпала |
 | 0310 | Общий носитель правила приведения | [0310-int-cast-shared-layer.md](0310-int-cast-shared-layer.md) | Готово: компилятор и эталон считают одними формулами |
+| 0311 | Описания записей реестра диагностик | [0311-diagnostic-descriptions.md](0311-diagnostic-descriptions.md) | Готово: все 229 записей называют смысл |
