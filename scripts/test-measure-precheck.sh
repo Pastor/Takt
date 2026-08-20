@@ -76,7 +76,10 @@ printf 'x' >> "$CALLS"
 sleep 1
 EOF
 chmod +x "$TMP/counted.sh"
-if MEASURE_CMD="$TMP/counted.sh" sh "$TOOL" >"$TMP/out" 2>&1; then
+# ⚠️ Порог ослаблен по той же причине, что в условии 1 (фикс 0272-01):
+# секундная команда меряется целыми секундами, и «1 с против 2 с» — это 100 %
+# разброса от одного округления. Здесь проверяется ЧИСЛО ВЫЗОВОВ, а не вердикт.
+if MEASURE_CMD="$TMP/counted.sh" MEASURE_SPREAD=200 sh "$TOOL" >"$TMP/out" 2>&1; then
     calls="$(wc -c < "$CALLS" | tr -d ' ')"
     if [ "$calls" -eq 3 ] && grep -q 'прогрев:' "$TMP/out"; then
         ok "прогрев выполняется и не идёт в вердикт (вызовов: $calls)"

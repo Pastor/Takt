@@ -305,3 +305,4 @@
 | 0319 | Приведение агрегата к массиву вычисляется при компиляции | [0319-array-cast-folding.md](0319-array-cast-folding.md) | — (новая фича) |
 | 0320 | Длина агрегата сверяется с объявлением | [0320-aggregate-length-check.md](0320-aggregate-length-check.md) | — (новая фича) |
 | 0321 | Цель sv разворачивает for со статическими границами | [0321-sv-for-unroll.md](0321-sv-for-unroll.md) | — (новая фича) |
+| 0322 | Цель sv переводит match в case | [0322-sv-match-case.md](0322-sv-match-case.md) | — (новая фича) |

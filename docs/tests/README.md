@@ -276,3 +276,4 @@
 | 0319 | Приведение агрегата к массиву | [0319-array-cast-folding.md](0319-array-cast-folding.md) | Пройден: 5/5 условий, граница названа |
 | 0320 | Длина агрегата | [0320-aggregate-length-check.md](0320-aggregate-length-check.md) | Пройден: 7/7 условий, обе формы |
 | 0321 | Разворот for в цели sv | [0321-sv-for-unroll.md](0321-sv-for-unroll.md) | Пройден: 5/5 условий, оба инструмента SV |
+| 0322 | match в цели sv | [0322-sv-match-case.md](0322-sv-match-case.md) | Пройден: 4/4 условия, защёлок нет |
