@@ -308,3 +308,4 @@
 | 0322 | Цель sv переводит match в case | [0322-sv-match-case.md](0322-sv-match-case.md) | — (новая фича) |
 | 0323 | Цель sv переводит приведение as между целыми | [0323-sv-integer-cast.md](0323-sv-integer-cast.md) | — (новая фича) |
 | 0324 | Сдвиг вправо знакового — арифметический во всех целях | [0324-arithmetic-shift-right.md](0324-arithmetic-shift-right.md) | — (новая фича) |
+| 0325 | Документ описывает семантику сдвигов | [0325-book-shift-semantics.md](0325-book-shift-semantics.md) | — (новая фича) |

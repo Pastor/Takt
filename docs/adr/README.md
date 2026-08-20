@@ -301,3 +301,4 @@
 | [0322](./0322-sv-match-case.md) | match цели sv — это case | Accepted | фича 0322 |
 | [0323](./0323-sv-integer-cast.md) | Приведение as в цели sv — размерная форма | Accepted | фича 0323 |
 | [0324](./0324-arithmetic-shift-right.md) | Сдвиг вправо знакового — арифметический | Accepted | фича 0324 |
+| [0325](./0325-book-shift-semantics.md) | Семантика сдвигов описывается в документе | Accepted | фича 0325 |

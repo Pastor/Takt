@@ -273,3 +273,4 @@
 | 0322 | match в цели sv | [0322-sv-match-case.md](0322-sv-match-case.md) | Готово: match переводят все восемь целей |
 | 0323 | Приведение as в цели sv | [0323-sv-integer-cast.md](0323-sv-integer-cast.md) | Готово: as переводят все восемь целей |
 | 0324 | Арифметический сдвиг вправо | [0324-arithmetic-shift-right.md](0324-arithmetic-shift-right.md) | Готово: девять потребителей дают −4 |
+| 0325 | Семантика сдвигов в документе | [0325-book-shift-semantics.md](0325-book-shift-semantics.md) | Готово: норма 0324 описана в языке |
