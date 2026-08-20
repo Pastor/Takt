@@ -81,6 +81,24 @@ fn instance_initializer(
                 )
                 .with_code("ST-017")
             })?;
+        // ⚠️ Агрегат МАССИВА здесь непечатаем (фича 0343): в объявлении
+        // переменной форма `:= [9, 8, 7, 6]` законна и `iec2c` её принимает, а
+        // в инициализаторе ЭКЗЕМПЛЯРА FB тот же массив даёт «Initialization
+        // element identifier … is set to value of incompatible datatype».
+        // Отказ `ST-017` честнее невалидного файла.
+        if matches!(ty, crate::semantic::type_node::TypeNode::Array(_, _)) {
+            return Err(Diagnostic::error(
+                arg.loc,
+                format!(
+                    "Значение параметра '{}' — агрегат массива: инициализатор \
+                     экземпляра FUNCTION_BLOCK такой формы в IEC 61131-3 не \
+                     принимает (проверено iec2c). Передайте значения \
+                     присваиванием в теле либо объявите массив у владельца",
+                    arg.name
+                ),
+            )
+            .with_code("ST-017"));
+        }
         let value = crate::generator::st::st_decl::literal_init(&arg.value, &ty, None).ok_or_else(
             || {
                 Diagnostic::error(

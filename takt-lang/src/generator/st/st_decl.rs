@@ -642,6 +642,24 @@ pub(crate) fn literal_init(
             crate::semantic::bit_vector::BitVectorLayout::Scalar { .. }
         )
     });
+    // Агрегат МАССИВА (фича 0343): `var a: [u8;2] := {1, 2};` печатается формой
+    // `[1, 2]` — проба `iec2c` 2026-08-20 её принимает. Прежде инициализатор
+    // терялся МОЛЧА, и прошивка считала с нулей: замер дал `o = 0` у ST против
+    // `3` у эталона при нулевом коде возврата `taktc`.
+    //
+    // ⚠️ Массив СТРУКТУР сюда не подпадает: ни одна из трёх проверенных форм
+    // (`[(1, 2), …]`, `[(v := 1, …), …]`, `((v := 1, …), …)`) `iec2c` не
+    // принимается — такой инициализатор печатается операторами первого скана.
+    if let TypeNode::Array(_, elem) = ty
+        && !matches!(**elem, TypeNode::Struct(_))
+        && let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = expr
+    {
+        let mut parts = Vec::new();
+        for item in items {
+            parts.push(literal_init(item, elem, model)?);
+        }
+        return Some(format!("[{}]", parts.join(", ")));
+    }
     if !packed_bits && matches!(ty, TypeNode::Array(_, _) | TypeNode::Struct(_)) {
         return None;
     }
