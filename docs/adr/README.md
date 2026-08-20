@@ -282,3 +282,4 @@
 | [0297](./0297-check-claude-md-line-blindness.md) | Гейт живого контекста читает абзацы, а не строки | Accepted | фича 0297 |
 | [0304](./0304-local-declaration-type-inference.md) | Локальное объявление в теле блока получает тип | Accepted | фича 0304 |
 | [0305](./0305-extern-call-in-initializer.md) | Вызов внешней функции в инициализаторе — SE-084 | Accepted | фича 0305 |
+| [0306](./0306-unfoldable-call-in-initializer.md) | Невычислимый вызов функции в инициализаторе отвергается с причиной | Accepted | фича 0306 |
