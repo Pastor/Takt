@@ -283,3 +283,4 @@
 | [0304](./0304-local-declaration-type-inference.md) | Локальное объявление в теле блока получает тип | Accepted | фича 0304 |
 | [0305](./0305-extern-call-in-initializer.md) | Вызов внешней функции в инициализаторе — SE-084 | Accepted | фича 0305 |
 | [0306](./0306-unfoldable-call-in-initializer.md) | Невычислимый вызов функции в инициализаторе отвергается с причиной | Accepted | фича 0306 |
+| [0307](./0307-sim-bit-range-text.md) | Текст SIM-011 называет разряды значения | Accepted | фича 0307 |

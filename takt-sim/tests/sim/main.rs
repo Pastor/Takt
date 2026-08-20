@@ -8,6 +8,7 @@
 
 mod aggregate_argument_tests;
 mod assignment_place_refusal_tests;
+mod bit_range_text_tests;
 mod cast_in_initializer_tests;
 mod composition_model_always_tests;
 mod composition_ports_tests;
