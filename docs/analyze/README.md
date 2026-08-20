@@ -283,3 +283,4 @@
 | 0261 | Жёлтая зона гейта размера модулей и его сторож | [0261-module-size-warning-zone.md](0261-module-size-warning-zone.md) | — (новая фича) |
 | 0265 | SVG диаграмм не несут версию graphviz | [0265-book-svg-graphviz-version.md](0265-book-svg-graphviz-version.md) | — (новая фича) |
 | 0271 | Устройство интеграционных тестов сторожится машиной | [0271-test-target-gate.md](0271-test-target-gate.md) | — (новая фича) |
+| 0272 | Обвязка замера: прогрев, два прогона, вердикт | [0272-build-measurement-harness.md](0272-build-measurement-harness.md) | — (новая фича) |
