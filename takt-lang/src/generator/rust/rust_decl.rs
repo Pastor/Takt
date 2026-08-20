@@ -376,6 +376,7 @@ pub(crate) fn emit_constants(
             hal_is_ref: false,
             instances: Vec::new(),
             time_profile: map.time_profile(),
+            return_type: None,
         };
         for var in model.variables.values() {
             let VariableNode::Const {

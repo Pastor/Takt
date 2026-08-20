@@ -248,9 +248,22 @@ pub(crate) fn print_call(
     args: &[ExpressionNode],
     model: &ModelNode,
 ) -> Result<String, Diagnostic> {
+    // Аргумент — позиция приёмника с ИЗВЕСТНЫМ типом (фича 0336): разряд `x.N`
+    // печатается булевым выражением, и `iec2c` отвечал «Data type
+    // incompatibility for value passed in position 1» при нулевом коде
+    // возврата `taktc`. Приведение делает та же воронка, что у присваивания.
+    let params: Vec<Option<TypeNode>> = match &*def.borrow() {
+        FunctionDefinitionNode::Local { params, .. } => {
+            params.iter().map(|(_, ty)| Some(ty.clone())).collect()
+        }
+        _ => Vec::new(),
+    };
     let mut printed = Vec::new();
-    for arg in args {
-        printed.push(print_expression(arg, model)?);
+    for (i, arg) in args.iter().enumerate() {
+        printed.push(match params.get(i).and_then(Option::as_ref) {
+            Some(ty) => crate::generator::st::st_expr::coerce_to(arg, ty, model)?,
+            None => print_expression(arg, model)?,
+        });
     }
     print_call_in(def, &printed, model)
 }
@@ -400,7 +413,9 @@ fn emit_function(
     // Дефект вскрыт фичей 0030: до неё ни одна функция корпуса не имела
     // локальных переменных, и порядок ничего не ломал.
     let hoisted = match def {
-        FunctionDefinitionNode::Local { body, .. } => collect_hoisted(body, &name, model)?,
+        FunctionDefinitionNode::Local { body, ret, .. } => {
+            collect_hoisted(body, &name, ret, model)?
+        }
         // Тела нет: у `extern fn` печатается заглушка (ниже), у остальных —
         // печатать нечего, поднимать тоже нечего.
         FunctionDefinitionNode::External { .. }
@@ -482,13 +497,14 @@ fn emit_function(
 fn collect_hoisted(
     body: &crate::semantic::StatementNode,
     name: &str,
+    ret: &TypeNode,
     model: &ModelNode,
 ) -> Result<Vec<Hoisted>, Diagnostic> {
     let mut probe = String::new();
     let mut out = StmtOutput::default();
     {
         let mut probe_p = Printer::new(4, &mut probe);
-        print_statement(body, model, &mut probe_p, &mut out, Some(name))?;
+        print_statement(body, model, &mut probe_p, &mut out, Some((name, ret)))?;
     }
     Ok(out.hoisted)
 }
@@ -530,7 +546,7 @@ fn emit_local_body(
 ) -> Result<(), Diagnostic> {
     p.up();
     let mut out2 = StmtOutput::default();
-    print_statement(body, model, p, &mut out2, Some(name))?;
+    print_statement(body, model, p, &mut out2, Some((name, ret)))?;
     // Функция, объявленная как `unit`, значение не возвращает — но в ST тип
     // синтетический, поэтому имя обязано быть присвоено хотя бы раз.
     if matches!(ret, TypeNode::Unit) {

@@ -101,6 +101,7 @@ pub(crate) fn emit_tick(
             .map(|i| (i.unique.clone(), i.field.clone()))
             .collect(),
         time_profile: map.time_profile(),
+        return_type: None,
     };
 
     p.ident("/// Один такт автомата.").nl();

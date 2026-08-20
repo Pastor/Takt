@@ -319,3 +319,4 @@
 | 0333 | Документ называет, где симулятор строже прошивки | [0333-book-runtime-errors.md](0333-book-runtime-errors.md) | — (новая фича) |
 | 0334 | Сдвиг на величину не меньше ширины типа в цели rust | [0334-rust-variable-shift-width.md](0334-rust-variable-shift-width.md) | — (новая фича) |
 | 0335 | Разряд в позиции числового значения переводят все цели | [0335-bit-value-in-targets.md](0335-bit-value-in-targets.md) | — (новая фича) |
+| 0336 | Приведение к типу приёмника в аргументе и возврате функции | [0336-call-return-coercion.md](0336-call-return-coercion.md) | — (новая фича) |

@@ -153,6 +153,12 @@ pub(crate) struct Scope<'a> {
     /// несинтезируемую конструкцию, — ровно как с `real`. Форма выбрана не по
     /// вкусу, а по тому, что принимают **оба** инструмента.
     pub(crate) function: Option<&'a str>,
+    /// Тип возврата функции, чьё тело печатается (фича 0336).
+    ///
+    /// Возврат здесь — присваивание имени функции, то есть позиция приёмника с
+    /// известным типом: разряд `x.N` даёт один бит, и без приведения verilator
+    /// отвечает `WIDTHEXPAND`, а гейт цели считает предупреждение ошибкой.
+    pub(crate) function_ret: Option<&'a crate::semantic::type_node::TypeNode>,
     /// Варианты перечислений модели: `имя перечисления → [(вариант, значение)]`.
     ///
     /// Нужны для **восстановления варианта по значению**. `command := Up` в АСД
@@ -556,9 +562,19 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             Ok(print_member(&print_expression(inner, scope)?, member))
         }
         ExpressionNode::Function(func, args) => {
-            let printed: Result<Vec<String>, Diagnostic> =
-                args.iter().map(|a| print_expression(a, scope)).collect();
             let f = func.borrow();
+            // Аргумент — позиция приёмника с ИЗВЕСТНЫМ типом (фича 0336):
+            // разряд `x.N` даёт один бит, и verilator отвечал `WIDTHEXPAND`
+            // («Operator FUNCREF expects 8 bits»), а гейт цели считает
+            // предупреждение ошибкой.
+            let printed: Result<Vec<String>, Diagnostic> = args
+                .iter()
+                .enumerate()
+                .map(|(i, a)| match param_type(&f, i) {
+                    Some(ty) => scope.coerce(&ty, a),
+                    None => print_expression(a, scope),
+                })
+                .collect();
             let loc = f.loc();
             super::sv_call::print_call(&f, &printed?, loc)
         }
@@ -610,6 +626,22 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
     }
 }
 
+/// Тип `i`-го параметра функции, если он объявлен (фича 0336).
+///
+/// ⚠️ Внешняя функция типов параметров не объявляет — там приведения нет и
+/// быть не может: приёмник неизвестен.
+fn param_type(
+    func: &crate::semantic::FunctionDefinitionNode,
+    index: usize,
+) -> Option<crate::semantic::type_node::TypeNode> {
+    match func {
+        crate::semantic::FunctionDefinitionNode::Local { params, .. } => {
+            params.get(index).map(|(_, ty)| ty.clone())
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -637,6 +669,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -656,6 +689,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -678,6 +712,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -700,6 +735,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -723,6 +759,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -746,6 +783,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -764,6 +802,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -791,6 +830,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -808,6 +848,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -848,6 +889,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };

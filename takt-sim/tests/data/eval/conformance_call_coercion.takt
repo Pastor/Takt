@@ -1,0 +1,38 @@
+// Сверка приведения к типу приёмника в АРГУМЕНТЕ и ВОЗВРАТЕ (фича 0336).
+//
+// Позиции приёмника три; присваивание научила фича 0335, а об аргументе и
+// возврате не знала ни одна цель. Один вход давал отказы ЧУЖИХ инструментов
+// при нулевом коде возврата `taktc`: `E0308` у `rust`, «Data type
+// incompatibility … position 1» у `st`, `WIDTHEXPAND` у `sv`.
+//
+// ⚠️ `plain` — контрольный вход: тот же вызов с обычным числовым аргументом.
+// Он работал всегда, и без него «стороны сошлись» значило бы лишь, что они
+// одинаково исполняют исправленное.
+fn take(v: u8) -> u8 { return v; }
+fn give(x: u8) -> u8 { return x.7; }
+fn flag(b: bit) -> u8 { if b { return 1; } return 0; }
+
+var src: u8 := 200;
+var arg: u8 := 0;
+var ret: u8 := 0;
+var lit: u8 := 0;
+var plain: u8 := 0;
+
+out o_arg: u8 at 0;
+out o_ret: u8 at 1;
+out o_lit: u8 at 2;
+out o_plain: u8 at 3;
+
+start Run {
+    always {
+        arg := take(src.7);
+        ret := give(src);
+        lit := flag(1);
+        plain := take(42);
+        o_arg := arg;
+        o_ret := ret;
+        o_lit := lit;
+        o_plain := plain;
+    }
+    ref Run: plain = 42;
+}

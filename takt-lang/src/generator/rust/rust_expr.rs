@@ -107,6 +107,12 @@ pub(crate) struct Scope<'a> {
     /// Профиль времени (фича 0134): нужен печатнику выдержки `after` в `rust_cond`
     /// (счётчик тактов vs метка `now_ms`). Берётся из [`RustMap::time_profile`].
     pub(crate) time_profile: crate::semantic::duration::TimeProfile,
+    /// Тип возврата функции, чьё тело печатается (фича 0336).
+    ///
+    /// `return` — позиция приёмника с известным типом, и форма значения в Rust
+    /// от него зависит: `return 1;` при `-> bit` обязано печататься `true`.
+    /// Вне тела функции возврата нет — там `None`.
+    pub(crate) return_type: Option<TypeNode>,
 }
 
 impl Scope<'_> {
@@ -789,11 +795,26 @@ fn call(
     args: &[ExpressionNode],
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
+    let borrowed = def.borrow();
+    // Аргумент — позиция приёмника с ИЗВЕСТНЫМ типом (фича 0336): у литерала
+    // `bit`, варианта перечисления и разряда форма в Rust зависит от типа
+    // параметра, и печать «как есть» давала `E0308` при нулевом коде возврата
+    // `taktc`. Внешняя функция типов параметров не объявляет — там печать
+    // прежняя.
+    let param_types: Vec<Option<TypeNode>> = match &*borrowed {
+        FunctionDefinitionNode::Local { params, .. } => {
+            params.iter().map(|(_, ty)| Some(ty.clone())).collect()
+        }
+        _ => Vec::new(),
+    };
     let printed = args
         .iter()
-        .map(|a| print_expression(a, scope))
+        .enumerate()
+        .map(|(i, a)| match param_types.get(i).and_then(Option::as_ref) {
+            Some(ty) => coerce_to(a, ty, scope),
+            None => print_expression(a, scope),
+        })
         .collect::<Result<Vec<_>, _>>()?;
-    let borrowed = def.borrow();
     match &*borrowed {
         FunctionDefinitionNode::Builtin(name, _, _) => builtin(name, &printed, args, scope),
         local @ FunctionDefinitionNode::Local { name, loc, .. } => Ok(format!(

@@ -144,6 +144,9 @@ pub(crate) fn emit_functions(
                 hal_is_ref: needs.hal,
                 instances: Vec::new(),
                 time_profile: map.time_profile(),
+                // Тело функции — единственное место, где `return` имеет тип
+                // приёмника (фича 0336).
+                return_type: Some(ret.clone()),
             };
 
             p.ident(&format!("/// Функция '{}' модели.", name)).nl();

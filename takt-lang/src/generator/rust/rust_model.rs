@@ -623,6 +623,7 @@ fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         hal_is_ref: false,
         instances: Vec::new(),
         time_profile: map.time_profile(),
+        return_type: None,
     };
     let args = if is_root && uses_hal { "hal: H" } else { "" };
     let vis = if is_root { "pub " } else { "" };
@@ -811,6 +812,7 @@ fn emit_init(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         hal_is_ref: false,
         instances: Vec::new(),
         time_profile: map.time_profile(),
+        return_type: None,
     };
     let vis = if is_root { "pub " } else { "" };
     p.ident("/// Возвращает модель в начальное состояние.").nl();
