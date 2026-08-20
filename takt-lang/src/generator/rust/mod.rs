@@ -55,6 +55,7 @@ mod rust_needs;
 mod rust_port;
 mod rust_port_init;
 mod rust_shared;
+mod rust_shift;
 mod rust_stmt;
 mod rust_struct;
 mod rust_tick;

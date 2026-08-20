@@ -490,7 +490,14 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
 
         // Побитовые — нативны (в ST требовали бы BYTE_TO_USINT(...)).
         ExpressionNode::ShiftLeft(a, b) => binary(a, "<<", b, scope),
-        ExpressionNode::ShiftRight(a, b) => binary(a, ">>", b, scope),
+        // Сдвиг на величину, не меньшую ширины типа, в Rust не собирается
+        // (фича 0326) — правило и его повод в заголовке `rust_shift`.
+        ExpressionNode::ShiftRight(a, b) => {
+            match crate::generator::rust::rust_shift::saturating_right(a, b, scope)? {
+                Some(printed) => Ok(printed),
+                None => binary(a, ">>", b, scope),
+            }
+        }
         ExpressionNode::BitwiseAnd(a, b) => binary(a, "&", b, scope),
         ExpressionNode::BitwiseXor(a, b) => binary(a, "^", b, scope),
         ExpressionNode::BitwiseOr(a, b) => binary(a, "|", b, scope),
