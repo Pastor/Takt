@@ -48,8 +48,19 @@ pub(crate) fn expression_type(expr: &ExpressionNode) -> Option<TypeNode> {
         | ExpressionNode::NotEqual(_, _)
         | ExpressionNode::And(_, _)
         | ExpressionNode::Or(_, _)
-        | ExpressionNode::Not(_)
-        | ExpressionNode::BitAccess(_, _) => Some(TypeNode::Bool),
+        | ExpressionNode::Not(_) => Some(TypeNode::Bool),
+        // ⚠️ `x.N` (разряд) логичен, а `s.field` (поле структуры) — НЕТ (фича
+        // 0341). Прежде обе формы давали `bool`, и `seg.a.x := 7;` отвергался
+        // `RS-011` «значение 7 не представимо в bool»: тип приёмника считался
+        // логическим у поля структуры.
+        //
+        // Тип поля здесь неизвестен — объявление структуры лежит в модели, а
+        // сюда она не передаётся, — поэтому честный ответ `None`: приведение
+        // не применяется, печать идёт обычным путём.
+        ExpressionNode::BitAccess(_, member) => match member {
+            crate::parser::ast::Member::Number(_) => Some(TypeNode::Bool),
+            crate::parser::ast::Member::Identifier(_) => None,
+        },
         ExpressionNode::ArraySubscript(var, _) => match var.borrow().ty() {
             TypeNode::Array(_, elem) => Some((**elem).clone()),
             _ => None,

@@ -581,8 +581,12 @@ pub fn generate_header(
     // Генерируем typedef struct для пользовательских структур
     if let Some(model_rc) = map.root_model_node() {
         let model = model_rc.borrow();
-        let mut structs: Vec<_> = model.structs.values().collect();
-        structs.sort_by_key(|s| &s.name);
+        // Порядок — по ЗАВИСИМОСТЯМ (фича 0341): вложенная структура обязана
+        // быть объявлена раньше вмещающей. Алфавитный порядок давал `cc`
+        // «unknown type name», потому что `Line` стоит в алфавите раньше
+        // `Point`. Правило общее у трёх целей — носитель один.
+        let structs = crate::generator::struct_order::sorted(&model.structs);
+        let structs: Vec<_> = structs.iter().collect();
         if !structs.is_empty() {
             for s in structs {
                 printer

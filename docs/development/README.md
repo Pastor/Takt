@@ -572,3 +572,4 @@
 | 0338-01 | 0338 | Перечисление внутри функции у целей st и sv | [0338-01-enum-in-function.md](0338-01-enum-in-function.md) |
 | 0339-01 | 0339 | Шаблон отказа цели sv: один носитель и читаемый текст | [0339-01-sv-refusal-template.md](0339-01-sv-refusal-template.md) |
 | 0340-01 | 0340 | Присваивание агрегата: место записи выбирает общий носитель | [0340-01-aggregate-assign-place.md](0340-01-aggregate-assign-place.md) |
+| 0341-01 | 0341 | Вложенная структура: порядок объявления и тип поля | [0341-01-nested-struct-order.md](0341-01-nested-struct-order.md) |

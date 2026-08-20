@@ -1,0 +1,32 @@
+// Сверка ВЛОЖЕННОЙ структуры (фича 0341).
+//
+// `struct Line { a: Point, b: Point }` — структура, содержащая структуру.
+// Прежде один вход давал ЧЕТЫРЕ отказа чужих инструментов при нулевом коде
+// возврата `taktc`: `cc` «unknown type name 'Point'», `iec2c` «invalid
+// specification in structure element declaration», verilator «Reference to
+// 'point_t' before declaration» — все три оттого, что структуры печатались
+// ПО АЛФАВИТУ, а `Line` стоит раньше `Point`; цель `rust` отвечала `RS-011`
+// «значение 7 не представимо в bool», считая доступ к полю логическим.
+//
+// ⚠️ `flat` — контрольный вход: плоская структура. Она работала всегда.
+struct Point { x: u8, y: u8 }
+struct Line { a: Point, b: Point }
+
+var seg: Line := {{1, 2}, {3, 4}};
+var flat: Point := {9, 0};
+var sum: u8 := 0;
+var ctl: u8 := 0;
+
+out o_sum: u8 at 0;
+out o_ctl: u8 at 1;
+
+start Run {
+    always {
+        seg.a.x := 7;
+        sum := seg.a.x + seg.b.y;
+        ctl := flat.x;
+        o_sum := sum;
+        o_ctl := ctl;
+    }
+    ref Run: sum = 11;
+}
