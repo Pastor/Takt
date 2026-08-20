@@ -133,11 +133,16 @@ fn non_constant_element_is_still_refused() {
 
 /// **T5.** Границы целей названы, а не забыты.
 ///
-/// `st` и `sv` агрегат в этой позиции не печатают и отвечают **своими** кодами.
-/// Тест пришпиливает отказ: если цель научится, он покраснеет и потребует
-/// снять запись — это лучше, чем молчаливое расхождение.
+/// Тест пришпиливает состояние целей: научившаяся цель обязана покраснеть и
+/// потребовать снять запись — это лучше, чем молчаливое расхождение.
+///
+/// ⚠️ Граница `sv` **сдвинулась** фичей 0309: агрегат массива печатается
+/// шаблоном присваивания `'{…}`, и здесь он доезжает до ветви сброса. Поэтому
+/// проверяется не отказ, а **значение** в выводе — «переводит» не должно
+/// означать «печатает что попало». Цель `st` агрегат в этой позиции
+/// по-прежнему не печатает и отвечает своим кодом.
 #[test]
-fn st_and_sv_refuse_with_named_codes() {
+fn st_refuses_and_sv_prints_the_aggregate() {
     let dir = std::env::temp_dir().join("takt_0209_targets");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
@@ -146,7 +151,12 @@ fn st_and_sv_refuse_with_named_codes() {
     let st = takt_lang::compile_to_st("agg", AGGREGATE, path, &[], &options)
         .expect_err("цель st пока не печатает агрегатный аргумент");
     assert_eq!(st.code.as_deref(), Some("ST-017"));
-    let sv = takt_lang::compile_to_sv("agg", AGGREGATE, path, &[], &options)
-        .expect_err("цель sv пока не печатает агрегатный аргумент");
-    assert_eq!(sv.code.as_deref(), Some("SV-002"));
+
+    takt_lang::compile_to_sv("agg", AGGREGATE, path, &[], &options)
+        .expect("цель sv печатает агрегат массива с фичи 0309");
+    let text = std::fs::read_to_string(dir.join("agg.sv")).expect("чтение модуля");
+    assert!(
+        text.contains("'{8'd9, 8'd8, 8'd7, 8'd6}"),
+        "значения агрегата обязаны доехать до ветви сброса:\n{text}"
+    );
 }
