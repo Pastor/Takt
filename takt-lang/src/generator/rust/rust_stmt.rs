@@ -448,7 +448,11 @@ pub(crate) fn print_statement_ctx(
     match stmt {
         StatementNode::None => Ok(0),
         StatementNode::Block(items) => print_block(items, None, scope, p, out).map(|_| 0),
-        StatementNode::Expression(expr, _) => {
+        StatementNode::Expression(expr, loc) => {
+            // Место оператора — для отказов печати выражений (фича 0308):
+            // своей позиции у них нет (решение 0056), и до этой фичи цель
+            // печатала отказ без координаты вовсе.
+            crate::generator::site::enter(*loc);
             p.ident(&format!("{};", print_expression(expr, scope)?))
                 .nl();
             Ok(0)

@@ -256,3 +256,4 @@
 | 0305 | Вызов внешней функции в инициализаторе — SE-084 | [0305-extern-call-in-initializer.md](0305-extern-call-in-initializer.md) | Готово: девять потребителей отвечают одинаково |
 | 0306 | Невычислимый вызов функции в инициализаторе | [0306-unfoldable-call-in-initializer.md](0306-unfoldable-call-in-initializer.md) | Готово: девять потребителей отвечают одинаково, причина названа |
 | 0307 | Текст SIM-011 называет ширину значения | [0307-sim-bit-range-text.md](0307-sim-bit-range-text.md) | Готово: сообщение описывает разрядность значения |
+| 0308 | Координата отказа целей rust, st, sv | [0308-target-refusal-position.md](0308-target-refusal-position.md) | Готово: место отказа указывают все четыре цели |

@@ -56,7 +56,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Строит диагностику `SV-002` — узел АСД не покрыт печатью.
 pub(crate) fn sv002(what: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "{} не транслируется в SystemVerilog целью 'sv'. Молчаливо \
              пропустить конструкцию нельзя: порождённый модуль вёл бы себя \
@@ -97,7 +97,7 @@ fn sv005(name: &str, loc: Location) -> Diagnostic {
 /// про делитель-константу — тоже (17…106 LUT); срабатывает лишь переменный.
 fn sv009() -> Diagnostic {
     Diagnostic::warning(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         "деление или остаток по переменному делителю: в синтезируемом RTL нет \
          аппаратного делителя, поэтому '/' и '%' разворачиваются в крупный \
          комбинационный блок (на порядок больше сложения) с длинным путём — это \
@@ -452,7 +452,7 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         // означало бы разбор в обход того пути.
         ConditionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
             *nanos,
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "литерал длительности в условии",
         )?
         .to_string()),
@@ -460,7 +460,7 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         // только у него есть счётчик и профиль.
         ConditionNode::After(_) | ConditionNode::AfterTicks(_) | ConditionNode::AfterExpr(_) => {
             Err(Diagnostic::error(
-                Location::Codegen,
+                crate::generator::site::at(Location::Codegen),
                 "выдержка 'after' обязана печататься через sv_time, а не как условие".to_string(),
             )
             .with_code("SV-015"))
@@ -545,7 +545,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         // общий слой — своей арифметики времени генератор не заводит.
         ExpressionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
             *nanos,
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "литерал длительности",
         )?
         .to_string()),

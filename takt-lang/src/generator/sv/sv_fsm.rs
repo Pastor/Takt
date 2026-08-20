@@ -65,7 +65,7 @@ pub(crate) type Block = (Name, Rc<RefCell<ModelNode>>);
 /// Строит диагностику `SV-002` — конструкция не транслируется.
 pub(crate) fn sv002(what: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "{} не транслируется в SystemVerilog целью 'sv'. Молчаливо \
              пропустить конструкцию нельзя: порождённый модуль вёл бы себя \

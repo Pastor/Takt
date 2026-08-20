@@ -69,7 +69,7 @@ const REG_IFACE_NAMES: &[&str] = &["reg_addr", "reg_wdata", "reg_wen", "reg_rdat
 /// Строит диагностику `SV-013` — срез порта не помещается в 64-битный регистр.
 fn sv013(name: &str, bit: i64, width: u32) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "порт '{}' занимает биты [{}..{}] адреса, но регистр цели 'sv-mmio' \
              шириной 64 бита (слово дефолтного HAL): срез bit+width={} выходит за \
@@ -88,7 +88,7 @@ fn sv013(name: &str, bit: i64, width: u32) -> Diagnostic {
 /// Строит диагностику `SV-014` — имя совпало с сигналом регистрового интерфейса.
 fn sv014(name: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "имя '{}' зарезервировано регистровым интерфейсом цели 'sv-mmio' \
              (reg_addr/reg_wdata/reg_wen/reg_rdata — сигналы шины, которых в .takt \
@@ -104,7 +104,7 @@ fn sv014(name: &str) -> Diagnostic {
 /// Строит диагностику `SV-002` — тип порта не ложится на биты регистра.
 fn sv002_width(name: &str, ty: &TypeNode) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "порт '{}' с адресом имеет тип '{}', ширина которого в битах не \
              определена (регистровый файл цели 'sv-mmio' раскладывает порт по \
@@ -231,7 +231,7 @@ impl Mmio {
             }
             if matches!(resolved.direction, PortDirection::InOut) {
                 return Err(Diagnostic::error(
-                    Location::Codegen,
+                    crate::generator::site::at(Location::Codegen),
                     format!(
                         "порт '{}': направление 'inout' целью 'sv-mmio' не \
                          поддерживается — направление принадлежит биту регистра \
