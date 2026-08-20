@@ -5,8 +5,9 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
+use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_expr::{Scope, sv_enum_variant_name};
-use crate::generator::sv::sv_fsm::{Block, sv002};
+use crate::generator::sv::sv_fsm::Block;
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::check_sv_name;
 use crate::generator::sv::sv_type::sv_type;

@@ -293,3 +293,4 @@
 | 0336 | Приведение в аргументе и возврате | [0336-call-return-coercion.md](0336-call-return-coercion.md) | Пройден: 7/7 условий, две мутации ловятся |
 | 0337 | Неиспользуемый параметр функции | [0337-unused-function-parameter.md](0337-unused-function-parameter.md) | Пройден: 7/7 условий |
 | 0338 | Перечисление внутри функции | [0338-enum-in-function.md](0338-enum-in-function.md) | Пройден: 5/5 условий, значения сверены |
+| 0339 | Шаблон отказа цели `sv` | [0339-sv-refusal-template.md](0339-sv-refusal-template.md) | Пройден: 5/5 условий |

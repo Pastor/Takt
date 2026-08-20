@@ -40,10 +40,11 @@
 //! `(<sub>_state_next == <SUB>_END)`. Чтение регистра дало бы значение
 //! **предыдущего** такта, то есть ровно тот сдвиг, который осуждает ADR 0033.
 
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::sv::sv_blocks::{emit_model_prelude, emit_named_blocks, emit_state_prelude};
 use crate::generator::sv::sv_const;
+use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_expr::{Scope, print_condition, sv_enum_variant_name};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
@@ -61,20 +62,6 @@ use std::rc::Rc;
 
 /// Блок модели: имя в карте и её узел.
 pub(crate) type Block = (Name, Rc<RefCell<ModelNode>>);
-
-/// Строит диагностику `SV-002` — конструкция не транслируется.
-pub(crate) fn sv002(what: &str) -> Diagnostic {
-    Diagnostic::error(
-        crate::generator::site::at(Location::Codegen),
-        format!(
-            "{} не транслируется в SystemVerilog целью 'sv'. Молчаливо \
-             пропустить конструкцию нельзя: порождённый модуль вёл бы себя \
-             иначе, чем модель",
-            what
-        ),
-    )
-    .with_code("SV-002")
-}
 
 /// Регистровый сигнал модуля: объявление и сброс.
 pub(crate) struct Reg {
