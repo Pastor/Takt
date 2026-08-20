@@ -67,6 +67,9 @@
 | [0066](./0066-st-bool-literals.md) | Литералы по целевому типу в телах `st` (`BOOL` и перечисления) | Accepted | фича 0066 |
 | [0068](./0068-verify-data-properties.md) | Верификация свойств над данными — абстракция по формуле | Accepted | фича 0068 |
 | [0069](./0069-address-map-eval-split.md) | Разделение `address_map.rs` — по темам, а не по лимиту | Accepted | фича 0069 |
+| [0075](./0075-lib-src-reference-model.md) | эталонная модель `syntax_simple` порождает компилируемый C | Accepted | фича 0075 |
+| [0081](./0081-lamc-print-warnings.md) | `lamc compile` печатает предупреждения компилятора | Accepted | фича 0081 |
+| [0082](./0082-unused-formulas.md) | `unused.rs` обходит формулы — Ce13 не ложный | Accepted | фича 0082 |
 | [0096](./0096-fixed-point-native-float.md) | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | Accepted | фича 0096 |
 | [0097](./0097-pid-regulator-example.md) | Пример ПИД-регулятора на языке Lam (fixed-point) | Accepted | фича 0097 |
 | [0090](./0090-ci-precheck.md) | CI прогоняет весь `precheck.sh` — единый источник истины гейтов | Accepted | фича 0090 |
@@ -93,6 +96,7 @@
 | [0088](./0088-module-size-remaining.md) | Остальные нарушители лимита размера модуля | Accepted | фича 0088 |
 | [0089](./0089-intellij-residual-checks.md) | Остаточные проверки плагина IntelliJ (0022/0023) | Accepted | фича 0089 |
 | [0092](./0092-adr-0018-retrofit.md) | У фичи 0018 нет ADR | Accepted | фича 0092 |
+| [0098](./0098-port-bit-range-safe-hal.md) | Проверка диапазона бита адреса порта и безопасный дефолтный HAL | Accepted | фича 0098 |
 | [0100](./0100-language-rename-takt.md) | Переименование языка Lam → Takt | Accepted | фича 0100 |
 | [0101](./0101-language-book.md) | Документ описания языка Takt | Accepted | фича 0101 |
 | [0117](./0117-book-tools.md) | Раздел документа «Инструментарий» | Draft | фича 0117 |
@@ -148,6 +152,7 @@
 | [0188](./0188-port-direction-everywhere.md) | Направление порта проверяется во всех позициях | Draft | фича 0188 |
 | [0190](./0190-precheck-selective-gates.md) | Разделение предкоммита на компоненты и выборочный запуск | Accepted | фича 0190 |
 | [0189](./0189-anonymous-ports.md) | Анонимные порты | Accepted | фича 0189 |
+| [0191](./0191-st-per-tick-conformance.md) | Цель `st` — потактовая сверка с эталоном и устранение расхождений | Accepted | фича 0191 |
 | [0196](./0196-editor-type-highlighting.md) | Подсветка имён типов отдельным цветом в LSP и плагинах | Accepted | фича 0196 |
 | [0192](./0192-const-init-fold.md) | Константное выражение в инициализаторе объявления | Accepted | фича 0192 |
 | [0193](./0193-shared-const-qualified.md) | Цели rust и sv: одноимённые константы разных моделей | Accepted | фича 0193 |
@@ -265,3 +270,4 @@
 | [0270](./0270-book-pdf-size.md) | Вес PDF документа: причина найдена, теги отключены | Accepted | фича 0270 |
 | [0283](./0283-cli-report-result-merge.md) | Печать результата компиляции сведена к одной функции | Accepted | фича 0283 |
 | [0294](./0294-se102-suggest-importer.md) | SE-102 называет файл, подключающий библиотеку | Accepted | фича 0294 |
+| [0164](./0164-registry-rebuild-gate.md) | Реестры стадий сверяются с файлами на диске | Accepted | фича 0164 |

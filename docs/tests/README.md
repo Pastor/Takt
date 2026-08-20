@@ -35,6 +35,7 @@
 | 0043 | Экспорт карты адресов во внешний формат | [0043-address-map-export.md](0043-address-map-export.md) | ГОТОВО |
 | 0044 | Юнит-конструкции языка для симуляции (assert/invariant) | [0044-sim-assert-invariant.md](0044-sim-assert-invariant.md) | ✅ ГОТОВО |
 | 0045 | Бэкенд генерации в SystemVerilog | [0045-sv-backend.md](0045-sv-backend.md) | ГОТОВО |
+| 0046 | Устранение всех предупреждений сборки | [0046-build-warnings-cleanup.md](0046-build-warnings-cleanup.md) | ✅ ПРОЙДЕН (отчёт: [reports/0046](../reports/0046-build-warnings-cleanup.md)) |
 | 0048 | Детерминированная генерация кода (единый порядок эмиссии) | [0048-deterministic-codegen.md](0048-deterministic-codegen.md) | ✅ ГОТОВО |
 | 0049 | Верификация модели (Model Checking) на основе LTL | [0049-model-checking-ltl.md](0049-model-checking-ltl.md) | ГОТОВО (T1–T47 пройдены) |
 | 0050 | Бэкенд генерации в Rust | [0050-rust-backend.md](0050-rust-backend.md) | РАЗРАБОТКА |
@@ -56,6 +57,9 @@
 | 0066 | Литералы по целевому типу в телах цели `st` | [0066-st-bool-literals.md](0066-st-bool-literals.md) | ГОТОВО |
 | 0068 | Верификация свойств над данными | [0068-verify-data-properties.md](0068-verify-data-properties.md) | ГОТОВО |
 | 0069 | Разделение `address_map.rs` | [0069-address-map-eval-split.md](0069-address-map-eval-split.md) | ГОТОВО |
+| 0075 | эталонная модель порождает компилируемый C | [0075-lib-src-reference-model.md](0075-lib-src-reference-model.md) | ✅ ПРОЙДЕН (отчёт: [reports/0075](../reports/0075-lib-src-reference-model.md)) |
+| 0081 | `lamc compile` печатает предупреждения | [0081-lamc-print-warnings.md](0081-lamc-print-warnings.md) | ✅ ПРОЙДЕН (отчёт: [reports/0081](../reports/0081-lamc-print-warnings.md)) |
+| 0082 | `unused.rs` обходит формулы | [0082-unused-formulas.md](0082-unused-formulas.md) | ✅ ПРОЙДЕН (отчёт: [reports/0082](../reports/0082-unused-formulas.md)) |
 | 0096 | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [0096-fixed-point-native-float.md](0096-fixed-point-native-float.md) | ГОТОВО |
 | 0097 | Пример ПИД-регулятора на языке Lam (fixed-point) | [0097-pid-regulator-example.md](0097-pid-regulator-example.md) | ГОТОВО |
 | 0090 | CI прогоняет весь `precheck.sh` (живые гейты + check-links) | [0090-ci-precheck.md](0090-ci-precheck.md) | ✅ ГОТОВО (T1,T4–T10 локально; T2/T3/T11 — блокер биллинга Actions) |
@@ -81,6 +85,7 @@
 | 0089 | Остаточные проверки плагина IntelliJ (0022/0023) | [0089-intellij-residual-checks.md](0089-intellij-residual-checks.md) | ГОТОВО |
 | 0092 | У фичи 0018 нет ADR | [0092-adr-0018-retrofit.md](0092-adr-0018-retrofit.md) | ГОТОВО |
 | 0088 | Нарушители лимита размера модуля — безопасная часть | [0088-module-size-remaining.md](0088-module-size-remaining.md) | ✅ ГОТОВО |
+| 0098 | диапазон бита адреса порта и безопасный дефолтный HAL | [0098-port-bit-range-safe-hal.md](0098-port-bit-range-safe-hal.md) | ✅ ПРОЙДЕН (отчёт: [reports/0098](../reports/0098-port-bit-range-safe-hal.md)) |
 | 0100 | Переименование языка Lam → Takt | [0100-language-rename-takt.md](0100-language-rename-takt.md) | ✅ ГОТОВО |
 | 0124 | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [0124-verify-graph-export.md](0124-verify-graph-export.md) | ГОТОВО |
 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-intellij-takt-lsp-tooling.md](0125-intellij-takt-lsp-tooling.md) | ГОТОВО |
@@ -119,6 +124,7 @@
 | 0182 | Библиотечный ПИД-регулятор и пример его применения | [0182-pid-library-and-application.md](0182-pid-library-and-application.md) | ГОТОВО |
 | 0185 | Параметризация моделей (ключевое слово parameter) | [0185-model-parameters.md](0185-model-parameters.md) | ГОТОВО |
 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-book-processor-example.md](0186-book-processor-example.md) | ГОТОВО |
+| 0187 | Пересмотр задания адресов и доступа к портам | [0187-port-io-redesign.md](0187-port-io-redesign.md) | ✅ ПРОЙДЕН (отчёт: [reports/0187](../reports/0187-port-io-redesign.md)) |
 | 0190 | Разделение предкоммита на компоненты и выборочный запуск | [0190-precheck-selective-gates.md](0190-precheck-selective-gates.md) | ГОТОВО |
 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-literal-u64-representation.md](0157-literal-u64-representation.md) | ГОТОВО |
 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-parser-depth-limit.md](0156-parser-depth-limit.md) | ГОТОВО |
@@ -242,3 +248,4 @@
 | 0270 | Вес PDF документа: причина найдена, теги отключены | [0270-book-pdf-size.md](0270-book-pdf-size.md) | Пройден: 7/7 условий, контроль возврата тегов |
 | 0283 | Печать результата компиляции сведена к одной функции | [0283-cli-report-result-merge.md](0283-cli-report-result-merge.md) | Пройден: 8/8 условий, 2 мутации |
 | 0294 | SE-102 называет файл, подключающий библиотеку | [0294-se102-suggest-importer.md](0294-se102-suggest-importer.md) | Пройден: 10/10 условий |
+| 0164 | Реестры стадий сверяются с файлами на диске | [0164-registry-rebuild-gate.md](0164-registry-rebuild-gate.md) | Пройден: 9/9 условий, 2 мутации |

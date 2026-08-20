@@ -54,6 +54,9 @@
 | 0029-03 | 0029 | Отображение `Rational` → `double` и опция `--float-width` | [0029-03-c-type-rational.md](0029-03-c-type-rational.md) |
 | 0029-04 | 0029 | Расширение сверки с симулятором и примеры в документации | [0029-04-conformance-docs.md](0029-04-conformance-docs.md) |
 | 0029-05 | 0029 | Инициализация массива в `_init` (заведена по ходу разработки) | [0029-05-array-initializer.md](0029-05-array-initializer.md) |
+| 0046-01 | 0046 | Ужатие `Location::Source` до `u32×3` (`Diagnostic` < 128 байт) | [0046-01-location-shrink.md](0046-01-location-shrink.md) |
+| 0046-02 | 0046 | Механическая чистка остатка clippy + rustc | [0046-02-mechanical-cleanup.md](0046-02-mechanical-cleanup.md) |
+| 0046-03 | 0046 | Закрепление ноль-долга (`-D warnings` в precheck + CI) | [0046-03-pin-warnings.md](0046-03-pin-warnings.md) |
 | 0047-01 | 0047 | Трансляция `S(Модель) = Состояние` в цель `c` | [0047-01-state-of-model.md](0047-01-state-of-model.md) |
 | 0030-01 | 0030 | Починка модели comprehensive.lam + приёмочный тест сценария | [0030-01-comprehensive-example-fix.md](0030-01-comprehensive-example-fix.md) |
 | 0030-02 | 0030 | Корпусной гейт достижимости заявленных сценариев для examples/ | [0030-02-examples-scenario-gate.md](0030-02-examples-scenario-gate.md) |
@@ -149,6 +152,7 @@
 | 0056-01 | 0056 | Индекс различает файлы (`file_no`, `offset`) | [0056-01-file-aware-index.md](0056-01-file-aware-index.md) |
 | 0056-02 | 0056 | Точный путь вместо угадывания (`to_snake_case` удаляется) | [0056-02-goto-exact-path.md](0056-02-goto-exact-path.md) |
 | 0056-03 | 0056 | Подключить кросс-файловый переход к серверу | [0056-03-wire-server.md](0056-03-wire-server.md) |
+| 0056-04 | 0056 | Позиция у ссылок на модель | [0056-04-model-reference-location.md](0056-04-model-reference-location.md) |
 | 0057-01 | 0057 | Регистр шага и его enum в `Fsm`/минимапе | [0057-01-step-register.md](0057-01-step-register.md) |
 | 0057-02 | 0057 | `emit_extend` для `Concatenation` — инлайн активного шага | [0057-02-emit-concatenation.md](0057-02-emit-concatenation.md) |
 | 0057-03 | 0057 | Вложенная композиция — покрытие или явная диагностика | [0057-03-nesting-diagnostics.md](0057-03-nesting-diagnostics.md) |
@@ -174,7 +178,12 @@
 | 0066-01 | 0066 | `coerce_to` по целевому типу — `BOOL` и перечисления | [0066-01-coerce-to.md](0066-01-coerce-to.md) |
 | 0068-01 | 0068 | `build_kripke` — вершина как (состояние, значения переменных φ) | [0068-01-tracked-vars-kripke.md](0068-01-tracked-vars-kripke.md) |
 | 0069-01 | 0069 | `address_map/` — разделение по темам + снятие записи долга | [0069-01-split-by-theme.md](0069-01-split-by-theme.md) |
+| 0075-01 | 0075 | разделить эталонную модель (разбор vs. компиляция) | [0075-01-split-reference-model.md](0075-01-split-reference-model.md) |
+| 0081-01 | 0081 | единая точка сбора и печати предупреждений в `lamc` | [0081-01-collect-and-print-warnings.md](0081-01-collect-and-print-warnings.md) |
+| 0082-01 | 0082 | обход формул в `unused.rs` | [0082-01-traverse-formulas.md](0082-01-traverse-formulas.md) |
 | 0096-01 | 0096 | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [0096-01-fixed-point-native-float.md](0096-01-fixed-point-native-float.md) |
+| 0096-02 | 0096 | цель `sv` — `float` → `q(m, n)` под `--float-as-q`, снятие `SV-003` | [0096-02-fixed-point-native-float.md](0096-02-fixed-point-native-float.md) |
+| 0096-03 | 0096 | цели `c`/`rust`/`st` — embedded-путь `float → q(m, n)` при `--float-embedded` | [0096-03-fixed-point-native-float.md](0096-03-fixed-point-native-float.md) |
 | 0097-01 | 0097 | Пример ПИД-регулятора на языке Lam (fixed-point) | [0097-01-pid-regulator-example.md](0097-01-pid-regulator-example.md) |
 | 0090-01 | 0090 | Обобщённый строгий режим `precheck.sh` (`PRECHECK_STRICT=1`) | [0090-01-precheck-strict-mode.md](0090-01-precheck-strict-mode.md) |
 | 0090-02 | 0090 | `ci.yml` вызывает `precheck.sh` под строгим режимом | [0090-02-ci-runs-precheck.md](0090-02-ci-runs-precheck.md) |
@@ -214,6 +223,7 @@
 | 0088-10 | 0088 | Остальные нарушители лимита размера модуля | [0088-10-module-size-remaining.md](0088-10-module-size-remaining.md) |
 | 0088-11 | 0088 | Остальные нарушители лимита размера модуля | [0088-11-module-size-remaining.md](0088-11-module-size-remaining.md) |
 | 0088-12 | 0088 | Остальные нарушители лимита размера модуля | [0088-12-module-size-remaining.md](0088-12-module-size-remaining.md) |
+| 0098-01 | 0098 | диапазон бита адреса (`SE-060`) + безопасный дефолтный HAL | [0098-01-bit-range-safe-hal.md](0098-01-bit-range-safe-hal.md) |
 | 0100-01 | 0100 | Переименование языка Lam → Takt | [0100-01-language-rename-takt.md](0100-01-language-rename-takt.md) |
 | 0100-02 | 0100 | Переименование языка Lam → Takt | [0100-02-language-rename-takt.md](0100-02-language-rename-takt.md) |
 | 0100-03 | 0100 | Переименование языка Lam → Takt | [0100-03-language-rename-takt.md](0100-03-language-rename-takt.md) |
@@ -222,6 +232,7 @@
 | 0100-06 | 0100 | Переименование языка Lam → Takt | [0100-06-language-rename-takt.md](0100-06-language-rename-takt.md) |
 | 0124-01 | 0124 | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [0124-01-verify-graph-export.md](0124-01-verify-graph-export.md) |
 | 0125-01 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-01-intellij-takt-lsp-tooling.md](0125-01-intellij-takt-lsp-tooling.md) |
+| 0138-01 | 0138 | чужой конфиг убран, замер — по требованию | [0138-01-coverage-measurement.md](0138-01-coverage-measurement.md) |
 | 0139-01 | 0139 | Удаление мёртвой конфигурации .travis.yml | [0139-01-remove-travis-config.md](0139-01-remove-travis-config.md) |
 | 0137-01 | 0137 | Фиксация толчейна Rust и MSRV | [0137-01-toolchain-pin-msrv.md](0137-01-toolchain-pin-msrv.md) |
 | 0128-01 | 0128 | Диагностика вместо паники на числовом литерале больше i64::MAX | [0128-01-lexer-literal-overflow.md](0128-01-lexer-literal-overflow.md) |
@@ -331,6 +342,7 @@
 | 0176-02 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-02-bit-port-address-position.md](0176-02-bit-port-address-position.md) |
 | 0176-03 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-03-bit-port-address-position.md](0176-03-bit-port-address-position.md) |
 | 0176-04 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-04-bit-port-address-position.md](0176-04-bit-port-address-position.md) |
+| 0187-01 | 0187 | Ключевое слово `at` — размещение в объявлении порта | [0187-01-port-io-redesign.md](0187-01-port-io-redesign.md) |
 | 0188-01 | 0188 | Направление порта проверяется во всех позициях | [0188-01-port-direction-everywhere.md](0188-01-port-direction-everywhere.md) |
 | 0187-07 | 0187 | Пересмотр задания адресов и доступа к портам | [0187-07-port-io-redesign.md](0187-07-port-io-redesign.md) |
 | 0187-02 | 0187 | Пересмотр задания адресов и доступа к портам | [0187-02-port-io-redesign.md](0187-02-port-io-redesign.md) |
@@ -512,3 +524,5 @@
 | 0270-01 | 0270 | Сборка PDF без тегов доступности | [0270-01-book-pdf-size.md](0270-01-book-pdf-size.md) |
 | 0283-01 | 0283 | Слияние report_simple_result и report_hal_result | [0283-01-cli-report-result-merge.md](0283-01-cli-report-result-merge.md) |
 | 0294-01 | 0294 | Поиск импортёров и заметка диагностики | [0294-01-se102-suggest-importer.md](0294-01-se102-suggest-importer.md) |
+| 0164-01 | 0164 | Гейт согласованности реестров | [0164-01-registry-rebuild-gate.md](0164-01-registry-rebuild-gate.md) |
+| 0164-02 | 0164 | Восполнение 42 пропущенных записей | [0164-02-registry-rebuild-gate.md](0164-02-registry-rebuild-gate.md) |

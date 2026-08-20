@@ -9,6 +9,15 @@
 
 | Фича | Заголовок | Отчёт | Вердикт |
 |------|-----------|-------|---------|
+| 0036 | Согласование видимости публичного API крейта `simulation` | [0036-sim-visibility.md](0036-sim-visibility.md) | ✅ ГОТОВО |
+| 0038 | семантическая подсветка Lam в IntelliJ | [0038-intellij-semantic-tokens.md](0038-intellij-semantic-tokens.md) | ✅ ГОТОВО |
+| 0046 | Устранение всех предупреждений сборки | [0046-build-warnings-cleanup.md](0046-build-warnings-cleanup.md) | ✅ ГОТОВО |
+| 0062 | цель `sv-mmio` — регистровый файл из адресов портов | [0062-sv-mmio-target.md](0062-sv-mmio-target.md) | ✅ ГОТОВО |
+| 0063 | порт `en` (clock enable) для цели `sv` | [0063-sv-clock-enable.md](0063-sv-clock-enable.md) | ✅ ГОТОВО |
+| 0064 | предупреждение о делителе (`SV-009`) в цели `sv` | [0064-sv-divider-warning.md](0064-sv-divider-warning.md) | ✅ ГОТОВО |
+| 0075 | эталонная модель порождает компилируемый C | [0075-lib-src-reference-model.md](0075-lib-src-reference-model.md) | ✅ ГОТОВО |
+| 0081 | `lamc compile` печатает предупреждения | [0081-lamc-print-warnings.md](0081-lamc-print-warnings.md) | ✅ ГОТОВО |
+| 0082 | `unused.rs` обходит формулы | [0082-unused-formulas.md](0082-unused-formulas.md) | ✅ ГОТОВО |
 | 0087 | Мягкий режим инвариантов симулятора (записать и продолжить) | [0087-invariant-soft-mode.md](0087-invariant-soft-mode.md) | ✅ ГОТОВО |
 | 0084 | Ключ карты адресов — квалифицированный (модель+порт) | [0084-address-map-qualified-key.md](0084-address-map-qualified-key.md) | ✅ ГОТОВО |
 | 0085 | Константа версии языка в коде + гейт синхронизации с README | [0085-language-version-constant.md](0085-language-version-constant.md) | ✅ ГОТОВО |
@@ -50,6 +59,7 @@
 | 0069 | Разделение `address_map.rs` по темам (снятие записи долга) | [0069-address-map-eval-split.md](0069-address-map-eval-split.md) | ✅ ГОТОВО (A1–A8; каталог `address_map/` — `parse`/`env`/`eval`/`resolve` + `mod.rs`-реэкспорт; вывод всех целей побайтово прежний; `apply_binary` одна; долг 22 → 21) |
 | 0068 | Верификация свойств над данными (атом-предикат LTL) | [0068-verify-data-properties.md](0068-verify-data-properties.md) | ✅ ГОТОВО (A1–A9, консервативное ядро; `verification/data_kripke.rs` — вершина = состояние × оценка; `Holds` надёжен, направление ошибки под мутационным сторожем; данные полностью недетерминированы, полный Option D отложен; язык не менялся) |
 | 0061 | Fixed-point `q(m, n)` как тип языка | [0061-05-example-and-docs.md](0061-05-example-and-docs.md) | ✅ ГОТОВО (задачи 01–05; отчёты [0061-03](0061-03-software-targets.md)/[04](0061-04-sv-target.md)/[05](0061-05-example-and-docs.md); Q-арифметика **побитово** едина у симулятора и 4 целей; ловушка C11 6.5.7p5 закрыта floor-делением; пример-регулятор проходит все гейты корпуса) |
+| 0096 | прозрачный `float` через глобальную Q-точность | [0096-fixed-point-native-float.md](0096-fixed-point-native-float.md) | ✅ ГОТОВО |
 | 0097 | Пример ПИД-регулятора на Lam (fixed-point) | [0097-pid-regulator-example.md](0097-pid-regulator-example.md) | ✅ ГОТОВО (A1–A6; позиционный ПИД с anti-windup на `q(8,8)`, объект 1-го порядка; сходится без входов; все гейты корпуса; конфликт имён с ФБ `INTEGRAL` IEC → `i_acc`/`meas`; компилятор не изменён) |
 | 0039 | Действие Reformat Code в плагине IntelliJ | [0039-intellij-reformat.md](0039-intellij-reformat.md) | ✅ ГОТОВО (развилка → Option B LSP4IJ после 0038; форматирование бесплатно от `lam-lsp`; production-кода нет; приёмка A2 байт-в-байт на всём корпусе автотестом; остаток — визуальный `runIde`) |
 | 0043 | Экспорт карты адресов во внешний формат | [0043-address-map-export.md](0043-address-map-export.md) | ✅ ГОТОВО (T1–T22 + K5; `lamc address-map --emit map\|json`; круговой рейс байт-в-байт; сверка с `c-hal`; CLI вынесен в библиотеку — `lamc.rs` пришпилен к baseline; крейт 0.5.0 → 0.6.0) |
@@ -70,6 +80,7 @@
 | 0089 | Остаточные проверки плагина IntelliJ (0022/0023) | [0089-intellij-residual-checks.md](0089-intellij-residual-checks.md) | ГОТОВО |
 | 0092 | У фичи 0018 нет ADR | [0092-adr-0018-retrofit.md](0092-adr-0018-retrofit.md) | ГОТОВО |
 | 0088 | Нарушители лимита размера модуля — безопасная часть | [0088-module-size-remaining.md](0088-module-size-remaining.md) | ✅ ГОТОВО |
+| 0098 | диапазон бита адреса и безопасный дефолтный HAL | [0098-port-bit-range-safe-hal.md](0098-port-bit-range-safe-hal.md) | ✅ ГОТОВО |
 | 0100 | Переименование языка Lam → Takt | [0100-language-rename-takt.md](0100-language-rename-takt.md) | ✅ ГОТОВО |
 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-intellij-takt-lsp-tooling.md](0125-intellij-takt-lsp-tooling.md) | ГОТОВО |
 | 0139 | Удаление мёртвой конфигурации .travis.yml | [0139-remove-travis-config.md](0139-remove-travis-config.md) | ✅ ПРОЙДЕН |
@@ -107,6 +118,7 @@
 | 0182 | Библиотечный ПИД-регулятор и пример его применения | [0182-pid-library-and-application.md](0182-pid-library-and-application.md) | ГОТОВО |
 | 0185 | Параметризация моделей (ключевое слово parameter) | [0185-model-parameters.md](0185-model-parameters.md) | ГОТОВО |
 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-book-processor-example.md](0186-book-processor-example.md) | ГОТОВО |
+| 0187 | Пересмотр задания адресов и доступа к портам | [0187-port-io-redesign.md](0187-port-io-redesign.md) | ✅ ГОТОВО (раздел «Вывод» отчёта) |
 | 0190 | Разделение предкоммита на компоненты и выборочный запуск | [0190-precheck-selective-gates.md](0190-precheck-selective-gates.md) | ГОТОВО |
 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-literal-u64-representation.md](0157-literal-u64-representation.md) | ГОТОВО |
 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-parser-depth-limit.md](0156-parser-depth-limit.md) | ГОТОВО |
@@ -230,3 +242,4 @@
 | 0270 | Вес PDF документа: причина найдена, теги отключены | [0270-book-pdf-size.md](0270-book-pdf-size.md) | Готово: 3.08 МБ → 947 КБ |
 | 0283 | Печать результата компиляции сведена к одной функции | [0283-cli-report-result-merge.md](0283-cli-report-result-merge.md) | Готово: --verbose действует у всех целей |
 | 0294 | SE-102 называет файл, подключающий библиотеку | [0294-se102-suggest-importer.md](0294-se102-suggest-importer.md) | Готово: подсказка у taktc и takt-sim |
+| 0164 | Реестры стадий сверяются с файлами на диске | [0164-registry-rebuild-gate.md](0164-registry-rebuild-gate.md) | Готово: 42 записи восполнены, гейт заведён |
