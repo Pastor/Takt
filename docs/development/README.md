@@ -543,3 +543,4 @@
 | 0309-01 | 0309 | Цель sv переводит массив с агрегатным инициализатором | [0309-01-sv-array-initializer.md](0309-01-sv-array-initializer.md) |
 | 0310-01 | 0310 | Правило целочисленного приведения — общий носитель | [0310-01-int-cast-shared-layer.md](0310-01-int-cast-shared-layer.md) |
 | 0311-01 | 0311 | Запись реестра диагностик называет смысл | [0311-01-diagnostic-descriptions.md](0311-01-diagnostic-descriptions.md) |
+| 0312-01 | 0312 | Гейты цели c проверяют и релизный режим | [0312-01-c-gate-release-mode.md](0312-01-c-gate-release-mode.md) |

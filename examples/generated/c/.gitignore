@@ -1,5 +1,6 @@
 .idea
 cmake-*-debug
+cmake-*-release
 elevator.[ch]
 elevator_mini.[ch]
 extend_complex.[ch]

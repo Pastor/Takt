@@ -1042,6 +1042,41 @@ cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja \
 cd $C_OUTPUT/cmake-build-debug/ && ninja
 cd -
 
+# Тот же корпус в РЕЛИЗНОМ режиме (фича 0312). Прошивки собирают именно так, а
+# оба гейта цели `c` шли только в отладке — и разница была уже измерена:
+# замер 0260 нашёл под `-DNDEBUG` 53 предупреждения против 49 без него, потому
+# что `assert(0 != main);` в релизе исчезает. После 0260 разницы не стало, но
+# её отсутствие никем не сторожилось.
+#
+# ⚠️ Первый же прогон этого шага нашёл ОТКАЗ: харнесс `batch_cycle_main.c`
+# проверял порядок фаз `assert`-ами, и под `-DNDEBUG` он не только переставал
+# проверять (правило «assert в неисполненном коде молчит всегда»), но и не
+# компилировался — `-Wunused-but-set-variable` на счётчике `phases`. Харнесс
+# переведён на проверку, работающую в любом режиме.
+#
+# ⚠️ Каталог сборки СВОЙ: общий с отладочным дал бы перекомпиляцию туда-сюда на
+# каждом прогоне (кэш cmake хранит флаги).
+echo "Гейт цели c: сборка корпуса в РЕЛИЗЕ (-DNDEBUG, фича 0312)..."
+cmake -DCMAKE_BUILD_TYPE=Release -G Ninja \
+  -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -DNDEBUG" \
+  -S $C_OUTPUT -B $C_OUTPUT/cmake-build-release/
+cd $C_OUTPUT/cmake-build-release/ && ninja
+cd -
+
+# Харнессы ЗАПУСКАЮТСЯ в релизе, а не только собираются (урок 0166: `assert` в
+# неисполненном коде молчит всегда — а в релизе он молчит и в исполненном).
+for harness in batch_cycle stacker; do
+  if [ -x "$C_OUTPUT/cmake-build-release/$harness" ]; then
+    if "$C_OUTPUT/cmake-build-release/$harness" > /tmp/${harness}_release.log 2>&1; then
+      echo "  $harness [релиз] → проверки пройдены"
+    else
+      echo "  $harness [релиз] → ПРОВАЛ:"
+      sed 's/^/    /' /tmp/${harness}_release.log | head -8
+      exit 1
+    fi
+  fi
+done
+
 # Гейт компиляции цели c-hal (фикс 0020-01 / фича 0098). Прежде c-hal НИГДЕ не
 # компилировалась — только диффилась на детерминизм (её вывод сверяли сам с
 # собой). Ровно эта дыра покрытия дала дожить UB в дефолтном HAL (сдвиг бита
@@ -1078,6 +1113,16 @@ if require_tool cc "гейт c-hal, фикс 0020-01; обычно есть на
            -I "$chal_dir" -c "$c" -o /dev/null 2>"$chal_dir/cc.log"; then
         echo "  $name [c-hal] → НЕ КОМПИЛИРУЕТСЯ:"
         sed 's/^/    /' "$chal_dir/cc.log" | head -8
+        ok=0
+        chal_failed=1
+      fi
+      # ...и в РЕЛИЗЕ (фича 0312): прошивки собирают с `-DNDEBUG`, а под ним
+      # `assert` исчезает — класс, видимый только там, отладочный гейт
+      # пропустит. Замер 0260: разница между режимами уже была (53 против 49).
+      if ! cc -std=c11 -Wall -Wextra -Werror -DNDEBUG \
+           -I "$chal_dir" -c "$c" -o /dev/null 2>"$chal_dir/cc-release.log"; then
+        echo "  $name [c-hal, релиз] → НЕ КОМПИЛИРУЕТСЯ:"
+        sed 's/^/    /' "$chal_dir/cc-release.log" | head -8
         ok=0
         chal_failed=1
       fi
