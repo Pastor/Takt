@@ -541,3 +541,4 @@
 | 0307-01 | 0307 | Текст SIM-011 называет ширину значения | [0307-01-sim-bit-range-text.md](0307-01-sim-bit-range-text.md) |
 | 0308-01 | 0308 | Отказ целей rust, st и sv несёт координату оператора | [0308-01-target-refusal-position.md](0308-01-target-refusal-position.md) |
 | 0309-01 | 0309 | Цель sv переводит массив с агрегатным инициализатором | [0309-01-sv-array-initializer.md](0309-01-sv-array-initializer.md) |
+| 0310-01 | 0310 | Правило целочисленного приведения — общий носитель | [0310-01-int-cast-shared-layer.md](0310-01-int-cast-shared-layer.md) |
