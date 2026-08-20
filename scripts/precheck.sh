@@ -138,6 +138,15 @@ if require_tool python3 "проверка ссылок, правило 14; apt i
   "$(dirname "$0")/check-registries.py" --self-test
   "$(dirname "$0")/check-registries.py"
 
+  # Устройство интеграционных тестов (фича 0271). Фича 0244 свела 147 тестовых
+  # бинарников в семь тем и сняла 98.2 с стадии `cargo test`; правило держалось
+  # только дисциплиной — cargo считает целью любой `tests/*.rs`. ⚠️ Второй класс
+  # тише первого: набор, лежащий в теме, но не объявленный `mod` в её main.rs,
+  # не собирается и не запускается ВОВСЕ, а `cargo test` рапортует об успехе.
+  echo "Устройство интеграционных тестов (фича 0271)..."
+  "$(dirname "$0")/check-test-targets.py" --self-test
+  "$(dirname "$0")/check-test-targets.py"
+
   echo "Статус фич: карточка ↔ реестр ↔ витрина (фича 0177)..."
   "$(dirname "$0")/check-feature-status.py" --self-test
   "$(dirname "$0")/check-feature-status.py"
