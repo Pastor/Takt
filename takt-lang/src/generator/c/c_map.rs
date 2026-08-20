@@ -25,6 +25,17 @@ pub struct CMap {
     /// идёт **только** через колбэки HAL, поэтому обращение по адресу она
     /// отвергает (`CC-021`), а `c-hal` печатает `*(volatile uintN_t*)`.
     hal: bool,
+    /// Предупреждения цели, накопленные за проход (фича 0314).
+    ///
+    /// Канал у цели `c` существует с фичи 0168 (`Generator::generate` возвращает
+    /// `Vec<Diagnostic>`), но говорить по нему было нечем. Первое, что по нему
+    /// поехало, — `CC-024`: вызов `debug(…)` цель **выбрасывает**, и молчать
+    /// об этом нельзя (соседние `st` и `rust` на том же входе отказывают).
+    ///
+    /// ⚠️ `RefCell`, потому что печатники получают карту по `&self`: заводить
+    /// `&mut` через полтора десятка сигнатур ради накопителя — цена выше
+    /// пользы. Генерация однопоточна по построению.
+    warnings: RefCell<Vec<Diagnostic>>,
 }
 
 impl CMap {
@@ -54,6 +65,16 @@ impl CMap {
 }
 
 impl CMap {
+    /// Запоминает предупреждение цели (фича 0314).
+    pub(crate) fn warn(&self, diagnostic: Diagnostic) {
+        self.warnings.borrow_mut().push(diagnostic);
+    }
+
+    /// Забирает накопленные предупреждения — зовёт генератор в конце прохода.
+    pub(crate) fn take_warnings(&self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.warnings.borrow_mut())
+    }
+
     pub fn new(filename: &str, model: &ModelNode, guard_enable: bool) -> Result<Self, Diagnostic> {
         let model_rc = Rc::new(RefCell::new(model.copy(None, None)));
         let usage = crate::semantic::unused::compute_usage(Rc::clone(&model_rc));
@@ -65,6 +86,7 @@ impl CMap {
             float_width: FloatWidth::default(),
             time_profile: crate::semantic::duration::TimeProfile::default(),
             hal: false,
+            warnings: RefCell::new(Vec::new()),
         })
     }
 
