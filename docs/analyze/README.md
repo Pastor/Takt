@@ -299,3 +299,4 @@
 | 0313 | Число аргументов вызова сверяется с объявлением | [0313-call-arity-check.md](0313-call-arity-check.md) | — (новая фича) |
 | 0314 | Цель c говорит о выброшенном вызове встроенной функции | [0314-c-dropped-builtin-warning.md](0314-c-dropped-builtin-warning.md) | — (новая фича) |
 | 0315 | Гейты без сторожей получают сторожей | [0315-gate-guards.md](0315-gate-guards.md) | — (новая фича) |
+| 0316 | Комментарий шага не пересказывает заголовок гейта | [0316-precheck-comment-duplication.md](0316-precheck-comment-duplication.md) | — (новая фича) |
