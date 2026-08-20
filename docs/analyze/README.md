@@ -294,3 +294,4 @@
 | 0308 | Отказ целей rust, st и sv несёт координату оператора | [0308-target-refusal-position.md](0308-target-refusal-position.md) | — (новая фича) |
 | 0309 | Цель sv переводит массив с агрегатным инициализатором | [0309-sv-array-initializer.md](0309-sv-array-initializer.md) | — (новая фича) |
 | 0310 | Правило целочисленного приведения — общий носитель | [0310-int-cast-shared-layer.md](0310-int-cast-shared-layer.md) | — (новая фича) |
+| 0311 | Запись реестра диагностик называет смысл | [0311-diagnostic-descriptions.md](0311-diagnostic-descriptions.md) | — (новая фича) |

@@ -265,3 +265,4 @@
 | 0308 | Координата отказа целей rust, st, sv | [0308-target-refusal-position.md](0308-target-refusal-position.md) | Пройден: 5/5 условий, контроль включён |
 | 0309 | Массив с агрегатом в цели sv | [0309-sv-array-initializer.md](0309-sv-array-initializer.md) | Пройден: 5/5 условий, сверка потактовая |
 | 0310 | Общий носитель правила приведения | [0310-int-cast-shared-layer.md](0310-int-cast-shared-layer.md) | Пройден: 9/9 условий, мутация ловится |
+| 0311 | Описания записей реестра диагностик | [0311-diagnostic-descriptions.md](0311-diagnostic-descriptions.md) | Пройден: 10/10 условий, сторож на копии дерева |
