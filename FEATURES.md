@@ -76,16 +76,6 @@ to a billing issue`), а разблокировка биллинга — дей�
 
 Идеи, ещё не оформленные в карточку `docs/features/XXXX-*.md`.
 
-- **Список зарезервированных имён IEC у цели `st` НЕПОЛОН.** Замер
-  [0341](docs/features/0341-nested-struct-order.md) (2026-08-20, прогон
-  `iec2c` по 62 именам): отвергаются **все** 62, а `IEC_RESERVED` знает 47 —
-  не хватает `ln`, `log`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
-  `trunc`, `mod`, `and`, `or`, `xor`, `not`, `add`, `sub`, `mul`, `div`,
-  `move`, `adr`, `size`, `bcd_to_int`, `int_to_bcd`. Цена: `var ln: u8;` даёт
-  невалидный ST при **нулевом** коде возврата `taktc`, а сообщение `iec2c`
-  («invalid located variable declaration») причины не называет. ⚠️ Сторож
-  обязан **прогонять** `iec2c` по списку, иначе он снова отстанет.
-
 - **Цикл структур не диагностируется.** Замер
   [0341](docs/features/0341-nested-struct-order.md) (2026-08-20): `struct A { b:
   B }` и `struct B { a: A }` — размер такой структуры бесконечен, но семантика
