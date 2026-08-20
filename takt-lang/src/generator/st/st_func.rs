@@ -331,10 +331,16 @@ pub(crate) fn emit_functions(
 
     for (_, model_rc) in models {
         let model = &*model_rc.borrow();
-        let mut names: Vec<&String> = model.functions.keys().collect();
-        names.sort();
-        for key in names {
-            let def = &model.functions[key];
+        // Порядок — по ЗАВИСИМОСТЯМ ВЫЗОВА (фича 0344): в IEC 61131-3
+        // опережающих ссылок нет, и функция, вызывающая другую, обязана стоять
+        // после неё. Алфавитный порядок давал `iec2c` «';' missing at the end
+        // of statement» — сообщение, по которому причину не опознать.
+        //
+        // Граф ацикличен: рекурсию запрещает семантика (`SE-053`).
+        for key in crate::generator::call_order::sorted(&model.functions) {
+            let Some(def) = model.functions.get(&key) else {
+                continue;
+            };
             let Some(name) = pou_name(def) else {
                 continue;
             };
