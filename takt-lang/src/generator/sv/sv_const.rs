@@ -284,6 +284,19 @@ pub(in crate::generator::sv) fn reset_value(
         {
             return struct_reset(items, ty, enums, what, loc, scope);
         }
+        // Агрегат массива (фича 0309): `var arr: [u8; 3] := {1, 2, 3};`.
+        // Печатается **шаблоном присваивания** `'{…}`, а не конкатенацией:
+        // массив здесь распакованный (`logic [7:0] a [0:2]`), и `{…}` для него
+        // не форма значения, а склейка разрядов.
+        //
+        // ⚠️ Бит-вектор `[bit;N]` сюда НЕ попадает — он скаляр (`logic [N-1:0]`,
+        // правило 0078), и его агрегат ложится обычным литералом.
+        ExpressionNode::Initializer(items) | ExpressionNode::Array(items)
+            if matches!(ty, TypeNode::Array(_, _))
+                && crate::semantic::bit_vector::is_bit_vector(ty).is_none() =>
+        {
+            return array_reset(items, ty, enums, what, loc, scope);
+        }
         // Не литерал — спрашиваем ВЫЧИСЛИМОСТЬ у общего слоя (фича 0286), а не
         // судим по виду узла. Прежде `var v := 5 as u16;` отвергался, тогда как
         // `var v: u16 := 5;` и `var v: u16 := 2 + 3;` принимались: разницу
@@ -310,6 +323,58 @@ pub(in crate::generator::sv) fn reset_value(
 /// # Ошибки
 /// [`SV-002`](crate::generator::sv::sv_fsm::sv002) — структура не объявлена,
 /// число значений не совпадает с числом полей либо значение поля невычислимо.
+/// Значение сброса для агрегата **массива** (фича 0309).
+///
+/// # Почему шаблон присваивания, а не конкатенация
+///
+/// Массив скаляров в SV распакованный (`logic [7:0] a [0:2]`), и `{a, b, c}`
+/// для него означает склейку **разрядов**, а не список элементов. Форма
+/// `'{…}` — проба 2026-08-20: её принимают **оба** инструмента (`verilator
+/// --lint-only -Wall` и `yosys synth`), как того требует урок 0235.
+///
+/// # Ошибки
+///
+/// [`SV-002`](sv002) — число значений не совпало с объявленным размером либо
+/// элемент невычислим.
+fn array_reset(
+    items: &[ExpressionNode],
+    ty: &TypeNode,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
+    what: &str,
+    loc: Location,
+    scope: Option<&std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>>,
+) -> Result<String, Diagnostic> {
+    let TypeNode::Array(size, elem) = ty else {
+        return Err(unresolvable_reset(what));
+    };
+    if usize::from(*size) != items.len() {
+        return Err(sv002(&format!(
+            "инициализатор {what}: массив объявлен на {size} элементов, а значений {}",
+            items.len()
+        )));
+    }
+    let mut parts = Vec::with_capacity(items.len());
+    for (index, value) in items.iter().enumerate() {
+        let printed = reset_value(
+            value,
+            elem,
+            enums,
+            &format!("элемента {index} массива в {what}"),
+            loc,
+            scope,
+        )?;
+        // Размерная форма обязательна, как и в агрегате структуры: безразмерное
+        // число в шаблоне присваивания даёт `verilator -Wall` предупреждение о
+        // ширине, а гейт цели идёт без исключений.
+        let sized = match (value, crate::generator::sv::sv_type::scalar_width(elem)) {
+            (ExpressionNode::Number(n), Some(width)) => format!("{width}'d{n}"),
+            _ => printed,
+        };
+        parts.push(sized);
+    }
+    Ok(format!("'{{{}}}", parts.join(", ")))
+}
+
 fn struct_reset(
     items: &[ExpressionNode],
     ty: &TypeNode,

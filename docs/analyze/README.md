@@ -292,3 +292,4 @@
 | 0306 | Невычислимый вызов функции в инициализаторе называет причину | [0306-unfoldable-call-in-initializer.md](0306-unfoldable-call-in-initializer.md) | — (новая фича) |
 | 0307 | Текст SIM-011 называет ширину значения | [0307-sim-bit-range-text.md](0307-sim-bit-range-text.md) | — (новая фича) |
 | 0308 | Отказ целей rust, st и sv несёт координату оператора | [0308-target-refusal-position.md](0308-target-refusal-position.md) | — (новая фича) |
+| 0309 | Цель sv переводит массив с агрегатным инициализатором | [0309-sv-array-initializer.md](0309-sv-array-initializer.md) | — (новая фича) |
