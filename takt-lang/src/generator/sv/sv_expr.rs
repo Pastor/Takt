@@ -392,7 +392,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
                      l: &ExpressionNode,
                      r: &ExpressionNode|
      -> Option<Result<String, Diagnostic>> {
-        super::sv_fixed::fixed_format(node)
+        super::sv_fixed::fixed_format_in(node, scope.structs)
             .map(|(m, n, sat)| super::sv_fixed::binary(op, l, r, scope, m, n, sat))
     };
     match node {
@@ -409,10 +409,12 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Parenthesis(inner) => Ok(format!("({})", print_expression(inner, scope)?)),
         ExpressionNode::Not(inner) => Ok(format!("(!{})", print_expression(inner, scope)?)),
         ExpressionNode::BitwiseNot(inner) => Ok(format!("(~{})", print_expression(inner, scope)?)),
-        ExpressionNode::Negate(inner) => match super::sv_fixed::fixed_format(node) {
-            Some((m, n, sat)) => super::sv_fixed::negate(inner, scope, m, n, sat),
-            None => Ok(format!("(-{})", print_expression(inner, scope)?)),
-        },
+        ExpressionNode::Negate(inner) => {
+            match super::sv_fixed::fixed_format_in(node, scope.structs) {
+                Some((m, n, sat)) => super::sv_fixed::negate(inner, scope, m, n, sat),
+                None => Ok(format!("(-{})", print_expression(inner, scope)?)),
+            }
+        }
         ExpressionNode::UnaryPlus(inner) => Ok(format!("(+{})", print_expression(inner, scope)?)),
         // Над q(m, n) — масштабирующая Q-арифметика (0061); иначе прямая.
         ExpressionNode::Multiply(l, r) => fixed_bin(node, super::sv_fixed::FixedOp::Multiply, l, r)
@@ -539,7 +541,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         // — q(m, n). Прочие `as` целью sv по-прежнему не транслируются.
         ExpressionNode::Cast(inner, ty) => {
             if matches!(ty, TypeNode::Fixed { .. })
-                || super::sv_fixed::fixed_format(inner).is_some()
+                || super::sv_fixed::fixed_format_in(inner, scope.structs).is_some()
             {
                 super::sv_fixed::cast(inner, ty, scope)
             } else if crate::generator::mixed_sign::operand_type_expr(inner)

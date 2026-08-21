@@ -32,6 +32,64 @@ pub(crate) enum FixedOp {
 
 /// Формат `q(m, n)` выражения, если его тип — `Fixed` (рекурсивно по арифметике;
 /// `SE-059` гарантирует единый формат операндов).
+pub(crate) fn fixed_format_in(
+    expr: &ExpressionNode,
+    structs: &std::collections::BTreeMap<String, Vec<(String, TypeNode)>>,
+) -> Option<(u8, u8, bool)> {
+    if let Some(found) = fixed_format(expr) {
+        return Some(found);
+    }
+    // Поле структуры (фича 0371): его тип объявлен в модели, и без него
+    // `g.kp as u8` печаталось без масштабирования — замер 2026-08-21 дал у
+    // эталона `1`, а у цели **128**, молча и при нулевом коде возврата.
+    match expr {
+        ExpressionNode::Parenthesis(a) | ExpressionNode::Negate(a) => fixed_format_in(a, structs),
+        ExpressionNode::Add(a, b)
+        | ExpressionNode::Subtract(a, b)
+        | ExpressionNode::Multiply(a, b)
+        | ExpressionNode::Divide(a, b) => {
+            fixed_format_in(a, structs).or_else(|| fixed_format_in(b, structs))
+        }
+        ExpressionNode::BitAccess(inner, crate::parser::ast::Member::Identifier(field)) => {
+            match field_type(inner, &field.name, structs)? {
+                TypeNode::Fixed { m, n, sat } => Some((m, n, sat)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Тип поля структуры по выражению-базе (фича 0371).
+///
+/// Объявления берутся у снимка карты, который цель уже носит в `Scope`:
+/// второго знания о полях не заводится.
+fn field_type(
+    base: &ExpressionNode,
+    field: &str,
+    structs: &std::collections::BTreeMap<String, Vec<(String, TypeNode)>>,
+) -> Option<TypeNode> {
+    let base_ty = match base {
+        ExpressionNode::Variable(var) => var.borrow().ty().clone(),
+        ExpressionNode::Parenthesis(inner) => return field_type(inner, field, structs),
+        ExpressionNode::ArraySubscript(inner, _) => {
+            match crate::generator::sv::sv_array::array_type_expr(inner)? {
+                TypeNode::Array(_, elem) => (*elem).clone(),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    let TypeNode::Struct(name) = base_ty else {
+        return None;
+    };
+    structs
+        .get(&name)?
+        .iter()
+        .find(|(f, _)| f == field)
+        .map(|(_, ty)| ty.clone())
+}
+
 pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8, bool)> {
     match expr {
         ExpressionNode::Variable(var) => var_fixed(&var.borrow()),
@@ -148,7 +206,8 @@ pub(crate) fn cast(
     target: &TypeNode,
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
-    let src = fixed_format(inner);
+    // Формат источника — с оглядкой на объявления структур (фича 0371).
+    let src = fixed_format_in(inner, scope.structs);
     let printed = print_expression(inner, scope)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>>`).

@@ -103,6 +103,69 @@ pub(crate) enum FixedOp {
 ///
 /// `SE-059` гарантирует единый формат обоих операндов арифметики, поэтому у
 /// бинарного узла достаточно взять формат любой стороны, у которой он выводится.
+pub(crate) fn fixed_format_in(
+    expr: &ExpressionNode,
+    model: &crate::semantic::ModelNode,
+) -> Option<(u8, u8, bool)> {
+    // Сперва — собственный вывод цели: он не требует модели и покрывает
+    // большинство узлов.
+    if let Some(found) = fixed_format(expr) {
+        return Some(found);
+    }
+    // Затем — разбор с оглядкой на МОДЕЛЬ (фича 0371): тип поля структуры
+    // объявлен в ней, и без него `g.kp as u8` печаталось без масштабирования —
+    // замер 2026-08-21 дал у эталона `1`, а у цели `rust` **128**, молча и
+    // при нулевом коде возврата `taktc`.
+    match expr {
+        ExpressionNode::Parenthesis(inner) | ExpressionNode::Negate(inner) => {
+            fixed_format_in(inner, model)
+        }
+        ExpressionNode::Add(a, b)
+        | ExpressionNode::Subtract(a, b)
+        | ExpressionNode::Multiply(a, b)
+        | ExpressionNode::Divide(a, b) => {
+            fixed_format_in(a, model).or_else(|| fixed_format_in(b, model))
+        }
+        ExpressionNode::BitAccess(inner, crate::parser::ast::Member::Identifier(field)) => {
+            match field_type(inner, &field.name, model)? {
+                TypeNode::Fixed { m, n, sat } => Some((m, n, sat)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Тип поля структуры по выражению-базе (фича 0371).
+///
+/// Разбирается та же цепочка, что и у места записи: переменная, элемент
+/// массива, скобки. Объявление структуры берётся у модели — второго знания о
+/// полях цель не заводит.
+fn field_type(
+    base: &ExpressionNode,
+    field: &str,
+    model: &crate::semantic::ModelNode,
+) -> Option<TypeNode> {
+    let base_ty = match base {
+        ExpressionNode::Variable(var) => var.borrow().ty().clone(),
+        ExpressionNode::Parenthesis(inner) => return field_type(inner, field, model),
+        ExpressionNode::ArraySubscript(inner, _) => match expression_type(inner)? {
+            TypeNode::Array(_, elem) => (*elem).clone(),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    let TypeNode::Struct(name) = base_ty else {
+        return None;
+    };
+    model
+        .search_struct(&name)?
+        .fields
+        .iter()
+        .find(|(f, _)| f == field)
+        .map(|(_, ty)| ty.clone())
+}
+
 pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8, bool)> {
     // Признак насыщения (фича 0170) едет вместе с разрядностями: печатник
     // обязан знать, чем закрывать операцию — переносом или прижатием.
@@ -224,7 +287,9 @@ pub(crate) fn cast(
     target: &TypeNode,
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
-    let src = fixed_format(inner);
+    // Формат источника спрашивается С ОГЛЯДКОЙ НА МОДЕЛЬ (фича 0371): без неё
+    // приведение из поля структуры печаталось без масштабирования.
+    let src = fixed_format_in(inner, scope.model);
     let printed = print_expression(inner, scope)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>`).

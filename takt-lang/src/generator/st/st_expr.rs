@@ -98,7 +98,7 @@ pub(crate) fn print_expression(
         // `taktc` — то есть цель молча печатала невалидный ST.
         ExpressionNode::Power(a, b) => super::st_arith::power(a, b, model),
         ExpressionNode::UnaryPlus(a) => Ok(format!("+{}", wrap_expr(a, model)?)),
-        ExpressionNode::Negate(a) => match st_fixed::fixed_format(expr) {
+        ExpressionNode::Negate(a) => match st_fixed::fixed_format(expr, model) {
             Some((m, n, sat)) => st_fixed::negate(a, model, m, n, sat),
             None => Ok(format!("-{}", wrap_expr(a, model)?)),
         },
@@ -164,7 +164,9 @@ pub(crate) fn print_expression(
         ExpressionNode::Cast(inner, ty) => {
             // Fixed-point (0061): масштабирующее приведение, когда источник либо
             // цель — q(m, n); иначе обычный `cast`.
-            if matches!(ty, TypeNode::Fixed { .. }) || st_fixed::fixed_format(inner).is_some() {
+            if matches!(ty, TypeNode::Fixed { .. })
+                || st_fixed::fixed_format(inner, model).is_some()
+            {
                 st_fixed::cast(inner, ty, model)
             } else {
                 cast(inner, ty, model)
@@ -514,7 +516,8 @@ fn fixed_binary(
     b: &ExpressionNode,
     model: &ModelNode,
 ) -> Option<Result<String, Diagnostic>> {
-    st_fixed::fixed_format(expr).map(|(m, n, sat)| st_fixed::binary(op, a, b, model, m, n, sat))
+    st_fixed::fixed_format(expr, model)
+        .map(|(m, n, sat)| st_fixed::binary(op, a, b, model, m, n, sat))
 }
 
 /// Печатает операнд, заключая составное выражение в скобки.

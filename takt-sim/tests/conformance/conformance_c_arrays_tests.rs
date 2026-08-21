@@ -535,3 +535,112 @@ int main(void) {{
     assert_eq!(c_val("kp"), 384, "поле структуры понижено");
     assert_eq!(c_val("l1kp"), 256, "поле структуры ВНУТРИ массива понижено");
 }
+
+/// **Фича 0371.** Приведение `as` из ПОЛЯ структуры масштабируется.
+///
+/// Замер 2026-08-21: `whole := (g.kp + g.ki) as u8;` при полях `q(8, 8)` давал
+/// у эталона **4**, а у `c`, `rust` и `sv` — **128** (у `st` — `ST-011` на
+/// выражении над полями): тип операнда не выводился у поля, и приведение
+/// печаталось без деления на 2ⁿ. Всё **молча** и при нулевом коде возврата
+/// `taktc` — класс, ради которого сверки и заведены.
+#[test]
+fn fixed_cast_from_field_matches_generated_c() {
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] fixed_cast_from_field_matches_generated_c: компилятор `cc` не найден");
+        return;
+    }
+
+    let source = "\
+struct Gains { kp: q(8,8), ki: q(8,8) }
+model CastQ {
+    var g: Gains := {1.5, 2.5};
+    var cells: [Gains; 2] := {{0.5, 3.25}, {7.75, 1.0}};
+    var one: u8 := 0;
+    var sum: u8 := 0;
+    var elem: u8 := 0;
+    start Run {
+        always {
+            one := g.kp as u8;
+            sum := (g.kp + g.ki) as u8;
+            elem := cells[1].kp as u8;
+        }
+    }
+}
+start Entry = CastQ;
+";
+    let (ast, _) = takt_lang::parse(source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let _ = unit.tick();
+    let sim = |name: &str| -> i128 {
+        match unit.variable(name) {
+            Some(Value::Number(n)) => n,
+            other => panic!("{name}: не целое {other:?}"),
+        }
+    };
+    let (sim_one, sim_sum, sim_elem) = (sim("one"), sim("sum"), sim("elem"));
+    // Значения РАЗНЫЕ: одинаковые не отличили бы поле от поля и элемент от
+    // элемента.
+    assert_eq!(sim_one, 1, "1.5 as u8 = 1 (floor)");
+    assert_eq!(sim_sum, 4, "1.5 + 2.5 = 4.0");
+    assert_eq!(sim_elem, 7, "7.75 as u8 = 7");
+
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0371_castq");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    takt_lang::compile_to_c(
+        "castq",
+        source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "castq.h"
+
+int main(void) {{
+    Castq m;
+    Castq_init(&m);
+    for (int i = 0; i < {MAX_TICKS}; i++) {{
+        Castq_tick(&m);
+        if (Castq_is_done(&m)) break;
+    }}
+    printf("one=%d\n", (int)m.entry.one);
+    printf("sum=%d\n", (int)m.entry.sum);
+    printf("elem=%d\n", (int)m.entry.elem);
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("harness_castq.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+    let bin = dir.join("castq_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
+        .arg(&dir)
+        .arg(dir.join("castq.c"))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    let out = String::from_utf8_lossy(&run.stdout);
+    let c_val = |key: &str| -> i128 {
+        out.lines()
+            .find_map(|l| l.strip_prefix(&format!("{key}="))?.trim().parse().ok())
+            .unwrap_or_else(|| panic!("C не напечатал '{key}': {out}"))
+    };
+
+    assert_eq!(sim_one, c_val("one"), "расхождение one");
+    assert_eq!(sim_sum, c_val("sum"), "расхождение sum");
+    assert_eq!(sim_elem, c_val("elem"), "расхождение elem");
+}
