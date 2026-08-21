@@ -67,6 +67,7 @@ mod conformance_struct_tests;
 mod conformance_sv_array_tests;
 mod conformance_sv_cast_tests;
 mod conformance_sv_duration_tests;
+mod conformance_sv_enum_reset_tests;
 mod conformance_sv_for_tests;
 mod conformance_sv_match_tests;
 mod conformance_sv_mmio_tests;
