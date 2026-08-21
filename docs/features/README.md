@@ -359,3 +359,4 @@
 | [0344](./0344-st-call-order.md) | Порядок функций у цели `st` — по зависимостям вызова | [ADR](../adr/0344-st-call-order.md), [анализ](../analyze/0344-st-call-order.md), [отчёт](../reports/0344-st-call-order.md) | ГОТОВО |
 | [0345](./0345-local-aggregate.md) | Агрегат в локальном объявлении переводят все цели | [ADR](../adr/0345-local-aggregate.md), [анализ](../analyze/0345-local-aggregate.md), [отчёт](../reports/0345-local-aggregate.md) | ГОТОВО |
 | [0346](./0346-array-param-index.md) | Индексация параметра-массива внутри функции | [ADR](../adr/0346-array-param-index.md), [анализ](../analyze/0346-array-param-index.md), [отчёт](../reports/0346-array-param-index.md) | ГОТОВО |
+| [0347](./0347-const-aggregate.md) | Константа структурного и массивного типа у `rust` и `sv` | [ADR](../adr/0347-const-aggregate.md), [анализ](../analyze/0347-const-aggregate.md), [отчёт](../reports/0347-const-aggregate.md) | ГОТОВО |
