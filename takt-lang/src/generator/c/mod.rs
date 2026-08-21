@@ -52,6 +52,7 @@ mod c_source;
 mod c_time;
 mod c_unresolved;
 mod c_unsupported;
+mod c_zero_init;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;

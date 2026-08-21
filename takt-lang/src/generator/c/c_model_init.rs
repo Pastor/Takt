@@ -76,7 +76,12 @@ pub(super) fn generate_model_init(
         if !map.usage().variables.contains(var_name) {
             continue;
         }
+        // Переменная без инициализатора получает НОЛЬ (фича 0353). Прежде
+        // ветвь была `continue`, и поле оставалось мусором стека: эталон,
+        // `st`, `sv` и `rust` при этом дают ноль, а контракт `_init` (ADR
+        // 0033) обещает определённую память до первого `_tick`.
         if let ExpressionNode::None = expr {
+            crate::generator::c::c_zero_init::emit_zero_init(printer, &var.name(), ty, raw)?;
             continue;
         }
         // 0029-05: массив в C **не присваивается** — ни скаляром, ни агрегатом.

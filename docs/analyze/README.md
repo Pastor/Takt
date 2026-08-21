@@ -336,3 +336,4 @@
 | 0350 | Порт составного типа: отказ вместо невалидного вывода | [0350-port-composite-type.md](0350-port-composite-type.md) | — (новая фича) |
 | 0351 | Значение по умолчанию у цели rust: структура, длительность и q | [0351-rust-default-value-types.md](0351-rust-default-value-types.md) | — (новая фича) |
 | 0352 | Имя типа видно во всём файле; цикл структур — SE-124 | [0352-struct-field-forward-reference.md](0352-struct-field-forward-reference.md) | — (новая фича) |
+| 0353 | Цель c обнуляет переменные без инициализатора | [0353-c-default-init.md](0353-c-default-init.md) | — (новая фича) |
