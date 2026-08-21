@@ -139,6 +139,84 @@ fn st020(name: &str, ch: char, loc: Location) -> Diagnostic {
     .with_code("ST-020")
 }
 
+/// Проверка имени ОБЪЯВЛЕНИЯ — одна воронка (фича 0378).
+///
+/// Спрашивает всё, что делает имя непригодным для IEC: столкновение со
+/// стандартной библиотекой и ключевыми словами (`ST-014`), символ вне алфавита
+/// (`ST-020`) и совпадение с именем объявленного типа (`ST-023`). Место
+/// объявления знает модель, поэтому воронка принимает её; там, где модели нет
+/// (имя POU, имя состояния), зовётся [`check_st_name`].
+pub(crate) fn check_st_declaration(
+    name: &str,
+    model: &crate::semantic::ModelNode,
+    loc: Location,
+) -> Result<(), Diagnostic> {
+    check_st_name(name, loc)?;
+    check_st_type_clash(name, model, loc)
+}
+
+/// Столкновение имени с объявленным ТИПОМ — диагностика `ST-023` (фича 0378).
+///
+/// Пространство имён IEC плоское и **регистронезависимое**, поэтому
+/// `var pair: Pair;` для MatIEC — два объявления одного идентификатора. Ответ
+/// он даёт обманчивый («invalid located variable declaration» с указанием на
+/// `AT %…`, которых в объявлении нет вовсе), а `taktc` при этом возвращает
+/// **ноль**: замер 2026-08-21 показал, что эталон и шесть остальных
+/// потребителей тот же вход исполняют.
+///
+/// ⚠️ Отказ принадлежит **цели**, а не языку — как `ST-014` и `SV-012`: имя
+/// законно, и модель остаётся валидной для прочих целей. Текст это называет.
+///
+/// ⚠️ Сравнение — **без учёта регистра**: `pair`/`PAIR`/`Pair` в IEC один
+/// идентификатор, и совпадение по регистру ничего не значит.
+pub(crate) fn check_st_type_clash(
+    name: &str,
+    model: &crate::semantic::ModelNode,
+    loc: Location,
+) -> Result<(), Diagnostic> {
+    let Some(clash) = declared_type_names(model)
+        .into_iter()
+        .find(|ty| ty.eq_ignore_ascii_case(name))
+    else {
+        return Ok(());
+    };
+    Err(Diagnostic::error(
+        loc,
+        format!(
+            "имя '{name}' совпадает с именем типа '{clash}': идентификаторы \
+             IEC 61131-3 регистронезависимы и делят одно пространство имён, \
+             поэтому переменная и тип с таким именем для ПЛК неразличимы. Это \
+             НЕ ограничение языка Takt — модель остаётся валидной для целей \
+             'c', 'c-hal', 'rust', 'sv', 'sv-mmio' и 'plantuml'. Переименуйте \
+             переменную или тип, если модель нужна для ПЛК"
+        ),
+    )
+    .with_code("ST-023"))
+}
+
+/// Имена типов, объявленных моделью и её предками.
+///
+/// Берутся у тех же карт, из которых цель печатает раздел `TYPE`: структуры,
+/// перечисления и псевдонимы. Второго списка не заводится (класс 0084/0193/0195).
+fn declared_type_names(model: &crate::semantic::ModelNode) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    // Собственные объявления модели.
+    out.extend(model.structs.values().map(|d| d.name.clone()));
+    out.extend(model.enums.values().map(|d| d.name.clone()));
+    out.extend(model.types.keys().cloned());
+    // Предки: тип, объявленный выше, тоже печатается в раздел `TYPE` файла.
+    let mut upper = model.upper.clone();
+    while let Some(weak) = upper {
+        let Some(rc) = weak.upgrade() else { break };
+        let parent = rc.borrow();
+        out.extend(parent.structs.values().map(|d| d.name.clone()));
+        out.extend(parent.enums.values().map(|d| d.name.clone()));
+        out.extend(parent.types.keys().cloned());
+        upper = parent.upper.clone();
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +237,30 @@ mod tests {
                 name
             );
         }
+    }
+
+    /// Имя, совпавшее с именем типа, отвергается `ST-023` (фича 0378).
+    #[test]
+    fn test_variable_named_like_type_is_st023() {
+        let (ast, _) = crate::parse(
+            "struct Pair { lo: u8, hi: u8 }\nvar pair: Pair := {1, 2};\nstart Run { }",
+            0,
+        )
+        .expect("разбор");
+        let model = crate::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
+        let model = model.borrow();
+        let err = check_st_type_clash("pair", &model, loc()).expect_err("ожидался отказ");
+        assert_eq!(err.code.as_deref(), Some("ST-023"));
+        assert!(
+            err.message.contains("'Pair'"),
+            "отказ обязан назвать ТИП: {}",
+            err.message
+        );
+        // Регистр не спасает: в IEC идентификаторы регистронезависимы.
+        assert!(check_st_type_clash("PAIR", &model, loc()).is_err());
+        // **Контрпример:** имя, ни с чем не столкнувшееся, проходит — иначе
+        // проверка означала бы «запрещаем любое имя».
+        assert!(check_st_type_clash("value", &model, loc()).is_ok());
     }
 
     /// Регистр не спасает: `left`/`LEFT`/`Left` — одно и то же (T7/A6).

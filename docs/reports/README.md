@@ -326,3 +326,4 @@
 | 0375 | Частично использованная локальная структура у цели sv | [0375-sv-partial-struct-local.md](0375-sv-partial-struct-local.md) | ГОТОВО |
 | 0376 | Неиспользуемая локальная переменная гасится заглушкой | [0376-unused-local-stub.md](0376-unused-local-stub.md) | ГОТОВО |
 | 0377 | Артефакты сборки не попадают в репозиторий | [0377-build-artifacts-gate.md](0377-build-artifacts-gate.md) | ГОТОВО |
+| 0378 | Имя переменной, совпавшее с именем типа, у цели st | [0378-st-name-type-clash.md](0378-st-name-type-clash.md) | ГОТОВО |

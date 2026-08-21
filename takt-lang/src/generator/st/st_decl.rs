@@ -21,7 +21,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
-use crate::generator::st::st_reserved::check_st_name;
+use crate::generator::st::st_reserved::check_st_declaration;
 use crate::generator::st::st_type::{self, get_st_type};
 use crate::semantic::FunctionDefinitionNode;
 use crate::semantic::minimap::Name;
@@ -356,7 +356,7 @@ pub(crate) fn emit_declarations(
                 // ST-014 на неё срабатывать не должна (иначе `var action: Action`
                 // из elevator.takt, объявленный, но не используемый, сломал бы
                 // сборку). Столкновение проверяется на самом эмитируемом имени.
-                check_st_name(name, *loc)?;
+                check_st_declaration(name, model, *loc)?;
                 // Разделяемая переменная уже объявлена в `VAR_IN_OUT`: повторное
                 // объявление в `VAR` сделало бы у под-FB ДВЕ разных переменных с
                 // одним именем — то есть тихо разорвало бы связь с корнем.
@@ -384,7 +384,7 @@ pub(crate) fn emit_declarations(
                 if !usage.ports.contains(name) {
                     continue;
                 }
-                check_st_name(name, *loc)?;
+                check_st_declaration(name, model, *loc)?;
                 if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
@@ -431,7 +431,7 @@ pub(crate) fn emit_declarations(
                 {
                     continue;
                 }
-                check_st_name(name, *loc)?;
+                check_st_declaration(name, model, *loc)?;
                 constants.push(declaration(
                     name,
                     ty,
