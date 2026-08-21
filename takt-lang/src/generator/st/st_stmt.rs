@@ -166,23 +166,21 @@ pub(crate) fn print_statement(
                 // индекс всегда, и `body[0] := 3;` для структуры `iec2c`
                 // отвергал — при нулевом коде возврата `taktc`.
                 let target_ty = assign_target_type(&var.borrow());
-                let fields = match &target_ty {
-                    Some(TypeNode::Struct(sname)) => {
-                        model.search_struct(sname).map(|def| def.fields)
-                    }
-                    _ => None,
-                };
-                let places = crate::generator::aggregate::places(
-                    fields.as_deref(),
-                    target_ty.as_ref(),
-                    items.len(),
-                );
-                for (item, place) in items.iter().zip(places) {
-                    let value = match &place.ty {
-                        Some(ty) => coerce_to(item, ty, model)?,
-                        None => print_expression(item, model)?,
+                // Агрегат раскрывается ДО ЛИСТЬЕВ общим носителем (фича
+                // 0366): элемент, который сам является агрегатом,
+                // раскрывается дальше. Прежде раскрытие было одноуровневым, и
+                // `pts := {{1, 2}, {3, 4}};` давало `ST-011` на записи,
+                // которую исполняют эталон, `rust` и `c`.
+                let fields_of = |sname: &str| model.search_struct(sname).map(|d| d.fields);
+                for leaf in
+                    crate::generator::aggregate::leaves(target_ty.as_ref(), items, &fields_of)
+                {
+                    let value = match &leaf.ty {
+                        Some(ty) => coerce_to(leaf.value, ty, model)?,
+                        None => print_expression(leaf.value, model)?,
                     };
-                    p.ident(&format!("{name}{} := {value};", place.suffix)).nl();
+                    let suffix = crate::generator::st::st_multidim::iec_suffix(&leaf.path);
+                    p.ident(&format!("{name}{suffix} := {value};")).nl();
                 }
                 return Ok(());
             }
@@ -252,21 +250,14 @@ pub(crate) fn print_statement(
                 // эталон, `c` и `rust` исполняют. Место записи выбирает общий
                 // носитель (0340).
                 if let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = &**init {
-                    let fields = match ty {
-                        TypeNode::Struct(sname) => model.search_struct(sname).map(|d| d.fields),
-                        _ => None,
-                    };
-                    let places = crate::generator::aggregate::places(
-                        fields.as_deref(),
-                        Some(ty),
-                        items.len(),
-                    );
-                    for (item, place) in items.iter().zip(places) {
-                        let value = match &place.ty {
-                            Some(elem) => coerce_to(item, elem, model)?,
-                            None => print_expression(item, model)?,
+                    let fields_of = |sname: &str| model.search_struct(sname).map(|d| d.fields);
+                    for leaf in crate::generator::aggregate::leaves(Some(ty), items, &fields_of) {
+                        let value = match &leaf.ty {
+                            Some(elem) => coerce_to(leaf.value, elem, model)?,
+                            None => print_expression(leaf.value, model)?,
                         };
-                        p.ident(&format!("{name}{} := {value};", place.suffix)).nl();
+                        let suffix = crate::generator::st::st_multidim::iec_suffix(&leaf.path);
+                        p.ident(&format!("{name}{suffix} := {value};")).nl();
                     }
                     return Ok(());
                 }
