@@ -50,6 +50,7 @@ mod st_fixed;
 mod st_func;
 mod st_map;
 mod st_model;
+mod st_operand_type;
 mod st_reserved;
 mod st_stmt;
 mod st_time;

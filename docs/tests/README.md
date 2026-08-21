@@ -303,3 +303,4 @@
 | 0346 | Индексация параметра-массива | [0346-array-param-index.md](0346-array-param-index.md) | Пройден: 6/6 условий |
 | 0347 | Константа-агрегат | [0347-const-aggregate.md](0347-const-aggregate.md) | Пройден: 5/5 условий |
 | 0348 | Массив в параметре функции | [0348-st-array-parameter.md](0348-st-array-parameter.md) | Пройден: 5/5 условий, полный цикл iec2c → cc |
+| 0349 | Длительность в поле структуры | [0349-duration-field.md](0349-duration-field.md) | Пройден: 5/5 условий |

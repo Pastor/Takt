@@ -361,3 +361,4 @@
 | [0346](./0346-array-param-index.md) | Индексация параметра-массива внутри функции | [ADR](../adr/0346-array-param-index.md), [анализ](../analyze/0346-array-param-index.md), [отчёт](../reports/0346-array-param-index.md) | ГОТОВО |
 | [0347](./0347-const-aggregate.md) | Константа структурного и массивного типа у `rust` и `sv` | [ADR](../adr/0347-const-aggregate.md), [анализ](../analyze/0347-const-aggregate.md), [отчёт](../reports/0347-const-aggregate.md) | ГОТОВО |
 | [0348](./0348-st-array-parameter.md) | Массив в параметре функции у цели `st` | [ADR](../adr/0348-st-array-parameter.md), [анализ](../analyze/0348-st-array-parameter.md), [отчёт](../reports/0348-st-array-parameter.md) | ГОТОВО |
+| [0349](./0349-duration-field.md) | Длительность в поле структуры у целей `st` и `sv` | [ADR](../adr/0349-duration-field.md), [анализ](../analyze/0349-duration-field.md), [отчёт](../reports/0349-duration-field.md) | ГОТОВО |
