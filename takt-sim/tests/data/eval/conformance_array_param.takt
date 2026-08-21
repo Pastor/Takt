@@ -1,0 +1,33 @@
+// Сверка ИНДЕКСАЦИИ параметра-массива (фича 0346).
+//
+// `fn first(a: [u8;2]) -> u8 { return a[0]; }` давал `SE-003` «Переменная 'a'
+// не найдена»: параметр был виден всюду, кроме индексации. Отказ приходил из
+// СЕМАНТИКИ, то есть одинаково у эталона и всех восьми целей — язык принимал
+// объявление, которое не работало.
+//
+// ⚠️ `ctl` — контрольный вход: та же функция без индексации параметра. Она
+// работала всегда.
+fn first(a: [u8;2]) -> u8 { return a[0]; }
+fn at_index(a: [u8;2], i: u8) -> u8 { return a[i]; }
+fn plain(k: u8) -> u8 { return k + 1; }
+
+var arr: [u8;2] := {7, 9};
+var head: u8 := 0;
+var tail: u8 := 0;
+var ctl: u8 := 0;
+
+out o_head: u8 at 0;
+out o_tail: u8 at 1;
+out o_ctl: u8 at 2;
+
+start Run {
+    always {
+        head := first(arr);
+        tail := at_index(arr, 1);
+        ctl := plain(2);
+        o_head := head;
+        o_tail := tail;
+        o_ctl := ctl;
+    }
+    ref Run: head = 7;
+}

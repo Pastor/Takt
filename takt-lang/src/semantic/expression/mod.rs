@@ -131,10 +131,16 @@ pub fn construct_expression(
         // Если тип переменной ещё не выведен (`TypeNode::Inference`), структурная
         // проверка пропускается — она будет повторно вычислена после вывода типов.
         ast::Expression::ArraySubscript(_, id, idx_expr) => {
-            let var = model.borrow().search_var(&id.name).ok_or_else(|| {
-                Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
-                    .with_code("SE-003")
-            })?;
+            // Имя ищется СПЕРВА среди параметров (фича 0346): `fn first(a:
+            // [u8;2]) -> u8 { return a[0]; }` давал `SE-003` «Переменная 'a' не
+            // найдена» — параметр виден всюду, кроме индексации, потому что эта
+            // ветвь спрашивала только таблицу модели.
+            let var = param_variable(&id.name, &params, &model)
+                .or_else(|| model.borrow().search_var(&id.name))
+                .ok_or_else(|| {
+                    Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
+                        .with_code("SE-003")
+                })?;
             // Проверяем тип (для динамических индексов проверку границ пропускаем)
             match var_type(&var) {
                 TypeNode::Array(size, _) => {
@@ -161,17 +167,24 @@ pub fn construct_expression(
                     .with_code("SE-030"));
                 }
             }
-            let resolved_idx = construct_expression(*idx_expr.clone(), vec![], model.clone())?;
+            // ⚠️ Параметры передаются и в ИНДЕКС: `a[i]`, где `i` — параметр,
+            // ломался тем же образом, а пустой список локальных имён здесь стоял
+            // с самого начала.
+            let resolved_idx =
+                construct_expression(*idx_expr.clone(), params.clone(), model.clone())?;
             Ok(ExpressionNode::ArraySubscript(
                 Rc::new(RefCell::new(var)),
                 Box::new(resolved_idx),
             ))
         }
         ast::Expression::ArraySlice(_, id, start, end) => {
-            let var = model.borrow().search_var(&id.name).ok_or_else(|| {
-                Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
-                    .with_code("SE-003")
-            })?;
+            // Срез — та же позиция, что индексация (фича 0346).
+            let var = param_variable(&id.name, &params, &model)
+                .or_else(|| model.borrow().search_var(&id.name))
+                .ok_or_else(|| {
+                    Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
+                        .with_code("SE-003")
+                })?;
             // Проверяем тип и границы среза (если тип известен)
             match var_type(&var) {
                 TypeNode::Array(size, _) => {
@@ -482,6 +495,27 @@ fn resolve_elems(
 }
 
 // ── Тесты ─────────────────────────────────────────────────────────────────────
+
+/// Параметр функции как узел переменной (фича 0346).
+///
+/// Список параметров — плоский `(имя, тип)`, и позиции объявления у него нет:
+/// узел получает `Location::Implicit`, как и в ветви разрешения имени.
+fn param_variable(
+    name: &str,
+    params: &[(String, TypeNode)],
+    model: &Rc<RefCell<ModelNode>>,
+) -> Option<VariableNode> {
+    params
+        .iter()
+        .find(|(param, _)| param == name)
+        .map(|(param, ty)| VariableNode::Simple {
+            upper: Some(Rc::downgrade(model)),
+            loc: Location::Implicit,
+            name: param.clone(),
+            ty: ty.clone(),
+            expr: Default::default(),
+        })
+}
 
 #[cfg(test)]
 mod tests;
