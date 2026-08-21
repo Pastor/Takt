@@ -594,3 +594,4 @@
 | 0360-01 | 0360 | Арифметика операндов разной знаковости | [0360-01-mixed-sign-arithmetic.md](0360-01-mixed-sign-arithmetic.md) |
 | 0361-01 | 0361 | Приведение к тому же типу опускается | [0361-01-same-type-cast.md](0361-01-same-type-cast.md) |
 | 0362-01 | 0362 | Проба прогоняет инструменты целей | [0362-01-probe-target-tools.md](0362-01-probe-target-tools.md) |
+| 0363-01 | 0363 | Индексация многомерного массива у цели st | [0363-01-st-multidim-subscript.md](0363-01-st-multidim-subscript.md) |

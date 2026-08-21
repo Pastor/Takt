@@ -1,0 +1,91 @@
+//! Многомерный массив у цели `st`: согласование формы с объявлением (фича 0363).
+//!
+//! В IEC 61131-3 массивы **не вкладываются**, поэтому `st_type` печатает
+//! `[[u8; 2]; 2]` многомерной формой `ARRAY [0..1, 0..1] OF USINT` (T12 задачи
+//! 0041). Всё остальное обязано следовать этому объявлению — иначе `iec2c`
+//! отвергает вывод («Number of subscripts/indexes does not match») либо, что
+//! хуже, принимает его и теряет данные молча.
+//!
+//! Здесь живут оба носителя такого согласования: сбор цепочки индексаций и
+//! уплощение агрегата-инициализатора. Модуль отдельный, потому что правило
+//! одно, а звать его приходится из двух печатников выражений и из печатника
+//! объявлений.
+
+use crate::diagnostics::Diagnostic;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ConditionNode, ExpressionNode, ModelNode};
+
+use super::st_decl::literal_init;
+use super::st_expr::{print_condition, print_expression};
+
+/// Собирает цепочку индексаций в корень и список индексов (фича 0363).
+///
+/// `grid[1][0]` приходит деревом `Subscript(Subscript(grid, 1), 0)`, а в IEC
+/// 61131-3 вложенных массивов **нет**: `st_type` печатает `[[u8; 2]; 2]`
+/// многомерной формой `ARRAY [0..1, 0..1] OF USINT`, и индексация обязана
+/// следовать объявлению — `grid[1, 0]`.
+///
+/// ⚠️ Цепочка обрывается на **любом** другом узле, поэтому `ps[1].x[0]`
+/// (массив структур с полем-массивом) остаётся двумя раздельными индексациями:
+/// там это два разных массива, и объединять их индексы нельзя.
+pub(crate) fn expression_subscript_chain(
+    expr: &ExpressionNode,
+    model: &ModelNode,
+) -> Result<(String, Vec<String>), Diagnostic> {
+    let mut indices = Vec::new();
+    let mut current = expr;
+    while let ExpressionNode::ArraySubscript(base, index) = current {
+        indices.push(print_expression(index, model)?);
+        current = base;
+    }
+    indices.reverse();
+    Ok((print_expression(current, model)?, indices))
+}
+
+/// Тот же сбор для условий: печатников **два** (ADR 0019), и правка одного
+/// чинит половину входов (урок 0359).
+pub(crate) fn condition_subscript_chain(
+    cond: &ConditionNode,
+    model: &ModelNode,
+) -> Result<(String, Vec<String>), Diagnostic> {
+    let mut indices = Vec::new();
+    let mut current = cond;
+    while let ConditionNode::ArraySubscript(base, index) = current {
+        indices.push(print_condition(index, model)?);
+        current = base;
+    }
+    indices.reverse();
+    Ok((print_condition(current, model)?, indices))
+}
+
+/// Элементы агрегата массива ПЛОСКИМ списком (фича 0363).
+///
+/// Тип многомерного массива уплощается (`[[u8; 2]; 2]` →
+/// `ARRAY [0..1, 0..1] OF USINT`, T12), и инициализатор обязан следовать
+/// объявлению. ⚠️ Вложенную форму `[[1, 2], [3, 4]]` `iec2c` **принимает**, но
+/// переводит в `{{1,2,}}` — вторая строка теряется **молча**; замер 2026-08-21
+/// дал `other = 0` у цели `st` против `3` у эталона при нулевом коде возврата
+/// `taktc`. Форма `[1, 2, 3, 4]` проверена прогоном `iec2c` + `cc`: значение
+/// `grid[1, 0]` равно 3.
+///
+/// ⚠️ Уплощается только **агрегат внутри агрегата**: элемент, записанный
+/// скаляром (упакованный `[bit;N≤64]` — правило 0078), печатается своим
+/// значением.
+pub(crate) fn flat_array_items(
+    items: &[ExpressionNode],
+    elem: &TypeNode,
+    model: Option<&ModelNode>,
+) -> Option<Vec<String>> {
+    let mut parts = Vec::new();
+    for item in items {
+        if let TypeNode::Array(_, inner) = elem
+            && !matches!(**inner, TypeNode::Struct(_))
+            && let ExpressionNode::Initializer(sub) | ExpressionNode::Array(sub) = item
+        {
+            parts.extend(flat_array_items(sub, inner, model)?);
+        } else {
+            parts.push(literal_init(item, elem, model)?);
+        }
+    }
+    Some(parts)
+}

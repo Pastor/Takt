@@ -695,11 +695,10 @@ pub(crate) fn literal_init(
         && !matches!(**elem, TypeNode::Struct(_))
         && let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = expr
     {
-        let mut parts = Vec::new();
-        for item in items {
-            parts.push(literal_init(item, elem, model)?);
-        }
-        return Some(format!("[{}]", parts.join(", ")));
+        return Some(format!(
+            "[{}]",
+            super::st_multidim::flat_array_items(items, elem, model)?.join(", ")
+        ));
     }
     if !packed_bits && matches!(ty, TypeNode::Array(_, _) | TypeNode::Struct(_)) {
         return None;
