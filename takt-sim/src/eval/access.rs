@@ -23,7 +23,7 @@ use crate::eval::value::Value;
 /// |---|---|---|
 /// | `Struct` | `Identifier(f)` | поле `f` (или `UnknownField`) |
 /// | `Struct` | `Number(_)` | `BitIndexOfStruct` — бита у структуры нет |
-/// | `Number`/`Boolean` | `Number(b)` | бит `b` (как прежде) |
+/// | `Number`/`Boolean` | `Number(b)` | бит `b` — число 0/1 (фича 0356) |
 /// | `Number`/`Boolean` | `Identifier(_)` | `FieldOfNonStruct` |
 /// | `Real`/`Array`/`Fixed` | `Number(_)` | `BitOfNonInteger` |
 /// | `Real`/`Array`/`Fixed` | `Identifier(_)` | `FieldOfNonStruct` |
@@ -65,7 +65,18 @@ pub(crate) fn read_member(value: &Value, member: &Member) -> Result<Value, EvalE
     }
 }
 
-/// Извлекает бит `bit` целочисленного значения `bits` как логическое.
+/// Извлекает бит `bit` целочисленного значения `bits` — как **число** 0/1.
+///
+/// ⚠️ **Не `Value::Boolean` (фича 0356).** Тип `bit` в языке числоподобен: его
+/// значения 0 и 1 (`validate_bit_values`), и `bit`-ПЕРЕМЕННАЯ хранится числом
+/// — `var f: bit := 1; arith := f + 1;` эталон исполнял всегда. Разряд же
+/// приходил логическим, и правило S8 («логическое не смешивается с числом
+/// молча») било по нему: `src.7 = 1` — типичная запись ребра — отвечало
+/// `SIM-005` **в такте**, тогда как все восемь целей её переводят.
+///
+/// Условия не затронуты: `to_bool` принимает число (`n != 0`). Правило S8
+/// остаётся в силе — `Value::Boolean` теперь приходит только от настоящих
+/// логических выражений (сравнение, `!`), а не от доступа к разряду.
 fn read_bit(bits: i128, bit: i128) -> Result<Value, EvalError> {
     if !(0..64).contains(&bit) {
         // Ширина здесь — ширина НОСИТЕЛЯ, а не объявления: у `Value::Number`
@@ -74,7 +85,7 @@ fn read_bit(bits: i128, bit: i128) -> Result<Value, EvalError> {
         // догадкой (граница названа в карточке фичи 0307).
         return Err(EvalError::BitIndexOutOfRange { bit, width: 64 });
     }
-    Ok(Value::Boolean(bits & (1 << bit) != 0))
+    Ok(Value::Number(i128::from(bits & (1 << bit) != 0)))
 }
 
 /// Извлекает бит `bit` из бит-вектора `[bit;N]` (N > 64), упакованного в массив
@@ -89,7 +100,7 @@ fn read_bit_words(words: &[Value], bit: i128) -> Result<Value, EvalError> {
     };
     let (w, off) = takt_lang::semantic::bit_vector::bit_slot(k);
     match words.get(usize::from(w)) {
-        Some(Value::Number(word)) => Ok(Value::Boolean(word & (1 << off) != 0)),
+        Some(Value::Number(word)) => Ok(Value::Number(i128::from(word & (1 << off) != 0))),
         _ => Err(EvalError::BitIndexOutOfRange { bit, width }),
     }
 }
@@ -135,17 +146,36 @@ mod tests {
         assert_eq!(err.code(), "SIM-029");
     }
 
+    /// Разряд целого — **число** 0/1 (фича 0356), а не логическое.
+    ///
+    /// Прежде возвращалось `Value::Boolean`, и правило S8 («логическое не
+    /// смешивается с числом молча») било по типичной записи ребра
+    /// `ref Done: src.7 = 1;` — эталон отвечал `SIM-005` в такте, тогда как все
+    /// восемь целей её переводят. Условия при этом не пострадали: `to_bool`
+    /// принимает число.
     #[test]
-    fn bit_read_on_integer_unchanged() {
-        // Регресс: BTN.0 — бит целого (фича бит-портов).
+    fn bit_read_on_integer_is_number() {
         assert_eq!(
             read_member(&Value::Number(0b101), &Member::Number(2)),
-            Ok(Value::Boolean(true))
+            Ok(Value::Number(1))
         );
         assert_eq!(
             read_member(&Value::Number(0b101), &Member::Number(1)),
-            Ok(Value::Boolean(false))
+            Ok(Value::Number(0))
         );
+    }
+
+    /// **Контрпример к правилу S8:** оно осталось в силе. `Value::Boolean`
+    /// приходит теперь только от настоящих логических выражений, и смешение
+    /// его с числом по-прежнему ошибка — иначе правка читалась бы как «S8
+    /// отменено».
+    #[test]
+    fn s8_still_holds_for_real_booleans() {
+        use crate::eval::ops::{BinOp, apply_binary};
+        assert!(matches!(
+            apply_binary(BinOp::Add, &Value::Boolean(true), &Value::Number(1)),
+            Err(crate::eval::EvalError::TypeMismatch { .. })
+        ));
     }
 
     #[test]
