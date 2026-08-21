@@ -205,7 +205,26 @@ fn integer_type(bits: u8, signed: bool) -> Result<String, Diagnostic> {
 /// форму. Порядок размерностей — от внешней к внутренней, как в индексации Takt:
 /// `[[u8; 2]; 3]` = `Array(3, Array(2, u8))` → `ARRAY [0..2, 0..1] OF USINT`.
 fn array_type(typ: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
-    let mut dims: Vec<String> = Vec::new();
+    let (dims, base) = array_dims_and_base(typ, model)?;
+    let ranges: Vec<String> = dims.iter().map(|size| format!("0..{}", size - 1)).collect();
+    Ok(format!("ARRAY [{}] OF {}", ranges.join(", "), base))
+}
+
+/// Размерности массива и его базовый тип — ОДИН разбор на объявление и на имя
+/// формы (фича 0372).
+///
+/// В IEC 61131-3 массивы не вкладываются, поэтому `[[u8; 2]; 2]` объявляется
+/// многомерной формой `ARRAY [0..1, 0..1] OF USINT` (правило 0363). Имя типа
+/// формы (`array_form_name`, фича 0348) обязано следовать **тому же** разбору:
+/// прежде оно строилось из ТЕКСТА типа элемента и для вложенного массива
+/// давало `TAKT_ARR_2_ARRAY_[0..1]_OF_USINT` — идентификатор со скобками и
+/// точками, который `iec2c` не принимает («unexpected token after 'TYPE'»)
+/// при нулевом коде возврата `taktc`.
+fn array_dims_and_base(
+    typ: &TypeNode,
+    model: &ModelNode,
+) -> Result<(Vec<u16>, String), Diagnostic> {
+    let mut dims: Vec<u16> = Vec::new();
     let mut current = typ;
     while let TypeNode::Array(size, elem) = current {
         // ⚠️ СПУСК ОСТАНАВЛИВАЕТСЯ НА БИТ-ВЕКТОРЕ (фича 0363): `[bit;N≤64]` —
@@ -236,13 +255,12 @@ fn array_type(typ: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
             )
             .with_code("ST-007"));
         }
-        dims.push(format!("0..{}", size - 1));
+        dims.push(*size);
         current = elem;
     }
     // Базовый тип разбирается тем же отображением: массив структур или
     // перечислений обязан пройти проверку разрешимости имени.
-    let base = get_st_type(current, model)?;
-    Ok(format!("ARRAY [{}] OF {}", dims.join(", "), base))
+    Ok((dims, get_st_type(current, model)?))
 }
 
 /// T13 (откат Option C): `Enum(name)` → целочисленный тип, вмещающий все варианты.
@@ -341,14 +359,18 @@ pub(crate) fn array_form_name(ty: &TypeNode, model: &ModelNode) -> Option<String
     if !needs_named_array_type(ty, model) {
         return None;
     }
-    let TypeNode::Array(size, elem) = ty else {
+    if !matches!(ty, TypeNode::Array(_, _)) {
         return None;
-    };
-    let elem_name = get_st_type(elem, model).ok()?;
-    // Имя детерминировано по форме: `TAKT_ARR_2_USINT`.
+    }
+    // Размерности и база берутся ТЕМ ЖЕ разбором, что и объявление (фича
+    // 0372): имя `TAKT_ARR_2_2_USINT` отвечает `ARRAY [0..1, 0..1] OF USINT`, и
+    // формы совпадают по построению, а не по дисциплине.
+    let (dims, base) = array_dims_and_base(ty, model).ok()?;
+    let sizes: Vec<String> = dims.iter().map(u16::to_string).collect();
     Some(format!(
-        "TAKT_ARR_{size}_{}",
-        elem_name.replace(' ', "_").to_uppercase()
+        "TAKT_ARR_{}_{}",
+        sizes.join("_"),
+        base.replace(' ', "_").to_uppercase()
     ))
 }
 
@@ -653,5 +675,52 @@ mod tests {
                 ),
             }
         }
+    }
+
+    /// Имя формы ВЛОЖЕННОГО массива следует объявлению (фича 0372).
+    ///
+    /// Прежде оно строилось из текста типа элемента и давало
+    /// `TAKT_ARR_2_ARRAY_[0..1]_OF_USINT` — идентификатор со скобками и
+    /// точками: `iec2c` отвечал «unexpected token after 'TYPE'» при нулевом
+    /// коде возврата `taktc`.
+    #[test]
+    fn nested_array_form_name_follows_the_declaration() {
+        let rc = empty_model();
+        let model = rc.borrow();
+        let inner = TypeNode::Array(
+            2,
+            Box::new(TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            }),
+        );
+        let nested = TypeNode::Array(2, Box::new(inner.clone()));
+        assert_eq!(
+            get_st_type(&nested, &model).unwrap(),
+            "ARRAY [0..1, 0..1] OF USINT"
+        );
+        assert_eq!(
+            array_form_name(&nested, &model).as_deref(),
+            Some("TAKT_ARR_2_2_USINT")
+        );
+        // Контроль: одномерная форма не изменилась — вывод корпуса на месте.
+        assert_eq!(
+            array_form_name(&inner, &model).as_deref(),
+            Some("TAKT_ARR_2_USINT")
+        );
+    }
+
+    /// Спуск останавливается на бит-векторе: `[bit;8]` — упакованный СКАЛЯР
+    /// (правило 0078), и объявление у него одномерное.
+    #[test]
+    fn bit_vector_element_is_not_a_dimension_in_the_form_name() {
+        let rc = empty_model();
+        let model = rc.borrow();
+        let ty = TypeNode::Array(2, Box::new(TypeNode::Array(8, Box::new(TypeNode::Bit))));
+        assert_eq!(get_st_type(&ty, &model).unwrap(), "ARRAY [0..1] OF USINT");
+        assert_eq!(
+            array_form_name(&ty, &model).as_deref(),
+            Some("TAKT_ARR_2_USINT")
+        );
     }
 }

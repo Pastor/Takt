@@ -490,13 +490,20 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
                 .iter()
                 .enumerate()
                 .map(|(i, a)| match param_type(&f, i) {
-                    Some(ty) => match crate::generator::sv::sv_array::flat_param_width(&ty) {
-                        Some((_, size, _)) => Ok(crate::generator::sv::sv_array::flatten_argument(
-                            &print_expression(a, scope)?,
-                            size,
-                        )),
-                        None => scope.coerce(&ty, a),
-                    },
+                    Some(ty) => {
+                        let fields_of = |name: &str| scope.structs.get(name).cloned();
+                        match crate::generator::sv::sv_array::flat_param(
+                            &ty,
+                            &fields_of,
+                            scope.enums,
+                        ) {
+                            Some(flat) => Ok(crate::generator::sv::sv_array::flatten_argument(
+                                &print_expression(a, scope)?,
+                                &flat,
+                            )),
+                            None => scope.coerce(&ty, a),
+                        }
+                    }
                     None => print_expression(a, scope),
                 })
                 .collect();

@@ -570,16 +570,23 @@ pub(crate) fn emit_functions(
             // вовсе («input/output/inout ports cannot have unpacked
             // dimensions»), тогда как verilator её пропускает — вывод
             // компилировался и не синтезировался при нулевом коде возврата.
-            let mut unpack: Vec<(String, crate::semantic::type_node::TypeNode, u16, u32)> =
-                Vec::new();
+            let fields_of = |name: &str| fsm.structs.get(name).cloned();
+            let mut unpack: Vec<(
+                String,
+                crate::semantic::type_node::TypeNode,
+                crate::generator::sv::sv_array::FlatParam,
+            )> = Vec::new();
             for (param, ty) in params {
                 check_sv_name(param, *loc)?;
-                if let Some((width, size, elem_width)) =
-                    crate::generator::sv::sv_array::flat_param_width(ty)
+                // Раскладка считается ПО ЛИСТЬЯМ (фича 0372): так одна форма
+                // обслуживает массив скаляров, структур, перечислений и
+                // вложенный массив, а вывод для скаляров остаётся прежним.
+                if let Some(flat_param) =
+                    crate::generator::sv::sv_array::flat_param(ty, &fields_of, &fsm.enums)
                 {
                     let flat = crate::generator::sv::sv_array::flat_param_name(param);
-                    sig.push(format!("input logic [{}:0] {}", width - 1, flat));
-                    unpack.push((param.clone(), ty.clone(), size, elem_width));
+                    sig.push(format!("input logic [{}:0] {}", flat_param.width - 1, flat));
+                    unpack.push((param.clone(), ty.clone(), flat_param));
                     continue;
                 }
                 let decl = sv_type(ty, &format!("параметр '{}' функции '{}'", param, name))?;
@@ -601,18 +608,25 @@ pub(crate) fn emit_functions(
             // Пролог распаковки (фича 0369): плоский вектор раскладывается в
             // распакованный массив с ИМЕНЕМ ПАРАМЕТРА, и тело печатается
             // дальше как прежде — второго знания об адресации не заводится.
-            for (param, ty, size, elem_width) in &unpack {
+            for (param, ty, flat_param) in &unpack {
                 let decl = sv_type(ty, &format!("параметр '{}' функции '{}'", param, name))?;
                 p.ident(&format!("{};", decl.declare(param))).nl();
                 let flat = crate::generator::sv::sv_array::flat_param_name(param);
-                for index in 0..*size {
-                    let low = u32::from(index) * elem_width;
-                    p.ident(&format!(
-                        "{param}[{index}] = {flat}[{}:{}];",
-                        low + elem_width - 1,
-                        low
-                    ))
-                    .nl();
+                let mut low = 0;
+                for (suffix, part_width, part_ty) in &flat_param.parts {
+                    // Перечисления в SystemVerilog строго типизированы: без
+                    // приведения verilator отвечает ОШИБКОЙ `ENUMVALUE`
+                    // («Implicit conversion to enum … from logic[1:0]»), а гейт
+                    // цели считает предупреждение ошибкой (фича 0372).
+                    let slice = format!("{flat}[{}:{}]", low + part_width - 1, low);
+                    let value = match part_ty {
+                        crate::semantic::type_node::TypeNode::Enum(enum_name) => {
+                            format!("{}'({})", sv_enum_type_name(enum_name), slice)
+                        }
+                        _ => slice,
+                    };
+                    p.ident(&format!("{param}{suffix} = {value};")).nl();
+                    low += part_width;
                 }
             }
             // Возврат печатается присваиванием имени функции и исполнения не
