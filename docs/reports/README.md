@@ -309,3 +309,4 @@
 | 0358 | Индексация применима к выражению, а не только к имени | [0358-postfix-index-on-expression.md](0358-postfix-index-on-expression.md) | ГОТОВО |
 | 0359 | Сравнение знакового с беззнаковым | [0359-mixed-sign-comparison.md](0359-mixed-sign-comparison.md) | ГОТОВО |
 | 0360 | Арифметика операндов разной знаковости | [0360-mixed-sign-arithmetic.md](0360-mixed-sign-arithmetic.md) | ГОТОВО |
+| 0361 | Приведение к тому же типу опускается | [0361-same-type-cast.md](0361-same-type-cast.md) | ГОТОВО |

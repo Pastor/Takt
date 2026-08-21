@@ -521,6 +521,13 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
                 || super::sv_fixed::fixed_format(inner).is_some()
             {
                 super::sv_fixed::cast(inner, ty, scope)
+            } else if crate::generator::mixed_sign::operand_type_expr(inner)
+                .is_some_and(|from| from == *ty)
+            {
+                // Приведение к ТОМУ ЖЕ типу опускается (фича 0361): форма
+                // `16'(x)` при `x: u16` валидна, но это лишний код в RTL, а
+                // правило у трёх целей должно быть одно.
+                print_expression(inner, scope)
             } else {
                 crate::generator::sv::sv_cast::integer_cast(inner, ty, scope)
             }

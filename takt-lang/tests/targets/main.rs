@@ -59,6 +59,7 @@ mod rust_live_tests;
 mod rust_non_ascii_name_tests;
 mod rust_printers_tests;
 mod rust_shift_width_tests;
+mod same_type_cast_tests;
 mod st_call_order_tests;
 mod st_reserved_names_tests;
 mod st_tests;
