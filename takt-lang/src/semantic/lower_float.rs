@@ -473,11 +473,12 @@ fn lower_expr(expr: &mut ExpressionNode, m: u8, n: u8) -> Result<(), Diagnostic>
                 lower_expr(a, m, n)?;
             }
         }
-        ExpressionNode::ArraySubscript(v, idx) => {
-            retype_var_cell(v, m, n);
+        // База — выражение (фича 0358): обходится тем же понижением.
+        ExpressionNode::ArraySubscript(base, idx) => {
+            lower_expr(base, m, n)?;
             lower_expr(idx, m, n)?;
         }
-        ExpressionNode::ArraySlice(v, _, _) => retype_var_cell(v, m, n),
+        ExpressionNode::ArraySlice(base, _, _) => lower_expr(base, m, n)?,
         ExpressionNode::Variable(v) => retype_var_cell(v, m, n),
         // Листья и узлы без `float`-типа.
         ExpressionNode::None
@@ -519,8 +520,8 @@ fn lower_cond(cond: &mut ConditionNode, m: u8, n: u8) -> Result<(), Diagnostic> 
         ConditionNode::Parenthesis(e) | ConditionNode::Not(e) | ConditionNode::BitAccess(e, _) => {
             lower_cond(e, m, n)?
         }
-        ConditionNode::ArraySubscript(v, idx) => {
-            retype_var_cell(v, m, n);
+        ConditionNode::ArraySubscript(base, idx) => {
+            lower_cond(base, m, n)?;
             lower_cond(idx, m, n)?;
         }
         ConditionNode::Function(f, args, _) => {

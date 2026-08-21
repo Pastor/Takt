@@ -249,11 +249,14 @@ fn walk_expression(
                 FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => {}
             }
         }
-        ExpressionNode::ArraySubscript(var, index) => {
-            note_variable(&var.borrow(), locals, needs);
+        // База — выражение (фича 0358): обходится тем же сборщиком нужд.
+        ExpressionNode::ArraySubscript(base, index) => {
+            walk_expression(base, model, locals, needs, seen)?;
             walk_expression(index, model, locals, needs, seen)?;
         }
-        ExpressionNode::ArraySlice(var, _, _) => note_variable(&var.borrow(), locals, needs),
+        ExpressionNode::ArraySlice(base, _, _) => {
+            walk_expression(base, model, locals, needs, seen)?
+        }
         ExpressionNode::Parenthesis(a)
         | ExpressionNode::Not(a)
         | ExpressionNode::BitwiseNot(a)
@@ -328,8 +331,8 @@ fn walk_condition(
 ) -> Result<(), Diagnostic> {
     match cond {
         ConditionNode::Variable(var, _) => note_variable(&var.borrow(), locals, needs),
-        ConditionNode::ArraySubscript(var, index) => {
-            note_variable(&var.borrow(), locals, needs);
+        ConditionNode::ArraySubscript(base, index) => {
+            walk_condition(base, model, locals, needs, seen)?;
             walk_condition(index, model, locals, needs, seen)?;
         }
         ConditionNode::Function(def, args, _) => {

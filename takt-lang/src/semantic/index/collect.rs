@@ -566,19 +566,11 @@ pub(super) fn collect_ast_condition_entries(
                 collect_ast_condition_entries(arg, model, entries);
             }
         }
-        ast::Condition::ArraySubscript(_, id, _) => {
-            if let Location::Source(_, start, end) = id.loc {
-                entries.push(IndexEntry {
-                    start: start as usize,
-                    end: end as usize,
-                    node_ref: SemanticNodeRef {
-                        name: id.name.clone(),
-                        kind: SemanticNodeKind::ReferenceCondition,
-                        loc: id.loc,
-                        model: Some(model.clone()),
-                    },
-                });
-            }
+        // База — выражение (фича 0358): записи собирает тот же обход, а не
+        // отдельная запись по имени.
+        ast::Condition::ArraySubscript(_, base, index) => {
+            collect_ast_condition_entries(base, model, entries);
+            collect_ast_condition_entries(index, model, entries);
         }
         // Бинарные операторы — рекурсивный обход обеих сторон.
         //
@@ -864,33 +856,13 @@ pub(super) fn collect_ast_expression_entries(
                 collect_ast_expression_entries(arg, model, entries);
             }
         }
-        ast::Expression::ArraySubscript(_, id, _) => {
-            if let Location::Source(_, start, end) = id.loc {
-                entries.push(IndexEntry {
-                    start: start as usize,
-                    end: end as usize,
-                    node_ref: SemanticNodeRef {
-                        name: id.name.clone(),
-                        kind: SemanticNodeKind::ReferenceCondition,
-                        loc: id.loc,
-                        model: Some(model.clone()),
-                    },
-                });
-            }
+        // База — выражение (фича 0358): записи собирает тот же обход.
+        ast::Expression::ArraySubscript(_, base, index) => {
+            collect_ast_expression_entries(base, model, entries);
+            collect_ast_expression_entries(index, model, entries);
         }
-        ast::Expression::ArraySlice(_, id, _, _) => {
-            if let Location::Source(_, start, end) = id.loc {
-                entries.push(IndexEntry {
-                    start: start as usize,
-                    end: end as usize,
-                    node_ref: SemanticNodeRef {
-                        name: id.name.clone(),
-                        kind: SemanticNodeKind::ReferenceCondition,
-                        loc: id.loc,
-                        model: Some(model.clone()),
-                    },
-                });
-            }
+        ast::Expression::ArraySlice(_, base, _, _) => {
+            collect_ast_expression_entries(base, model, entries);
         }
         // Бинарные операторы
         ast::Expression::Power(_, l, r)

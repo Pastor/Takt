@@ -76,19 +76,16 @@ pub(crate) fn eval_expression(
             })
         }
         ExpressionNode::Parenthesis(inner) => eval_expression(inner, ctx),
-        ExpressionNode::ArraySubscript(var, index) => {
-            let (name, loc) = {
-                let b = var.borrow();
-                (b.name().to_string(), b.loc())
-            };
-            let array = ctx.get_value(&name).ok_or_else(|| {
-                Diagnostic::error(loc, format!("переменная '{name}' не найдена"))
-                    .with_code("SIM-009")
-            })?;
+        // База — ВЫРАЖЕНИЕ (фича 0358): `b.data[1]` вычисляется тем же
+        // вычислителем, что и прочие выражения, поэтому знание о цепочке места
+        // остаётся одно.
+        ExpressionNode::ArraySubscript(base, index) => {
+            let loc = base.loc();
+            let array = eval_expression(base, ctx)?;
             let Value::Array(items) = array else {
                 return Err(Diagnostic::error(
                     loc,
-                    format!("переменная '{name}' не является массивом"),
+                    "индексируемое значение не является массивом".to_string(),
                 )
                 .with_code("SIM-010"));
             };
@@ -104,27 +101,18 @@ pub(crate) fn eval_expression(
                 .ok_or_else(|| {
                     Diagnostic::error(
                         loc,
-                        format!(
-                            "индекс {idx} вне границ массива '{name}' (длина {})",
-                            items.len()
-                        ),
+                        format!("индекс {idx} вне границ массива (длина {})", items.len()),
                     )
                     .with_code("SIM-010")
                 })
         }
-        ExpressionNode::ArraySlice(var, from, to) => {
-            let (name, loc) = {
-                let b = var.borrow();
-                (b.name().to_string(), b.loc())
-            };
-            let array = ctx.get_value(&name).ok_or_else(|| {
-                Diagnostic::error(loc, format!("переменная '{name}' не найдена"))
-                    .with_code("SIM-009")
-            })?;
+        ExpressionNode::ArraySlice(base, from, to) => {
+            let loc = base.loc();
+            let array = eval_expression(base, ctx)?;
             let Value::Array(items) = array else {
                 return Err(Diagnostic::error(
                     loc,
-                    format!("переменная '{name}' не является массивом"),
+                    "срезаемое значение не является массивом".to_string(),
                 )
                 .with_code("SIM-010"));
             };
@@ -139,7 +127,7 @@ pub(crate) fn eval_expression(
                     Diagnostic::error(
                         loc,
                         format!(
-                            "срез [{start}:{end}] вне границ массива '{name}' (длина {})",
+                            "срез [{start}:{end}] вне границ массива (длина {})",
                             items.len()
                         ),
                     )

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Condition {
     /// Доступ к элементу массива: `id[индекс]`.
-    ArraySubscript(Location, Identifier, Box<Condition>),
+    ArraySubscript(Location, Box<Condition>, Box<Condition>),
     /// Скобки: `(условие)`.
     Parenthesis(Location, Box<Condition>),
     /// Доступ к биту: `условие.член`.

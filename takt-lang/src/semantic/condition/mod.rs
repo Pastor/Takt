@@ -16,6 +16,9 @@
 /// размеров (1553 строки) и расти не имеет права, а предмет вычислителя —
 /// частный случай разбора условия, то есть его законное место здесь.
 mod after_const;
+/// База постфиксной индексации в условии (фича 0358).
+mod base;
+use base::{cond_base_is_array, cond_base_label};
 
 /// Распознавание паттерна `S(Модель) = Состояние` и его краткой формы
 /// `Модель = Состояние` (фича 0203): один разбор на судью, генераторы и
@@ -161,31 +164,32 @@ pub fn resolve_condition(
         ast::Condition::AfterExpr(_, inner) => {
             after_const::resolve_after_expr(inner, model.clone())
         }
-        ast::Condition::ArraySubscript(_, id, idx_cond) => {
-            let name = id.name.clone();
-            let var = model.borrow().search_var(&name);
-            if let Some(var) = var
-                && let VariableNode::Simple { ty, .. } = var.clone()
-                && let TypeNode::Array(..) = ty
-            {
-                let resolved_idx = resolve_condition(idx_cond, model.clone())?;
-                return Ok(ConditionNode::ArraySubscript(
-                    Rc::new(RefCell::new(var)),
-                    Box::new(resolved_idx),
-                ));
+        // Индексация — постфикс над ВЫРАЖЕНИЕМ (фича 0358): `b.data[1]` в
+        // условии прежде не разбирался вовсе.
+        ast::Condition::ArraySubscript(loc, base_cond, idx_cond) => {
+            let base = resolve_condition(base_cond, model.clone())?;
+            // Тип базы даёт общий носитель; условие и выражение — разные деревья,
+            // поэтому база проверяется по своему виду: имя переменной массива
+            // либо цепочка полей, приводящая к массиву.
+            if !cond_base_is_array(&base, &model.borrow()) {
+                // SE-117 (фича 0276): у диагностики есть код и ПОЗИЦИЯ. Прежде
+                // она строилась конверсией `From<&str>` — код печатался `[?]`, а
+                // позиция вырождалась в «начало первого файла».
+                return Err(Diagnostic::error(
+                    *loc,
+                    format!(
+                        "{} не является массивом: индексировать можно переменную массива \
+                         либо поле структуры типа '[T; N]'",
+                        cond_base_label(&base)
+                    ),
+                )
+                .with_code("SE-117"));
             }
-            // SE-117 (фича 0276): у диагностики есть код и ПОЗИЦИЯ. Прежде она
-            // строилась конверсией `From<&str>` — код печатался `[?]`, а
-            // позиция вырождалась в `Source(0, 0, 0)`, то есть «начало первого
-            // файла»: сообщение указывало на строку 1 любого входа.
-            Err(Diagnostic::error(
-                id.loc,
-                format!(
-                    "'{name}' не является массивом: индексировать можно только переменную \
-                     массива, объявленную как '[T; N]'"
-                ),
-            )
-            .with_code("SE-117"))
+            let resolved_idx = resolve_condition(idx_cond, model.clone())?;
+            Ok(ConditionNode::ArraySubscript(
+                Box::new(base),
+                Box::new(resolved_idx),
+            ))
         }
         ast::Condition::Parenthesis(_, cond) => Ok(ConditionNode::Parenthesis(Box::new(
             resolve_condition(cond, model.clone())?,

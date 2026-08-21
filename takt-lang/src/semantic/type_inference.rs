@@ -527,13 +527,14 @@ fn extract_type_known(
         ExpressionNode::Assign(_, r) => extract_type_known(r, model, known),
 
         // ── Обращение к массиву → тип элемента ───────────────────────────────
-        ExpressionNode::ArraySubscript(var_rc, _) => match type_of_var(&var_rc.borrow()) {
+        // База — выражение (фича 0358): её тип выводится тем же проходом.
+        ExpressionNode::ArraySubscript(base, _) => match extract_type_known(base, model, known)? {
             TypeNode::Array(_, elem_type) => Ok(*elem_type),
             other => Ok(other),
         },
 
         // ── Срез массива → тип элемента ──────────────────────────────────────
-        ExpressionNode::ArraySlice(var_rc, _, _) => match type_of_var(&var_rc.borrow()) {
+        ExpressionNode::ArraySlice(base, _, _) => match extract_type_known(base, model, known)? {
             TypeNode::Array(_, elem_type) => Ok(*elem_type),
             other => Ok(other),
         },

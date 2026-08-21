@@ -142,12 +142,16 @@ fn semantic_condition_summary(cond: &ConditionNode) -> String {
         ConditionNode::Subtract(_, _) => "арифметическое вычитание".to_string(),
         ConditionNode::And(_, _) => "побитовое И".to_string(),
         ConditionNode::Or(_, _) => "побитовое ИЛИ".to_string(),
-        ConditionNode::ArraySubscript(var, idx) => {
-            let name = match &*var.borrow() {
-                VariableNode::Simple { name, .. }
-                | VariableNode::Port { name, .. }
-                | VariableNode::Const { name, .. } => name.clone(),
-                VariableNode::Unresolved => "?".to_string(),
+        // База — выражение (фича 0358): имя берётся у неё, когда оно есть.
+        ConditionNode::ArraySubscript(base, idx) => {
+            let name = match base.as_ref() {
+                ConditionNode::Variable(var, _) => match &*var.borrow() {
+                    VariableNode::Simple { name, .. }
+                    | VariableNode::Port { name, .. }
+                    | VariableNode::Const { name, .. } => name.clone(),
+                    VariableNode::Unresolved => "?".to_string(),
+                },
+                _ => "выражение".to_string(),
             };
             let idx_str = match idx.as_ref() {
                 ConditionNode::Number(n) => n.to_string(),

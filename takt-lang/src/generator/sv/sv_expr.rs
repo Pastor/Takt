@@ -289,15 +289,13 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::Variable(var, _) => signal_of(var)
             .map(|name| scope.read(&name))
             .ok_or_else(|| sv002("неразрешённая переменная в условии")),
-        ConditionNode::ArraySubscript(var, index) => {
-            let name = signal_of(var)
-                .ok_or_else(|| sv002("неразрешённая переменная в индексации массива"))?;
-            Ok(format!(
-                "{}[{}]",
-                scope.read(&name),
-                print_condition(index, scope)?
-            ))
-        }
+        // База — выражение (фича 0358): печатается тем же печатником условий,
+        // поэтому `b.data[1]` выходит через ту же форму доступа к полю.
+        ConditionNode::ArraySubscript(base, index) => Ok(format!(
+            "{}[{}]",
+            print_condition(base, scope)?,
+            print_condition(index, scope)?
+        )),
         ConditionNode::BitAccess(inner, member) => {
             Ok(print_member(&print_condition(inner, scope)?, member))
         }
@@ -411,15 +409,11 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Variable(var) => signal_of(var)
             .map(|name| scope.read(&name))
             .ok_or_else(|| sv002("неразрешённая переменная")),
-        ExpressionNode::ArraySubscript(var, index) => {
-            let name = signal_of(var)
-                .ok_or_else(|| sv002("неразрешённая переменная в индексации массива"))?;
-            Ok(format!(
-                "{}[{}]",
-                scope.read(&name),
-                print_expression(index, scope)?
-            ))
-        }
+        ExpressionNode::ArraySubscript(base, index) => Ok(format!(
+            "{}[{}]",
+            print_expression(base, scope)?,
+            print_expression(index, scope)?
+        )),
         ExpressionNode::BitAccess(inner, member) => {
             Ok(print_member(&print_expression(inner, scope)?, member))
         }

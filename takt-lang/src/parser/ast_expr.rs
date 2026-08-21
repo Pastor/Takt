@@ -20,9 +20,9 @@ use serde::{Deserialize, Serialize};
 #[non_exhaustive]
 pub enum Expression {
     /// Доступ к элементу массива: `id[индекс]`.
-    ArraySubscript(Location, Identifier, Box<Expression>),
+    ArraySubscript(Location, Box<Expression>, Box<Expression>),
     /// Срез массива: `id[начало:конец]`.
-    ArraySlice(Location, Identifier, Option<i128>, Option<i128>),
+    ArraySlice(Location, Box<Expression>, Option<i128>, Option<i128>),
     /// Скобки: `(выражение)`.
     Parenthesis(Location, Box<Expression>),
     /// Доступ к биту: `выражение.член`.

@@ -40,6 +40,19 @@ pub(crate) fn elementwise_len(ty: &TypeNode) -> Option<u16> {
     }
 }
 
+/// Длина базы-выражения, если срез над ней выразим поэлементно (фича 0358).
+///
+/// База стала выражением (`b.data[0:2]`), поэтому тип берётся у общего носителя
+/// `semantic::validate::base_type`, а не у переменной. `None` — «поэлементно нельзя»:
+/// либо тип не выводится, либо это бит-вектор.
+pub(crate) fn elementwise_len_of(
+    base: &crate::semantic::ExpressionNode,
+    model: &crate::semantic::ModelNode,
+) -> Option<u16> {
+    let ty = crate::semantic::validate::base_type::base_type(base, model)?;
+    elementwise_len(&ty)
+}
+
 /// Начало и длина среза `[from, to)` источника длины `src_len`.
 ///
 /// Пропущенная граница означает край: `src[:2]` — от нуля, `src[2:]` — до

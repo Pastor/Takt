@@ -184,9 +184,12 @@ fn classify(expr: &ExpressionNode) -> Result<Place, &'static str> {
     match expr {
         // Скобки прозрачны, доступ к члену и биту — место, если место основание.
         ExpressionNode::Parenthesis(inner) | ExpressionNode::BitAccess(inner, _) => classify(inner),
-        ExpressionNode::Variable(var)
-        | ExpressionNode::ArraySubscript(var, _)
-        | ExpressionNode::ArraySlice(var, _, _) => match &*var.borrow() {
+        // База индексации и среза — выражение (фича 0358): место определяется
+        // по ней рекурсивно, как у скобок и доступа к члену.
+        ExpressionNode::ArraySubscript(base, _) | ExpressionNode::ArraySlice(base, _, _) => {
+            classify(base)
+        }
+        ExpressionNode::Variable(var) => match &*var.borrow() {
             VariableNode::Const { name, .. } => Ok(Place::ReadOnly(name.clone())),
             // `Unresolved` уже отвергнут `SE-025`/`SE-003` — не удваиваем.
             VariableNode::Unresolved => Ok(Place::Silent),

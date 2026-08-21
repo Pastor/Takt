@@ -128,9 +128,10 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
             ))
         }
 
-        ConditionNode::ArraySubscript(var, index) => {
+        // База — выражение (фича 0358): печатается тем же печатником условий.
+        ConditionNode::ArraySubscript(base, index) => {
             Ok(crate::generator::rust::rust_expr::subscript(
-                &variable(&var.borrow(), scope)?,
+                &print_condition(base, scope)?,
                 &print_condition(index, scope)?,
                 matches!(index.as_ref(), ConditionNode::Number(_)),
             ))
@@ -456,8 +457,9 @@ pub(crate) fn condition_type(cond: &ConditionNode) -> Option<TypeNode> {
         // о пропуске не сообщает.
         | ConditionNode::AfterExpr(_)
         | ConditionNode::BitAccess(_, _) => Some(TypeNode::Bool),
-        ConditionNode::ArraySubscript(var, _) => match var.borrow().ty() {
-            TypeNode::Array(_, elem) => Some((**elem).clone()),
+        // База — выражение (фича 0358): тип берётся у неё рекурсивно.
+        ConditionNode::ArraySubscript(base, _) => match condition_type(base) {
+            Some(TypeNode::Array(_, elem)) => Some((*elem).clone()),
             _ => None,
         },
         ConditionNode::Function(def, _, _) => function_return(&def.borrow()),

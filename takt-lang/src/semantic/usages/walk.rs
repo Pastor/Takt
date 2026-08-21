@@ -379,11 +379,13 @@ fn walk_expression(expr: &ast::Expression, scopes: &mut Scopes, table: &mut Usag
                 walk_expression(arg, scopes, table);
             }
         }
-        ast::Expression::ArraySubscript(_, name, index) => {
-            reference(name, VALUE_SPACES, scopes, table);
+        // База — выражение (фича 0358): вхождения в ней ищет тот же обход, а
+        // не `reference` по имени.
+        ast::Expression::ArraySubscript(_, base, index) => {
+            walk_expression(base, scopes, table);
             walk_expression(index, scopes, table);
         }
-        ast::Expression::ArraySlice(_, name, _, _) => reference(name, VALUE_SPACES, scopes, table),
+        ast::Expression::ArraySlice(_, base, _, _) => walk_expression(base, scopes, table),
         ast::Expression::BitAccess(_, base, member) => {
             walk_expression(base, scopes, table);
             // Член — это поле структуры или номер бита, а не самостоятельное
@@ -509,8 +511,8 @@ fn walk_condition(cond: &ast::Condition, scopes: &mut Scopes, table: &mut UsageT
                 walk_condition(arg, scopes, table);
             }
         }
-        ast::Condition::ArraySubscript(_, name, index) => {
-            reference(name, VALUE_SPACES, scopes, table);
+        ast::Condition::ArraySubscript(_, base, index) => {
+            walk_condition(base, scopes, table);
             walk_condition(index, scopes, table);
         }
         ast::Condition::BitAccess(_, base, member) => {

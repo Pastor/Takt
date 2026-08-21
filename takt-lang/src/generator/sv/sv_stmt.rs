@@ -377,21 +377,23 @@ fn print_expression_statement(
             let ExpressionNode::ArraySlice(src, from, to) = value.as_ref() else {
                 unreachable!("охрана ветви проверила вид узла");
             };
+            // База — выражение (фича 0358): печатается тем же печатником.
             let lhs = print_assign_target(target, scope)?;
-            let src_expr = ExpressionNode::Variable(std::rc::Rc::clone(src));
-            let rhs_base = print_expression(&src_expr, scope)?;
+            let rhs_base = print_expression(src, scope)?;
             // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим
             // массивом (`res := mem[1:2];` при `res: u8` эталон не исполняет —
-            // `SIM-006`).
+            // `SIM-006`). У цели `sv` тип берётся её же функцией: модели здесь
+            // нет, карта хранит снимок.
             let dst_ok = target_type(target)
                 .as_ref()
                 .and_then(crate::generator::slice::elementwise_len)
                 .is_some();
-            let src_len = match &*src.borrow() {
-                crate::semantic::VariableNode::Simple { ty, .. } if dst_ok => {
-                    crate::generator::slice::elementwise_len(ty)
-                }
-                _ => None,
+            let src_len = if dst_ok {
+                target_type(src)
+                    .as_ref()
+                    .and_then(crate::generator::slice::elementwise_len)
+            } else {
+                None
             };
             // Непригодный операнд отдаётся ПРЕЖНЕМУ пути: отказ `SV-002` строит
             // общий печатник выражений, и координату оператора ему даёт
@@ -507,15 +509,13 @@ fn print_assign_target(target: &ExpressionNode, scope: &Scope) -> Result<String,
         ExpressionNode::Variable(var) => signal_of(var)
             .map(|name| scope.write(&name))
             .ok_or_else(|| sv002("неразрешённая переменная в левой части присваивания")),
-        ExpressionNode::ArraySubscript(var, index) => {
-            let name = signal_of(var)
-                .ok_or_else(|| sv002("неразрешённая переменная в левой части присваивания"))?;
-            Ok(format!(
-                "{}[{}]",
-                scope.write(&name),
-                print_expression(index, scope)?
-            ))
-        }
+        // База — выражение (фича 0358): она сама печатается КАК ЦЕЛЬ ЗАПИСИ,
+        // поэтому `b.data[1] := …` даёт `b_next.data[1] = …`.
+        ExpressionNode::ArraySubscript(base, index) => Ok(format!(
+            "{}[{}]",
+            print_assign_target(base, scope)?,
+            print_expression(index, scope)?
+        )),
         // Запись в бит/поле: `x.0 := 1;` → `x_next[0] = 1;`. Основание — то же,
         // что и при чтении: в SV вектор индексируется как массив.
         ExpressionNode::BitAccess(inner, member) => {

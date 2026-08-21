@@ -555,8 +555,9 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
             crate::generator::rust::rust_bit::bit_access(inner, member, scope)
         }
 
-        ExpressionNode::ArraySubscript(var, index) => Ok(subscript(
-            &variable(&var.borrow(), scope)?,
+        // База — выражение (фича 0358): печатается тем же печатником.
+        ExpressionNode::ArraySubscript(base, index) => Ok(subscript(
+            &print_expression(base, scope)?,
             &print_expression(index, scope)?,
             matches!(index.as_ref(), ExpressionNode::Number(_)),
         )),

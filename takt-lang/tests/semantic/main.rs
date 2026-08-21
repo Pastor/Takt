@@ -75,6 +75,7 @@ mod port_direction_tests;
 mod port_init_tests;
 mod port_initial_value_tests;
 mod port_initializer_tests;
+mod postfix_index_tests;
 mod reference_model_tests;
 mod semantic_tests;
 mod shared_const_qualified_tests;

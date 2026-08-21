@@ -34,10 +34,10 @@ pub(in crate::generator::c) fn emit(
     // массив в C не присваивается, а `memcpy` потребовал бы `<string.h>` в
     // заголовке, который цель не подключает. Границы — литералы, проверенные
     // `SE-029`, поэтому длина известна и цикла не нужно.
-    if let ExpressionNode::ArraySlice(src, from, to) = value.as_ref()
-        && let ExpressionNode::Variable(dst) = target.as_ref()
-    {
-        return emit_slice(printer, map, owner, params, dst, src, *from, *to, has_model);
+    if let ExpressionNode::ArraySlice(src, from, to) = value.as_ref() {
+        return emit_slice(
+            printer, map, owner, params, target, src, *from, *to, has_model,
+        );
     }
     let (ExpressionNode::Initializer(items) | ExpressionNode::Array(items)) = value.as_ref() else {
         return Ok(false);
@@ -103,8 +103,8 @@ fn emit_slice(
     map: &CMap,
     owner: &Element,
     params: Vec<(String, TypeNode)>,
-    dst: &std::rc::Rc<std::cell::RefCell<VariableNode>>,
-    src: &std::rc::Rc<std::cell::RefCell<VariableNode>>,
+    dst: &ExpressionNode,
+    src: &ExpressionNode,
     from: Option<i128>,
     to: Option<i128>,
     has_model: bool,
@@ -112,11 +112,22 @@ fn emit_slice(
     // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим массивом.
     // `res := mem[1:2];` при `res: u8` эталон не исполняет (`SIM-006`), а
     // поэлементная печать дала бы `model->res[0] = …` над скаляром.
-    let dst_ok = matches!(&*dst.borrow(), VariableNode::Simple { ty, .. }
-        if crate::generator::slice::elementwise_len(ty).is_some());
-    let src_len = match &*src.borrow() {
-        VariableNode::Simple { ty, .. } if dst_ok => crate::generator::slice::elementwise_len(ty),
-        _ => None,
+    //
+    // Тип базы даёт общий носитель (фича 0358): она теперь выражение, а не
+    // переменная, и `b.data[0:2]` разбирается тем же правилом.
+    let Element::Model {
+        name: owner_name, ..
+    } = owner
+    else {
+        return Ok(false);
+    };
+    let model_rc = map.raw_model_at(owner_name.clone())?;
+    let model_ref = model_rc.borrow();
+    let dst_ok = crate::generator::slice::elementwise_len_of(dst, &model_ref).is_some();
+    let src_len = if dst_ok {
+        crate::generator::slice::elementwise_len_of(src, &model_ref)
+    } else {
+        None
     };
     // Непригодный операнд отдаётся ПРЕЖНЕМУ пути (`Ok(false)`), а не отвергается
     // здесь: отказ `CC-022` строит общий печатник выражений, и координату
@@ -126,21 +137,12 @@ fn emit_slice(
         return Ok(false);
     };
     let (start, len) = crate::generator::slice::bounds(from, to, src_len);
-    let base_of =
-        |var: &std::rc::Rc<std::cell::RefCell<VariableNode>>| -> Result<String, Diagnostic> {
-            let mut text = String::new();
-            let mut tmp = Printer::new(4, &mut text);
-            generate_expr(
-                &mut tmp,
-                map,
-                owner,
-                params.clone(),
-                &ExpressionNode::Variable(std::rc::Rc::clone(var)),
-                0,
-                has_model,
-            )?;
-            Ok(text)
-        };
+    let base_of = |node: &ExpressionNode| -> Result<String, Diagnostic> {
+        let mut text = String::new();
+        let mut tmp = Printer::new(4, &mut text);
+        generate_expr(&mut tmp, map, owner, params.clone(), node, 0, has_model)?;
+        Ok(text)
+    };
     let dst_base = base_of(dst)?;
     let src_base = base_of(src)?;
     for k in 0..len {

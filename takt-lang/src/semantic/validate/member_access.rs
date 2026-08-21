@@ -14,6 +14,7 @@
 use super::*;
 use crate::parser::ast::{Identifier, Member};
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::validate::base_type::base_type;
 
 /// Ce19 (`SE-061`): доступ к несуществующему полю структуры.
 ///
@@ -62,27 +63,6 @@ fn var_initializer(var: &VariableNode) -> Option<&ExpressionNode> {
             } else {
                 Some(expr)
             }
-        }
-        _ => None,
-    }
-}
-
-/// Разрешает тип выражения-базы доступа к члену — только для цепочки
-/// `переменная(.поле)*`. Возвращает `None`, если тип надёжно не выводится
-/// (консервативно: тогда проверка не срабатывает).
-fn base_type(expr: &ExpressionNode, model: &ModelNode) -> Option<TypeNode> {
-    match expr {
-        ExpressionNode::Variable(var_rc) => Some(var_rc.borrow().ty().clone()),
-        ExpressionNode::Parenthesis(inner) => base_type(inner, model),
-        ExpressionNode::BitAccess(inner, Member::Identifier(field)) => {
-            let TypeNode::Struct(name) = base_type(inner, model)? else {
-                return None;
-            };
-            let s = model.search_struct(&name)?;
-            s.fields
-                .iter()
-                .find(|(f, _)| *f == field.name)
-                .map(|(_, t)| t.clone())
         }
         _ => None,
     }

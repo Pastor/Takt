@@ -123,27 +123,23 @@ pub(crate) fn print_statement(
             // Границы — литералы, проверенные `SE-029`, поэтому длина известна
             // и цикла не требуется.
             if let ExpressionNode::Assign(lhs, rhs) = expr.as_ref()
-                && let ExpressionNode::Variable(var) = lhs.as_ref()
                 && let ExpressionNode::ArraySlice(src, from, to) = rhs.as_ref()
             {
-                let dst = variable_ident(&var.borrow());
-                let src_var = src.borrow();
-                let src_name = variable_ident(&src_var);
+                // База — выражение (фича 0358): печатается тем же печатником.
+                let dst = print_expression(lhs, model)?;
+                let src_name = print_expression(src, model)?;
                 // Срез над бит-вектором поэлементно не выразим (0078) — такой
                 // вход уходит прежним путём, к отказу цели, как и у эталона.
                 // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим
                 // массивом (`res := mem[1:2];` при `res: u8` эталон не
-                // исполняет — `SIM-006`).
-                let dst_ok = assign_target_type(&var.borrow())
-                    .as_ref()
-                    .and_then(crate::generator::slice::elementwise_len)
-                    .is_some();
-                let src_len = assign_target_type(&src_var)
-                    .as_ref()
-                    .and_then(crate::generator::slice::elementwise_len)
-                    .filter(|_| dst_ok);
+                // исполняет — `SIM-006`). Тип базы даёт общий носитель (0358).
+                let dst_ok = crate::generator::slice::elementwise_len_of(lhs, model).is_some();
+                let src_len = if dst_ok {
+                    crate::generator::slice::elementwise_len_of(src, model)
+                } else {
+                    None
+                };
                 let Some(src_len) = src_len else {
-                    drop(src_var);
                     let text = print_expression(expr, model)?;
                     p.ident(&format!("{text};")).nl();
                     return Ok(());

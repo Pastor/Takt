@@ -589,3 +589,4 @@
 | 0355-01 | 0355 | Срез массива переводят четыре цели | [0355-01-array-slice-in-targets.md](0355-01-array-slice-in-targets.md) |
 | 0356-01 | 0356 | Разряд участвует в арифметике как 0/1 | [0356-01-sim-bit-in-arithmetic.md](0356-01-sim-bit-in-arithmetic.md) |
 | 0357-01 | 0357 | Умолчание общей переменной строит один носитель | [0357-01-rust-shared-default-value.md](0357-01-rust-shared-default-value.md) |
+| 0358-01 | 0358 | Индексация применима к выражению, а не только к имени | [0358-01-postfix-index-on-expression.md](0358-01-postfix-index-on-expression.md) |

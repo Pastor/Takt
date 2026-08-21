@@ -33,6 +33,7 @@ mod aggregate_length;
 mod arity;
 mod assignment_place;
 mod assignment_position;
+pub(crate) mod base_type;
 mod bodies;
 mod common;
 mod constant_conditions;
