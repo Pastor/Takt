@@ -194,24 +194,25 @@ pub(crate) fn check_st_type_clash(
     .with_code("ST-023"))
 }
 
-/// Имена типов, объявленных моделью и её предками.
+/// Имена типов, которые цель ПЕЧАТАЕТ в разделе `TYPE`, — модели и её предков.
 ///
-/// Берутся у тех же карт, из которых цель печатает раздел `TYPE`: структуры,
-/// перечисления и псевдонимы. Второго списка не заводится (класс 0084/0193/0195).
+/// ⚠️ **Только структуры, и это замер, а не забывчивость** (фикс 0378-01).
+/// Перечисление цель печатает целым типом плюс `VAR CONSTANT` (откат Option C
+/// задачи 0041-02: перечислимый тип с явными значениями MatIEC не принимает), а
+/// псевдоним раскрывается в базовый тип — ни того, ни другого имени в выводе
+/// нет, и занимать пространство имён IEC им нечем. Проба 2026-08-22: `var mode:
+/// Mode;` при `enum Mode` `iec2c` **принимает**.
+///
+/// Отсюда правило: список строится из того, что цель **печатает**, а не из
+/// того, что объявлено в модели.
 fn declared_type_names(model: &crate::semantic::ModelNode) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    // Собственные объявления модели.
-    out.extend(model.structs.values().map(|d| d.name.clone()));
-    out.extend(model.enums.values().map(|d| d.name.clone()));
-    out.extend(model.types.keys().cloned());
-    // Предки: тип, объявленный выше, тоже печатается в раздел `TYPE` файла.
+    let mut out: Vec<String> = model.structs.values().map(|d| d.name.clone()).collect();
+    // Предки: структура, объявленная выше, печатается в тот же раздел `TYPE`.
     let mut upper = model.upper.clone();
     while let Some(weak) = upper {
         let Some(rc) = weak.upgrade() else { break };
         let parent = rc.borrow();
         out.extend(parent.structs.values().map(|d| d.name.clone()));
-        out.extend(parent.enums.values().map(|d| d.name.clone()));
-        out.extend(parent.types.keys().cloned());
         upper = parent.upper.clone();
     }
     out
@@ -261,6 +262,42 @@ mod tests {
         // **Контрпример:** имя, ни с чем не столкнувшееся, проходит — иначе
         // проверка означала бы «запрещаем любое имя».
         assert!(check_st_type_clash("value", &model, loc()).is_ok());
+    }
+
+    /// Тёзка ПЕРЕЧИСЛЕНИЯ проходит: цель печатает его целым типом и
+    /// константами, и имени `Mode` в выводе нет (фикс 0378-01).
+    ///
+    /// ⚠️ Первая редакция проверки брала имена у `structs`, `enums` и `types`
+    /// разом и отвергала `var mode: Mode;` — вход, который `iec2c` **принимает**
+    /// (проба 2026-08-22). Ложный отказ хуже пропуска: он ломает валидную
+    /// модель.
+    #[test]
+    fn test_enum_namesake_is_allowed() {
+        let (ast, _) = crate::parse(
+            "enum Mode { Idle = 1, Work = 2 }\nvar mode: Mode := Idle;\nstart Run { }",
+            0,
+        )
+        .expect("разбор");
+        let model = crate::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
+        let model = model.borrow();
+        assert!(
+            check_st_type_clash("mode", &model, loc()).is_ok(),
+            "перечисление имени в выводе цели не занимает"
+        );
+    }
+
+    /// Тёзка ПСЕВДОНИМА проходит по той же причине: он раскрывается в базовый
+    /// тип, и его имени в выводе нет.
+    #[test]
+    fn test_alias_namesake_is_allowed() {
+        let (ast, _) = crate::parse(
+            "type Small = u8;\nvar small_v: Small := 1;\nstart Run { }",
+            0,
+        )
+        .expect("разбор");
+        let model = crate::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
+        let model = model.borrow();
+        assert!(check_st_type_clash("small", &model, loc()).is_ok());
     }
 
     /// Регистр не спасает: `left`/`LEFT`/`Left` — одно и то же (T7/A6).
