@@ -78,18 +78,92 @@ pub(in crate::generator::c) fn emit(
             .map(|def| def.fields),
         _ => None,
     };
-    let places = crate::generator::aggregate::places(fields.as_deref(), Some(&ty), items.len());
+    emit_aggregate(
+        printer,
+        map,
+        owner,
+        params,
+        &base,
+        &ty,
+        fields.as_deref(),
+        items,
+        has_model,
+        owner_model.as_ref(),
+    )?;
+    Ok(true)
+}
+
+/// Раскрывает агрегат в присваивания листьев — рекурсивно (фича 0364).
+///
+/// Массив раскрывается по индексам, структура — по местам общего носителя
+/// (`aggregate::places`, фича 0340), а элемент, который сам является агрегатом,
+/// раскрывается **дальше**. Прежде раскрытие было одноуровневым, и
+/// `grid := {{1, 2}, {3, 4}};` при `grid: [[u8; 2]; 2]` печаталось
+/// `model->grid[0] = {1, 2};` — формы, которой в C нет вовсе («expected
+/// expression»), при нулевом коде возврата `taktc`.
+///
+/// ⚠️ Бит-вектор `[bit;N]` агрегатом не раскрывается: это упакованное значение
+/// (правило 0078).
+#[allow(clippy::too_many_arguments)]
+fn emit_aggregate(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    base: &str,
+    ty: &TypeNode,
+    fields: Option<&[(String, TypeNode)]>,
+    items: &[ExpressionNode],
+    has_model: bool,
+    owner_model: Option<&std::rc::Weak<std::cell::RefCell<crate::semantic::ModelNode>>>,
+) -> Result<(), Diagnostic> {
+    let places = crate::generator::aggregate::places(fields, Some(ty), items.len());
     for (item, place) in items.iter().zip(places) {
+        let target = format!("{base}{}", place.suffix);
+        let elem_ty = place.ty.clone().unwrap_or_else(|| ty.clone());
+        if let ExpressionNode::Initializer(inner) | ExpressionNode::Array(inner) = item {
+            let nested_is_array = matches!(elem_ty, TypeNode::Array(_, _))
+                && crate::semantic::bit_vector::is_bit_vector(&elem_ty).is_none();
+            let nested_fields = struct_fields(owner_model, &elem_ty);
+            if nested_is_array || nested_fields.is_some() {
+                emit_aggregate(
+                    printer,
+                    map,
+                    owner,
+                    params.clone(),
+                    &target,
+                    &elem_ty,
+                    nested_fields.as_deref(),
+                    inner,
+                    has_model,
+                    owner_model,
+                )?;
+                continue;
+            }
+        }
         let mut rhs = String::new();
         {
             let mut tmp = Printer::new(4, &mut rhs);
             generate_expr(&mut tmp, map, owner, params.clone(), item, 0, has_model)?;
         }
-        printer
-            .ident(&format!("{base}{} = {rhs};", place.suffix))
-            .nl();
+        printer.ident(&format!("{target} = {rhs};")).nl();
     }
-    Ok(true)
+    Ok(())
+}
+
+/// Поля структуры по её типу — ищутся у ВЛАДЕЛЬЦА переменной (`search_struct`
+/// поднимается по родителям), как и у одноуровневого раскрытия.
+fn struct_fields(
+    owner_model: Option<&std::rc::Weak<std::cell::RefCell<crate::semantic::ModelNode>>>,
+    ty: &TypeNode,
+) -> Option<Vec<(String, TypeNode)>> {
+    let TypeNode::Struct(name) = ty else {
+        return None;
+    };
+    owner_model
+        .and_then(|weak| weak.upgrade())
+        .and_then(|model| model.borrow().search_struct(name))
+        .map(|def| def.fields)
 }
 
 /// Печатает присваивание среза поэлементно (фича 0355).

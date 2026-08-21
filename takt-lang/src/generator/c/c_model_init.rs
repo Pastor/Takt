@@ -361,27 +361,81 @@ fn generate_array_init(
     };
     for (i, elem) in elems.iter().enumerate() {
         let base = format!("model->{}[{}]", field, i);
-        match (&fields, elem) {
-            (Some(list), ExpressionNode::Initializer(inner) | ExpressionNode::Array(inner)) => {
-                let places = crate::generator::aggregate::places(
-                    Some(list.as_slice()),
-                    Some(elem_ty),
-                    inner.len(),
-                );
-                for (item, place) in inner.iter().zip(places) {
-                    printer.ident(&format!("{base}{} = ", place.suffix));
-                    generate_expr(printer, map, model, vec![], item, 0, true)?;
-                    printer.print(";").nl();
-                }
-            }
-            _ => {
-                printer.ident(&format!("{base} = "));
-                generate_expr(printer, map, model, vec![], elem, 0, true)?;
-                printer.print(";").nl();
-            }
-        }
+        emit_element_init(printer, map, model, &base, elem_ty, fields.as_deref(), elem)?;
     }
     Ok(())
+}
+
+/// Записывает один элемент агрегата — рекурсивно по его виду (фича 0364).
+///
+/// Лист печатается присваиванием, агрегат раскрывается: структура — по местам
+/// носителя (`aggregate::places`, фича 0340), **вложенный массив — по
+/// индексам**. Прежде ветви было две (структура и «всё остальное»), и
+/// `[[u8; 2]; 2]` печатался `model->grid[0] = {1, 2};` — формы, которой в C нет
+/// вовсе (`cc`: «expected expression»), при нулевом коде возврата `taktc`.
+///
+/// ⚠️ Бит-вектор `[bit;N]` агрегатом не раскрывается: это упакованное значение
+/// (правило 0078), и его инициализатор — число.
+fn emit_element_init(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &Element,
+    base: &str,
+    ty: &TypeNode,
+    fields: Option<&[(String, TypeNode)]>,
+    expr: &ExpressionNode,
+) -> Result<(), Diagnostic> {
+    if let ExpressionNode::Initializer(inner) | ExpressionNode::Array(inner) = expr {
+        if let Some(list) = fields {
+            let places = crate::generator::aggregate::places(Some(list), Some(ty), inner.len());
+            for (item, place) in inner.iter().zip(places) {
+                let nested = format!("{base}{}", place.suffix);
+                let nested_fields = struct_fields_of(map, place.ty.as_ref());
+                emit_element_init(
+                    printer,
+                    map,
+                    model,
+                    &nested,
+                    place.ty.as_ref().unwrap_or(ty),
+                    nested_fields.as_deref(),
+                    item,
+                )?;
+            }
+            return Ok(());
+        }
+        if let TypeNode::Array(_, inner_ty) = ty
+            && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+        {
+            let nested_fields = struct_fields_of(map, Some(inner_ty));
+            for (i, item) in inner.iter().enumerate() {
+                emit_element_init(
+                    printer,
+                    map,
+                    model,
+                    &format!("{base}[{i}]"),
+                    inner_ty,
+                    nested_fields.as_deref(),
+                    item,
+                )?;
+            }
+            return Ok(());
+        }
+    }
+    printer.ident(&format!("{base} = "));
+    generate_expr(printer, map, model, vec![], expr, 0, true)?;
+    printer.print(";").nl();
+    Ok(())
+}
+
+/// Поля структуры по её типу — или `None`, если тип структурой не является.
+fn struct_fields_of(map: &CMap, ty: Option<&TypeNode>) -> Option<Vec<(String, TypeNode)>> {
+    match ty {
+        Some(TypeNode::Struct(name)) => map
+            .root_model_node()
+            .and_then(|root| root.borrow().search_struct(name))
+            .map(|def| def.fields),
+        _ => None,
+    }
 }
 
 /// Инициализирует бит-вектор шире 64 бит — по словам (фича 0262).
