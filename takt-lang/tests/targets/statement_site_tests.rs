@@ -4,11 +4,11 @@
 //!
 //! Носитель позиции оператора (`generator::site`, фича 0277) был **полем карты
 //! цели `c`**, и воспользоваться им могла только она. Замер 2026-08-20 на
-//! `res := mem[1:2];` (строка 13 фикстуры):
+//! `res := mem[1:2];` (строка 16 фикстуры):
 //!
 //! | Цель | Координата отказа |
 //! |---|---|
-//! | `c` | `13:9` — верно |
+//! | `c` | `16:9` — верно |
 //! | `rust`, `st`, `sv` | **нет вовсе**: `Location::Codegen` печатается без префикса |
 //!
 //! Это честная пустота, а не ложь, — но автор всё равно искал место сам.
@@ -54,14 +54,14 @@ fn refusal(fixture: &str, target: &str) -> String {
 
 /// Предмет: срез в теле состояния — координата оператора у трёх целей.
 ///
-/// Строка 13 фикстуры — `res := mem[1:2];`; строка 4 — объявление `mem`,
+/// Строка 16 фикстуры — `res := mem[1:2];`; строка 7 — объявление `mem`,
 /// откуда координату брал бы вывод по операнду.
 #[test]
 fn slice_in_statement_points_at_the_statement() {
     for target in ["c", "rust", "st"] {
         let err = refusal("slice_stmt.takt", target);
         assert!(
-            err.contains("slice_stmt.takt:13:"),
+            err.contains("slice_stmt.takt:16:"),
             "цель {target} обязана указать строку оператора:\n{err}"
         );
     }
@@ -79,7 +79,7 @@ fn slice_in_statement_points_at_the_statement() {
 fn slice_in_statement_points_at_the_statement_for_sv() {
     let err = refusal("slice_stmt.takt", "sv");
     assert!(
-        err.contains("slice_stmt.takt:13:"),
+        err.contains("slice_stmt.takt:16:"),
         "цель sv обязана указать строку оператора:\n{err}"
     );
 }
