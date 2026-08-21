@@ -318,3 +318,4 @@
 | 0367 | Массив структур у цели sv синтезируется | [0367-sv-struct-array.md](0367-sv-struct-array.md) | ГОТОВО |
 | 0368 | Элемент агрегата печатается по типу элемента | [0368-aggregate-element-type.md](0368-aggregate-element-type.md) | ГОТОВО |
 | 0369 | Массив в параметре функции у цели sv | [0369-sv-array-parameter.md](0369-sv-array-parameter.md) | ГОТОВО |
+| 0370 | Понижение q-литерала доходит до полей структуры | [0370-struct-field-fixed.md](0370-struct-field-fixed.md) | ГОТОВО |

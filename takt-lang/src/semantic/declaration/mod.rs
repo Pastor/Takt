@@ -528,7 +528,7 @@ pub(crate) fn fold_variable_initializers(
         // значит 0.1875, тогда как эталон давал 3.0. Понижение делает тот же
         // носитель, что и для написанного автором литерала: своя копия
         // разошлась бы с ним в округлении.
-        let literal = lower_folded_fixed(literal, declared_type(&folded[name]))?;
+        let literal = lower_folded_fixed(literal, declared_type(&folded[name]), model)?;
         // Литерал обязан быть РАЗРЕШЁН здесь: свёртка идёт последней, и
         // разрешать `Unresolved` после неё уже некому — потребители получили бы
         // неразрешённый узел, а он для них «не константа» (то есть ноль).
@@ -581,6 +581,7 @@ fn retype_declaration(var: &mut VariableNode, ty: crate::semantic::type_node::Ty
 fn lower_folded_fixed(
     literal: crate::parser::ast::Expression,
     ty: Option<&crate::semantic::type_node::TypeNode>,
+    model: &Rc<RefCell<ModelNode>>,
 ) -> Result<crate::parser::ast::Expression, Diagnostic> {
     use crate::parser::ast::Expression as E;
     use crate::semantic::type_node::TypeNode;
@@ -596,7 +597,27 @@ fn lower_folded_fixed(
     {
         let mut lowered = Vec::with_capacity(items.len());
         for item in items {
-            lowered.push(lower_folded_fixed(item.clone(), Some(elem))?);
+            lowered.push(lower_folded_fixed(item.clone(), Some(elem), model)?);
+        }
+        return Ok(E::Initializer(*loc, lowered));
+    }
+    // Поля СТРУКТУРЫ понижаются по своим типам (фича 0370): объявление полей
+    // живёт в `ModelNode`, и без него правило до них не доходило —
+    // `var g: Gains := {1.5, 2.5};` при `struct Gains { kp: q(8, 8), … }`
+    // отвергали ВСЕ цели, кроме диаграммы (`cc`, `iec2c`, `rustc` — на
+    // порождённом файле, `sv` — своим `SV-002`), тогда как эталон запись
+    // исполняет.
+    if let (Some(TypeNode::Struct(struct_name)), E::Initializer(loc, items) | E::Array(loc, items)) =
+        (ty, &literal)
+        && let Some(def) = model.borrow().search_struct(struct_name)
+    {
+        let mut lowered = Vec::with_capacity(items.len());
+        for (item, (_, field_ty)) in items.iter().zip(def.fields.iter()) {
+            lowered.push(lower_folded_fixed(item.clone(), Some(field_ty), model)?);
+        }
+        // Полей может быть больше, чем значений: длину сверяет `SE-123`.
+        for item in items.iter().skip(def.fields.len()) {
+            lowered.push(item.clone());
         }
         return Ok(E::Initializer(*loc, lowered));
     }
