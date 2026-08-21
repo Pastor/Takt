@@ -315,3 +315,4 @@
 | 0364 | Вложенный массив у цели c | [0364-c-nested-array.md](0364-c-nested-array.md) | ГОТОВО |
 | 0365 | Распакованный массив у цели sv | [0365-sv-unpacked-array.md](0365-sv-unpacked-array.md) | ГОТОВО |
 | 0366 | Раскрытие вложенного агрегата — общий носитель | [0366-nested-aggregate-carrier.md](0366-nested-aggregate-carrier.md) | ГОТОВО |
+| 0367 | Массив структур у цели sv синтезируется | [0367-sv-struct-array.md](0367-sv-struct-array.md) | ГОТОВО |
