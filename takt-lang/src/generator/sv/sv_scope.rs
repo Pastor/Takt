@@ -129,6 +129,21 @@ impl Scope<'_> {
             {
                 return Ok(format!("{width}'({})", print_expression(value, self)?));
             }
+            // Арифметика печатается В ШИРИНЕ ПРИЁМНИКА (фича 0360): `r := a + b;`
+            // при `a, b: u8` и `r: u16` давало verilator `WIDTHEXPAND` — а гейт
+            // цели считает предупреждение ошибкой. Эталон и цель `c` вход
+            // считают верно.
+            //
+            // ⚠️ Расширяются ОПЕРАНДЫ, а не результат: сложение в восьми битах
+            // обернулось бы **до** расширения, и 300 стало бы 44.
+            if let Some(text) = super::sv_arith::in_target(value, ty, self)? {
+                return Ok(text);
+            }
+            // Именованное значение иной ширины приводится к приёмнику
+            // (фича 0360): иначе verilator отвечает `WIDTHEXPAND`.
+            if let Some(text) = super::sv_arith::value_in_target(value, ty, self)? {
+                return Ok(text);
+            }
             return print_expression(value, self);
         };
         let printed = print_expression(value, self)?;

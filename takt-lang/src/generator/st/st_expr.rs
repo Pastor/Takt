@@ -282,6 +282,31 @@ pub(crate) fn coerce_to(
                 Err(_) => Ok(printed),
             }
         }
+        // Арифметика печатается В ТИПЕ ПРИЁМНИКА (фича 0360): `r := a + b;` при
+        // `a, b: u8` и `r: u16` давало отказ `iec2c` («Incompatible data types
+        // for ':=' operation») при нулевом коде возврата `taktc`, тогда как
+        // эталон и цель `c` вход считают.
+        //
+        // ⚠️ Приводятся ОПЕРАНДЫ, а не результат: сложение в `USINT` обернулось
+        // бы по модулю 256 **до** расширения — 300 стало бы 44.
+        (
+            TypeNode::Integer { .. },
+            ExpressionNode::Add(l, r)
+            | ExpressionNode::Subtract(l, r)
+            | ExpressionNode::Multiply(l, r)
+            | ExpressionNode::Divide(l, r)
+            | ExpressionNode::Modulo(l, r),
+        ) if crate::generator::st::st_sign::operands_need_cast(l, r, target) => {
+            crate::generator::st::st_sign::arith_in_target(value, target, model)
+        }
+        // Именованное значение ИНОГО целого типа приводится к приёмнику
+        // (фича 0360): `iec2c` отвергает присваивание разных типов.
+        (TypeNode::Integer { .. }, ExpressionNode::Variable(_))
+            if crate::generator::mixed_sign::operand_type_expr(value)
+                .is_some_and(|ty| matches!(ty, TypeNode::Integer { .. }) && ty != *target) =>
+        {
+            crate::generator::st::st_sign::value_in_target(value, target, model)
+        }
         _ => print_expression(value, model),
     }
 }

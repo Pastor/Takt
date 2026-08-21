@@ -133,3 +133,96 @@ pub(super) fn expr_compare(
         }
     }
 }
+
+/// Нужно ли приводить операнды арифметики к типу приёмника (фича 0360).
+///
+/// Признак узкий: оба операнда — **именованные значения** целого типа, и хотя
+/// бы у одного тип отличается от приёмника. Литерал сюда не входит: у него
+/// типа нет, он подстраивается под приёмник сам.
+pub(super) fn operands_need_cast(
+    l: &ExpressionNode,
+    r: &ExpressionNode,
+    target: &TypeNode,
+) -> bool {
+    let (Some(lt), Some(rt)) = (
+        crate::generator::mixed_sign::operand_type_expr(l),
+        crate::generator::mixed_sign::operand_type_expr(r),
+    ) else {
+        return false;
+    };
+    matches!(target, TypeNode::Integer { .. })
+        && matches!(lt, TypeNode::Integer { .. })
+        && matches!(rt, TypeNode::Integer { .. })
+        && (lt != *target || rt != *target)
+}
+
+/// Печатает арифметику с операндами, приведёнными к типу приёмника (фича 0360).
+///
+/// Преобразование — стандартное `X_TO_Y` IEC; имя типа берётся у `st_type`,
+/// второго списка имён быть не должно.
+pub(super) fn arith_in_target(
+    value: &ExpressionNode,
+    target: &TypeNode,
+    model: &ModelNode,
+) -> Result<String, Diagnostic> {
+    let (op, l, r) = match value {
+        ExpressionNode::Add(l, r) => ("+", l, r),
+        ExpressionNode::Subtract(l, r) => ("-", l, r),
+        ExpressionNode::Multiply(l, r) => ("*", l, r),
+        ExpressionNode::Divide(l, r) => ("/", l, r),
+        ExpressionNode::Modulo(l, r) => ("MOD", l, r),
+        // Ветвь зовётся только для арифметики (охрана в `coerce_to`).
+        _ => return crate::generator::st::st_expr::print_expression(value, model),
+    };
+    let TypeNode::Integer { bits, signed } = target else {
+        return crate::generator::st::st_expr::print_expression(value, model);
+    };
+    let Some(to) = crate::generator::st::st_type::iec_integer_name(*bits, *signed) else {
+        return crate::generator::st::st_expr::print_expression(value, model);
+    };
+    let conv = |node: &ExpressionNode| -> Result<String, Diagnostic> {
+        let text = wrap_expr(node, model)?;
+        let Some(TypeNode::Integer { bits, signed }) =
+            crate::generator::mixed_sign::operand_type_expr(node)
+        else {
+            return Ok(text);
+        };
+        match crate::generator::st::st_type::iec_integer_name(bits, signed) {
+            Some(from) if from != to => Ok(format!("{from}_TO_{to}({text})")),
+            _ => Ok(text),
+        }
+    };
+    Ok(format!("{} {op} {}", conv(l)?, conv(r)?))
+}
+
+/// Печатает значение с преобразованием к типу приёмника (фича 0360).
+pub(super) fn value_in_target(
+    value: &ExpressionNode,
+    target: &TypeNode,
+    model: &ModelNode,
+) -> Result<String, Diagnostic> {
+    let text = wrap_expr(value, model)?;
+    let (
+        TypeNode::Integer { bits, signed },
+        Some(TypeNode::Integer {
+            bits: from_bits,
+            signed: from_signed,
+        }),
+    ) = (
+        target,
+        crate::generator::mixed_sign::operand_type_expr(value),
+    )
+    else {
+        return Ok(text);
+    };
+    let (Some(to), Some(from)) = (
+        crate::generator::st::st_type::iec_integer_name(*bits, *signed),
+        crate::generator::st::st_type::iec_integer_name(from_bits, from_signed),
+    ) else {
+        return Ok(text);
+    };
+    if from == to {
+        return Ok(text);
+    }
+    Ok(format!("{from}_TO_{to}({text})"))
+}

@@ -308,3 +308,4 @@
 | 0357 | Умолчание общей переменной строит один носитель | [0357-rust-shared-default-value.md](0357-rust-shared-default-value.md) | ГОТОВО |
 | 0358 | Индексация применима к выражению, а не только к имени | [0358-postfix-index-on-expression.md](0358-postfix-index-on-expression.md) | ГОТОВО |
 | 0359 | Сравнение знакового с беззнаковым | [0359-mixed-sign-comparison.md](0359-mixed-sign-comparison.md) | ГОТОВО |
+| 0360 | Арифметика операндов разной знаковости | [0360-mixed-sign-arithmetic.md](0360-mixed-sign-arithmetic.md) | ГОТОВО |
