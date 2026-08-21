@@ -387,7 +387,13 @@ pub(crate) fn insert_helper(program: String) -> String {
     if helpers.is_empty() {
         return program;
     }
-    match program.find("FUNCTION_BLOCK") {
+    // ⚠️ **Перед первым POU, а не перед `FUNCTION_BLOCK`** (фича 0380). В IEC
+    // 61131-3 опережающих ссылок нет (урок 0344), а пользовательские
+    // `FUNCTION` печатаются ДО блока: хелпер, вставленный перед
+    // `FUNCTION_BLOCK`, оказывался объявлен позже своего вызова, и `iec2c`
+    // отвечал «')' missing at the end of function invocation» — диагностикой о
+    // синтаксисе в строке вызова, по которой причину не опознать.
+    match first_pou(&program) {
         Some(i) => {
             let mut s = program;
             s.insert_str(i, &helpers);
@@ -395,4 +401,16 @@ pub(crate) fn insert_helper(program: String) -> String {
         }
         None => format!("{helpers}{program}"),
     }
+}
+
+/// Смещение первого POU — строки, начинающейся с `FUNCTION` (в том числе
+/// `FUNCTION_BLOCK`).
+///
+/// Ищется **начало строки**: слово `FUNCTION` встречается и в комментариях, и
+/// внутри тел, а вставка обязана попасть между разделом `TYPE` и первым POU.
+fn first_pou(program: &str) -> Option<usize> {
+    if program.starts_with("FUNCTION") {
+        return Some(0);
+    }
+    program.find("\nFUNCTION").map(|i| i + 1)
 }

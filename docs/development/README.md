@@ -611,3 +611,4 @@
 | 0377-01 | 0377 | Артефакты сборки не попадают в репозиторий | [0377-01-build-artifacts-gate.md](0377-01-build-artifacts-gate.md) |
 | 0378-01 | 0378 | Имя переменной, совпавшее с именем типа, у цели st | [0378-01-st-name-type-clash.md](0378-01-st-name-type-clash.md) |
 | 0379-01 | 0379 | Сброс перечислимого регистра у цели sv | [0379-01-sv-enum-reset.md](0379-01-sv-enum-reset.md) |
+| 0380-01 | 0380 | Fixed-point в параметре функции | [0380-01-fixed-point-parameter.md](0380-01-fixed-point-parameter.md) |
