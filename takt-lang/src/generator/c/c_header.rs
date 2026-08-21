@@ -236,6 +236,7 @@ pub(super) fn collect_ports_by_class(map: &CMap) -> Result<PortMap, Diagnostic> 
         let model_name = element.name();
         let model = map.raw_model_at(model_name.clone())?;
         let model_borrowed = model.borrow();
+        crate::generator::c::c_ports::check_port_types(&model_borrowed, &model_name)?;
         let mut ports: Vec<(Name, String, PortClass, PortDirection)> = model_borrowed
             .variables
             .values()
