@@ -308,3 +308,4 @@
 | 0351 | Значение по умолчанию у цели rust: структура, длительность и q | [0351-rust-default-value-types.md](0351-rust-default-value-types.md) | ГОТОВО (сверка с отчётом пройдена) |
 | 0352 | Имя типа видно во всём файле; цикл структур — SE-124 | [0352-struct-field-forward-reference.md](0352-struct-field-forward-reference.md) | ГОТОВО (сверка с отчётом пройдена) |
 | 0353 | Цель c обнуляет переменные без инициализатора | [0353-c-default-init.md](0353-c-default-init.md) | ГОТОВО (сверка с отчётом пройдена) |
+| 0354 | Умолчание duration у эталона несёт свой вид значения | [0354-sim-duration-default.md](0354-sim-duration-default.md) | ГОТОВО (сверка с отчётом пройдена) |

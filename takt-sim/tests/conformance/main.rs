@@ -37,6 +37,7 @@ mod conformance_composition_edge_tests;
 mod conformance_const_param_tests;
 mod conformance_default_init_tests;
 mod conformance_default_value_tests;
+mod conformance_duration_default_tests;
 mod conformance_float_modes_tests;
 mod conformance_forward_type_tests;
 mod conformance_local_decl_tests;
