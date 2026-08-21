@@ -56,13 +56,18 @@ pub(crate) fn coerce_to(
         },
         // Вещественному полю целый литерал не подходит: `1` не является литералом f64.
         (TypeNode::Rational, ExpressionNode::Number(n)) => Ok(format!("{}.0", n)),
-        // Массив СТРУКТУР (фича 0343): элементы печатаются литералом структуры,
-        // а не вложенным массивом. Прежде выходило `[[1, 2], [3, 4]]` — `E0308`
-        // при нулевом коде возврата `taktc`.
+        // Массив: КАЖДЫЙ элемент печатается по типу элемента (фича 0343 —
+        // структуры, фича 0368 — все остальные типы). Прежде правило знало
+        // только структуру, и `var modes: [Mode; 2] := {Idle, Work};` давало
+        // `[0, 1]` в поле `[Mode; 2]` — `E0308` при нулевом коде возврата
+        // `taktc`, при том что та же запись СКАЛЯРОМ работает.
+        //
+        // ⚠️ Бит-вектор `[bit;N≤64]` исключён: это упакованный скаляр (правило
+        // 0078), и поэлементная печать дала бы массив булевых.
         (
             TypeNode::Array(_, elem),
             ExpressionNode::Initializer(items) | ExpressionNode::Array(items),
-        ) if matches!(**elem, TypeNode::Struct(_)) => {
+        ) if crate::semantic::bit_vector::is_bit_vector(target).is_none() => {
             let mut parts = Vec::new();
             for item in items {
                 parts.push(coerce_to(item, elem, scope)?);
