@@ -299,3 +299,4 @@
 | 0348 | Массив в параметре функции | [0348-st-array-parameter.md](0348-st-array-parameter.md) | Готово: разбор — не доказательство |
 | 0349 | Длительность в поле структуры | [0349-duration-field.md](0349-duration-field.md) | Готово: одна запись, две причины |
 | 0350 | Порт составного типа | [0350-port-composite-type.md](0350-port-composite-type.md) | Готово: согласие достигнуто |
+| 0351 | Значение по умолчанию у цели rust: структура, длительность и q | [0351-rust-default-value-types.md](0351-rust-default-value-types.md) | ГОТОВО |
