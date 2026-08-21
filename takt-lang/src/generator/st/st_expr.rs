@@ -103,8 +103,12 @@ pub(crate) fn print_expression(
             None => Ok(format!("-{}", wrap_expr(a, model)?)),
         },
         // Сравнения: `!=` в ST записывается `<>`, остальные совпадают.
-        ExpressionNode::Equal(a, b) => binary(a, "=", b, model),
-        ExpressionNode::NotEqual(a, b) => binary(a, "<>", b, model),
+        ExpressionNode::Equal(a, b) => {
+            crate::generator::st::st_sign::expr_compare(a, "=", b, model)
+        }
+        ExpressionNode::NotEqual(a, b) => {
+            crate::generator::st::st_sign::expr_compare(a, "<>", b, model)
+        }
         ExpressionNode::Less(a, b) => crate::generator::st::st_sign::expr_compare(a, "<", b, model),
         ExpressionNode::More(a, b) => crate::generator::st::st_sign::expr_compare(a, ">", b, model),
         ExpressionNode::LessEqual(a, b) => {
@@ -337,8 +341,10 @@ pub(crate) fn print_condition(
         ConditionNode::Add(a, b) => binary_cond(a, "+", b, model),
         ConditionNode::Subtract(a, b) => binary_cond(a, "-", b, model),
         // Ключевое отличие от цели `c`: там печатается `==`, здесь `=`.
-        ConditionNode::Equal(a, b) => binary_cond(a, "=", b, model),
-        ConditionNode::NotEqual(a, b) => binary_cond(a, "<>", b, model),
+        ConditionNode::Equal(a, b) => crate::generator::st::st_sign::compare_cond(a, "=", b, model),
+        ConditionNode::NotEqual(a, b) => {
+            crate::generator::st::st_sign::compare_cond(a, "<>", b, model)
+        }
         ConditionNode::Less(a, b) => crate::generator::st::st_sign::compare_cond(a, "<", b, model),
         ConditionNode::More(a, b) => crate::generator::st::st_sign::compare_cond(a, ">", b, model),
         ConditionNode::LessEqual(a, b) => {

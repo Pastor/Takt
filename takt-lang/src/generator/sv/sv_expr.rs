@@ -305,8 +305,8 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::More(l, r) => cmp(l, ">", r),
         ConditionNode::LessEqual(l, r) => cmp(l, "<=", r),
         ConditionNode::MoreEqual(l, r) => cmp(l, ">=", r),
-        ConditionNode::Equal(l, r) => bin(l, "==", r),
-        ConditionNode::NotEqual(l, r) => bin(l, "!=", r),
+        ConditionNode::Equal(l, r) => cmp(l, "==", r),
+        ConditionNode::NotEqual(l, r) => cmp(l, "!=", r),
         ConditionNode::Variable(var, _) => signal_of(var)
             .map(|name| scope.read(&name))
             .ok_or_else(|| sv002("неразрешённая переменная в условии")),
@@ -444,8 +444,8 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::More(l, r) => expr_cmp(l, ">", r),
         ExpressionNode::LessEqual(l, r) => expr_cmp(l, "<=", r),
         ExpressionNode::MoreEqual(l, r) => expr_cmp(l, ">=", r),
-        ExpressionNode::Equal(l, r) => bin(l, "==", r),
-        ExpressionNode::NotEqual(l, r) => bin(l, "!=", r),
+        ExpressionNode::Equal(l, r) => expr_cmp(l, "==", r),
+        ExpressionNode::NotEqual(l, r) => expr_cmp(l, "!=", r),
         ExpressionNode::ConditionalOperator(c, t, f) => Ok(format!(
             "({} ? {} : {})",
             print_expression(c, scope)?,
@@ -561,12 +561,7 @@ fn sign_guard(lhs: &str, op: &str, rhs: &str, signed_is_left: bool) -> String {
     } else {
         format!("({unsigned} {op} $unsigned({signed}))")
     };
-    // Для `<`/`<=` слева знаковый: отрицательное всегда меньше. Для `>`/`>=`
-    // — наоборот, отрицательное никогда не больше.
-    let negative_wins = matches!(
-        (op, signed_is_left),
-        ("<" | "<=", true) | (">" | ">=", false)
-    );
+    let negative_wins = crate::generator::mixed_sign::negative_wins(op, signed_is_left);
     if negative_wins {
         format!("({neg} || {same})")
     } else {

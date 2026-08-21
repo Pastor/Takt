@@ -14,7 +14,7 @@
 | Разработка | [`docs/development/0359-01-mixed-sign-comparison.md`](../development/0359-01-mixed-sign-comparison.md) |
 | Тест-план | [`docs/tests/0359-mixed-sign-comparison.md`](../tests/0359-mixed-sign-comparison.md) |
 | Отчёт о тестировании | [`docs/reports/0359-mixed-sign-comparison.md`](../reports/0359-mixed-sign-comparison.md) |
-| Исправления | [`docs/fixes/`](../fixes/README.md) (не потребовались) |
+| Исправления | [`docs/fixes/0359-01-mixed-sign-equality.md`](../fixes/0359-01-mixed-sign-equality.md) |
 
 ## Краткое описание
 
@@ -64,5 +64,11 @@
 - ⚠️ **Цель `c` на малых ширинах не тронута:** продвижение до `int` уже верно,
   а лишнее приведение изменило бы вывод корпуса.
 - Раздел `book/` «Выражения» получил правило — прежде документ о нём молчал.
+
+⚠️ **Фикс [0359-01](../fixes/0359-01-mixed-sign-equality.md), найден сразу
+после закрытия:** правило было заведено по **списку операторов из замера**
+(`<`, `>`, `<=`, `>=`) и не распространилось на соседние узлы `=`/`!=` — `sv`
+считал `-1 == 255` истиной, `rust` и `st` не собирались. Замер называет
+**предмет**, а не границу.
 
 Детали — в [отчёте](../reports/0359-mixed-sign-comparison.md).

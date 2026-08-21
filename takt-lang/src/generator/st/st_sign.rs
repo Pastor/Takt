@@ -68,10 +68,7 @@ pub(super) fn compare_cond(
             } else {
                 format!("({unsigned} {op} LINT_TO_ULINT({signed}))")
             };
-            let negative_wins = matches!(
-                (op, signed_is_left),
-                ("<" | "<=", true) | (">" | ">=", false)
-            );
+            let negative_wins = crate::generator::mixed_sign::negative_wins(op, signed_is_left);
             Ok(if negative_wins {
                 format!("({neg} OR {same})")
             } else {
@@ -127,10 +124,7 @@ pub(super) fn expr_compare(
             } else {
                 format!("({unsigned} {op} LINT_TO_ULINT({signed}))")
             };
-            let negative_wins = matches!(
-                (op, signed_is_left),
-                ("<" | "<=", true) | (">" | ">=", false)
-            );
+            let negative_wins = crate::generator::mixed_sign::negative_wins(op, signed_is_left);
             Ok(if negative_wins {
                 format!("({neg} OR {same})")
             } else {

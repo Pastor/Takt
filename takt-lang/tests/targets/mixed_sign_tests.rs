@@ -128,6 +128,27 @@ fn sixty_four_bit_mix_expands_to_sign_guard() {
     }
 }
 
+/// Равенство и неравенство покрыты тем же правилом (фикс 0359-01).
+///
+/// Первая редакция фичи их **не покрыла**: `sv` считал `-1 == 255` истиной
+/// (проверено прогоном verilator), `rust` и `st` не собирались. Класс тот же,
+/// а маршрут — другой узел АСД.
+#[test]
+fn equality_is_covered_too() {
+    const EQ: &str = "var s: i8 := -1; var u: u8 := 255; var res: u8 := 0; out o: u8 at 0x100; \
+                      start Run { always { if s = u { res := 1; } else { res := 2; } o := res; } \
+                      next Done; } state Done { }";
+    let (_d, rust) = generate("eq", "rust", EQ);
+    assert!(
+        rust.contains("as i16"),
+        "равенство обязано выравнивать знаковость так же, как `<`.\n{rust}"
+    );
+    let (_d, st) = generate("eq", "st", EQ);
+    assert!(st.contains("SINT_TO_INT"), "то же у цели `st`.\n{st}");
+    let (_d, sv) = generate("eq", "sv", EQ);
+    assert!(sv.contains("$signed(16'("), "то же у цели `sv`.\n{sv}");
+}
+
 /// **Контрпример:** сравнение с литералом остаётся прежним.
 ///
 /// У литерала знаковости нет — он подстраивается под приёмник. Приведение
