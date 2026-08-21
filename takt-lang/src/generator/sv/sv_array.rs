@@ -237,6 +237,36 @@ pub(crate) fn leafwise_reset(
     Ok(out)
 }
 
+/// Имя плоского параметра, которым передаётся массив (фича 0369).
+pub(crate) fn flat_param_name(param: &str) -> String {
+    format!("{param}_flat")
+}
+
+/// Ширина плоского вектора, которым передаётся массив: `размер × ширина элемента`.
+///
+/// `None` — тип не распакованный массив скаляров: бит-вектор (0078) передаётся
+/// как есть, а массив структур или массив массивов плоским вектором не
+/// выражается — там форма не измерена, и догадываться о ней нельзя.
+pub(crate) fn flat_param_width(ty: &TypeNode) -> Option<(u32, u16, u32)> {
+    let TypeNode::Array(size, elem) = ty else {
+        return None;
+    };
+    if crate::semantic::bit_vector::is_bit_vector(ty).is_some() {
+        return None;
+    }
+    let elem_width = scalar_width(elem)?;
+    Some((elem_width * u32::from(*size), *size, elem_width))
+}
+
+/// Аргумент-массив печатается КОНКАТЕНАЦИЕЙ элементов (фича 0369).
+///
+/// Порядок обратный: `{a[N-1], …, a[0]}` — так `a[0]` ложится в младшие
+/// разряды, и распаковка в прологе функции читает те же элементы.
+pub(crate) fn flatten_argument(base: &str, size: u16) -> String {
+    let parts: Vec<String> = (0..size).rev().map(|i| format!("{base}[{i}]")).collect();
+    format!("{{{}}}", parts.join(", "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,6 +352,23 @@ mod tests {
         let ty = TypeNode::Array(2, Box::new(u(8)));
         let no_fields = |_: &str| None;
         assert!(type_leaves(&ty, &no_fields).is_none());
+    }
+
+    /// Аргумент-массив печатается конкатенацией в ОБРАТНОМ порядке: `a[0]`
+    /// обязан лечь в младшие разряды, иначе распаковка вернёт другой элемент.
+    #[test]
+    fn array_argument_is_concatenated_low_element_last() {
+        assert_eq!(flatten_argument("data", 3), "{data[2], data[1], data[0]}");
+    }
+
+    /// Плоский вектор шире элемента ровно во столько раз, сколько элементов.
+    #[test]
+    fn flat_width_is_size_times_element_width() {
+        let ty = TypeNode::Array(3, Box::new(u(8)));
+        assert_eq!(flat_param_width(&ty), Some((24, 3, 8)));
+        // Бит-вектор передаётся как есть — он упакованный скаляр (0078).
+        let bits = TypeNode::Array(8, Box::new(TypeNode::Bit));
+        assert_eq!(flat_param_width(&bits), None);
     }
 
     #[test]

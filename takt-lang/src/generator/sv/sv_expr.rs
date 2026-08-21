@@ -481,11 +481,20 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             // разряд `x.N` даёт один бит, и verilator отвечал `WIDTHEXPAND`
             // («Operator FUNCREF expects 8 bits»), а гейт цели считает
             // предупреждение ошибкой.
+            // Аргумент-МАССИВ печатается конкатенацией (фича 0369): параметр
+            // передаётся плоским вектором, потому что распакованную
+            // размерность у порта функции yosys не принимает вовсе.
             let printed: Result<Vec<String>, Diagnostic> = args
                 .iter()
                 .enumerate()
                 .map(|(i, a)| match param_type(&f, i) {
-                    Some(ty) => scope.coerce(&ty, a),
+                    Some(ty) => match crate::generator::sv::sv_array::flat_param_width(&ty) {
+                        Some((_, size, _)) => Ok(crate::generator::sv::sv_array::flatten_argument(
+                            &print_expression(a, scope)?,
+                            size,
+                        )),
+                        None => scope.coerce(&ty, a),
+                    },
                     None => print_expression(a, scope),
                 })
                 .collect();
