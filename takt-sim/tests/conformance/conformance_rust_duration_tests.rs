@@ -147,6 +147,11 @@ fn duration_values_match_simulator_and_generated_rust() {
 
 /// Приведение `as` **не порождает арифметики** — та же проверка, что у цели `c`:
 /// единица представления одна, поэтому пересчёту взяться неоткуда.
+///
+/// ⚠️ **Прежде здесь требовался текст `self.elapsed as u32`, и это утверждение
+/// перестало быть верным** (фича 0374): такая печать есть
+/// `clippy::unnecessary_cast`, то есть отказ гейта цели — `duration`
+/// отображается в `u32`. Предмет проверки не изменился.
 #[test]
 fn cast_between_duration_and_number_emits_no_arithmetic_in_rust() {
     let dir = std::env::temp_dir().join("takt_0183_rust_duration_text");
@@ -164,8 +169,12 @@ fn cast_between_duration_and_number_emits_no_arithmetic_in_rust() {
     let code = std::fs::read_to_string(dir.join("conformance_duration_value.rs"))
         .expect("порождённый .rs");
     assert!(
-        code.contains("self.elapsed as u32"),
-        "приведение обязано быть простым `as`:\n{code}"
+        code.contains("self.elapsed"),
+        "значение обязано читаться напрямую:\n{code}"
+    );
+    assert!(
+        !code.contains("self.elapsed as u32"),
+        "приведение к тому же напечатанному типу не печатается (фича 0374):\n{code}"
     );
     for forbidden in ["1000000", "/ 1000", "* 1000"] {
         assert!(

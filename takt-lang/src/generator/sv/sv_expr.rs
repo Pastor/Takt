@@ -551,11 +551,9 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
                 || super::sv_fixed::fixed_format_in(inner, scope.structs).is_some()
             {
                 super::sv_fixed::cast(inner, ty, scope)
-            } else if crate::generator::mixed_sign::operand_type_expr(inner)
-                .is_some_and(|from| from == *ty)
-            {
-                // Приведение к ТОМУ ЖЕ типу опускается (фича 0361): форма
-                // `16'(x)` при `x: u16` валидна, но это лишний код в RTL, а
+            } else if same_printed_type(inner, ty) {
+                // Приведение к ТОМУ ЖЕ типу опускается (фичи 0361, 0374): форма
+                // `32'(x)` при `x: u32` валидна, но это лишний код в RTL, а
                 // правило у трёх целей должно быть одно.
                 print_expression(inner, scope)
             } else {
@@ -603,6 +601,31 @@ fn sign_guard(lhs: &str, op: &str, rhs: &str, signed_is_left: bool) -> String {
         format!("({neg} || {same})")
     } else {
         format!("(!{neg} && {same})")
+    }
+}
+
+/// Совпадают ли тип операнда и цель приведения ПОСЛЕ отображения в SV
+/// (фичи 0361, 0374).
+///
+/// Сравниваются **напечатанные** типы, а не типы Takt: `duration` отображается
+/// в `logic [31:0]` (0183), и типы Takt при этом различны — признак 0361 такую
+/// запись не ловил, хотя печатал `32'(x)` над 32-битным значением.
+///
+/// ⚠️ Тип операнда берётся у **именованного значения** (0359): у литерала и
+/// выражения он печатнику неизвестен.
+fn same_printed_type(inner: &ExpressionNode, ty: &crate::semantic::type_node::TypeNode) -> bool {
+    let Some(from) = crate::generator::mixed_sign::operand_type_expr(inner) else {
+        return false;
+    };
+    match (
+        super::sv_type::sv_type(&from, "приведение типа"),
+        super::sv_type::sv_type(ty, "приведение типа"),
+    ) {
+        // Сравнение по объявлению одного и того же имени: так в одну строку
+        // сходятся и ширина, и знаковость, и упакованность.
+        (Ok(from), Ok(to)) => from.declare("x") == to.declare("x"),
+        // Неотобразимый тип судит печать самого приведения — здесь молчим.
+        _ => false,
     }
 }
 

@@ -142,11 +142,18 @@ fn duration_values_match_simulator_and_generated_c() {
 }
 
 /// Приведение `as` **не порождает арифметики**: единица представления та же
-/// (миллисекунды), поэтому в выводе стоит только приведение типа.
+/// (миллисекунды), поэтому в выводе стоит одно имя переменной.
 ///
 /// Проверяется текстом, а не поведением: деление на 1000000, вставленное «на
 /// всякий случай», прошло бы сверку значений при `elapsed = 0` и провалилось бы на
 /// живой модели.
+///
+/// ⚠️ **Прежде здесь требовался текст `(uint32_t)model->elapsed`, и это
+/// утверждение перестало быть верным** (фича 0374): `duration` отображается в
+/// `uint32_t`, то есть приведение совпадает с типом операнда ПОСЛЕ отображения
+/// и больше не печатается. У цели `rust` та же печать была отказом гейта
+/// (`clippy::unnecessary_cast`). Предмет проверки — отсутствие пересчёта
+/// единиц — остался прежним.
 #[test]
 fn cast_between_duration_and_number_emits_no_arithmetic() {
     let dir = tempfile::tempdir().expect("временный каталог");
@@ -162,8 +169,12 @@ fn cast_between_duration_and_number_emits_no_arithmetic() {
     let code = std::fs::read_to_string(dir.path().join("conformance_duration_value.c"))
         .expect("порождённый .c");
     assert!(
-        code.contains("(uint32_t)model->elapsed"),
-        "приведение обязано быть простым кастом:\n{code}"
+        code.contains("model->elapsed"),
+        "значение обязано читаться напрямую:\n{code}"
+    );
+    assert!(
+        !code.contains("(uint32_t)model->elapsed"),
+        "приведение к тому же напечатанному типу не печатается (фича 0374):\n{code}"
     );
     for forbidden in ["1000000", "/ 1000", "* 1000"] {
         assert!(

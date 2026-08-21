@@ -1,4 +1,4 @@
-//! Приведение к ТОМУ ЖЕ типу опускается (фича 0361).
+//! Приведение к ТОМУ ЖЕ типу опускается (фичи 0361, 0374).
 //!
 //! # Что было
 //!
@@ -27,6 +27,13 @@ use takt_lang::generator::GenerateOptions;
 const SAME: &str = "var r: u16 := 300; var q: u16 := 0; out o: u8 at 0x100; \
                     start Run { always { q := r as u16; o := 1; } ref Done: q > 0; } \
                     state Done { }";
+
+/// Приведение, совпадающее ПОСЛЕ отображения типа (фича 0374): типы Takt
+/// различны (`duration` и `u32`), а напечатанные совпадают — `duration`
+/// отображается в `u32`/`uint32_t`/`logic [31:0]` (правило 0183).
+const MAPPED: &str = "var d: duration := 5ms; var ms: u32 := 0; out o: u8 at 0x100; \
+                      start Run { always { ms := d as u32; o := 1; } ref Done: ms > 0; } \
+                      state Done { }";
 
 /// **Контрпример:** настоящее приведение остаётся на месте.
 const REAL: &str = "var b: u8 := 200; var w: u16 := 0; out o: u8 at 0x100; \
@@ -72,6 +79,29 @@ fn same_type_cast_is_omitted() {
     assert!(!sv.contains("16'("), "то же у цели `sv`.\n{sv}");
 }
 
+/// Приведение, совпадающее после ОТОБРАЖЕНИЯ типа, не печатается (фича 0374).
+///
+/// ⚠️ Признак 0361 сравнивал типы **Takt**, и `duration as u32` под него не
+/// подпадал: типы разные. Замер 2026-08-21 — `clippy -D warnings` отвечал
+/// «casting to the same type is unnecessary (`u32` -> `u32`)», то есть вывод
+/// цели `rust` не собирался под флагами её же гейта при нулевом коде возврата
+/// `taktc`.
+#[test]
+fn cast_matching_after_type_mapping_is_omitted() {
+    let (_d, rust) = generate("mapped", "rust", MAPPED);
+    assert!(
+        !rust.contains("as u32"),
+        "`d as u32` при `d: duration` — это `clippy::unnecessary_cast`.\n{rust}"
+    );
+    let (_d, c) = generate("mapped", "c", MAPPED);
+    assert!(
+        !c.contains("(uint32_t)model->d"),
+        "правило одно на три цели.\n{c}"
+    );
+    let (_d, sv) = generate("mapped", "sv", MAPPED);
+    assert!(!sv.contains("32'("), "то же у цели `sv`.\n{sv}");
+}
+
 /// **Контрпример:** приведение, меняющее тип, остаётся.
 ///
 /// Без него правка читается как «приведения не печатаем вовсе», и `u8 → u16`
@@ -89,6 +119,22 @@ fn real_cast_is_kept() {
     assert!(sv.contains("16'("), "то же у цели `sv`.\n{sv}");
 }
 
+/// **Контрпример к 0374:** `duration → u8` меняет ширину и остаётся.
+///
+/// Без него правка читается как «приведения от длительности не печатаем».
+#[test]
+fn narrowing_cast_from_duration_is_kept() {
+    const NARROW: &str = "var d: duration := 5ms; var tiny: u8 := 0; out o: u8 at 0x100; \
+                          start Run { always { tiny := d as u8; o := 1; } ref Done: tiny > 0; } \
+                          state Done { }";
+    let (_d, rust) = generate("narrow", "rust", NARROW);
+    assert!(rust.contains("as u8"), "сужение обязано остаться.\n{rust}");
+    let (_d, c) = generate("narrow", "c", NARROW);
+    assert!(c.contains("(uint8_t)"), "то же у цели `c`.\n{c}");
+    let (_d, sv) = generate("narrow", "sv", NARROW);
+    assert!(sv.contains("8'("), "то же у цели `sv`.\n{sv}");
+}
+
 /// Вывод цели `rust` принимается `clippy -D warnings` — тем же гейтом.
 #[test]
 fn rust_output_passes_clippy() {
@@ -101,17 +147,21 @@ fn rust_output_passes_clippy() {
         eprintln!("[ПРОПУСК] rust_output_passes_clippy: `clippy-driver` не найден");
         return;
     }
-    let (dir, _) = generate("gate", "rust", SAME);
-    let out = Command::new("clippy-driver")
-        .args(["--edition", "2021", "--crate-type=lib", "-D", "warnings"])
-        .arg(dir.join("probe.rs"))
-        .arg("--out-dir")
-        .arg(dir.join("out"))
-        .output()
-        .expect("запуск clippy-driver");
-    assert!(
-        out.status.success(),
-        "вывод обязан приниматься гейтом цели:\n{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    // Оба входа: совпадение типов Takt (0361) и совпадение после отображения
+    // (0374) — второй и был отказом гейта.
+    for (tag, source) in [("gate", SAME), ("gate_mapped", MAPPED)] {
+        let (dir, _) = generate(tag, "rust", source);
+        let out = Command::new("clippy-driver")
+            .args(["--edition", "2021", "--crate-type=lib", "-D", "warnings"])
+            .arg(dir.join("probe.rs"))
+            .arg("--out-dir")
+            .arg(dir.join("out"))
+            .output()
+            .expect("запуск clippy-driver");
+        assert!(
+            out.status.success(),
+            "вывод обязан приниматься гейтом цели ('{tag}'):\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
 }
