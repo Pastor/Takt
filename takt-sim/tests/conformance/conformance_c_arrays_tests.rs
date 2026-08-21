@@ -419,3 +419,119 @@ int main(void) {{
     // Понижение q-литерала: 1.5 в q(8, 8) — это 384, а не 1.
     assert_eq!(c_val("g0"), 384, "литерал 1.5 понижен в q-представление");
 }
+
+/// **Фича 0370.** Понижение q-литерала доходит до ПОЛЕЙ структуры.
+///
+/// Замер 2026-08-21: `var g: Gains := {1.5, 2.5};` при
+/// `struct Gains { kp: q(8, 8), ki: q(8, 8) }` отвергали **все** цели, кроме
+/// диаграммы: `cc`, `iec2c` и `rustc` — на порождённом файле, `sv` — своим
+/// `SV-002`; эталон запись исполнял. Причина: понижение шло по типу
+/// объявления, а поля живут в `ModelNode`, которого слой свёртки не видел.
+///
+/// ⚠️ Сверяются ЗНАЧЕНИЯ: понижение — умножение на 2ⁿ, и ошибка в нём даёт
+/// валидный C с другим числом.
+#[test]
+fn struct_field_fixed_matches_generated_c() {
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] struct_field_fixed_matches_generated_c: компилятор `cc` не найден");
+        return;
+    }
+
+    // ⚠️ Наблюдаемые — q-ЗНАЧЕНИЯ, а не результат приведения `as u8`:
+    // приведение из ПОЛЯ структуры цель `c` печатает без деления на 2ⁿ —
+    // соседний класс, вынесенный кандидатом; смешав их, тест мерил бы не
+    // понижение литерала.
+    let source = "\
+struct Gains { kp: q(8,8), ki: q(8,8) }
+model FieldQ {
+    var g: Gains := {1.5, 2.5};
+    var loops: [Gains; 2] := {{0.5, 0.25}, {1.0, 2.0}};
+    var total: q(8,8) := 0.0;
+    var picked: q(8,8) := 0.0;
+    start Run {
+        always {
+            total := g.kp + g.ki;
+            picked := loops[0].ki + loops[1].kp;
+        }
+    }
+}
+start Entry = FieldQ;
+";
+    let (ast, _) = takt_lang::parse(source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let _ = unit.tick();
+    // Значение q эталон хранит представлением: 4.0 в q(8, 8) — это 1024.
+    let sim = |name: &str| -> i128 {
+        match unit.variable(name) {
+            Some(Value::Fixed { repr, .. }) => i128::from(repr),
+            other => panic!("{name}: не q-значение {other:?}"),
+        }
+    };
+    let sim_total = sim("total");
+    let sim_picked = sim("picked");
+    assert_eq!(sim_total, 1024, "1.5 + 2.5 = 4.0 → 1024");
+    assert_eq!(sim_picked, 320, "0.25 + 1.0 = 1.25 → 320");
+
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0370_fieldq");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    takt_lang::compile_to_c(
+        "fieldq",
+        source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "fieldq.h"
+
+int main(void) {{
+    Fieldq m;
+    Fieldq_init(&m);
+    for (int i = 0; i < {MAX_TICKS}; i++) {{
+        Fieldq_tick(&m);
+        if (Fieldq_is_done(&m)) break;
+    }}
+    printf("total=%d\n", (int)m.entry.total);
+    printf("picked=%d\n", (int)m.entry.picked);
+    printf("kp=%d\n", (int)m.entry.g.kp);
+    printf("l1kp=%d\n", (int)m.entry.loops[1].kp);
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("harness_fieldq.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+    let bin = dir.join("fieldq_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
+        .arg(&dir)
+        .arg(dir.join("fieldq.c"))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    let out = String::from_utf8_lossy(&run.stdout);
+    let c_val = |key: &str| -> i128 {
+        out.lines()
+            .find_map(|l| l.strip_prefix(&format!("{key}="))?.trim().parse().ok())
+            .unwrap_or_else(|| panic!("C не напечатал '{key}': {out}"))
+    };
+
+    assert_eq!(sim_total, c_val("total"), "расхождение total");
+    assert_eq!(sim_picked, c_val("picked"), "расхождение picked");
+    // Представление: 1.5 в q(8, 8) — 384, 1.0 — 256.
+    assert_eq!(c_val("kp"), 384, "поле структуры понижено");
+    assert_eq!(c_val("l1kp"), 256, "поле структуры ВНУТРИ массива понижено");
+}
