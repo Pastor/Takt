@@ -14,6 +14,15 @@ extensions/zed-but/Cargo.lock
 extensions/zed-but/extension.wasm
 /examples/example.pdf
 /*.o
+
+# Артефакты ручных проб (фича 0377): `rustc`/`cc`, запущенные без `--out-dir`,
+# кладут вывод в ТЕКУЩИЙ каталог. Так в корень попали три `.rlib` (коммит
+# 3c6bec19), и никто этого не заметил.
+/*.rlib
+/*.rmeta
+/*.d
+/*.so
+/*.dylib
 /takt-lang/.output
 README.pdf
 /*.svg
