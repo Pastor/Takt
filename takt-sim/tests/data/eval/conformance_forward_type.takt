@@ -1,0 +1,35 @@
+// Фикстура сверки 0352: тип объявлен НИЖЕ места использования.
+//
+// Порядок объявлений здесь обратный «естественному»: `Segment` ссылается на
+// `Point`, объявленную ниже, а псевдоним `Coord` — на другой псевдоним. Тело
+// НАКАПЛИВАЮЩЕЕ: на постоянном значении верное чтение поля и «поле стало
+// числом» неразличимы — а именно так вёл себя эталон до фичи.
+struct Segment {
+    a: Point,
+    b: Point
+}
+
+struct Point {
+    x: u8,
+    y: u8
+}
+
+type Coord = Wide;
+type Wide = u16;
+
+var seg: Segment;
+var sum: Coord;
+out acc: u8 at 0x100;
+
+start Run {
+    always {
+        seg.a.x := seg.a.x + 1;
+        seg.b.y := seg.b.y + 2;
+        sum := seg.a.x + seg.b.y;
+        acc := sum;
+    }
+    ref Done: seg.a.x >= 4;
+}
+
+state Done {
+}

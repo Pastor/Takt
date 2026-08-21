@@ -225,6 +225,10 @@ pub(super) fn construct_model_stage0(
         }
     }
 
+    // Типы модели готовятся ОДНИМ шагом (фича 0352): цикл структур, занятие
+    // имён и разрешение псевдонимов — см. `type_registry::prepare_types`.
+    crate::semantic::type_registry::prepare_types(&model_node, &model.elements)?;
+
     // Каталог импортирующего файла — неявный путь поиска (фича 0055).
     let import_paths = search_paths_with_importer_dir(search_paths, import_stack, files);
     let importer: Option<String> = importer_path(import_stack, files).map(str::to_string);
@@ -426,9 +430,10 @@ pub(super) fn construct_model_stage0(
                 &mut variables,
                 &mut parameters,
             )?;
-        } else if let ModelElement::Type(def) = element {
-            // Занятие имени и регистрация псевдонима — одно место (фича 0243).
-            crate::semantic::type_registry::declare_alias(&model_node, def)?;
+        } else if let ModelElement::Type(_) = element {
+            // Псевдоним занят и разрешён предпроходом (фича 0352): здесь делать
+            // нечего. Занятие имени по-прежнему живёт в одной воронке (0243) —
+            // она просто переехала выше по конвейеру.
         } else if let ModelElement::Condition(def) = element {
             let def_loc = def
                 .as_ref()
@@ -570,10 +575,8 @@ pub(super) fn construct_model_stage0(
                 FunctionDefinitionNode::Unresolved(*def.clone()),
             );
         } else if let ModelElement::Enum(e) = element {
-            // Фича 0243: имя занимается ДО построения узла (иначе затрёт чужое).
-            if let Some(id) = e.name.as_ref() {
-                crate::semantic::type_registry::claim_type_name(&model_node, &id.name, id.loc)?;
-            }
+            // Имя уже занято предпроходом `predeclare_named_types` (фича 0352):
+            // повторный `claim_type_name` дал бы ложную `SE-108`.
             // FE1: узел перечисления строит `enum_build` (фича 0167 — вынос из
             // этого файла: он сверх лимита размера, и правило велит выносить
             // новое, а не дописывать сюда).
@@ -587,13 +590,18 @@ pub(super) fn construct_model_stage0(
                 .unwrap_or_default();
             let struct_loc = s.name.as_ref().map(|id| id.loc).unwrap_or(s.loc);
             // Фича 0243: имя занимается ДО разбора полей.
-            crate::semantic::type_registry::claim_type_name(&model_node, &struct_name, struct_loc)?;
+            // Имя занято предпроходом `predeclare_named_types` (фича 0352).
 
-            // Разрешаем типы полей в контексте текущей модели.
+            // Типы полей разрешаются при ПОЛНОЙ карте имён, поэтому поле вправе
+            // сослаться на тип, объявленный ниже.
+            //
+            // ⚠️ Ошибка `construct_type` возвращается вызывающему, а НЕ
+            // подменяется `TypeNode::Unsupported` (фича 0352): подмена глотала
+            // диагностику, и эталон исполнял модель с полем-структурой,
+            // ставшей числом, — молча.
             let mut field_pairs: Vec<(String, TypeNode)> = Vec::new();
             for field in &s.fields {
-                let field_ty = construct_type(Some(field.ty.clone()), Rc::clone(&model_node))
-                    .unwrap_or(TypeNode::Unsupported);
+                let field_ty = construct_type(Some(field.ty.clone()), Rc::clone(&model_node))?;
                 field_pairs.push((field.name.name.clone(), field_ty));
             }
 
@@ -608,17 +616,8 @@ pub(super) fn construct_model_stage0(
                 .borrow_mut()
                 .structs
                 .insert(struct_name.clone(), struct_node);
-            // Регистрируем структуру в таблице типов для разрешения `var p: Point = ...;`
-            if !struct_name.is_empty() {
-                model_node
-                    .borrow_mut()
-                    .types
-                    .insert(struct_name.clone(), TypeNode::Struct(struct_name.clone()));
-                model_node
-                    .borrow_mut()
-                    .type_locs
-                    .insert(struct_name.clone(), struct_loc);
-            }
+            // Регистрация в `types`/`type_locs` сделана предпроходом (0352):
+            // второе место записи разъехалось бы с первым.
         } else if let ModelElement::Address(def) = element {
             // Фича 0020: оператор `address Имя = <выражение>;`. Захватываем сырую
             // привязку; проверка (существование порта, конфликт источников) —

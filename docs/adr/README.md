@@ -328,3 +328,4 @@
 | [0349](./0349-duration-field.md) | Длительность в поле структуры у целей `st` и `sv` | Accepted | фича 0349 |
 | [0350](./0350-port-composite-type.md) | Порт составного типа: отказ вместо невалидного вывода | Accepted | фича 0350 |
 | [0351](./0351-rust-default-value-types.md) | Умолчание значения у цели rust строит один носитель, а не derive | Accepted | фича 0351 |
+| [0352](./0352-struct-field-forward-reference.md) | Имя типа видно во всём файле; цикл структур — SE-124 | Accepted | фича 0352 |

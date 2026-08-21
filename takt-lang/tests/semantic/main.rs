@@ -80,6 +80,7 @@ mod semantic_tests;
 mod shared_const_qualified_tests;
 mod stage_order_single_source_tests;
 mod stage_recovery_tests;
+mod type_forward_reference_tests;
 mod type_inference_chain_tests;
 mod type_redefinition_tests;
 mod unconditional_edge_tests;
