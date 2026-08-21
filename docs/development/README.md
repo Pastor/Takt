@@ -593,3 +593,4 @@
 | 0359-01 | 0359 | Сравнение знакового с беззнаковым | [0359-01-mixed-sign-comparison.md](0359-01-mixed-sign-comparison.md) |
 | 0360-01 | 0360 | Арифметика операндов разной знаковости | [0360-01-mixed-sign-arithmetic.md](0360-01-mixed-sign-arithmetic.md) |
 | 0361-01 | 0361 | Приведение к тому же типу опускается | [0361-01-same-type-cast.md](0361-01-same-type-cast.md) |
+| 0362-01 | 0362 | Проба прогоняет инструменты целей | [0362-01-probe-target-tools.md](0362-01-probe-target-tools.md) |

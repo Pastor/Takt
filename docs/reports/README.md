@@ -310,3 +310,4 @@
 | 0359 | Сравнение знакового с беззнаковым | [0359-mixed-sign-comparison.md](0359-mixed-sign-comparison.md) | ГОТОВО |
 | 0360 | Арифметика операндов разной знаковости | [0360-mixed-sign-arithmetic.md](0360-mixed-sign-arithmetic.md) | ГОТОВО |
 | 0361 | Приведение к тому же типу опускается | [0361-same-type-cast.md](0361-same-type-cast.md) | ГОТОВО |
+| 0362 | Проба прогоняет инструменты целей | [0362-probe-target-tools.md](0362-probe-target-tools.md) | ГОТОВО |
