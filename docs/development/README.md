@@ -600,3 +600,4 @@
 | 0366-01 | 0366 | Раскрытие вложенного агрегата — общий носитель | [0366-01-nested-aggregate-carrier.md](0366-01-nested-aggregate-carrier.md) |
 | 0367-01 | 0367 | Массив структур у цели sv синтезируется | [0367-01-sv-struct-array.md](0367-01-sv-struct-array.md) |
 | 0368-01 | 0368 | Элемент агрегата печатается по типу элемента | [0368-01-aggregate-element-type.md](0368-01-aggregate-element-type.md) |
+| 0369-01 | 0369 | Массив в параметре функции у цели sv | [0369-01-sv-array-parameter.md](0369-01-sv-array-parameter.md) |

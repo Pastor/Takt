@@ -565,8 +565,23 @@ pub(crate) fn emit_functions(
             check_sv_name(name, *loc)?;
             let ret_ty = sv_type(ret, &format!("возвращаемый тип функции '{}'", name))?;
             let mut sig: Vec<String> = Vec::new();
+            // Массив в параметре передаётся ПЛОСКИМ вектором (фича 0369):
+            // распакованную размерность у порта функции yosys не принимает
+            // вовсе («input/output/inout ports cannot have unpacked
+            // dimensions»), тогда как verilator её пропускает — вывод
+            // компилировался и не синтезировался при нулевом коде возврата.
+            let mut unpack: Vec<(String, crate::semantic::type_node::TypeNode, u16, u32)> =
+                Vec::new();
             for (param, ty) in params {
                 check_sv_name(param, *loc)?;
+                if let Some((width, size, elem_width)) =
+                    crate::generator::sv::sv_array::flat_param_width(ty)
+                {
+                    let flat = crate::generator::sv::sv_array::flat_param_name(param);
+                    sig.push(format!("input logic [{}:0] {}", width - 1, flat));
+                    unpack.push((param.clone(), ty.clone(), size, elem_width));
+                    continue;
+                }
                 let decl = sv_type(ty, &format!("параметр '{}' функции '{}'", param, name))?;
                 sig.push(format!("input {}", decl.declare(param)));
             }
@@ -583,6 +598,23 @@ pub(crate) fn emit_functions(
             let mut locals = Vec::new();
             hoist_locals(body, &mut locals);
             emit_hoisted_locals(p, &locals)?;
+            // Пролог распаковки (фича 0369): плоский вектор раскладывается в
+            // распакованный массив с ИМЕНЕМ ПАРАМЕТРА, и тело печатается
+            // дальше как прежде — второго знания об адресации не заводится.
+            for (param, ty, size, elem_width) in &unpack {
+                let decl = sv_type(ty, &format!("параметр '{}' функции '{}'", param, name))?;
+                p.ident(&format!("{};", decl.declare(param))).nl();
+                let flat = crate::generator::sv::sv_array::flat_param_name(param);
+                for index in 0..*size {
+                    let low = u32::from(index) * elem_width;
+                    p.ident(&format!(
+                        "{param}[{index}] = {flat}[{}:{}];",
+                        low + elem_width - 1,
+                        low
+                    ))
+                    .nl();
+                }
+            }
             // Возврат печатается присваиванием имени функции и исполнения не
             // прерывает, поэтому досрочный возврат сменил бы смысл молча.
             if has_early_return(body) {

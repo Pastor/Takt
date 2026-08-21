@@ -521,3 +521,170 @@ fn struct_array_is_synthesizable() {
         String::from_utf8_lossy(&synth.stderr)
     );
 }
+
+// ── Фича 0369: массив в параметре функции ──────────────────────────────────
+
+const PARAM_FIXTURE: &str = "tests/data/eval/conformance_sv_array_param.takt";
+const PARAM_UNIT: &str = "svarrayparam";
+
+/// Трасса эталона по фикстуре 0369: `(low, high, sum)`.
+fn param_simulator_trace() -> Vec<(i128, i128, i128)> {
+    let source = std::fs::read_to_string(PARAM_FIXTURE).expect("фикстура читается");
+    let (ast, _) = takt_lang::parse(&source, 0).expect("разбор фикстуры");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение Unit");
+    let mut trace = Vec::new();
+    for _ in 0..TICKS {
+        let _ = unit.tick();
+        let value = |name: &str| match unit.variable(name) {
+            Some(Value::Number(v)) => v,
+            other => panic!("порт '{name}' обязан быть числом, получено {other:?}"),
+        };
+        trace.push((value("low"), value("high"), value("sum")));
+    }
+    trace
+}
+
+/// Трасса порождённого RTL по фикстуре 0369.
+fn param_generated_sv_trace(dir: &Path) -> Vec<(i128, i128, i128)> {
+    let source = std::fs::read_to_string(PARAM_FIXTURE).expect("фикстура читается");
+    takt_lang::compile_to_sv(
+        PARAM_UNIT,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+
+    let tb = format!(
+        r#"module tb;
+    logic clk = 0, rst_n = 0;
+    logic [7:0] low, high, sum;
+    logic is_done;
+    {PARAM_UNIT} dut (.clk(clk), .rst_n(rst_n), .low(low), .high(high),
+                      .sum(sum), .is_done(is_done));
+    always #5 clk = ~clk;
+    initial begin
+        @(posedge clk);
+        rst_n <= 1'b1;
+        for (int i = 0; i < {TICKS}; i++) begin
+            @(posedge clk);
+            #1 $display("TICK %0d %0d %0d", low, high, sum);
+        end
+        $finish;
+    end
+endmodule
+"#
+    );
+    std::fs::write(dir.join("tb.sv"), tb).expect("тестбенч");
+
+    let build = Command::new("verilator")
+        .current_dir(dir)
+        .args([
+            "--binary",
+            "-j",
+            "0",
+            "--timing",
+            "-Wno-fatal",
+            "--top-module",
+            "tb",
+            "tb.sv",
+            &format!("{PARAM_UNIT}.sv"),
+            "-o",
+            "simtb",
+        ])
+        .output()
+        .expect("запуск verilator");
+    assert!(
+        build.status.success(),
+        "verilator не собрал тестбенч параметра-массива:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("obj_dir").join("simtb"))
+        .current_dir(dir)
+        .output()
+        .expect("запуск симуляции");
+    assert!(
+        run.status.success(),
+        "симуляция RTL параметра-массива упала"
+    );
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|line| {
+            let rest = line.strip_prefix("TICK ")?;
+            let mut it = rest.split_whitespace();
+            let low = it.next()?.parse::<i128>().ok()?;
+            let high = it.next()?.parse::<i128>().ok()?;
+            let sum = it.next()?.parse::<i128>().ok()?;
+            Some((low, high, sum))
+        })
+        .collect()
+}
+
+/// Массив в параметре функции: значения совпадают с RTL.
+///
+/// ⚠️ Наблюдаемые различают **края** массива и меняются по тактам:
+/// перепутанный порядок конкатенации даёт валидный RTL с зеркальными
+/// значениями, а на постоянных числах ошибка неотличима.
+#[test]
+fn array_parameter_values_match_generated_sv() {
+    let sim = param_simulator_trace();
+    assert_eq!(
+        sim,
+        vec![(1, 21, 22), (2, 22, 24), (3, 23, 26)],
+        "эталон: low = n, high = n + 20, sum = low + high: {sim:?}"
+    );
+
+    if !verilator_available() {
+        eprintln!("[ПРОПУСК] array_parameter_values_match_generated_sv: verilator не найден");
+        return;
+    }
+    let dir = build_dir("sv_array_param");
+    let rtl = param_generated_sv_trace(&dir);
+    assert_eq!(rtl.len(), TICKS, "тестбенч обязан напечатать каждый такт");
+    assert_eq!(sim, rtl, "трассы разошлись\nsim={sim:?}\nRTL={rtl:?}");
+}
+
+/// Порождённый модуль СИНТЕЗИРУЕТСЯ: verilator этого не доказывает.
+///
+/// ⚠️ Именно здесь класс и жил: `input logic [7:0] a [0:2]` verilator
+/// принимает, а yosys отвечает «input/output/inout ports cannot have unpacked
+/// dimensions».
+#[test]
+fn array_parameter_is_synthesizable() {
+    if Command::new("yosys")
+        .arg("-V")
+        .output()
+        .map(|o| !o.status.success())
+        .unwrap_or(true)
+    {
+        eprintln!("[ПРОПУСК] array_parameter_is_synthesizable: yosys не найден");
+        return;
+    }
+    let dir = build_dir("sv_array_param_synth");
+    let source = std::fs::read_to_string(PARAM_FIXTURE).expect("фикстура читается");
+    takt_lang::compile_to_sv(
+        PARAM_UNIT,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+
+    let synth = Command::new("yosys")
+        .current_dir(&dir)
+        .args([
+            "-q",
+            "-p",
+            &format!("read_verilog -sv {PARAM_UNIT}.sv; synth -top {PARAM_UNIT}"),
+        ])
+        .output()
+        .expect("запуск yosys");
+    assert!(
+        synth.status.success(),
+        "порождённый SystemVerilog не синтезируется:\n{}",
+        String::from_utf8_lossy(&synth.stderr)
+    );
+}
