@@ -118,15 +118,53 @@ pub(crate) fn emit_declarations(p: &mut Printer, hoisted: &HoistedLocals) {
         .nl();
     for local in hoisted.iter() {
         p.ident(&format!("automatic {};", local.decl)).nl();
+        // Объявление поглотителя (фича 0375) — здесь же: объявления обязаны
+        // предшествовать операторам блока.
+        p.ident(&format!("logic _unused_{};", local.name)).nl();
     }
 }
 
 /// Печатает нулевые умолчания поднятых — рядом с умолчаниями регистров.
+///
+/// ⚠️ **Следом печатается ПОГЛОТИТЕЛЬ** (фича 0375): поле структуры, которое
+/// тело пишет, но не читает, verilator объявляет неиспользованным
+/// (`%Warning-UNUSEDSIGNAL: Bits of signal are not used: 'tmp'[15:8]`), а гейт
+/// цели считает предупреждение ошибкой — при нулевом коде возврата `taktc` и
+/// при том, что эталон, `c`, `st` и `rust` тот же вход исполняют. Идиома та
+/// же, что у неиспользуемого параметра (0337) и у сигналов записи обёртки APB
+/// (0169): редукция с константой, которую синтезатор выбрасывает сам.
+///
+/// ⚠️ Поглотитель печатается **безусловно**, и это осознанно: «прочитано ли
+/// поле» по напечатанному тексту не спросишь — запись `tmp.hi = …` упоминает
+/// поле ровно так же, как чтение. Признак, ошибающийся в сторону «поглотитель
+/// не нужен», давал бы отказ гейта у пользователя, а корпус такого входа не
+/// содержит и не поймал бы его. Цена — две строки на переменную, которые
+/// синтезатор удаляет.
 pub(crate) fn emit_defaults(p: &mut Printer, hoisted: &HoistedLocals) {
     for local in hoisted.borrow().iter() {
         for (suffix, zero) in &local.defaults {
             p.ident(&format!("{}{} = {};", local.name, suffix, zero))
                 .nl();
         }
+        // ⚠️ Операнды редукции — то, что в SystemVerilog можно склеить:
+        // упакованное значение целиком, а РАСПАКОВАННЫЙ массив — поэлементно.
+        // `&{1'b0, tmp}` над `tmp [0:1]` yosys встречает «Invalid array
+        // access» (прогон 2026-08-21).
+        let packed = local.defaults.iter().any(|(suffix, _)| suffix.is_empty());
+        let operands: Vec<String> = if packed {
+            vec![local.name.clone()]
+        } else {
+            local
+                .defaults
+                .iter()
+                .map(|(suffix, _)| format!("{}{}", local.name, suffix))
+                .collect()
+        };
+        p.ident(&format!(
+            "_unused_{} = &{{1'b0, {}}};",
+            local.name,
+            operands.join(", ")
+        ))
+        .nl();
     }
 }

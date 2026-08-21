@@ -606,3 +606,4 @@
 | 0372-01 | 0372 | Составной элемент массива в параметре функции | [0372-01-composite-array-parameter.md](0372-01-composite-array-parameter.md) |
 | 0373-01 | 0373 | Локальная переменная структурного типа у цели sv | [0373-01-sv-struct-local.md](0373-01-sv-struct-local.md) |
 | 0374-01 | 0374 | Приведение, совпадающее после отображения типа | [0374-01-mapped-type-cast.md](0374-01-mapped-type-cast.md) |
+| 0375-01 | 0375 | Частично использованная локальная структура у цели sv | [0375-01-sv-partial-struct-local.md](0375-01-sv-partial-struct-local.md) |
