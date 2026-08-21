@@ -467,20 +467,18 @@ pub(crate) fn print_statement_ctx(
             if let ExpressionNode::Assign(target, value) = expr.as_ref()
                 && let ExpressionNode::ArraySlice(src, from, to) = value.as_ref()
             {
+                // База — выражение (фича 0358): печатается тем же печатником.
                 let dst = print_expression(target, scope)?;
-                let src_expr = ExpressionNode::Variable(std::rc::Rc::clone(src));
-                let base = print_expression(&src_expr, scope)?;
+                let base = print_expression(src, scope)?;
                 // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим
                 // массивом (`res := mem[1:2];` при `res: u8` эталон не
-                // исполняет — `SIM-006`).
-                let dst_ok = matches!(target.as_ref(), ExpressionNode::Variable(v)
-                    if matches!(&*v.borrow(), crate::semantic::VariableNode::Simple { ty, .. }
-                        if crate::generator::slice::elementwise_len(ty).is_some()));
-                let src_len = match &*src.borrow() {
-                    crate::semantic::VariableNode::Simple { ty, .. } if dst_ok => {
-                        crate::generator::slice::elementwise_len(ty)
-                    }
-                    _ => None,
+                // исполняет — `SIM-006`). Тип базы даёт общий носитель (0358).
+                let dst_ok =
+                    crate::generator::slice::elementwise_len_of(target, scope.model).is_some();
+                let src_len = if dst_ok {
+                    crate::generator::slice::elementwise_len_of(src, scope.model)
+                } else {
+                    None
                 };
                 // Срез над бит-вектором поэлементно не выразим (0078): вход
                 // уходит прежним путём — к отказу `RS-011`, как у эталона.

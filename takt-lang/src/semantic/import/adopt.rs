@@ -503,11 +503,12 @@ fn adopt_expr(ctx: &mut Adoption, expr: &mut ExpressionNode) {
                 adopt_expr(ctx, a);
             }
         }
-        ExpressionNode::ArraySubscript(v, idx) => {
-            ctx.adopt_var_cell(v);
+        // База — выражение (фича 0358): усыновляется тем же обходом.
+        ExpressionNode::ArraySubscript(base, idx) => {
+            adopt_expr(ctx, base);
             adopt_expr(ctx, idx);
         }
-        ExpressionNode::ArraySlice(v, _, _) => ctx.adopt_var_cell(v),
+        ExpressionNode::ArraySlice(base, _, _) => adopt_expr(ctx, base),
         ExpressionNode::Variable(v) => ctx.adopt_var_cell(v),
         ExpressionNode::None
         | ExpressionNode::Unresolved(_)
@@ -544,8 +545,8 @@ fn adopt_cond(ctx: &mut Adoption, cond: &mut ConditionNode) {
         ConditionNode::Parenthesis(e) | ConditionNode::Not(e) | ConditionNode::BitAccess(e, _) => {
             adopt_cond(ctx, e)
         }
-        ConditionNode::ArraySubscript(v, idx) => {
-            ctx.adopt_var_cell(v);
+        ConditionNode::ArraySubscript(base, idx) => {
+            adopt_cond(ctx, base);
             adopt_cond(ctx, idx);
         }
         ConditionNode::Function(_, args, _) => {

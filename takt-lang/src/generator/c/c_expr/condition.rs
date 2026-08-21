@@ -286,17 +286,11 @@ pub(in crate::generator::c) fn generate_condition_expr(
             resolve_variable_c_expr(&var, &[], map, owner, true)
         }
         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
-        ConditionNode::ArraySubscript(var_rc, idx) => {
+        // База — выражение (фича 0358): печатается тем же печатником условий.
+        ConditionNode::ArraySubscript(base, idx) => {
+            let base_str = generate_condition_expr(base, map, owner)?;
             let idx_str = generate_condition_expr(idx, map, owner)?;
-            let var = var_rc.borrow();
-            if let VariableNode::Simple { upper, .. } = &*var
-                && let Some(s) =
-                    resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true)
-            {
-                return Ok(format!("{}[{}]", s, idx_str));
-            }
-            let base = resolve_variable_c_expr(&var, &[], map, owner, true)?;
-            Ok(format!("{}[{}]", base, idx_str))
+            Ok(format!("{base_str}[{idx_str}]"))
         }
         ConditionNode::BitAccess(inner, member) => {
             match member {

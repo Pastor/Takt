@@ -61,8 +61,9 @@ pub(crate) fn expression_type(expr: &ExpressionNode) -> Option<TypeNode> {
             crate::parser::ast::Member::Number(_) => Some(TypeNode::Bool),
             crate::parser::ast::Member::Identifier(_) => None,
         },
-        ExpressionNode::ArraySubscript(var, _) => match var.borrow().ty() {
-            TypeNode::Array(_, elem) => Some((**elem).clone()),
+        // База — выражение (фича 0358): тип берётся у неё рекурсивно.
+        ExpressionNode::ArraySubscript(base, _) => match expression_type(base) {
+            Some(TypeNode::Array(_, elem)) => Some((*elem).clone()),
             _ => None,
         },
         // Именованное условие — всегда логическое (фича 0331): `cond` есть

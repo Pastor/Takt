@@ -27,6 +27,22 @@ use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Как назвать базу постфикса в диагностике (фича 0358).
+///
+/// Имя переменной, когда оно есть: «Переменная 'flag' не является массивом»
+/// точнее безличного «значение». База-выражение имени не имеет — тогда
+/// называется вид записи.
+fn base_label(base: &ExpressionNode) -> String {
+    match base {
+        ExpressionNode::Variable(var) => format!("Переменная '{}'", var.borrow().name()),
+        ExpressionNode::Parenthesis(inner) => base_label(inner),
+        ExpressionNode::BitAccess(_, crate::parser::ast::Member::Identifier(field)) => {
+            format!("Поле '{}'", field.name)
+        }
+        _ => "Индексируемое значение".to_string(),
+    }
+}
+
 /// Строит разрешённое семантическое выражение из АСД-выражения.
 ///
 /// Рекурсивно обходит дерево [`ast::Expression`], разрешая все идентификаторы
@@ -130,80 +146,62 @@ pub fn construct_expression(
         //
         // Если тип переменной ещё не выведен (`TypeNode::Inference`), структурная
         // проверка пропускается — она будет повторно вычислена после вывода типов.
-        ast::Expression::ArraySubscript(_, id, idx_expr) => {
-            // Имя ищется СПЕРВА среди параметров (фича 0346): `fn first(a:
-            // [u8;2]) -> u8 { return a[0]; }` давал `SE-003` «Переменная 'a' не
-            // найдена» — параметр виден всюду, кроме индексации, потому что эта
-            // ветвь спрашивала только таблицу модели.
-            let var = param_variable(&id.name, &params, &model)
-                .or_else(|| model.borrow().search_var(&id.name))
-                .ok_or_else(|| {
-                    Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
-                        .with_code("SE-003")
-                })?;
-            // Проверяем тип (для динамических индексов проверку границ пропускаем)
-            match var_type(&var) {
-                TypeNode::Array(size, _) => {
-                    // Статическая проверка границ только для числовых литералов
+        // Индексация и срез — постфиксы над ВЫРАЖЕНИЕМ (фича 0358): `b.data[1]`
+        // прежде не разбирался вовсе, тогда как `ps[1].x` работал.
+        //
+        // ⚠️ Проверки границ (`SE-028`) и «это не массив» (`SE-030`) остались, но
+        // тип базы даёт теперь общий носитель `semantic::base_type`: у выражения
+        // объявления нет. Носитель консервативен — `None` значит «не выводится»,
+        // и тогда проверка молчит (за пропуском стоят диагностики целей и
+        // эталона, за ложным отказом — незаконно отвергнутая программа).
+        ast::Expression::ArraySubscript(loc, base_expr, idx_expr) => {
+            let base = resolve_expr(*base_expr, params.clone(), model.clone())?;
+            let base_ty = crate::semantic::validate::base_type::base_type(&base, &model.borrow());
+            match base_ty {
+                Some(TypeNode::Array(size, _)) => {
+                    // Статическая проверка границ — только для числового литерала.
                     if let ast::Expression::Number(_, n) = idx_expr.as_ref()
                         && (*n < 0 || *n >= i128::from(size))
                     {
                         return Err(Diagnostic::error(
-                            id.loc,
-                            format!(
-                                "Индекс {} выходит за границы массива '{}' (размер {})",
-                                n, id.name, size
-                            ),
+                            loc,
+                            format!("Индекс {} выходит за границы массива (размер {})", n, size),
                         )
                         .with_code("SE-028"));
                     }
                 }
-                TypeNode::Inference => {} // тип ещё не выведен — пропускаем проверку
-                _ => {
+                // Тип не выведен либо база сложнее цепочки места — молчим.
+                Some(TypeNode::Inference) | None => {}
+                Some(_) => {
                     return Err(Diagnostic::error(
-                        id.loc,
-                        format!("Переменная '{}' не является массивом", id.name),
+                        loc,
+                        format!("{} не является массивом", base_label(&base)),
                     )
                     .with_code("SE-030"));
                 }
             }
-            // ⚠️ Параметры передаются и в ИНДЕКС: `a[i]`, где `i` — параметр,
-            // ломался тем же образом, а пустой список локальных имён здесь стоял
-            // с самого начала.
+            // ⚠️ Параметры передаются и в ИНДЕКС (фича 0346): `a[i]`, где `i` —
+            // параметр, ломался тем же образом.
             let resolved_idx =
                 construct_expression(*idx_expr.clone(), params.clone(), model.clone())?;
-            Ok(ExpressionNode::ArraySubscript(
-                Rc::new(RefCell::new(var)),
-                Box::new(resolved_idx),
-            ))
+            Ok(ExpressionNode::ArraySubscript(base, Box::new(resolved_idx)))
         }
-        ast::Expression::ArraySlice(_, id, start, end) => {
-            // Срез — та же позиция, что индексация (фича 0346).
-            let var = param_variable(&id.name, &params, &model)
-                .or_else(|| model.borrow().search_var(&id.name))
-                .ok_or_else(|| {
-                    Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
-                        .with_code("SE-003")
-                })?;
-            // Проверяем тип и границы среза (если тип известен)
-            match var_type(&var) {
-                TypeNode::Array(size, _) => {
-                    check_slice_bounds(&id.name, id.loc, size, start, end)?;
+        ast::Expression::ArraySlice(loc, base_expr, start, end) => {
+            let base = resolve_expr(*base_expr, params.clone(), model.clone())?;
+            match crate::semantic::validate::base_type::base_type(&base, &model.borrow()) {
+                Some(TypeNode::Array(size, _)) => {
+                    check_slice_bounds("", loc, size, start, end)?;
                 }
-                TypeNode::Inference => {} // тип ещё не выведен — пропускаем
-                _ => {
+                Some(TypeNode::Inference) | None => {}
+                Some(_) => {
                     return Err(Diagnostic::error(
-                        id.loc,
-                        format!("Переменная '{}' не является массивом", id.name),
+                        loc,
+                        format!("{} не является массивом", base_label(&base)),
                     )
                     .with_code("SE-030"));
                 }
             }
-            Ok(ExpressionNode::ArraySlice(
-                Rc::new(RefCell::new(var)),
-                start,
-                end,
-            ))
+            Ok(ExpressionNode::ArraySlice(base, start, end))
         }
 
         // ── Структурные выражения ─────────────────────────────────────────────
@@ -408,20 +406,6 @@ fn resolve_bin(
     Ok((l, r))
 }
 
-/// Возвращает [`TypeNode`] переменной из её [`VariableNode`].
-///
-/// Если переменная не разрешена ([`VariableNode::Unresolved`]),
-/// возвращает [`TypeNode::Inference`].
-#[inline]
-fn var_type(var: &VariableNode) -> TypeNode {
-    match var {
-        VariableNode::Simple { ty, .. }
-        | VariableNode::Port { ty, .. }
-        | VariableNode::Const { ty, .. } => ty.clone(),
-        VariableNode::Unresolved => TypeNode::Inference,
-    }
-}
-
 /// Проверяет допустимость границ среза массива.
 ///
 /// # Правила проверки
@@ -495,27 +479,6 @@ fn resolve_elems(
 }
 
 // ── Тесты ─────────────────────────────────────────────────────────────────────
-
-/// Параметр функции как узел переменной (фича 0346).
-///
-/// Список параметров — плоский `(имя, тип)`, и позиции объявления у него нет:
-/// узел получает `Location::Implicit`, как и в ветви разрешения имени.
-fn param_variable(
-    name: &str,
-    params: &[(String, TypeNode)],
-    model: &Rc<RefCell<ModelNode>>,
-) -> Option<VariableNode> {
-    params
-        .iter()
-        .find(|(param, _)| param == name)
-        .map(|(param, ty)| VariableNode::Simple {
-            upper: Some(Rc::downgrade(model)),
-            loc: Location::Implicit,
-            name: param.clone(),
-            ty: ty.clone(),
-            expr: Default::default(),
-        })
-}
 
 #[cfg(test)]
 mod tests;

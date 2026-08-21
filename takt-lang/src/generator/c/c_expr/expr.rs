@@ -527,24 +527,19 @@ pub(in crate::generator::c) fn generate_expr(
             generate_expr(printer, map, owner, params, r, 1, has_model)?;
         }
 
-        ExpressionNode::ArraySubscript(var_rc, idx) => {
-            let idx_str = {
+        // База — ВЫРАЖЕНИЕ (фича 0358): печатается тем же печатником, что и
+        // прочие выражения, поэтому `b.data[1]` выходит как `model->b.data[1]`
+        // без второго знания о выборе базы.
+        ExpressionNode::ArraySubscript(base, idx) => {
+            let render = |node: &ExpressionNode| -> Result<String, Diagnostic> {
                 let mut buf = String::new();
                 let mut p = Printer::new(0, &mut buf);
-                generate_expr(&mut p, map, owner, params.clone(), idx, 0, has_model)?;
-                buf
+                generate_expr(&mut p, map, owner, params.clone(), node, 0, has_model)?;
+                Ok(buf)
             };
-            let var = var_rc.borrow();
-            let var_expr = if let VariableNode::Simple { upper, .. } = &*var {
-                resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                    .map_or_else(
-                        || resolve_variable_c_expr(&*var, &params, map, owner, has_model),
-                        Ok,
-                    )?
-            } else {
-                resolve_variable_c_expr(&*var, &params, map, owner, has_model)?
-            };
-            printer.print(&format!("{}[{}]", var_expr, idx_str));
+            let base_str = render(base)?;
+            let idx_str = render(idx)?;
+            printer.print(&format!("{base_str}[{idx_str}]"));
         }
 
         ExpressionNode::Variable(var_rc) => {

@@ -439,7 +439,8 @@ Condition0: Condition = {
   },
   <a:@L> "(" <e:Condition> ")" <b:@R> => Condition::Parenthesis(Location::source(file_no, a, b), Box::new(e)),
   <a:@L> <e:Condition0> "." <i:Member> <b:@R> => Condition::BitAccess(Location::source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <idx:Condition> "]" <b:@R> => Condition::ArraySubscript(Location::source(file_no, a, b), i, Box::new(idx)),
+  // Индексация — постфикс над выражением (фича 0358), как `.` выше.
+  <a:@L> <e:Condition0> "[" <idx:Condition> "]" <b:@R> => Condition::ArraySubscript(Location::source(file_no, a, b), Box::new(e), Box::new(idx)),
   ConditionExpression,
 }
 
@@ -739,8 +740,13 @@ Precedence0: Expression = {
       Expression::AnonAddress(Location::source(file_no, l, r), n, None)
   },
   <a:@L> <e:Precedence0> "." <i:Member> <b:@R> => Expression::BitAccess(Location::source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <idx:Expression> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), i, Box::new(idx)),
-  <a:@L> <i:Identifier> "[" <l:number?> ":" <r:number?> "]" <b:@R> => Expression::ArraySlice(Location::source(file_no, a, b), i, l, r),
+  // Индексация — постфикс НАД ВЫРАЖЕНИЕМ (фича 0358), как `.` выше:
+  // `b.data[1]` прежде не разбирался вовсе (`SY-002`), тогда как обратная
+  // цепочка `ps[1].x` работала — асимметрия постфиксных операций.
+  <a:@L> <e:Precedence0> "[" <idx:Expression> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), Box::new(e), Box::new(idx)),
+  // Срез — тоже постфикс над выражением (фича 0358): иначе LR(1) не
+  // различает `x[…` двух правил, и грамматика перестаёт строиться.
+  <a:@L> <e:Precedence0> "[" <l:number?> ":" <r:number?> "]" <b:@R> => Expression::ArraySlice(Location::source(file_no, a, b), Box::new(e), l, r),
   LiteralExpression,
 }
 

@@ -449,10 +449,11 @@ fn reads_expr(name: &str, expr: &ExpressionNode) -> bool {
             };
             target_reads || reads_expr(name, value)
         }
-        ExpressionNode::ArraySubscript(var, index) => {
-            var.borrow().name() == name || reads_expr(name, index)
+        // База — выражение (фича 0358): чтение ищется в ней тем же обходом.
+        ExpressionNode::ArraySubscript(base, index) => {
+            reads_expr(name, base) || reads_expr(name, index)
         }
-        ExpressionNode::ArraySlice(var, _, _) => var.borrow().name() == name,
+        ExpressionNode::ArraySlice(base, _, _) => reads_expr(name, base),
         ExpressionNode::Parenthesis(a)
         | ExpressionNode::Not(a)
         | ExpressionNode::BitwiseNot(a)

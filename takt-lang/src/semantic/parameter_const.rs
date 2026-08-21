@@ -407,8 +407,9 @@ fn scan_expression(expr: &ast::Expression, scan: &mut Scan) {
 fn assigned_name(target: &ast::Expression) -> Option<String> {
     match target {
         ast::Expression::Variable(id) => Some(id.name.clone()),
-        ast::Expression::ArraySubscript(_, id, _) | ast::Expression::ArraySlice(_, id, _, _) => {
-            Some(id.name.clone())
+        // База — выражение (фича 0358): имя ищется в ней рекурсивно.
+        ast::Expression::ArraySubscript(_, base, _) | ast::Expression::ArraySlice(_, base, _, _) => {
+            assigned_name(base)
         }
         ast::Expression::Parenthesis(_, inner) | ast::Expression::BitAccess(_, inner, _) => {
             assigned_name(inner)

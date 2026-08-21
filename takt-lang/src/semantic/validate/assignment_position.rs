@@ -110,7 +110,8 @@ fn target_of(expr: &ExpressionNode) -> (Location, Option<String>) {
             ExpressionNode::Variable(v) => Some(v),
             _ => None,
         },
-        ExpressionNode::ArraySubscript(v, _) => Some(v),
+        // База индексации — выражение (фича 0358): спускаемся по ней.
+        ExpressionNode::ArraySubscript(base, _) => return target_of(base),
         _ => None,
     };
     match var {

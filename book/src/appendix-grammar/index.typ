@@ -178,7 +178,7 @@ condition
     | condition "+" condition  | condition "-" condition
     | "!" condition | "(" condition ")"
     | condition "." member
-    | identifier "[" ( integer | identifier ) "]"
+    | condition "[" condition "]"
     | identifier "(" [ condition { "," condition } ] ")"
     | "#" address_literal | "#" integer          (* обращение к ячейке без имени *)
     | "after" duration | "after" ticks           (* выдержка *)
@@ -259,8 +259,8 @@ expression
     | "!" expression | "~" expression | "+" expression | "-" expression
     | "{" expression { "," expression } "}"                  (* инициализатор массива *)
     | identifier "(" [ call_arg { "," call_arg } ] ")"       (* вызов функции *)
-    | identifier "[" ( integer | identifier ) "]"            (* индекс *)
-    | identifier "[" [ integer ] ":" [ integer ] "]"         (* срез *)
+    | expression "[" expression "]"                          (* индекс *)
+    | expression "[" [ integer ] ":" [ integer ] "]"         (* срез *)
     | "#" address_literal | "#" integer                      (* ячейка без имени *)
     | expression "." member
     | "(" expression ")"

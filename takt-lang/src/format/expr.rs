@@ -45,10 +45,13 @@ pub(crate) fn expression(expr: &ast::Expression) -> Result<String, FormatError> 
 
         // ── Доступ ───────────────────────────────────────────────────────────
         E::Parenthesis(_, inner) => format!("({})", expression(inner)?),
-        E::ArraySubscript(_, id, index) => format!("{}[{}]", id.name, expression(index)?),
-        E::ArraySlice(_, id, from, to) => format!(
+        // База — выражение (фича 0358): печатается тем же печатником.
+        E::ArraySubscript(_, base, index) => {
+            format!("{}[{}]", expression(base)?, expression(index)?)
+        }
+        E::ArraySlice(_, base, from, to) => format!(
             "{}[{}:{}]",
-            id.name,
+            expression(base)?,
             from.map(|v| v.to_string()).unwrap_or_default(),
             to.map(|v| v.to_string()).unwrap_or_default()
         ),
@@ -162,7 +165,9 @@ pub(crate) fn condition(cond: &ast::Condition) -> Result<String, FormatError> {
         C::Variable(id) => id.name.clone(),
         C::AnonAddress(_, addr, bit) => anon_address(*addr, *bit),
         C::Parenthesis(_, inner) => format!("({})", condition(inner)?),
-        C::ArraySubscript(_, id, index) => format!("{}[{}]", id.name, condition(index)?),
+        C::ArraySubscript(_, base, index) => {
+            format!("{}[{}]", condition(base)?, condition(index)?)
+        }
         C::BitAccess(_, base, m) => format!("{}.{}", condition(base)?, member(m)),
         C::Function(_, id, args) => {
             let args = args

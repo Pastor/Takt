@@ -126,9 +126,10 @@ pub(crate) fn print_expression(
             member,
             model,
         ),
-        ExpressionNode::ArraySubscript(var, index) => Ok(format!(
+        // База — выражение (фича 0358): печатается тем же печатником.
+        ExpressionNode::ArraySubscript(base, index) => Ok(format!(
             "{}[{}]",
-            variable_name(&var.borrow()),
+            print_expression(base, model)?,
             print_expression(index, model)?
         )),
         // Присваивание — оператор ST, а не выражение; точку с запятой ставит
@@ -344,9 +345,9 @@ pub(crate) fn print_condition(
             member,
             model,
         ),
-        ConditionNode::ArraySubscript(var, index) => Ok(format!(
+        ConditionNode::ArraySubscript(base, index) => Ok(format!(
             "{}[{}]",
-            variable_name(&var.borrow()),
+            print_condition(base, model)?,
             print_condition(index, model)?
         )),
         // Вариант перечисления → именованная константа, которую объявляет

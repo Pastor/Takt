@@ -394,26 +394,10 @@ fn array_subscript_on_non_array_is_error() {
     );
 }
 
-/// `var_type` для Simple-переменной возвращает правильный тип.
-#[test]
-fn var_type_simple() {
-    use crate::semantic::VariableNode;
-    let v = VariableNode::Simple {
-        upper: None,
-        loc: crate::diagnostics::Location::Implicit,
-        name: "x".into(),
-        ty: TypeNode::Bit,
-        expr: ExpressionNode::None,
-    };
-    assert_eq!(var_type(&v), TypeNode::Bit);
-}
-
-/// `var_type` для Unresolved-переменной возвращает Inference.
-#[test]
-fn var_type_unresolved() {
-    use crate::semantic::VariableNode;
-    assert_eq!(var_type(&VariableNode::Unresolved), TypeNode::Inference);
-}
+// ⚠️ Тесты `var_type_simple`/`var_type_unresolved` сняты вместе с функцией
+// (фича 0358): тип базы постфикса даёт теперь общий носитель
+// `semantic::validate::base_type`, а тип переменной читается её собственным `ty()`.
+// Сторож без своего предмета — декорация.
 
 /// `check_slice_bounds`: допустимый срез [1:6] для массива size=8 — ок.
 #[test]
@@ -845,7 +829,9 @@ fn construct_expression_array_subscript_unknown_var() {
     let model = Rc::new(RefCell::new(ModelNode::default()));
     let expr = ast::Expression::ArraySubscript(
         crate::diagnostics::Location::default(),
-        ast::Identifier::new("no_such_var"),
+        Box::new(ast::Expression::Variable(ast::Identifier::new(
+            "no_such_var",
+        ))),
         Box::new(ast::Expression::Number(
             crate::diagnostics::Location::default(),
             0,
@@ -864,7 +850,9 @@ fn construct_expression_array_slice_unknown_var() {
     let model = Rc::new(RefCell::new(ModelNode::default()));
     let expr = ast::Expression::ArraySlice(
         crate::diagnostics::Location::default(),
-        ast::Identifier::new("no_such_var"),
+        Box::new(ast::Expression::Variable(ast::Identifier::new(
+            "no_such_var",
+        ))),
         Some(0),
         Some(4),
     );
@@ -873,34 +861,6 @@ fn construct_expression_array_slice_unknown_var() {
         result.is_err(),
         "несуществующая переменная должна давать ошибку"
     );
-}
-
-/// `var_type` для Port-переменной возвращает правильный тип.
-#[test]
-fn var_type_port() {
-    let v = VariableNode::Port {
-        upper: None,
-        loc: crate::diagnostics::Location::Implicit,
-        name: "p".into(),
-        ty: TypeNode::Bit,
-        address: ExpressionNode::None,
-        init: ExpressionNode::None,
-        direction: crate::semantic::PortDirection::In,
-    };
-    assert_eq!(var_type(&v), TypeNode::Bit);
-}
-
-/// `var_type` для Const-переменной возвращает правильный тип.
-#[test]
-fn var_type_const() {
-    let v = VariableNode::Const {
-        upper: None,
-        loc: crate::diagnostics::Location::Implicit,
-        name: "c".into(),
-        ty: TypeNode::Bool,
-        expr: ExpressionNode::None,
-    };
-    assert_eq!(var_type(&v), TypeNode::Bool);
 }
 
 /// `check_slice_bounds`: отрицательный start — ошибка.

@@ -52,7 +52,8 @@ pub(crate) fn inner_expr_type(expr: &ExpressionNode) -> Option<TypeNode> {
         ExpressionNode::BitAccess(_, Member::Number(_)) => Some(TypeNode::Bool),
         // Элемент массива: тип берётся у объявления носителя. Нужен записи
         // разряда (`arr[1].2 := 1`) — цель `c` и эталон её исполняют.
-        ExpressionNode::ArraySubscript(var, _) => match variable_type(&var.borrow()) {
+        // База — выражение (фича 0358): тип берётся у неё же, рекурсивно.
+        ExpressionNode::ArraySubscript(base, _) => match inner_expr_type(base) {
             Some(TypeNode::Array(_, elem)) => Some((*elem).clone()),
             _ => None,
         },

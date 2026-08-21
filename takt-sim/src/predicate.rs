@@ -83,8 +83,8 @@ fn condition_label(cond: &ConditionNode) -> String {
             };
             format!("{}.{member}", condition_label(c))
         }
-        ConditionNode::ArraySubscript(v, idx) => {
-            format!("{}[{}]", v.borrow().name(), condition_label(idx))
+        ConditionNode::ArraySubscript(base, idx) => {
+            format!("{}[{}]", condition_label(base), condition_label(idx))
         }
         ConditionNode::Function(f, args, _) => {
             let name = f.borrow().name().to_string();
@@ -222,17 +222,14 @@ pub(crate) fn eval_condition(
         // Д7: скобки вычисляются **рекурсивно**. Раньше возвращался внутренний
         // узел невычисленным, из-за чего `(t + 1) > 2` при t=5 было ложным.
         ConditionNode::Parenthesis(inner) => eval_condition(inner, ctx),
-        ConditionNode::ArraySubscript(var, index) => {
-            let name = var.borrow().name().to_string();
+        // База — ВЫРАЖЕНИЕ (фича 0358): вычисляется тем же вычислителем.
+        ConditionNode::ArraySubscript(base, index) => {
             let loc = loc_of(cond);
-            let array = ctx.get_value(&name).ok_or_else(|| {
-                Diagnostic::error(loc, format!("переменная '{name}' не найдена"))
-                    .with_code("SIM-009")
-            })?;
+            let array = eval_condition(base, ctx)?;
             let Value::Array(items) = array else {
                 return Err(Diagnostic::error(
                     loc,
-                    format!("переменная '{name}' не является массивом"),
+                    "индексируемое значение не является массивом".to_string(),
                 )
                 .with_code("SIM-010"));
             };
@@ -249,10 +246,7 @@ pub(crate) fn eval_condition(
                 .ok_or_else(|| {
                     Diagnostic::error(
                         loc,
-                        format!(
-                            "индекс {idx} вне границ массива '{name}' (длина {})",
-                            items.len()
-                        ),
+                        format!("индекс {idx} вне границ массива (длина {})", items.len()),
                     )
                     .with_code("SIM-010")
                 })?;

@@ -21,10 +21,14 @@ pub enum ExpressionNode {
     None,
     /// «Сырое» АСД-выражение, ожидающее семантического понижения.
     Unresolved(ast::Expression),
-    /// Доступ к элементу массива: `id[индекс]`.
-    ArraySubscript(Rc<RefCell<VariableNode>>, Box<ExpressionNode>),
-    /// Срез массива: `id[начало:конец]`.
-    ArraySlice(Rc<RefCell<VariableNode>>, Option<i128>, Option<i128>),
+    /// Доступ к элементу массива: `база[индекс]` (фича 0358).
+    ///
+    /// ⚠️ База — **выражение**, а не переменная: `b.data[1]` прежде не
+    /// разбирался вовсе (`SY-002`), тогда как обратная цепочка `ps[1].x`
+    /// работала — постфиксные операции были асимметричны.
+    ArraySubscript(Box<ExpressionNode>, Box<ExpressionNode>),
+    /// Срез массива: `база[начало:конец]` (фича 0358 — база тоже выражение).
+    ArraySlice(Box<ExpressionNode>, Option<i128>, Option<i128>),
     /// Скобки: `(выражение)`.
     Parenthesis(Box<ExpressionNode>),
     /// Доступ к биту: `выражение.член`.
@@ -157,8 +161,8 @@ impl ExpressionNode {
             // У литерала длительности позиции нет — как и у прочих литералов.
             ExpressionNode::Duration(_) => Location::Implicit,
             ExpressionNode::Variable(var) => var.borrow().loc(),
-            ExpressionNode::ArraySubscript(var, _) | ExpressionNode::ArraySlice(var, _, _) => {
-                var.borrow().loc()
+            ExpressionNode::ArraySubscript(base, _) | ExpressionNode::ArraySlice(base, _, _) => {
+                base.loc()
             }
             ExpressionNode::Function(func, _) => func.borrow().loc(),
             ExpressionNode::Parenthesis(inner)

@@ -380,11 +380,15 @@ fn resolve_place<'a>(
         // вычислителем, что и чтение (`expression.rs`), чтобы `data[i] := …` и
         // `data[i]` смотрели на одну переменную. Индекс — часть места, а не
         // корня, поэтому кладём его сегментом.
-        ExpressionNode::ArraySubscript(var, index_expr) => {
-            let (name, loc) = {
-                let b = var.borrow();
-                (b.name().to_string(), b.loc())
-            };
+        // База — ВЫРАЖЕНИЕ (фича 0358): корень места ищется в ней рекурсивно,
+        // как у поля и разряда, поэтому `b.data[1] := 5;` кладёт путь
+        // `.data[1]` от корня `b`.
+        ExpressionNode::ArraySubscript(base, index_expr) => {
+            let loc = base.loc();
+            let root = resolve_place(base, path, ctx)?;
+            if root.is_none() {
+                return Ok(None);
+            }
             let Value::Number(idx) = eval_expression(index_expr, ctx)? else {
                 return Err(
                     Diagnostic::error(loc, "индекс массива должен быть целым".to_string())
@@ -392,14 +396,13 @@ fn resolve_place<'a>(
                 );
             };
             let Ok(index) = usize::try_from(idx) else {
-                return Err(Diagnostic::error(
-                    loc,
-                    format!("индекс {idx} вне границ массива '{name}'"),
-                )
-                .with_code("SIM-010"));
+                return Err(
+                    Diagnostic::error(loc, format!("индекс {idx} вне границ массива"))
+                        .with_code("SIM-010"),
+                );
             };
             path.push(PlaceSegment::Index(index));
-            Ok(Some(var))
+            Ok(root)
         }
         _ => Ok(None),
     }
@@ -409,9 +412,11 @@ fn resolve_place<'a>(
 /// вместо `Location::Builtin`.
 fn loc_of_assign(lhs: &ExpressionNode) -> Location {
     match lhs {
-        ExpressionNode::Variable(v)
-        | ExpressionNode::ArraySubscript(v, _)
-        | ExpressionNode::ArraySlice(v, _, _) => v.borrow().loc(),
+        ExpressionNode::Variable(v) => v.borrow().loc(),
+        // База — выражение (фича 0358): позиция берётся у неё.
+        ExpressionNode::ArraySubscript(base, _) | ExpressionNode::ArraySlice(base, _, _) => {
+            loc_of_assign(base)
+        }
         ExpressionNode::Parenthesis(inner) | ExpressionNode::BitAccess(inner, _) => {
             loc_of_assign(inner)
         }

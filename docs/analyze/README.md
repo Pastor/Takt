@@ -341,3 +341,4 @@
 | 0355 | Срез массива переводят четыре цели | [0355-array-slice-in-targets.md](0355-array-slice-in-targets.md) | — (новая фича) |
 | 0356 | Разряд участвует в арифметике как 0/1 — эталон приводится к целям | [0356-sim-bit-in-arithmetic.md](0356-sim-bit-in-arithmetic.md) | — (новая фича) |
 | 0357 | Умолчание общей переменной строит один носитель | [0357-rust-shared-default-value.md](0357-rust-shared-default-value.md) | — (новая фича) |
+| 0358 | Индексация применима к выражению, а не только к имени | [0358-postfix-index-on-expression.md](0358-postfix-index-on-expression.md) | — (новая фича) |

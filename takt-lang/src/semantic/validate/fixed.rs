@@ -313,9 +313,11 @@ fn se059(loc: Location, lt: &TypeNode, rt: &TypeNode) -> Diagnostic {
 /// ближайшего именованного узла.
 fn first_loc(expr: &ExpressionNode) -> Option<Location> {
     match expr {
-        ExpressionNode::Variable(v)
-        | ExpressionNode::ArraySubscript(v, _)
-        | ExpressionNode::ArraySlice(v, _, _) => var_loc(&v.borrow()),
+        ExpressionNode::Variable(v) => var_loc(&v.borrow()),
+        // База — выражение (фича 0358): позиция берётся у неё.
+        ExpressionNode::ArraySubscript(base, _) | ExpressionNode::ArraySlice(base, _, _) => {
+            first_loc(base)
+        }
         ExpressionNode::Parenthesis(e)
         | ExpressionNode::BitAccess(e, _)
         | ExpressionNode::Not(e)

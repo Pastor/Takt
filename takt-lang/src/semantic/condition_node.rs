@@ -23,7 +23,8 @@ pub enum ConditionNode {
     /// Заглушка для условия, которое ещё не было разрешено.
     Unresolved(ast::Condition),
     /// Доступ к элементу массива: `id[индекс]`.
-    ArraySubscript(Rc<RefCell<VariableNode>>, Box<ConditionNode>),
+    /// Доступ к элементу массива: `база[индекс]` (фича 0358 — база выражение).
+    ArraySubscript(Box<ConditionNode>, Box<ConditionNode>),
     /// Скобки: `(условие)`.
     Parenthesis(Box<ConditionNode>),
     /// Доступ к биту: `условие.член`.
