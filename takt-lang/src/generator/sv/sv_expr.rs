@@ -247,6 +247,27 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
             print_condition(r, scope)?
         ))
     };
+    // Сравнение операндов РАЗНОЙ знаковости (фича 0359). В SystemVerilog оно
+    // приводит оба к **беззнаковым**, поэтому `-1 < 200` при `i8`/`u8` давало
+    // **ложь** — молча, verilator такой модуль принимает. Формы выбраны
+    // прогоном: расширение `$signed(W'(x))` и раскрытие проверкой знака.
+    let cmp = |l: &ConditionNode, op: &str, r: &ConditionNode| -> Result<String, Diagnostic> {
+        match crate::generator::mixed_sign::plan(
+            crate::generator::mixed_sign::operand_type_cond(l).as_ref(),
+            crate::generator::mixed_sign::operand_type_cond(r).as_ref(),
+        ) {
+            crate::generator::mixed_sign::Plan::AsIs => bin(l, op, r),
+            crate::generator::mixed_sign::Plan::Widen { bits } => Ok(format!(
+                "($signed({bits}'({})) {op} $signed({bits}'({})))",
+                print_condition(l, scope)?,
+                print_condition(r, scope)?
+            )),
+            crate::generator::mixed_sign::Plan::SignGuard { signed_is_left } => {
+                let (lt, rt) = (print_condition(l, scope)?, print_condition(r, scope)?);
+                Ok(sign_guard(&lt, op, &rt, signed_is_left))
+            }
+        }
+    };
     match node {
         // Безусловное ребро: `if (1'b1)` не печатается — вызывающий код
         // (`sv_fsm`) обязан различать условный и безусловный переход, потому что
@@ -280,10 +301,10 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::Or(l, r) => bin(l, "||", r),
         ConditionNode::Add(l, r) => bin(l, "+", r),
         ConditionNode::Subtract(l, r) => bin(l, "-", r),
-        ConditionNode::Less(l, r) => bin(l, "<", r),
-        ConditionNode::More(l, r) => bin(l, ">", r),
-        ConditionNode::LessEqual(l, r) => bin(l, "<=", r),
-        ConditionNode::MoreEqual(l, r) => bin(l, ">=", r),
+        ConditionNode::Less(l, r) => cmp(l, "<", r),
+        ConditionNode::More(l, r) => cmp(l, ">", r),
+        ConditionNode::LessEqual(l, r) => cmp(l, "<=", r),
+        ConditionNode::MoreEqual(l, r) => cmp(l, ">=", r),
         ConditionNode::Equal(l, r) => bin(l, "==", r),
         ConditionNode::NotEqual(l, r) => bin(l, "!=", r),
         ConditionNode::Variable(var, _) => signal_of(var)
@@ -327,6 +348,31 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
 /// # Ошибки
 /// [`SV-002`](sv002) на непокрытом узле, [`SV-005`](sv005) на `extern fn`.
 pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
+    // Сравнение операндов РАЗНОЙ знаковости (фича 0359): правило одно с
+    // печатником условий; здесь — путь тела, где условие приходит выражением.
+    let expr_cmp =
+        |l: &ExpressionNode, op: &str, r: &ExpressionNode| -> Result<String, Diagnostic> {
+            match crate::generator::mixed_sign::plan(
+                crate::generator::mixed_sign::operand_type_expr(l).as_ref(),
+                crate::generator::mixed_sign::operand_type_expr(r).as_ref(),
+            ) {
+                crate::generator::mixed_sign::Plan::AsIs => Ok(format!(
+                    "({} {} {})",
+                    print_expression(l, scope)?,
+                    op,
+                    print_expression(r, scope)?
+                )),
+                crate::generator::mixed_sign::Plan::Widen { bits } => Ok(format!(
+                    "($signed({bits}'({})) {op} $signed({bits}'({})))",
+                    print_expression(l, scope)?,
+                    print_expression(r, scope)?
+                )),
+                crate::generator::mixed_sign::Plan::SignGuard { signed_is_left } => {
+                    let (lt, rt) = (print_expression(l, scope)?, print_expression(r, scope)?);
+                    Ok(sign_guard(&lt, op, &rt, signed_is_left))
+                }
+            }
+        };
     let bin = |l: &ExpressionNode, op: &str, r: &ExpressionNode| -> Result<String, Diagnostic> {
         Ok(format!(
             "({} {} {})",
@@ -394,10 +440,10 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::BitwiseXor(l, r) => bin(l, "^", r),
         ExpressionNode::And(l, r) => bin(l, "&&", r),
         ExpressionNode::Or(l, r) => bin(l, "||", r),
-        ExpressionNode::Less(l, r) => bin(l, "<", r),
-        ExpressionNode::More(l, r) => bin(l, ">", r),
-        ExpressionNode::LessEqual(l, r) => bin(l, "<=", r),
-        ExpressionNode::MoreEqual(l, r) => bin(l, ">=", r),
+        ExpressionNode::Less(l, r) => expr_cmp(l, "<", r),
+        ExpressionNode::More(l, r) => expr_cmp(l, ">", r),
+        ExpressionNode::LessEqual(l, r) => expr_cmp(l, "<=", r),
+        ExpressionNode::MoreEqual(l, r) => expr_cmp(l, ">=", r),
         ExpressionNode::Equal(l, r) => bin(l, "==", r),
         ExpressionNode::NotEqual(l, r) => bin(l, "!=", r),
         ExpressionNode::ConditionalOperator(c, t, f) => Ok(format!(
@@ -495,6 +541,36 @@ fn param_type(
             params.get(index).map(|(_, ty)| ty.clone())
         }
         _ => None,
+    }
+}
+
+/// Раскрытие сравнения проверкой знака (фича 0359).
+///
+/// Общего типа нет (`u64` против знакового), поэтому правило записывается
+/// явно: отрицательное меньше любого беззнакового. Операнд печатается дважды —
+/// в условии Takt эффектов не бывает (0187).
+fn sign_guard(lhs: &str, op: &str, rhs: &str, signed_is_left: bool) -> String {
+    let (signed, unsigned) = if signed_is_left {
+        (lhs, rhs)
+    } else {
+        (rhs, lhs)
+    };
+    let neg = format!("({signed} < 0)");
+    let same = if signed_is_left {
+        format!("($unsigned({signed}) {op} {unsigned})")
+    } else {
+        format!("({unsigned} {op} $unsigned({signed}))")
+    };
+    // Для `<`/`<=` слева знаковый: отрицательное всегда меньше. Для `>`/`>=`
+    // — наоборот, отрицательное никогда не больше.
+    let negative_wins = matches!(
+        (op, signed_is_left),
+        ("<" | "<=", true) | (">" | ">=", false)
+    );
+    if negative_wins {
+        format!("({neg} || {same})")
+    } else {
+        format!("(!{neg} && {same})")
     }
 }
 

@@ -527,10 +527,10 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         // Сравнения. Операнды приводятся друг к другу по типу: `c = X` при
         // `c : Constant` приходит как `Equal(Variable(c), Number(0))` —
         // семантика уже свернула вариант в число (см. `coerce_to`).
-        ExpressionNode::Less(a, b) => comparison(a, "<", b, scope),
-        ExpressionNode::More(a, b) => comparison(a, ">", b, scope),
-        ExpressionNode::LessEqual(a, b) => comparison(a, "<=", b, scope),
-        ExpressionNode::MoreEqual(a, b) => comparison(a, ">=", b, scope),
+        ExpressionNode::Less(a, b) => expr_compare(a, "<", b, scope),
+        ExpressionNode::More(a, b) => expr_compare(a, ">", b, scope),
+        ExpressionNode::LessEqual(a, b) => expr_compare(a, "<=", b, scope),
+        ExpressionNode::MoreEqual(a, b) => expr_compare(a, ">=", b, scope),
         ExpressionNode::Equal(a, b) => comparison(a, "==", b, scope),
         ExpressionNode::NotEqual(a, b) => comparison(a, "!=", b, scope),
 
@@ -930,3 +930,50 @@ fn escape(text: &str) -> String {
 // с детектором Q-формата. (`function_return` уехал вместе с печатником условий в
 // `rust_cond`, фича 0088.)
 pub(crate) use crate::generator::rust::rust_fixed::expression_type;
+
+/// Сравнение операндов разной знаковости в ВЫРАЖЕНИИ (фича 0359).
+///
+/// Правило одно с печатником условий (`rust_cond::cond_compare`); здесь — путь
+/// тела (`if s < u { … }`), где условие приходит выражением. Прежде вывод не
+/// компилировался вовсе: `E0308`.
+fn expr_compare(
+    a: &ExpressionNode,
+    op: &str,
+    b: &ExpressionNode,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    match crate::generator::mixed_sign::plan(
+        crate::generator::mixed_sign::operand_type_expr(a).as_ref(),
+        crate::generator::mixed_sign::operand_type_expr(b).as_ref(),
+    ) {
+        crate::generator::mixed_sign::Plan::AsIs => comparison(a, op, b, scope),
+        crate::generator::mixed_sign::Plan::Widen { bits } => Ok(format!(
+            "(({} as i{bits}) {op} ({} as i{bits}))",
+            print_expression(a, scope)?,
+            print_expression(b, scope)?
+        )),
+        crate::generator::mixed_sign::Plan::SignGuard { signed_is_left } => {
+            let (lt, rt) = (print_expression(a, scope)?, print_expression(b, scope)?);
+            let (signed, unsigned) = if signed_is_left {
+                (lt.as_str(), rt.as_str())
+            } else {
+                (rt.as_str(), lt.as_str())
+            };
+            let neg = format!("({signed} < 0)");
+            let same = if signed_is_left {
+                format!("(({signed} as u64) {op} {unsigned})")
+            } else {
+                format!("({unsigned} {op} ({signed} as u64))")
+            };
+            let negative_wins = matches!(
+                (op, signed_is_left),
+                ("<" | "<=", true) | (">" | ">=", false)
+            );
+            Ok(if negative_wins {
+                format!("({neg} || {same})")
+            } else {
+                format!("(!{neg} && {same})")
+            })
+        }
+    }
+}

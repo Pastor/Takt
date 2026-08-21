@@ -255,24 +255,52 @@ pub(in crate::generator::c) fn generate_expr(
 
         // ── Сравнение ─────────────────────────────────────────────────────────
         ExpressionNode::Less(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
-            printer.print(" < ");
-            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            // Смешанная знаковость (фича 0359): на 64 битах C сравнивает
+            // беззнаково, и `-1 < 200` давало ложь. Правило одно с печатником
+            // условий; здесь — путь тела (`if s < u { … }`).
+            if let Some(text) = mixed_sign_compare(l, "<", r, map, owner, &params, has_model)? {
+                printer.print(&text);
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+                printer.print(" < ");
+                generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            }
         }
         ExpressionNode::More(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
-            printer.print(" > ");
-            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            // Смешанная знаковость (фича 0359): на 64 битах C сравнивает
+            // беззнаково, и `-1 < 200` давало ложь. Правило одно с печатником
+            // условий; здесь — путь тела (`if s < u { … }`).
+            if let Some(text) = mixed_sign_compare(l, ">", r, map, owner, &params, has_model)? {
+                printer.print(&text);
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+                printer.print(" > ");
+                generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            }
         }
         ExpressionNode::LessEqual(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
-            printer.print(" <= ");
-            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            // Смешанная знаковость (фича 0359): на 64 битах C сравнивает
+            // беззнаково, и `-1 < 200` давало ложь. Правило одно с печатником
+            // условий; здесь — путь тела (`if s < u { … }`).
+            if let Some(text) = mixed_sign_compare(l, "<=", r, map, owner, &params, has_model)? {
+                printer.print(&text);
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+                printer.print(" <= ");
+                generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            }
         }
         ExpressionNode::MoreEqual(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
-            printer.print(" >= ");
-            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            // Смешанная знаковость (фича 0359): на 64 битах C сравнивает
+            // беззнаково, и `-1 < 200` давало ложь. Правило одно с печатником
+            // условий; здесь — путь тела (`if s < u { … }`).
+            if let Some(text) = mixed_sign_compare(l, ">=", r, map, owner, &params, has_model)? {
+                printer.print(&text);
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+                printer.print(" >= ");
+                generate_expr(printer, map, owner, params, r, 10, has_model)?;
+            }
         }
         ExpressionNode::Equal(l, r) => {
             generate_expr(printer, map, owner, params.clone(), l, 8, has_model)?;
@@ -762,4 +790,55 @@ fn enum_constant_for_assignment(left: &ExpressionNode, right: &ExpressionNode) -
     };
     let scope = upper.as_ref().and_then(|w| w.upgrade())?;
     crate::generator::c::c_enum::constant_of(ty, *value, &scope)
+}
+
+/// Сравнение операндов разной знаковости в ВЫРАЖЕНИИ (фича 0359).
+///
+/// `None` — печать прежняя. Раскрытие нужно только там, где общего типа нет
+/// (`u64` против знакового): на 8/16/32 битах операнды продвигаются до `int`,
+/// и печать «как есть» верна, а лишнее приведение изменило бы вывод корпуса.
+fn mixed_sign_compare(
+    l: &ExpressionNode,
+    op: &str,
+    r: &ExpressionNode,
+    map: &CMap,
+    owner: &Element,
+    params: &[(String, TypeNode)],
+    has_model: bool,
+) -> Result<Option<String>, Diagnostic> {
+    let crate::generator::mixed_sign::Plan::SignGuard { signed_is_left } =
+        crate::generator::mixed_sign::plan(
+            crate::generator::mixed_sign::operand_type_expr(l).as_ref(),
+            crate::generator::mixed_sign::operand_type_expr(r).as_ref(),
+        )
+    else {
+        return Ok(None);
+    };
+    let render = |node: &ExpressionNode| -> Result<String, Diagnostic> {
+        let mut buf = String::new();
+        let mut p = Printer::new(0, &mut buf);
+        generate_expr(&mut p, map, owner, params.to_vec(), node, 0, has_model)?;
+        Ok(buf)
+    };
+    let (lt, rt) = (render(l)?, render(r)?);
+    let (signed, unsigned) = if signed_is_left {
+        (lt.as_str(), rt.as_str())
+    } else {
+        (rt.as_str(), lt.as_str())
+    };
+    let neg = format!("({signed} < 0)");
+    let same = if signed_is_left {
+        format!("((uint64_t)({signed}) {op} ({unsigned}))")
+    } else {
+        format!("(({unsigned}) {op} (uint64_t)({signed}))")
+    };
+    let negative_wins = matches!(
+        (op, signed_is_left),
+        ("<" | "<=", true) | (">" | ">=", false)
+    );
+    Ok(Some(if negative_wins {
+        format!("({neg} || {same})")
+    } else {
+        format!("(!{neg} && {same})")
+    }))
 }
