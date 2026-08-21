@@ -292,7 +292,11 @@ fn print_call_in(
     // совпадут даже если вызов идёт из другой модели.
     let name = pou_name(&def)
         .ok_or_else(|| unsupported("вызов неразрешённой функции (определение отсутствует)"))?;
-    let mut printed: Vec<String> = args.to_vec();
+    // Порядок аргументов повторяет порядок ОБЪЯВЛЕНИЯ (фича 0348): параметры
+    // массивов печатаются в `VAR_IN_OUT`, то есть после скалярных, — и вызов
+    // обязан следовать той же раскладке, иначе `iec2c` отвечает
+    // «Data type incompatibility … position N».
+    let mut printed: Vec<String> = reorder_by_sections(&def, args, model);
     if printed.is_empty() && state_params(&def, model).is_empty() {
         // Синтетический параметр требует синтетического аргумента.
         printed.push("0".to_string());
@@ -377,8 +381,16 @@ fn emit_function(
 
     // Параметры. Пустой `VAR_INPUT … END_VAR` недопустим (и роняет iec2c
     // segfault'ом), поэтому у беспараметрической функции — синтетический вход.
-    let mut params = params_of(def);
-    if params.is_empty() && state_params(def, model).is_empty() {
+    let declared = params_of(def);
+    // Параметр-МАССИВ уходит в `VAR_IN_OUT` (фича 0348): `VAR_INPUT` с массивом
+    // `iec2c` **разбирает**, но порождает C, который не компилируется
+    // («operand of type '__ARRAY_OF_USINT_2' where arithmetic or pointer type is
+    // required»). Проба показала это только полным циклом `iec2c` → `cc`: одна
+    // трансляция ничего не сказала.
+    let (array_params, mut params): (Vec<_>, Vec<_>) = declared
+        .into_iter()
+        .partition(|(_, ty)| crate::generator::st::st_type::array_form_name(ty, model).is_some());
+    if params.is_empty() && array_params.is_empty() && state_params(def, model).is_empty() {
         params.push((SYNTHETIC_PARAM.to_string(), synthetic_type()));
     }
     // Пустой `VAR_INPUT … END_VAR` недопустим (и роняет iec2c segfault'ом):
@@ -391,7 +403,13 @@ fn emit_function(
             // распространяется и на параметры). Позиции у параметра нет —
             // берётся позиция функции.
             check_st_name(pname, def.loc())?;
-            let ty = get_st_type(pty, model)?;
+            // Массив объявляется ИМЕНОВАННОЙ формой (фича 0348): анонимный
+            // `ARRAY […] OF T` в `VAR_INPUT` MatIEC не принимает — «Data type
+            // incompatibility for value passed in position 1».
+            let ty = match crate::generator::st::st_type::array_form_name(pty, model) {
+                Some(form) => form,
+                None => get_st_type(pty, model)?,
+            };
             p.ident(&format!("{} : {};", pname, ty)).nl();
         }
         p.down();
@@ -401,9 +419,18 @@ fn emit_function(
     // Переменные модели, которые тело трогает: `FUNCTION` в IEC чистая, поэтому
     // они передаются по ссылке (см. `state_params`).
     let state = state_params(def, model);
-    if !state.is_empty() {
+    if !state.is_empty() || !array_params.is_empty() {
         p.ident("VAR_IN_OUT").nl();
         p.up();
+        // Параметры-массивы идут первыми: их порядок в объявлении обязан
+        // совпадать с порядком аргументов вызова (`st_func::print_call_in`
+        // печатает объявленные аргументы, затем переменные состояния).
+        for (pname, pty) in &array_params {
+            check_st_name(pname, def.loc())?;
+            let ty = crate::generator::st::st_type::array_form_name(pty, model)
+                .ok_or_else(|| unsupported("параметр-массив без именованной формы"))?;
+            p.ident(&format!("{} : {};", pname, ty)).nl();
+        }
         for (vname, vty) in &state {
             let ty = get_st_type(vty, model)?;
             p.ident(&format!("{} : {};", vname, ty)).nl();
@@ -644,6 +671,34 @@ fn mentions_ident(line: &str, ident: &str) -> bool {
 /// Байт, который может входить в идентификатор IEC.
 fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Переставляет аргументы в порядок секций объявления (фича 0348).
+///
+/// Скалярные параметры объявлены в `VAR_INPUT`, массивы — в `VAR_IN_OUT`;
+/// позиционный вызов IEC следует этому порядку, а не порядку в исходнике Takt.
+fn reorder_by_sections(
+    def: &FunctionDefinitionNode,
+    args: &[String],
+    model: &ModelNode,
+) -> Vec<String> {
+    let params = params_of(def);
+    if params.len() != args.len() {
+        // Число аргументов сверяет семантика (`SE-122`, фича 0313); здесь
+        // расхождение означало бы синтетический аргумент — порядок не трогаем.
+        return args.to_vec();
+    }
+    let mut scalars = Vec::new();
+    let mut arrays = Vec::new();
+    for ((_, ty), arg) in params.iter().zip(args) {
+        if crate::generator::st::st_type::array_form_name(ty, model).is_some() {
+            arrays.push(arg.clone());
+        } else {
+            scalars.push(arg.clone());
+        }
+    }
+    scalars.extend(arrays);
+    scalars
 }
 
 #[cfg(test)]
