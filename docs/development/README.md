@@ -580,3 +580,4 @@
 | 0346-01 | 0346 | Индексация параметра-массива внутри функции | [0346-01-array-param-index.md](0346-01-array-param-index.md) |
 | 0347-01 | 0347 | Константа структурного и массивного типа у rust и sv | [0347-01-const-aggregate.md](0347-01-const-aggregate.md) |
 | 0348-01 | 0348 | Массив в параметре функции у цели st | [0348-01-st-array-parameter.md](0348-01-st-array-parameter.md) |
+| 0349-01 | 0349 | Длительность в поле структуры у целей st и sv | [0349-01-duration-field.md](0349-01-duration-field.md) |

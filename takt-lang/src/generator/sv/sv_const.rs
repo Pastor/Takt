@@ -428,8 +428,16 @@ fn struct_reset(
         // печати литерала, 0157): `verilator -Wall` отвечает `WIDTHCONCAT`
         // «Unsized numbers not allowed in concatenations» на любое безразмерное
         // число внутри `{…}`.
-        let sized = match (value, crate::generator::sv::sv_type::scalar_width(field_ty)) {
-            (ExpressionNode::Number(n), Some(width)) => format!("{width}'d{n}"),
+        //
+        // ⚠️ Литерал ДЛИТЕЛЬНОСТИ (`5ms`) — тоже число (фича 0349): он приходит
+        // узлом `Duration`, печатается миллисекундами и прежде оставался
+        // безразмерным, из-за чего `verilator` отвечал `WIDTHCONCAT` на
+        // структуру с полем `duration`. Признак берётся у **напечатанного**
+        // текста: он уже приведён к единицам цели.
+        let sized = match crate::generator::sv::sv_type::scalar_width(field_ty) {
+            Some(width) if printed.chars().all(|c| c.is_ascii_digit()) => {
+                format!("{width}'d{printed}")
+            }
             _ => printed,
         };
         parts.push(sized);
