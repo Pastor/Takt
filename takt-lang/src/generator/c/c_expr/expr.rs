@@ -658,13 +658,17 @@ pub(in crate::generator::c) fn generate_expr(
                 || super::fixed::fixed_of(map, owner, expr).is_some()
             {
                 super::fixed::cast(printer, map, owner, params, expr, typ, &type_c, has_model)?;
-            } else if crate::generator::mixed_sign::operand_type_expr(expr)
-                .is_some_and(|from| from == *typ)
-            {
-                // Приведение к ТОМУ ЖЕ типу опускается (фича 0361): в C оно
-                // безвредно, но правило у трёх целей должно быть одно — у
-                // `rust` такая печать есть `clippy::unnecessary_cast`, то есть
-                // отказ гейта.
+            } else if crate::generator::mixed_sign::operand_type_expr(expr).is_some_and(|from| {
+                // Сравниваются НАПЕЧАТАННЫЕ типы (фича 0374): `duration`
+                // отображается в `uint32_t` (0183), и типы Takt при этом
+                // различны — признак 0361 такую запись не ловил. В C лишнее
+                // приведение безвредно, но правило у трёх целей одно: у `rust`
+                // та же печать есть `clippy::unnecessary_cast`, то есть отказ
+                // гейта.
+                c_type_or_diagnostic(&from, model, map.float_width(), "приведение типа")
+                    .is_ok_and(|from_c| from_c == type_c)
+            }) {
+                // Приведение к ТОМУ ЖЕ типу опускается (фичи 0361, 0374).
                 generate_expr(printer, map, owner, params, expr, 13, has_model)?;
             } else {
                 // Приводимое выражение оборачивается при prec < UNARY (13),

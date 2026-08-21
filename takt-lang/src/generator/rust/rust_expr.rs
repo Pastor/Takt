@@ -572,14 +572,13 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
                 || rust_fixed::fixed_format_in(inner, scope.model).is_some()
             {
                 rust_fixed::cast(inner, ty, scope)
-            } else if crate::generator::mixed_sign::operand_type_expr(inner)
-                .is_some_and(|from| from == *ty)
-            {
-                // Приведение к ТОМУ ЖЕ типу опускается (фича 0361): `r as u16`
-                // при `r: u16` — это `clippy::unnecessary_cast`, то есть отказ
-                // сборки под `-D warnings`, а гейт цели гоняет ровно эти флаги.
-                // Запись законна и осмысленна (автор подчёркивает тип), поэтому
-                // отвергать её нельзя — её печать обязана быть валидной.
+            } else if crate::generator::rust::rust_type::same_printed_type(inner, ty) {
+                // Приведение к ТОМУ ЖЕ типу опускается (фичи 0361, 0374):
+                // `r as u16` при `r: u16` — это `clippy::unnecessary_cast`, то
+                // есть отказ сборки под `-D warnings`, а гейт цели гоняет ровно
+                // эти флаги. Запись законна и осмысленна (автор подчёркивает
+                // тип), поэтому отвергать её нельзя — её печать обязана быть
+                // валидной.
                 print_expression(inner, scope)
             } else {
                 let target = crate::generator::rust::rust_type::rust_type(ty, "приведение типа")?;

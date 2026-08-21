@@ -167,6 +167,32 @@ pub(crate) fn reject_float_width(width: crate::generator::FloatWidth) -> Result<
     Ok(())
 }
 
+/// Совпадают ли тип операнда и цель приведения ПОСЛЕ отображения в Rust
+/// (фичи 0361, 0374).
+///
+/// Сравниваются **напечатанные** типы, а не типы Takt: `duration` отображается
+/// в `u32` (0183), и `d as u32` даёт `self.d as u32` — это
+/// `clippy::unnecessary_cast`, то есть отказ гейта цели при нулевом коде
+/// возврата `taktc`. Типы Takt здесь различны, и признак 0361 такую запись не
+/// ловил.
+///
+/// ⚠️ Тип операнда берётся у **именованного значения** (0359): у литерала и
+/// выражения он печатнику неизвестен, и опускать приведение там было бы
+/// догадкой.
+pub(crate) fn same_printed_type(inner: &crate::semantic::ExpressionNode, ty: &TypeNode) -> bool {
+    let Some(from) = crate::generator::mixed_sign::operand_type_expr(inner) else {
+        return false;
+    };
+    match (
+        rust_type(&from, "приведение типа"),
+        rust_type(ty, "приведение типа"),
+    ) {
+        (Ok(from), Ok(to)) => from == to,
+        // Неотобразимый тип судит печать самого приведения — здесь молчим.
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
