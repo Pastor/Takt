@@ -54,6 +54,7 @@ mod nondeterminism;
 mod port_init;
 mod ports;
 mod states;
+pub(crate) mod struct_cycle;
 mod structs;
 mod types;
 mod unreachable_edge;

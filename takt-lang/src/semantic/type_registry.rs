@@ -95,18 +95,139 @@ pub(crate) fn claim_type_name(
     Ok(())
 }
 
-/// Объявляет псевдоним типа: занимает имя и кладёт разрешённый тип в модель.
+/// Предпроход: занимает имена ВСЕХ типов модели до разбора их устройства
+/// (фича 0352).
 ///
-/// Живёт здесь, а не в `tree.rs`, по той же причине, по какой там появился
-/// вызов: занятие имени и регистрация — **одно** действие, и разнесённые по
-/// разным местам они разъезжаются (класс 0084/0193/0195). Заодно `tree.rs` не
-/// растёт: он сверх лимита размера, и правило велит выносить новое.
-pub(crate) fn declare_alias(
+/// # Зачем
+///
+/// Прежде объявления типов строились одним проходом в порядке текста: встретив
+/// `struct`, строитель тут же разрешал типы её полей, а `construct_type`
+/// спрашивал `types` — карту, наполняемую тем же проходом. Имя, объявленное
+/// **ниже**, не разрешалось: `struct Aa { b: Bb }` выше `struct Bb` давало у
+/// эталона поле-структуру, ставшую **числом** (ошибку глотал
+/// `.unwrap_or(TypeNode::Unsupported)`), а у семи целей — отказ.
+///
+/// Теперь имя типа видно во всём файле — как у констант; порядок объявления
+/// значения не имеет.
+///
+/// # Что делает
+///
+/// 1. Занимает имена `struct`, `enum` и `type` — **единственная** воронка
+///    занятия (0243); прежние вызовы из основного цикла сняты, иначе второй
+///    вызов на том же имени дал бы ложную `SE-108`.
+/// 2. Кладёт в `types` те типы, чьё значение известно **по имени**:
+///    `TypeNode::Struct` и `TypeNode::Enum`. Псевдоним значения по имени не
+///    имеет — его разрешает [`resolve_aliases`].
+///
+/// Обход идёт в порядке текста: `SE-108` о дубле обязана называть первым
+/// верное объявление.
+///
+/// # Ошибки
+/// `SE-107` (имя принадлежит языку) либо `SE-108` (имя уже занято).
+pub(crate) fn predeclare_named_types(
+    model: &Rc<RefCell<ModelNode>>,
+    elements: &[crate::parser::ast::ModelElement],
+) -> Result<(), Diagnostic> {
+    use crate::parser::ast::ModelElement;
+    for element in elements {
+        let (name, loc, ty) = match element {
+            ModelElement::Struct(s) => {
+                let Some(id) = s.name.as_ref() else { continue };
+                (
+                    id.name.clone(),
+                    id.loc,
+                    Some(crate::semantic::type_node::TypeNode::Struct(
+                        id.name.clone(),
+                    )),
+                )
+            }
+            ModelElement::Enum(e) => {
+                let Some(id) = e.name.as_ref() else { continue };
+                (
+                    id.name.clone(),
+                    id.loc,
+                    Some(crate::semantic::type_node::TypeNode::Enum(id.name.clone())),
+                )
+            }
+            // Псевдоним занимает имя здесь, а значение получает в
+            // `resolve_aliases`: оно есть уже разрешённый тип, и знать его до
+            // регистрации соседей нельзя.
+            ModelElement::Type(def) => (def.name.name.clone(), def.name.loc, None),
+            _ => continue,
+        };
+        claim_type_name(model, &name, loc)?;
+        if name.is_empty() {
+            continue;
+        }
+        let mut bm = model.borrow_mut();
+        if let Some(ty) = ty {
+            bm.types.insert(name.clone(), ty);
+        }
+        bm.type_locs.insert(name, loc);
+    }
+    Ok(())
+}
+
+/// Разрешает псевдонимы типов модели до неподвижной точки (фича 0352).
+///
+/// Значение псевдонима — уже **разрешённый** тип, поэтому одного прохода мало:
+/// `type A = B;` выше `type B = u8;` требует второго. Проход повторяется, пока
+/// карта растёт.
+///
+/// ⚠️ **Завершение держит `SE-039`** (Ce16): циклические псевдонимы отсекаются
+/// **раньше**, до вызова этой функции, поэтому «до неподвижной точки» не
+/// зациклится. Зависимость по порядку проверок, в коде она не видна.
+///
+/// # Ошибки
+/// Диагностика первого псевдонима, не разрешившегося после стабилизации, —
+/// как правило `SE-034`: имя действительно не объявлено.
+pub(crate) fn resolve_aliases(
+    model: &Rc<RefCell<ModelNode>>,
+    elements: &[crate::parser::ast::ModelElement],
+) -> Result<(), Diagnostic> {
+    use crate::parser::ast::ModelElement;
+    let mut pending: Vec<&crate::parser::ast::TypeDefine> = elements
+        .iter()
+        .filter_map(|e| match e {
+            ModelElement::Type(def) => Some(&**def),
+            _ => None,
+        })
+        .collect();
+    if pending.is_empty() {
+        return Ok(());
+    }
+    loop {
+        let before = pending.len();
+        let mut rest = Vec::with_capacity(before);
+        for def in pending {
+            match resolve_alias_value(model, def) {
+                Ok(()) => {}
+                Err(_) => rest.push(def),
+            }
+        }
+        if rest.is_empty() {
+            return Ok(());
+        }
+        if rest.len() == before {
+            // Карта больше не растёт: отдаём настоящую диагностику первого
+            // неразрешённого — имя действительно не объявлено.
+            let def = rest[0];
+            resolve_alias_value(model, def)?;
+            return Ok(());
+        }
+        pending = rest;
+    }
+}
+
+/// Вычисляет значение одного псевдонима и кладёт его в модель.
+///
+/// Имя уже занято предпроходом ([`predeclare_named_types`]), поэтому
+/// `claim_type_name` здесь **не** зовётся: второй вызов дал бы `SE-108`.
+fn resolve_alias_value(
     model: &Rc<RefCell<ModelNode>>,
     def: &crate::parser::ast::TypeDefine,
 ) -> Result<(), Diagnostic> {
     let name = def.name.name.clone();
-    claim_type_name(model, &name, def.name.loc)?;
     let typ = def.ty.clone();
     // Тип вычисляется ДО `borrow_mut`: `construct_type` зовёт `borrow`
     // (`search_type`), и одновременный `borrow_mut` был бы паникой.
@@ -117,4 +238,27 @@ pub(crate) fn declare_alias(
     bm.types.insert(name.clone(), resolved);
     bm.type_locs.insert(name, def.name.loc);
     Ok(())
+}
+
+/// Готовит типы модели: цикл структур, занятие имён, разрешение псевдонимов
+/// (фича 0352).
+///
+/// Порядок шагов значим и держится на нём **две** гарантии:
+///
+/// 1. `SE-124` проверяется по **сырому** АСД, до регистрации имён: тип
+///    бесконечного размера не должен доехать до потребителей;
+/// 2. [`resolve_aliases`] завершается потому, что циклы среди псевдонимов
+///    отсекает `SE-039` (Ce16) — она проверяется **раньше**, в вызывающем.
+///
+/// Шаг живёт здесь, а не в `tree.rs`: тот сверх лимита размера, и правило
+/// велит выносить новое, а не дописывать туда (тот же довод, что у 0167).
+pub(crate) fn prepare_types(
+    model: &Rc<RefCell<ModelNode>>,
+    elements: &[crate::parser::ast::ModelElement],
+) -> Result<(), Diagnostic> {
+    if let Some(diag) = crate::semantic::validate::struct_cycle::check_struct_cycles(elements) {
+        return Err(diag);
+    }
+    predeclare_named_types(model, elements)?;
+    resolve_aliases(model, elements)
 }
