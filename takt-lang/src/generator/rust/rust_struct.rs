@@ -1,4 +1,4 @@
-//! Литерал структуры для цели `rust` (фича 0293).
+//! Литерал структуры и умолчание для цели `rust` (фичи 0293, 0351).
 //!
 //! Отдельный модуль, потому что `rust_expr.rs` пришпилен лимитом размера, а
 //! знание «как выглядит агрегат структуры» самостоятельно: оно повторяет
@@ -7,7 +7,8 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::rust::rust_expr::{Scope, coerce_to, unsupported};
 use crate::generator::rust::rust_name::rust_type_name;
-use crate::semantic::ExpressionNode;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode};
 
 /// Литерал структуры: `Gains { kp: 2, ki: 3 }` (фича 0293).
 ///
@@ -44,6 +45,78 @@ pub(crate) fn struct_literal(
     Ok(format!(
         "{} {{ {} }}",
         rust_type_name(name, Location::Codegen)?,
+        parts.join(", ")
+    ))
+}
+
+/// Выводится ли `#[derive(Default)]` для типа (фича 0351).
+///
+/// Знание не о печати типа, а о **стандартной библиотеке Rust**: `Default` не
+/// выводится у перечисления (нужен атрибут `#[default]` на варианте), а
+/// `impl Default for [T; N]` существует только до `N = 32`. Структура,
+/// содержащая такое поле, наследует ответ — отсюда рекурсия.
+///
+/// ⚠️ Длина массива берётся у **напечатанного** типа: бит-вектор шире 64 бит
+/// печатается массивом СЛОВ `[u64; ⌈N/64⌉]` (фича 0078), и считать надо слова,
+/// а не разряды.
+///
+/// ⚠️ Признак нужен потому, что «печатать `impl Default` всегда» роняет гейт
+/// цели: `clippy::derivable_impls` под `-D warnings` — отказ сборки. Там, где
+/// `derive` не выводится, линт молчит по построению.
+pub(crate) fn derives_default(ty: &TypeNode, model: &ModelNode) -> bool {
+    match ty {
+        // У перечисления `Default` не выводится вовсе.
+        TypeNode::Enum(_) => false,
+        TypeNode::Array(n, elem) => {
+            // Бит-вектор шире 64 бит — массив слов `[u64; K]`: элемент `u64`
+            // умолчание имеет, считаем K.
+            if let Some(words) = crate::generator::rust::rust_bit::words_of_type(ty) {
+                return words <= ARRAY_DEFAULT_LIMIT;
+            }
+            // `[bit; N ≤ 64]` — упакованный СКАЛЯР (0078), длины у него нет.
+            if crate::semantic::bit_vector::is_bit_vector(ty).is_some() {
+                return true;
+            }
+            *n <= ARRAY_DEFAULT_LIMIT && derives_default(elem, model)
+        }
+        TypeNode::Struct(name) => match model.search_struct(name) {
+            Some(def) => def.fields.iter().all(|(_, ty)| derives_default(ty, model)),
+            // Структура не объявлена: отказ придёт из печати объявления,
+            // выбирать форму умолчания уже незачем.
+            None => true,
+        },
+        _ => true,
+    }
+}
+
+/// Предел длины массива, для которого стандартная библиотека Rust даёт
+/// `impl Default for [T; N]`.
+const ARRAY_DEFAULT_LIMIT: u16 = 32;
+
+/// Тело `impl Default` структуры — литерал полей с умолчаниями (фича 0351).
+///
+/// Порядок полей — **объявленный** (как у [`struct_literal`]), значение каждого
+/// поля даёт `default_value`: знание «чему равно умолчание типа» остаётся у
+/// одного носителя.
+///
+/// # Ошибки
+/// `RS-014`, если умолчание поля не строится.
+pub(crate) fn default_literal(
+    name: &str,
+    def: &crate::semantic::StructDefinitionNode,
+    model: &ModelNode,
+) -> Result<String, Diagnostic> {
+    let mut parts = Vec::with_capacity(def.fields.len());
+    for (field, field_ty) in &def.fields {
+        parts.push(format!(
+            "{}: {}",
+            crate::semantic::naming::normalize_lowercase_snakecase(field.clone()),
+            crate::generator::rust::rust_decl::default_value(field_ty, model)?
+        ));
+    }
+    Ok(format!(
+        "{} {{ {} }}",
+        rust_type_name(name, def.loc)?,
         parts.join(", ")
     ))
 }

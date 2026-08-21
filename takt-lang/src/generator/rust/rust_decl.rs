@@ -333,8 +333,20 @@ pub(crate) fn emit_structs(
             // корпуса перестал бы компилироваться (`the trait Eq is not
             // implemented for f64`). Сравнение структур язык и так запрещает
             // (`SE-059`), поэтому `PartialEq` достаточно.
-            p.ident("#[derive(Debug, Clone, Copy, PartialEq, Default)]")
-                .nl();
+            // `Default` выводится НЕ ВСЕГДА (фича 0351): у перечисления его нет
+            // вовсе, а `impl Default for [T; N]` в стандартной библиотеке
+            // существует лишь до N = 32. Прежде слово печаталось безусловно, и
+            // такая структура давала `E0277` при НУЛЕВОМ коде возврата `taktc`.
+            let derived = crate::generator::rust::rust_struct::derives_default(
+                &TypeNode::Struct(def.name.clone()),
+                &model,
+            );
+            if derived {
+                p.ident("#[derive(Debug, Clone, Copy, PartialEq, Default)]")
+                    .nl();
+            } else {
+                p.ident("#[derive(Debug, Clone, Copy, PartialEq)]").nl();
+            }
             p.ident(&format!("pub struct {} {{", name)).nl();
             p.up();
             for (field, ty) in &def.fields {
@@ -351,6 +363,23 @@ pub(crate) fn emit_structs(
             }
             p.down();
             p.ident("}").nl().nl();
+            // Там, где `derive` не выводится, умолчание печатается вручную —
+            // тем же носителем, что и литерал инициализатора. Печатать импл
+            // ВСЕГДА нельзя: `clippy::derivable_impls` под `-D warnings` —
+            // отказ сборки, а гейт цели гоняет ровно эти флаги.
+            if !derived {
+                let body =
+                    crate::generator::rust::rust_struct::default_literal(&def.name, def, &model)?;
+                p.ident(&format!("impl Default for {} {{", name)).nl();
+                p.up();
+                p.ident("fn default() -> Self {").nl();
+                p.up();
+                p.ident(&body).nl();
+                p.down();
+                p.ident("}").nl();
+                p.down();
+                p.ident("}").nl().nl();
+            }
         }
     }
     Ok(())
@@ -443,6 +472,17 @@ pub(crate) fn default_value(ty: &TypeNode, model: &ModelNode) -> Result<String, 
             Ok(format!("[0u64; {count}]"))
         }
         TypeNode::Array(n, elem) => Ok(format!("[{}; {}]", default_value(elem, model)?, n)),
+        // Длительность печатается как `u32` МИЛЛИСЕКУНД (фича 0183), формат
+        // `q(m, n)` — как `i{W}` (ADR 0061): нулевой код в обоих означает ноль
+        // величины, поэтому умолчание общее и никакой арифметики не требует.
+        TypeNode::Duration | TypeNode::Fixed { .. } => Ok("0".to_string()),
+        // Структура умолчание получает СВОИМ `Default` (фича 0351): тело
+        // печатает `rust_struct::default_literal` — там же, где живёт литерал
+        // инициализатора, чтобы форма агрегата была одна.
+        TypeNode::Struct(name) => Ok(format!(
+            "{}::default()",
+            crate::generator::rust::rust_name::rust_type_name(name, Location::Codegen)?
+        )),
         // Умолчание перечисления — его ПЕРВЫЙ вариант. Нуля у перечисления может
         // не быть вовсе (`enum Action { Idle = 670 }`), поэтому `0 as Action`
         // было бы невалидным значением, а не умолчанием.

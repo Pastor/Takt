@@ -170,7 +170,7 @@
 | `RS-011` | Конструкция не транслируется в Rust: срез массива (в Takt у него нет типа-владельца, а в `no_std` нет `alloc`), строковый литерал вне `debug`, неразрешённый узел. ⚠️ Состав менялся: степень переводится с фичи 0329 (`wrapping_pow`), запись разряда — с 0250 | `takt-lang/src/generator/rust/rust_expr.rs` |
 | `RS-012` | Корневой элемент карты не является моделью | `takt-lang/src/generator/rust/mod.rs:112` |
 | `RS-013` | Состояние '…' не найдено | `takt-lang/src/generator/rust/rust_map.rs:125` |
-| `RS-014` | тип не представим; `RS-015` — `--float-width=32` (цель всегда даёт `f64`) | `takt-lang/src/generator/rust/rust_decl.rs:372` |
+| `RS-014` | тип не представим; `RS-015` — `--float-width=32` (цель всегда даёт `f64`) | `takt-lang/src/generator/rust/rust_type.rs` |
 | `RS-015` | `--float-width=32` несовместим с целью rust (float → f64, ADR 0050) | `takt-lang/src/generator/rust/rust_type.rs:148` |
 | `RS-016` | тип порта не ложится на метод HAL (составной) | `takt-lang/src/generator/rust/rust_port.rs:116` |
 | `RS-017` | Обращение к переменной модели из тела функции не транслируется в Rust — передать параметром | `takt-lang/src/generator/rust/rust_expr.rs:155` |
