@@ -1,0 +1,41 @@
+// Сверка МАССИВА СТРУКТУР цели `sv` с эталоном (фича 0367).
+//
+// Прежде цель печатала вывод, который verilator принимает, а yosys отвергает:
+// сброс шёл шаблоном присваивания («Assignment pattern is only supported for
+// whole unpacked array assignments»), а умолчание `pts_next = pts;` при записи
+// в поле элемента давало «Latch inferred». Всё — при нулевом коде возврата.
+//
+// Наблюдаемые различают поля и элементы: `head` читает поле ПЕРВОГО элемента,
+// `tail` — другое поле ВТОРОГО. Значения меняются по тактам, иначе
+// перепутанные поле и индекс неразличимы.
+struct Cell {
+    lo: u8,
+    hi: u8
+}
+
+model Bank {
+    out head: u8 at 0;
+    out tail: u8 at 1;
+    out spare: u8 at 2;
+
+    var cells: [Cell; 2] := {{1, 2}, {3, 4}};
+    var fresh: [Cell; 2];
+    var n: u8 := 0;
+
+    start Run {
+        always {
+            n := n + 1;
+            cells[0].lo := n + 10;
+            cells[1].hi := n + 20;
+            head := cells[0].lo;
+            tail := cells[1].hi;
+            // `fresh` тело не трогает: порт читает её поле и проверяет СБРОС.
+            spare := fresh[1].lo;
+        }
+        ref Done: n >= 100;
+    }
+
+    state Done;
+}
+
+start Main = Bank;

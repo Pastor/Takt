@@ -48,7 +48,6 @@ use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_expr::{Scope, print_condition, sv_enum_variant_name};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
-use crate::generator::sv::sv_names;
 use crate::generator::sv::sv_stmt::{
     emit_hoisted_locals, has_early_return, hoist_locals, print_statement,
 };
@@ -73,6 +72,13 @@ pub(crate) struct Reg {
     pub(crate) suffix: String,
     /// Значение в ветви сброса.
     pub(crate) reset: String,
+    /// Сброс и умолчание ПО ЛИСТЬЯМ (фича 0367): `[(суффикс, значение)]`.
+    ///
+    /// Непусто там, где внутри распакованного массива лежит структура:
+    /// синтезатор принимает шаблон присваивания только для массива целиком, а
+    /// частичную запись поля элемента при умолчании массива целиком объявляет
+    /// защёлкой. Тогда и сброс, и умолчание печатаются по полям.
+    pub(crate) leaves: Vec<(String, String)>,
     /// Объявлять ли сам регистр: у выходного порта он уже объявлен в заголовке.
     pub(crate) declare_reg: bool,
 }
@@ -93,7 +99,7 @@ pub(crate) struct Fsm {
     structs: BTreeMap<String, Vec<(String, crate::semantic::type_node::TypeNode)>>,
     /// Цепочки `+`: несущее состояние и число шагов (для эмиссии enum шага,
     /// задача 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
-    step_enums: Vec<(Name, usize)>,
+    pub(crate) step_enums: Vec<(Name, usize)>,
     /// Предупреждения генератора, собранные при печати выражений (фича 0064).
     ///
     /// Ячейка, а не поле-вектор: печать выражения идёт через `&Scope`
@@ -191,7 +197,7 @@ fn state_reg_name(name: &Name, root: &Name) -> String {
 }
 
 /// Имя типа-перечисления состояний модели.
-fn state_enum_name(name: &Name) -> String {
+pub(crate) fn state_enum_name(name: &Name) -> String {
     format!("{}_state_e", name.unique_lowercase_snakecase())
 }
 
@@ -234,7 +240,7 @@ fn var_signal_name(model: &Name, var: &str) -> String {
 /// `INIT` не добавляется — его в цели `sv` не существует (см. шапку модуля).
 /// Если состояние с именем `End` объявлено автором, второй `END` не заводится:
 /// `unique_uppercase_snakecase` даёт для него ровно `<MODEL>_END`.
-fn state_variants(model: &Name, states: &[Name]) -> Vec<String> {
+pub(crate) fn state_variants(model: &Name, states: &[Name]) -> Vec<String> {
     let mut variants: Vec<String> = states
         .iter()
         .map(|s| s.unique_uppercase_snakecase())
@@ -307,6 +313,7 @@ impl Fsm {
                 suffix: String::new(),
                 reset: start.unique_uppercase_snakecase(),
                 declare_reg: true,
+                leaves: Vec::new(),
             });
 
             // Переменные модели: свой регистр на каждую, с префиксом уровня.
@@ -344,6 +351,19 @@ impl Fsm {
                     *loc,
                     map.root_model_node().as_ref(),
                 )?;
+                // Массив, внутри которого лежит структура, сбрасывается и
+                // получает умолчание ПО ПОЛЯМ (фича 0367): синтезатор
+                // принимает шаблон присваивания только для массива целиком, а
+                // частичную запись поля элемента при умолчании массива целиком
+                // объявляет защёлкой.
+                let leaves = crate::generator::sv::sv_array::leafwise_reset(
+                    expr,
+                    ty,
+                    &fsm.enums,
+                    &fsm.structs,
+                    *loc,
+                    &format!("переменной '{var_name}'"),
+                )?;
                 fsm.registered.insert(signal.clone());
                 fsm.regs.push(Reg {
                     name: signal,
@@ -351,6 +371,7 @@ impl Fsm {
                     suffix: decl.suffix,
                     reset,
                     declare_reg: true,
+                    leaves,
                 });
             }
             drop(model);
@@ -374,6 +395,7 @@ impl Fsm {
                     suffix: String::new(),
                     reset: step_variant(state_name, 0),
                     declare_reg: true,
+                    leaves: Vec::new(),
                 });
                 fsm.step_enums.push((state_name.clone(), items.len()));
             }
@@ -413,6 +435,7 @@ impl Fsm {
                     map.root_model_node().as_ref(),
                 )?,
                 declare_reg: false,
+                leaves: Vec::new(),
             });
         }
 
@@ -441,6 +464,7 @@ impl Fsm {
                     suffix: ty.suffix,
                     reset,
                     declare_reg: true,
+                    leaves: Vec::new(),
                 });
             }
         }
@@ -603,81 +627,6 @@ pub(crate) fn emit_functions(
     Ok(())
 }
 
-/// Печатает перечисления состояний всех уровней.
-pub(crate) fn emit_state_enums(
-    p: &mut Printer,
-    map: &SvMap,
-    blocks: &[Block],
-) -> Result<(), Diagnostic> {
-    for (name, _) in blocks {
-        let Some(Element::Model { states, .. }) = map.model_element_of(name) else {
-            continue;
-        };
-        // Алфавит имени состояния (фича 0200): перечислитель печатается здесь,
-        // и без этой проверки не-ASCII имя доехало бы до `verilator`. ⚠️ Дыру
-        // нашёл тест по видам объявлений, а не чтение: у переменных, портов и
-        // функций проверка была, у состояний — нет.
-        sv_names::check_state_names(map, name)?;
-        let variants = state_variants(name, &states);
-        // Ширина — по диапазону значений (задача 0045-03). Значения назначает
-        // генератор (0..n-1), поэтому формула вырождается в ⌈log₂(n)⌉ — то есть
-        // совпадает с формулой ADR именно здесь, где та была верна.
-        let numbered: Vec<(String, i128)> = variants
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (v.clone(), i as i128))
-            .collect();
-        let (width, _) = enum_width(&numbered, &format!("состояния модели '{}'", name))?;
-        p.ident(&format!(
-            "// Состояния модели '{}'. Синтетического INIT нет: стартовое",
-            name
-        ))
-        .nl();
-        p.ident("// состояние живёт в ветви сброса (контракт ADR 0033).")
-            .nl();
-        p.ident(&format!("typedef enum logic [{}:0] {{", width - 1))
-            .nl();
-        p.up();
-        for (i, (variant, value)) in numbered.iter().enumerate() {
-            let comma = if i + 1 == numbered.len() { "" } else { "," };
-            p.ident(&format!("{} = {}'d{}{}", variant, width, value, comma))
-                .nl();
-        }
-        p.down();
-        p.ident(&format!("}} {};", state_enum_name(name))).nl().nl();
-    }
-    Ok(())
-}
-
-/// Печатает перечисления шага для цепочек `+` (задача 0057-01).
-///
-/// Значения назначает генератор (0..n-1), поэтому ширина — ⌈log₂(n)⌉, как у
-/// перечислений состояний. Порядок — обхода `Fsm::build` (детерминизм 0048).
-pub(crate) fn emit_step_enums(p: &mut Printer, fsm: &Fsm) -> Result<(), Diagnostic> {
-    for (state, count) in &fsm.step_enums {
-        let numbered: Vec<(String, i128)> = (0..*count)
-            .map(|i| (step_variant(state, i), i as i128))
-            .collect();
-        let (width, _) = enum_width(&numbered, &format!("шаг цепочки '{}'", state))?;
-        p.ident(&format!(
-            "// Шаг последовательной композиции '{}' (`+`).",
-            state
-        ))
-        .nl();
-        p.ident(&format!("typedef enum logic [{}:0] {{", width - 1))
-            .nl();
-        p.up();
-        for (i, (variant, value)) in numbered.iter().enumerate() {
-            let comma = if i + 1 == numbered.len() { "" } else { "," };
-            p.ident(&format!("{} = {}'d{}{}", variant, width, value, comma))
-                .nl();
-        }
-        p.down();
-        p.ident(&format!("}} {};", step_enum_name(state))).nl().nl();
-    }
-    Ok(())
-}
-
 /// Печатает объявления регистров и их комбинационных пар.
 pub(crate) fn emit_signals(p: &mut Printer, fsm: &Fsm) {
     for reg in &fsm.regs {
@@ -715,7 +664,20 @@ pub(crate) fn emit_comb(
         .nl();
     p.ident("// даёт защёлку (verilator: LATCH).").nl();
     for reg in &fsm.regs {
-        p.ident(&format!("{}_next = {};", reg.name, reg.name)).nl();
+        // Массив со структурой внутри — по полям (фича 0367): whole-array
+        // умолчание синтезатор считает защёлкой, когда тело пишет поле
+        // элемента.
+        if reg.leaves.is_empty() {
+            p.ident(&format!("{}_next = {};", reg.name, reg.name)).nl();
+        } else {
+            for (suffix, _) in &reg.leaves {
+                p.ident(&format!(
+                    "{name}_next{suffix} = {name}{suffix};",
+                    name = reg.name
+                ))
+                .nl();
+            }
+        }
     }
     p.nl();
     // Перекрытие умолчаний регистров времени (фича 0134). Логика — в `sv_time`.
@@ -928,7 +890,14 @@ pub(crate) fn emit_ff(
     p.ident("if (!rst_n) begin").nl();
     p.up();
     for reg in &fsm.regs {
-        p.ident(&format!("{} <= {};", reg.name, reg.reset)).nl();
+        if reg.leaves.is_empty() {
+            p.ident(&format!("{} <= {};", reg.name, reg.reset)).nl();
+        } else {
+            // Сброс по полям — по той же причине, что и умолчание (фича 0367).
+            for (suffix, value) in &reg.leaves {
+                p.ident(&format!("{}{suffix} <= {value};", reg.name)).nl();
+            }
+        }
     }
     // Блоки `enter` стартовых состояний — после умолчаний: они их уточняют.
     for (signal, value) in &enter_resets {

@@ -208,6 +208,7 @@ pub(crate) fn push_time_regs(
             suffix: String::new(),
             reset,
             declare_reg: true,
+            leaves: Vec::new(),
         });
     };
     if dwell {

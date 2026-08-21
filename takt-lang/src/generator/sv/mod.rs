@@ -43,6 +43,7 @@ mod sv_call;
 mod sv_cast;
 mod sv_compose;
 mod sv_const;
+mod sv_enums;
 mod sv_expr;
 mod sv_fixed;
 mod sv_fsm;
@@ -265,8 +266,8 @@ fn generate_program(
     // Константы — после типов (фича 0347): `localparam cell_t …` ссылается на
     // `typedef struct packed … cell_t`.
     sv_const::emit_constants(&mut p, map, &blocks)?;
-    sv_fsm::emit_state_enums(&mut p, map, &blocks)?;
-    sv_fsm::emit_step_enums(&mut p, &fsm)?;
+    sv_enums::emit_state_enums(&mut p, map, &blocks)?;
+    sv_enums::emit_step_enums(&mut p, &fsm)?;
     sv_fsm::emit_signals(&mut p, &fsm);
     sv_fsm::emit_functions(&mut p, map, &fsm, &blocks)?;
     sv_fsm::emit_comb(&mut p, map, &fsm, &root_name)?;

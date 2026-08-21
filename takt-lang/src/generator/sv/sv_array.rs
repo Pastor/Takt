@@ -18,6 +18,9 @@
 //! ⚠️ Бит-вектор `[bit;N≤64]` под правило **не подпадает**: это упакованный
 //! скаляр (правило 0078), у него и сброс `'0`, и индексация разряда законны.
 
+use std::collections::BTreeMap;
+
+use crate::diagnostics::Diagnostic;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode};
 
@@ -117,6 +120,123 @@ fn index_width_for(size: u16) -> u32 {
     }
 }
 
+/// Листья ТИПА: суффикс и тип каждого скалярного места (фича 0367).
+///
+/// `None` — тип листьями не раскладывается, то есть присваивается целиком.
+/// Раскладка нужна там, где внутри распакованного массива лежит структура:
+/// yosys принимает шаблон присваивания только для массива целиком, а частичную
+/// запись поля элемента при умолчании массива целиком объявляет защёлкой
+/// («Latch inferred» — замер 2026-08-21). Значит и умолчание, и сброс такого
+/// регистра печатаются **по полям**.
+pub(crate) fn type_leaves(
+    ty: &TypeNode,
+    fields_of: &crate::generator::aggregate::FieldsOf<'_>,
+) -> Option<Vec<(String, TypeNode)>> {
+    if !needs_leafwise(ty, fields_of) {
+        return None;
+    }
+    let mut out = Vec::new();
+    walk_type(ty, fields_of, &mut String::new(), &mut out);
+    Some(out)
+}
+
+/// Лежит ли структура ВНУТРИ распакованного массива.
+///
+/// Только этот случай синтезатор не принимает целиком: массив скаляров
+/// присваивается whole-array (проверено прогоном), а структура вне массива —
+/// упакованная, и её присваивание тоже законно.
+pub(crate) fn needs_leafwise(
+    ty: &TypeNode,
+    fields_of: &crate::generator::aggregate::FieldsOf<'_>,
+) -> bool {
+    match ty {
+        TypeNode::Array(_, elem) if crate::semantic::bit_vector::is_bit_vector(ty).is_none() => {
+            contains_struct(elem, fields_of)
+        }
+        _ => false,
+    }
+}
+
+fn contains_struct(ty: &TypeNode, fields_of: &crate::generator::aggregate::FieldsOf<'_>) -> bool {
+    match ty {
+        TypeNode::Struct(name) => fields_of(name).is_some(),
+        TypeNode::Array(_, elem) if crate::semantic::bit_vector::is_bit_vector(ty).is_none() => {
+            contains_struct(elem, fields_of)
+        }
+        _ => false,
+    }
+}
+
+fn walk_type(
+    ty: &TypeNode,
+    fields_of: &crate::generator::aggregate::FieldsOf<'_>,
+    prefix: &mut String,
+    out: &mut Vec<(String, TypeNode)>,
+) {
+    match ty {
+        TypeNode::Array(size, elem) if crate::semantic::bit_vector::is_bit_vector(ty).is_none() => {
+            for index in 0..usize::from(*size) {
+                let saved = prefix.len();
+                prefix.push_str(&format!("[{index}]"));
+                walk_type(elem, fields_of, prefix, out);
+                prefix.truncate(saved);
+            }
+        }
+        TypeNode::Struct(name) => match fields_of(name) {
+            Some(fields) => {
+                for (field, field_ty) in fields {
+                    let saved = prefix.len();
+                    prefix.push('.');
+                    prefix.push_str(&field);
+                    walk_type(&field_ty, fields_of, prefix, out);
+                    prefix.truncate(saved);
+                }
+            }
+            None => out.push((prefix.clone(), ty.clone())),
+        },
+        other => out.push((prefix.clone(), other.clone())),
+    }
+}
+
+/// Сброс ПО ЛИСТЬЯМ, если тип того требует (фича 0367).
+///
+/// Пустой вектор — регистр сбрасывается целиком, как прежде. Значения листьев
+/// берутся у инициализатора, когда он агрегат, и у умолчания типа — когда его
+/// нет.
+pub(crate) fn leafwise_reset(
+    expr: &crate::semantic::ExpressionNode,
+    ty: &crate::semantic::type_node::TypeNode,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
+    structs: &BTreeMap<String, Vec<(String, crate::semantic::type_node::TypeNode)>>,
+    loc: crate::diagnostics::Location,
+    what: &str,
+) -> Result<Vec<(String, String)>, Diagnostic> {
+    use crate::semantic::ExpressionNode;
+
+    let fields_of = |name: &str| structs.get(name).cloned();
+    let Some(type_leaves) = type_leaves(ty, &fields_of) else {
+        return Ok(Vec::new());
+    };
+    if let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = expr {
+        let mut out = Vec::new();
+        for leaf in crate::generator::aggregate::leaves(Some(ty), items, &fields_of) {
+            let suffix = crate::generator::aggregate::c_like_suffix(&leaf.path);
+            let leaf_ty = leaf.ty.clone().unwrap_or_else(|| ty.clone());
+            let value = super::sv_const::reset_value(leaf.value, &leaf_ty, enums, what, loc, None)?;
+            out.push((suffix, value));
+        }
+        return Ok(out);
+    }
+    // Инициализатора нет: каждый лист получает умолчание своего типа.
+    let mut out = Vec::new();
+    for (suffix, leaf_ty) in type_leaves {
+        let value =
+            super::sv_const::reset_value(&ExpressionNode::None, &leaf_ty, enums, what, loc, None)?;
+        out.push((suffix, value));
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +301,27 @@ mod tests {
         assert_eq!(index_text(Some(&base), None, "1".to_string()), "1");
         // База не массив — не трогаем.
         assert_eq!(index_text(None, Some(&u(8)), "i".to_string()), "i");
+    }
+
+    /// Массив структур раскладывается по полям: whole-array присваивание
+    /// синтезатор принимает, а частичную запись поля при нём — нет.
+    #[test]
+    fn array_of_structs_is_split_into_field_leaves() {
+        let ty = TypeNode::Array(2, Box::new(TypeNode::Struct("Point".to_string())));
+        let fields = |name: &str| {
+            (name == "Point").then(|| vec![("x".to_string(), u(8)), ("y".to_string(), u(8))])
+        };
+        let leaves = type_leaves(&ty, &fields).expect("массив структур раскладывается");
+        let names: Vec<_> = leaves.iter().map(|(s, _)| s.clone()).collect();
+        assert_eq!(names, vec!["[0].x", "[0].y", "[1].x", "[1].y"]);
+    }
+
+    /// Массив СКАЛЯРОВ присваивается целиком — раскладка не нужна.
+    #[test]
+    fn array_of_scalars_is_assigned_as_a_whole() {
+        let ty = TypeNode::Array(2, Box::new(u(8)));
+        let no_fields = |_: &str| None;
+        assert!(type_leaves(&ty, &no_fields).is_none());
     }
 
     #[test]
