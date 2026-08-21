@@ -23,6 +23,7 @@ use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::st::st_reserved::check_st_name;
 use crate::generator::st::st_type::{self, get_st_type};
+use crate::semantic::FunctionDefinitionNode;
 use crate::semantic::minimap::Name;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::UsageSet;
@@ -119,7 +120,16 @@ pub(crate) fn emit_struct_types(
     // MatIEC отвергает анонимный `ARRAY […] OF T` в объявлении параметра.
     // Собираются здесь же, чтобы `TYPE … END_TYPE` в файле остался ОДИН: вторая
     // секция типов рядом с первой — лишняя сущность и лишний повод разъехаться.
-    let arrays = shared_array_types(models, shared_arrays)?;
+    let mut arrays = shared_array_types(models, shared_arrays)?;
+    // Формы массивов, встречающиеся в ПАРАМЕТРАХ функций (фича 0348): MatIEC
+    // не принимает анонимный `ARRAY […] OF T` в `VAR_INPUT`, а типы аргумента и
+    // параметра обязаны совпадать — значит именованной должна быть **форма**, а
+    // не переменная (в отличие от общих массивов под-моделей, 0210).
+    for (name, ty) in function_array_forms(models)? {
+        if !arrays.iter().any(|(n, _)| *n == name) {
+            arrays.push((name, ty));
+        }
+    }
 
     if declared.is_empty() && arrays.is_empty() {
         return Ok(false);
@@ -214,6 +224,13 @@ pub(crate) struct Extras {
     /// `data : ArrayVar_data_arr;` при **отсутствующем** типе, то есть ссылку в
     /// пустоту (урок ADR 0195).
     pub named_arrays: Vec<String>,
+    /// Формы массивов, объявленные именованным типом ради ПАРАМЕТРОВ функций
+    /// (фича 0348): `TAKT_ARR_2_USINT` и подобные.
+    ///
+    /// ⚠️ Список нужен, чтобы имя получали **только** те массивы, чья форма
+    /// действительно передаётся в функцию: иначе именованным стал бы каждый
+    /// массив вывода — правка формы там, где ничего не ломалось.
+    pub array_forms: Vec<String>,
     /// Экземпляры под-FB: `(имя, тип)`.
     /// Экземпляры под-FB: имя, тип, инициализатор экземпляра (фича 0185).
     ///
@@ -353,6 +370,7 @@ pub(crate) fn emit_declarations(
                     model,
                     array_owner,
                     named_arrays,
+                    &extras.array_forms,
                 )?);
             }
             VariableNode::Port {
@@ -382,7 +400,7 @@ pub(crate) fn emit_declarations(
                 // а в цели `st-at` порт виден блоку через `VAR_EXTERNAL`, где
                 // инициализатор недопустим по стандарту: значение там ставится
                 // на `VAR_GLOBAL` (`st/mod.rs::emit_configuration`).
-                let mut decl = declaration(name, ty, init, model, None, &[])?;
+                let mut decl = declaration(name, ty, init, model, None, &[], &extras.array_forms)?;
                 // Цель `st-at`: порт — размещённая глобальная переменная
                 // (`VAR_GLOBAL … AT %…` внутри `CONFIGURATION`), и блок видит её
                 // через `VAR_EXTERNAL`. Цель `st` адрес не потребляет: порт
@@ -414,7 +432,15 @@ pub(crate) fn emit_declarations(
                     continue;
                 }
                 check_st_name(name, *loc)?;
-                constants.push(declaration(name, ty, expr, model, None, &[])?);
+                constants.push(declaration(
+                    name,
+                    ty,
+                    expr,
+                    model,
+                    None,
+                    &[],
+                    &extras.array_forms,
+                )?);
             }
         }
     }
@@ -424,7 +450,15 @@ pub(crate) fn emit_declarations(
         let VariableNode::Const { ty, expr, .. } = &var else {
             continue;
         };
-        constants.push(declaration(&name, ty, expr, model, None, &[])?);
+        constants.push(declaration(
+            &name,
+            ty,
+            expr,
+            model,
+            None,
+            &[],
+            &extras.array_forms,
+        )?);
     }
 
     // Анонимные ячейки (фича 0189): в цели `st-at` они объявлены глобально с
@@ -560,6 +594,7 @@ fn declaration(
     model: &ModelNode,
     array_owner: Option<&str>,
     named_arrays: &[String],
+    array_forms: &[String],
 ) -> Result<Declaration, Diagnostic> {
     // Массив, разделяемый через `VAR_IN_OUT`, объявляется ИМЕНОВАННЫМ типом —
     // и у владельца тоже (фича 0210). ⚠️ Именованным должен быть **и параметр,
@@ -570,7 +605,13 @@ fn declaration(
         Some(owner) if named_arrays.iter().any(|n| n == name) => {
             st_type::shared_array_type_name(owner, name)
         }
-        _ => get_st_type(ty, model)?,
+        // Массив, чья ФОРМА встречается в параметре функции, объявляется той же
+        // формой (фича 0348): типы аргумента и параметра обязаны совпадать, и
+        // анонимный `ARRAY […]` против именованного MatIEC не принимает.
+        _ => match st_type::array_form_name(ty, model) {
+            Some(form) if array_forms.contains(&form) => form,
+            _ => get_st_type(ty, model)?,
+        },
     };
     Ok(Declaration {
         name: name.to_string(),
@@ -691,6 +732,48 @@ pub(crate) fn literal_init(
         }
         _ => None,
     }
+}
+
+/// Формы массивов из параметров функций — `(имя формы, объявление IEC)`.
+///
+/// ⚠️ Порядок детерминирован (инвариант 0048): обход идёт по отсортированным
+/// именам функций и по порядку параметров.
+fn function_array_forms(
+    models: &[(Name, Rc<RefCell<ModelNode>>)],
+) -> Result<Vec<(String, String)>, Diagnostic> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (_, model_rc) in models {
+        let model = &*model_rc.borrow();
+        let mut names: Vec<&String> = model.functions.keys().collect();
+        names.sort();
+        for key in names {
+            let (FunctionDefinitionNode::Local { params, .. }
+            | FunctionDefinitionNode::External { params, .. }) = &model.functions[key]
+            else {
+                continue;
+            };
+            for (_, ty) in params {
+                let Some(form) = st_type::array_form_name(ty, model) else {
+                    continue;
+                };
+                if !out.iter().any(|(n, _)| *n == form) {
+                    out.push((form, get_st_type(ty, model)?));
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Имена форм массивов из параметров функций (фича 0348).
+///
+/// Продюсер (`TYPE … END_TYPE`) и потребитель (объявление переменной и
+/// параметра) обязаны спрашивать **один** список — разъехавшись, они дадут
+/// ссылку в пустоту (урок ADR 0195, тот же довод, что у `named_arrays`).
+pub(crate) fn function_array_form_names(models: &[(Name, Rc<RefCell<ModelNode>>)]) -> Vec<String> {
+    function_array_forms(models)
+        .map(|forms| forms.into_iter().map(|(name, _)| name).collect())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

@@ -331,3 +331,4 @@
 | 0345 | Агрегат в локальном объявлении переводят все цели | [0345-local-aggregate.md](0345-local-aggregate.md) | — (новая фича) |
 | 0346 | Индексация параметра-массива внутри функции | [0346-array-param-index.md](0346-array-param-index.md) | — (новая фича) |
 | 0347 | Константа структурного и массивного типа у rust и sv | [0347-const-aggregate.md](0347-const-aggregate.md) | — (новая фича) |
+| 0348 | Массив в параметре функции у цели st | [0348-st-array-parameter.md](0348-st-array-parameter.md) | — (новая фича) |

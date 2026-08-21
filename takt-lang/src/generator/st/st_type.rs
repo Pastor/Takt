@@ -293,6 +293,31 @@ pub(crate) fn shared_array_type_name(owner: &str, var: &str) -> String {
     format!("{}_{}_arr", normalize_camelcase_name(owner), var)
 }
 
+/// Имя ФОРМЫ массива для объявления в секции `TYPE` (фича 0348).
+///
+/// MatIEC не принимает анонимный `ARRAY […] OF T` в параметре `FUNCTION`
+/// («Data type incompatibility for value passed in position 1»), а типы
+/// аргумента и параметра обязаны **совпадать** — проверено пробой. Поэтому имя
+/// строится по самой форме (размер и тип элемента), а не по владельцу: все
+/// переменные и параметры одной формы получают один тип.
+///
+/// ⚠️ `[bit; N ≤ 64]` сюда не попадает: по правилу 0078 это упакованный
+/// **скаляр**, и MatIEC принимает его как есть.
+pub(crate) fn array_form_name(ty: &TypeNode, model: &ModelNode) -> Option<String> {
+    if !needs_named_array_type(ty, model) {
+        return None;
+    }
+    let TypeNode::Array(size, elem) = ty else {
+        return None;
+    };
+    let elem_name = get_st_type(elem, model).ok()?;
+    // Имя детерминировано по форме: `TAKT_ARR_2_USINT`.
+    Some(format!(
+        "TAKT_ARR_{size}_{}",
+        elem_name.replace(' ', "_").to_uppercase()
+    ))
+}
+
 /// Требует ли тип именованного объявления при передаче через `VAR_IN_OUT`.
 ///
 /// Только настоящий массив: `[bit; N ≤ 64]` — упакованный **скаляр**

@@ -215,6 +215,10 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
     // Функции — тоже раньше: опережающие ссылки в ST нестандартны (`iec2c -p`).
     let mut warnings = st_func::emit_functions(&mut p, &blocks)?;
 
+    // Формы массивов из параметров функций (фича 0348) считаются один раз:
+    // список общий у продюсера типов и у каждого объявления.
+    let array_forms = st_decl::function_array_form_names(&blocks);
+
     let root_name = map.root_name();
     for (name, model) in &blocks {
         let is_root = name.unique() == root_name.unique();
@@ -225,6 +229,7 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
             &model.borrow(),
             is_root,
             &shared_arrays,
+            &array_forms,
         )?);
     }
 
@@ -495,6 +500,7 @@ fn emit_function_block(
     model: &ModelNode,
     is_root: bool,
     named_arrays: &[String],
+    array_forms: &[String],
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     let element = if is_root {
         map.model()
@@ -536,6 +542,9 @@ fn emit_function_block(
         // под-модели в параметрах, — иначе типы не совпадут (фича 0210).
         root_owner: is_root.then(|| map.root_name().unique().to_string()),
         named_arrays: named_arrays.to_vec(),
+        // Формы массивов из параметров функций (фича 0348): именованный тип
+        // получают только они, иначе правка задела бы каждый массив вывода.
+        array_forms: array_forms.to_vec(),
         instances: out
             .instances
             .iter()
