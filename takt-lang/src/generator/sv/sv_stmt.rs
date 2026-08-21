@@ -367,6 +367,47 @@ fn print_expression_statement(
     scope: &Scope,
 ) -> Result<(), Diagnostic> {
     match expr {
+        // Присваивание СРЕЗА печатается тем же поэлементным путём (фича 0355):
+        // массив здесь РАСПАКОВАННЫЙ, и `{…}` для него есть склейка разрядов, а
+        // не список элементов (урок 0309). Границы — литералы, проверенные
+        // `SE-029`.
+        ExpressionNode::Assign(target, value)
+            if matches!(value.as_ref(), ExpressionNode::ArraySlice(..)) =>
+        {
+            let ExpressionNode::ArraySlice(src, from, to) = value.as_ref() else {
+                unreachable!("охрана ветви проверила вид узла");
+            };
+            let lhs = print_assign_target(target, scope)?;
+            let src_expr = ExpressionNode::Variable(std::rc::Rc::clone(src));
+            let rhs_base = print_expression(&src_expr, scope)?;
+            // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим
+            // массивом (`res := mem[1:2];` при `res: u8` эталон не исполняет —
+            // `SIM-006`).
+            let dst_ok = target_type(target)
+                .as_ref()
+                .and_then(crate::generator::slice::elementwise_len)
+                .is_some();
+            let src_len = match &*src.borrow() {
+                crate::semantic::VariableNode::Simple { ty, .. } if dst_ok => {
+                    crate::generator::slice::elementwise_len(ty)
+                }
+                _ => None,
+            };
+            // Непригодный операнд отдаётся ПРЕЖНЕМУ пути: отказ `SV-002` строит
+            // общий печатник выражений, и координату оператора ему даёт
+            // `site::at` (фича 0308). Свой отказ пришёл бы без координаты.
+            let Some(src_len) = src_len else {
+                let rhs = print_expression(value, scope)?;
+                p.ident(&format!("{lhs} = {rhs};")).nl();
+                return Ok(());
+            };
+            let (start, len) = crate::generator::slice::bounds(*from, *to, src_len);
+            for k in 0..len {
+                p.ident(&format!("{lhs}[{k}] = {rhs_base}[{}];", start + k))
+                    .nl();
+            }
+            Ok(())
+        }
         // Присваивание АГРЕГАТА (фичи 0330, 0340) печатается поэлементно:
         // `'{…}` в `always_comb` пришлось бы согласовывать по ширине с каждым
         // элементом, а поэлементная форма выразима всегда.

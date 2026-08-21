@@ -309,3 +309,4 @@
 | 0352 | Имя типа видно во всём файле; цикл структур — SE-124 | [0352-struct-field-forward-reference.md](0352-struct-field-forward-reference.md) | ГОТОВО (сверка с отчётом пройдена) |
 | 0353 | Цель c обнуляет переменные без инициализатора | [0353-c-default-init.md](0353-c-default-init.md) | ГОТОВО (сверка с отчётом пройдена) |
 | 0354 | Умолчание duration у эталона несёт свой вид значения | [0354-sim-duration-default.md](0354-sim-duration-default.md) | ГОТОВО (сверка с отчётом пройдена) |
+| 0355 | Срез массива переводят четыре цели | [0355-array-slice-in-targets.md](0355-array-slice-in-targets.md) | ГОТОВО (сверка с отчётом пройдена) |

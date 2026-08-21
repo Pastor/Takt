@@ -5,6 +5,7 @@ mod indent;
 mod plantuml;
 mod rust;
 mod site;
+pub(crate) mod slice;
 mod st;
 mod struct_order;
 mod sv;

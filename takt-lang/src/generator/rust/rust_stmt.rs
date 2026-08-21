@@ -460,6 +460,39 @@ pub(crate) fn print_statement_ctx(
             // своей позиции у них нет (решение 0056), и до этой фичи цель
             // печатала отказ без координаты вовсе.
             crate::generator::site::enter(*loc);
+            // Присваивание СРЕЗА печатается поэлементно (фича 0355) — так же,
+            // как у `c`, `st` и `sv`. Выражением его не напечатать: `&self.src[0..2]`
+            // имеет тип `[u8]`, не `Sized`, а `copy_from_slice` — оператор, не
+            // выражение. Границы — литералы, проверенные `SE-029`.
+            if let ExpressionNode::Assign(target, value) = expr.as_ref()
+                && let ExpressionNode::ArraySlice(src, from, to) = value.as_ref()
+            {
+                let dst = print_expression(target, scope)?;
+                let src_expr = ExpressionNode::Variable(std::rc::Rc::clone(src));
+                let base = print_expression(&src_expr, scope)?;
+                // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим
+                // массивом (`res := mem[1:2];` при `res: u8` эталон не
+                // исполняет — `SIM-006`).
+                let dst_ok = matches!(target.as_ref(), ExpressionNode::Variable(v)
+                    if matches!(&*v.borrow(), crate::semantic::VariableNode::Simple { ty, .. }
+                        if crate::generator::slice::elementwise_len(ty).is_some()));
+                let src_len = match &*src.borrow() {
+                    crate::semantic::VariableNode::Simple { ty, .. } if dst_ok => {
+                        crate::generator::slice::elementwise_len(ty)
+                    }
+                    _ => None,
+                };
+                // Срез над бит-вектором поэлементно не выразим (0078): вход
+                // уходит прежним путём — к отказу `RS-011`, как у эталона.
+                if let Some(src_len) = src_len {
+                    let (start, len) = crate::generator::slice::bounds(*from, *to, src_len);
+                    for k in 0..len {
+                        p.ident(&format!("{dst}[{k}] = {base}[{}];", start + k))
+                            .nl();
+                    }
+                    return Ok(0);
+                }
+            }
             p.ident(&format!("{};", print_expression(expr, scope)?))
                 .nl();
             Ok(0)

@@ -118,6 +118,43 @@ pub(crate) fn print_statement(
                 p.ident(&print_bit_write(inner, *bit, rhs, model)?).nl();
                 return Ok(());
             }
+            // Присваивание СРЕЗА печатается поэлементно (фича 0355): формы
+            // «взять кусок массива» в IEC 61131-3 нет, а эталон вход исполняет.
+            // Границы — литералы, проверенные `SE-029`, поэтому длина известна
+            // и цикла не требуется.
+            if let ExpressionNode::Assign(lhs, rhs) = expr.as_ref()
+                && let ExpressionNode::Variable(var) = lhs.as_ref()
+                && let ExpressionNode::ArraySlice(src, from, to) = rhs.as_ref()
+            {
+                let dst = variable_ident(&var.borrow());
+                let src_var = src.borrow();
+                let src_name = variable_ident(&src_var);
+                // Срез над бит-вектором поэлементно не выразим (0078) — такой
+                // вход уходит прежним путём, к отказу цели, как и у эталона.
+                // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим
+                // массивом (`res := mem[1:2];` при `res: u8` эталон не
+                // исполняет — `SIM-006`).
+                let dst_ok = assign_target_type(&var.borrow())
+                    .as_ref()
+                    .and_then(crate::generator::slice::elementwise_len)
+                    .is_some();
+                let src_len = assign_target_type(&src_var)
+                    .as_ref()
+                    .and_then(crate::generator::slice::elementwise_len)
+                    .filter(|_| dst_ok);
+                let Some(src_len) = src_len else {
+                    drop(src_var);
+                    let text = print_expression(expr, model)?;
+                    p.ident(&format!("{text};")).nl();
+                    return Ok(());
+                };
+                let (start, len) = crate::generator::slice::bounds(*from, *to, src_len);
+                for k in 0..len {
+                    p.ident(&format!("{dst}[{k}] := {src_name}[{}];", start + k))
+                        .nl();
+                }
+                return Ok(());
+            }
             // Присваивание АГРЕГАТА печатается поэлементно (фича 0330):
             // агрегатной формы значения массива в IEC 61131-3 нет, и прежде
             // цель отвечала `ST-011` с текстом, обещавшим «часть 2 задачи

@@ -30,6 +30,15 @@ pub(in crate::generator::c) fn emit(
     let ExpressionNode::Assign(target, value) = expr else {
         return Ok(false);
     };
+    // Присваивание СРЕЗА печатается тем же поэлементным путём (фича 0355):
+    // массив в C не присваивается, а `memcpy` потребовал бы `<string.h>` в
+    // заголовке, который цель не подключает. Границы — литералы, проверенные
+    // `SE-029`, поэтому длина известна и цикла не нужно.
+    if let ExpressionNode::ArraySlice(src, from, to) = value.as_ref()
+        && let ExpressionNode::Variable(dst) = target.as_ref()
+    {
+        return emit_slice(printer, map, owner, params, dst, src, *from, *to, has_model);
+    }
     let (ExpressionNode::Initializer(items) | ExpressionNode::Array(items)) = value.as_ref() else {
         return Ok(false);
     };
@@ -78,6 +87,65 @@ pub(in crate::generator::c) fn emit(
         }
         printer
             .ident(&format!("{base}{} = {rhs};", place.suffix))
+            .nl();
+    }
+    Ok(true)
+}
+
+/// Печатает присваивание среза поэлементно (фича 0355).
+///
+/// База обоих операндов берётся у общего печатника выражений: она бывает
+/// `model->a`, `main->a` и просто `a`, и второй копии правила выбора здесь
+/// быть не должно.
+#[allow(clippy::too_many_arguments)]
+fn emit_slice(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    dst: &std::rc::Rc<std::cell::RefCell<VariableNode>>,
+    src: &std::rc::Rc<std::cell::RefCell<VariableNode>>,
+    from: Option<i128>,
+    to: Option<i128>,
+    has_model: bool,
+) -> Result<bool, Diagnostic> {
+    // Пригодны ОБА операнда: приёмник тоже обязан быть настоящим массивом.
+    // `res := mem[1:2];` при `res: u8` эталон не исполняет (`SIM-006`), а
+    // поэлементная печать дала бы `model->res[0] = …` над скаляром.
+    let dst_ok = matches!(&*dst.borrow(), VariableNode::Simple { ty, .. }
+        if crate::generator::slice::elementwise_len(ty).is_some());
+    let src_len = match &*src.borrow() {
+        VariableNode::Simple { ty, .. } if dst_ok => crate::generator::slice::elementwise_len(ty),
+        _ => None,
+    };
+    // Непригодный операнд отдаётся ПРЕЖНЕМУ пути (`Ok(false)`), а не отвергается
+    // здесь: отказ `CC-022` строит общий печатник выражений, и координату
+    // оператора ему даёт `site::at` (фича 0277). Свой отказ пришёл бы с
+    // позицией объявления — то есть с чужой верной координатой (класс 0264).
+    let Some(src_len) = src_len else {
+        return Ok(false);
+    };
+    let (start, len) = crate::generator::slice::bounds(from, to, src_len);
+    let base_of =
+        |var: &std::rc::Rc<std::cell::RefCell<VariableNode>>| -> Result<String, Diagnostic> {
+            let mut text = String::new();
+            let mut tmp = Printer::new(4, &mut text);
+            generate_expr(
+                &mut tmp,
+                map,
+                owner,
+                params.clone(),
+                &ExpressionNode::Variable(std::rc::Rc::clone(var)),
+                0,
+                has_model,
+            )?;
+            Ok(text)
+        };
+    let dst_base = base_of(dst)?;
+    let src_base = base_of(src)?;
+    for k in 0..len {
+        printer
+            .ident(&format!("{dst_base}[{k}] = {src_base}[{}];", start + k))
             .nl();
     }
     Ok(true)
