@@ -249,15 +249,19 @@ fn generate_program(
         }
         _ => None,
     };
+    // Пользовательские типы объявляются ВНЕ модуля (фича 0350): порт может
+    // иметь структурный тип, а шапка модуля печатается раньше тела — verilator
+    // отвечал «Reference to 'pair_t' before declaration». Форма проверена
+    // **обоими** инструментами: `typedef` на уровне файла принимают и
+    // verilator, и yosys.
+    sv_type::emit_structs(&mut p, &blocks)?;
+    sv_fsm::emit_enums(&mut p, &blocks)?;
+
     sv_module::emit_module_header(&mut p, &module, &ports, mmio_map.as_ref(), time_ms_bits);
 
     p.up();
-    // Типы — ДО констант (фича 0347): `localparam cell_t …` ссылается на
-    // `typedef struct packed … cell_t`, и обратный порядок давал verilator
-    // «Reference to 'cell_t' before declaration». Тот же класс, что порядок
-    // самих структур (0341), но между **разделами** файла.
-    sv_type::emit_structs(&mut p, &blocks)?;
-    sv_fsm::emit_enums(&mut p, &blocks)?;
+    // Константы — после типов (фича 0347): `localparam cell_t …` ссылается на
+    // `typedef struct packed … cell_t`.
     sv_const::emit_constants(&mut p, map, &blocks)?;
     sv_fsm::emit_state_enums(&mut p, map, &blocks)?;
     sv_fsm::emit_step_enums(&mut p, &fsm)?;

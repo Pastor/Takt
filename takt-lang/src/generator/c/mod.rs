@@ -46,6 +46,7 @@ mod c_model;
 mod c_model_init;
 mod c_names;
 mod c_params;
+mod c_ports;
 mod c_source;
 /// Механизм времени цели `c` (фича 0134).
 mod c_time;
@@ -121,6 +122,29 @@ impl PortClass {
             TypeNode::Bit | TypeNode::Bool => PortClass::Bit,
             TypeNode::Rational => PortClass::Rational,
             _ => PortClass::Numeric,
+        }
+    }
+
+    /// Ложится ли тип порта на протокол HAL (фича 0350).
+    ///
+    /// Колбэки HAL принимают **скаляр** (`bool`, `int64_t`, `double`), поэтому
+    /// структура и массив (кроме упакованного `[bit;N]`, правило 0078) в него не
+    /// ложатся. Прежде такой порт печатался вызовом `write_numeric(…, model->v,
+    /// …)` — `cc`: «passing 'Pair' to parameter of incompatible type 'int64_t'»,
+    /// при **нулевом** коде возврата `taktc`; цель `c-hal` на том же входе
+    /// честно отказывала `CC-015`.
+    pub(super) fn fits_hal(ty: &TypeNode) -> bool {
+        match ty {
+            TypeNode::Struct(_) => false,
+            TypeNode::Array(_, _) => {
+                crate::semantic::bit_vector::is_bit_vector(ty).is_some_and(|bits| {
+                    matches!(
+                        crate::semantic::bit_vector::layout(bits),
+                        crate::semantic::bit_vector::BitVectorLayout::Scalar { .. }
+                    )
+                })
+            }
+            _ => true,
         }
     }
 }

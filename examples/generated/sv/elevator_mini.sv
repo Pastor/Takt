@@ -5,6 +5,12 @@
 // ветвь if (!rst_n) несёт стартовое состояние — синтетического INIT нет,
 // поэтому тело стартового состояния исполняется на такте 1 (контракт 0033).
 
+typedef enum logic [1:0] {
+    COMMAND_UP = 2'd0,
+    COMMAND_DOWN = 2'd1,
+    COMMAND_STOP = 2'd2
+} command_e;
+
 module elevator_mini (
     input  logic clk,   // служебный порт цели sv: в .takt его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
@@ -45,12 +51,6 @@ module elevator_mini (
     output logic elevator_motor_up,
     output logic is_done
 );
-    typedef enum logic [1:0] {
-        COMMAND_UP = 2'd0,
-        COMMAND_DOWN = 2'd1,
-        COMMAND_STOP = 2'd2
-    } command_e;
-
     // Состояния модели 'Cabin (ElevatorMini:Cabin)'. Синтетического INIT нет: стартовое
     // состояние живёт в ветви сброса (контракт ADR 0033).
     typedef enum logic [1:0] {

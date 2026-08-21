@@ -581,3 +581,4 @@
 | 0347-01 | 0347 | Константа структурного и массивного типа у rust и sv | [0347-01-const-aggregate.md](0347-01-const-aggregate.md) |
 | 0348-01 | 0348 | Массив в параметре функции у цели st | [0348-01-st-array-parameter.md](0348-01-st-array-parameter.md) |
 | 0349-01 | 0349 | Длительность в поле структуры у целей st и sv | [0349-01-duration-field.md](0349-01-duration-field.md) |
+| 0350-01 | 0350 | Порт составного типа: отказ вместо невалидного вывода | [0350-01-port-composite-type.md](0350-01-port-composite-type.md) |
