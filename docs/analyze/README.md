@@ -355,3 +355,4 @@
 | 0369 | Массив в параметре функции у цели sv | [0369-sv-array-parameter.md](0369-sv-array-parameter.md) | — (новая фича) |
 | 0370 | Понижение q-литерала доходит до полей структуры | [0370-struct-field-fixed.md](0370-struct-field-fixed.md) | — (новая фича) |
 | 0371 | Приведение q из поля структуры масштабируется | [0371-fixed-cast-from-field.md](0371-fixed-cast-from-field.md) | — (новая фича) |
+| 0372 | Составной элемент массива в параметре функции | [0372-composite-array-parameter.md](0372-composite-array-parameter.md) | — (новая фича) |

@@ -242,29 +242,109 @@ pub(crate) fn flat_param_name(param: &str) -> String {
     format!("{param}_flat")
 }
 
-/// Ширина плоского вектора, которым передаётся массив: `размер × ширина элемента`.
+/// Раскладка параметра-массива по плоскому вектору (фичи 0369, 0372).
 ///
-/// `None` — тип не распакованный массив скаляров: бит-вектор (0078) передаётся
-/// как есть, а массив структур или массив массивов плоским вектором не
-/// выражается — там форма не измерена, и догадываться о ней нельзя.
-pub(crate) fn flat_param_width(ty: &TypeNode) -> Option<(u32, u16, u32)> {
-    let TypeNode::Array(size, elem) = ty else {
-        return None;
-    };
-    if crate::semantic::bit_vector::is_bit_vector(ty).is_some() {
-        return None;
-    }
-    let elem_width = scalar_width(elem)?;
-    Some((elem_width * u32::from(*size), *size, elem_width))
+/// Части — в порядке разрядов: первая лежит в **младших**. Спуск идёт только по
+/// РАСПАКОВАННЫМ размерностям, и частью становится элемент: у массива скаляров
+/// это `[0]`, `[1]`, …, у массива структур — сами структуры (они упакованы), у
+/// вложенного массива — элементы внутреннего.
+pub(crate) struct FlatParam {
+    /// Ширина плоского вектора: сумма ширин частей.
+    pub(crate) width: u32,
+    /// Суффикс пути к части, её ширина и тип — от младших разрядов к старшим.
+    pub(crate) parts: Vec<(String, u32, TypeNode)>,
 }
 
-/// Аргумент-массив печатается КОНКАТЕНАЦИЕЙ элементов (фича 0369).
+/// Раскладка массива в плоский вектор, если она у типа есть.
 ///
-/// Порядок обратный: `{a[N-1], …, a[0]}` — так `a[0]` ложится в младшие
-/// разряды, и распаковка в прологе функции читает те же элементы.
-pub(crate) fn flatten_argument(base: &str, size: u16) -> String {
-    let parts: Vec<String> = (0..size).rev().map(|i| format!("{base}[{i}]")).collect();
-    format!("{{{}}}", parts.join(", "))
+/// `None` — тип не распакованный массив (бит-вектор 0078 передаётся как есть)
+/// либо у какой-то части нет ширины: угадывать её нельзя, и такой параметр
+/// печатается прежним путём.
+///
+/// ⚠️ **Спуск останавливается на упакованном типе, и это замер, а не вкус.**
+/// Первая редакция раскладывала структуру ПО ПОЛЯМ, и yosys отвечал «Latch
+/// inferred for signal `…a[0].lo`»: запись полей элемента внутри `always_comb`
+/// он полным присваиванием не считает (тот же класс, что 0367). Присваивание
+/// структуры целиком принимают **оба** инструмента — проба 2026-08-21.
+pub(crate) fn flat_param(
+    ty: &TypeNode,
+    fields_of: &crate::generator::aggregate::FieldsOf<'_>,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
+) -> Option<FlatParam> {
+    if !matches!(ty, TypeNode::Array(_, _))
+        || crate::semantic::bit_vector::is_bit_vector(ty).is_some()
+    {
+        return None;
+    }
+    let mut parts = Vec::new();
+    walk_dimensions(ty, &mut String::new(), &mut parts);
+    let mut out = Vec::new();
+    let mut width = 0;
+    for (suffix, part_ty) in parts {
+        let part_width = packed_width(&part_ty, fields_of, enums)?;
+        width += part_width;
+        out.push((suffix, part_width, part_ty));
+    }
+    (!out.is_empty()).then_some(FlatParam { width, parts: out })
+}
+
+/// Спуск по распакованным размерностям: элемент — часть, дальше не идём.
+fn walk_dimensions(ty: &TypeNode, prefix: &mut String, out: &mut Vec<(String, TypeNode)>) {
+    match ty {
+        TypeNode::Array(size, elem) if crate::semantic::bit_vector::is_bit_vector(ty).is_none() => {
+            for index in 0..usize::from(*size) {
+                let saved = prefix.len();
+                prefix.push_str(&format!("[{index}]"));
+                walk_dimensions(elem, prefix, out);
+                prefix.truncate(saved);
+            }
+        }
+        other => out.push((prefix.clone(), other.clone())),
+    }
+}
+
+/// Ширина УПАКОВАННОГО типа в разрядах.
+///
+/// Перечисление спрашивается у `enum_width`, структура складывается по полям —
+/// у цели `sv` она `struct packed` (фича 0293), то есть вектор своей ширины.
+/// Второго знания о ширинах не заводится (урок 0060).
+fn packed_width(
+    ty: &TypeNode,
+    fields_of: &crate::generator::aggregate::FieldsOf<'_>,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
+) -> Option<u32> {
+    match ty {
+        TypeNode::Enum(name) => {
+            let variants = enums.get(name)?;
+            super::sv_type::enum_width(variants, "параметр-массив")
+                .ok()
+                .map(|(width, _)| width)
+        }
+        TypeNode::Struct(name) => {
+            let fields = fields_of(name)?;
+            let mut width = 0;
+            for (_, field_ty) in fields {
+                width += packed_width(&field_ty, fields_of, enums)?;
+            }
+            Some(width)
+        }
+        other => scalar_width(other),
+    }
+}
+
+/// Аргумент-массив печатается КОНКАТЕНАЦИЕЙ частей (фичи 0369, 0372).
+///
+/// Порядок обратный: первая часть ложится в **младшие** разряды, и распаковка в
+/// прологе функции читает те же разряды. Один порядок на сигнатуру, пролог и
+/// аргумент: разойдясь, они дали бы валидный RTL с другими значениями.
+pub(crate) fn flatten_argument(base: &str, flat: &FlatParam) -> String {
+    let items: Vec<String> = flat
+        .parts
+        .iter()
+        .rev()
+        .map(|(suffix, _, _)| format!("{base}{suffix}"))
+        .collect();
+    format!("{{{}}}", items.join(", "))
 }
 
 #[cfg(test)]
@@ -277,6 +357,9 @@ mod tests {
             signed: false,
         }
     }
+
+    /// Структур в модели нет: имя не разрешается ни во что.
+    const NO_FIELDS: &crate::generator::aggregate::FieldsOf<'static> = &|_: &str| None;
 
     #[test]
     fn reset_of_unpacked_array_is_aggregate_of_zeros() {
@@ -358,17 +441,83 @@ mod tests {
     /// обязан лечь в младшие разряды, иначе распаковка вернёт другой элемент.
     #[test]
     fn array_argument_is_concatenated_low_element_last() {
-        assert_eq!(flatten_argument("data", 3), "{data[2], data[1], data[0]}");
+        let ty = TypeNode::Array(3, Box::new(u(8)));
+        let flat = flat_param(&ty, NO_FIELDS, &BTreeMap::new()).expect("раскладка есть");
+        assert_eq!(
+            flatten_argument("data", &flat),
+            "{data[2], data[1], data[0]}"
+        );
     }
 
     /// Плоский вектор шире элемента ровно во столько раз, сколько элементов.
     #[test]
     fn flat_width_is_size_times_element_width() {
         let ty = TypeNode::Array(3, Box::new(u(8)));
-        assert_eq!(flat_param_width(&ty), Some((24, 3, 8)));
+        let flat = flat_param(&ty, NO_FIELDS, &BTreeMap::new()).expect("раскладка есть");
+        assert_eq!(flat.width, 24);
+        assert_eq!(
+            flat.parts
+                .iter()
+                .map(|(suffix, width, _)| (suffix.as_str(), *width))
+                .collect::<Vec<_>>(),
+            vec![("[0]", 8), ("[1]", 8), ("[2]", 8)]
+        );
         // Бит-вектор передаётся как есть — он упакованный скаляр (0078).
         let bits = TypeNode::Array(8, Box::new(TypeNode::Bit));
-        assert_eq!(flat_param_width(&bits), None);
+        assert!(flat_param(&bits, NO_FIELDS, &BTreeMap::new()).is_none());
+    }
+
+    /// Элемент-СТРУКТУРА остаётся ОДНОЙ частью: у цели `sv` она `struct
+    /// packed`, и присваивание её целиком принимают оба инструмента, тогда как
+    /// запись по полям даёт у yosys «Latch inferred» (фича 0372).
+    #[test]
+    fn struct_element_stays_one_part() {
+        let ty = TypeNode::Array(2, Box::new(TypeNode::Struct("Cell".to_string())));
+        let fields = |name: &str| {
+            (name == "Cell").then(|| vec![("lo".to_string(), u(8)), ("hi".to_string(), u(8))])
+        };
+        let flat = flat_param(&ty, &fields, &BTreeMap::new()).expect("раскладка есть");
+        assert_eq!(flat.width, 32);
+        assert_eq!(
+            flat.parts
+                .iter()
+                .map(|(suffix, width, _)| (suffix.as_str(), *width))
+                .collect::<Vec<_>>(),
+            vec![("[0]", 16), ("[1]", 16)]
+        );
+    }
+
+    /// Вложенный массив раскладывается ДО ЭЛЕМЕНТОВ внутреннего: он распакован,
+    /// и присвоить ему срез вектора нельзя.
+    #[test]
+    fn nested_array_is_split_down_to_inner_elements() {
+        let inner = TypeNode::Array(2, Box::new(u(8)));
+        let ty = TypeNode::Array(2, Box::new(inner));
+        let flat = flat_param(&ty, NO_FIELDS, &BTreeMap::new()).expect("раскладка есть");
+        assert_eq!(flat.width, 32);
+        assert_eq!(
+            flat.parts
+                .iter()
+                .map(|(suffix, _, _)| suffix.as_str())
+                .collect::<Vec<_>>(),
+            vec!["[0][0]", "[0][1]", "[1][0]", "[1][1]"]
+        );
+    }
+
+    /// Ширина элемента-ПЕРЕЧИСЛЕНИЯ берётся у `enum_width` — того же знания,
+    /// которым печатается сам тип (урок 0060).
+    #[test]
+    fn enum_element_width_comes_from_enum_facts() {
+        let ty = TypeNode::Array(2, Box::new(TypeNode::Enum("Mode".to_string())));
+        let mut enums = BTreeMap::new();
+        enums.insert(
+            "Mode".to_string(),
+            vec![("Idle".to_string(), 1), ("Work".to_string(), 2)],
+        );
+        let flat = flat_param(&ty, NO_FIELDS, &enums).expect("раскладка есть");
+        assert_eq!(flat.width, 4);
+        // Перечисление неизвестно — раскладки нет, поведение прежнее.
+        assert!(flat_param(&ty, NO_FIELDS, &BTreeMap::new()).is_none());
     }
 
     #[test]
