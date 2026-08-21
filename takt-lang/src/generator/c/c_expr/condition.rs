@@ -249,14 +249,20 @@ pub(in crate::generator::c) fn generate_condition_expr(
             if let Some(model) = state_of_model(l) {
                 generate_state_comparison(model, r, "==", map, owner)
             } else {
-                generate_comparison(l, r, "==", map, owner)
+                // Смешанная знаковость (фикс 0359-01): на 64 битах C сравнивает
+                // беззнаково, и равенство отрицательного с беззнаковым тоже
+                // ломается — первая редакция 0359 покрыла лишь `<`/`>`.
+                compare(l, "==", r, map, owner)
             }
         }
         ConditionNode::NotEqual(l, r) => {
             if let Some(model) = state_of_model(l) {
                 generate_state_comparison(model, r, "!=", map, owner)
             } else {
-                generate_comparison(l, r, "!=", map, owner)
+                // Смешанная знаковость (фикс 0359-01): на 64 битах C сравнивает
+                // беззнаково, и равенство отрицательного с беззнаковым тоже
+                // ломается — первая редакция 0359 покрыла лишь `<`/`>`.
+                compare(l, "!=", r, map, owner)
             }
         }
         ConditionNode::Variable(var_rc, _) => {
@@ -542,13 +548,10 @@ fn compare(
     map: &CMap,
     owner: &Element,
 ) -> Result<String, Diagnostic> {
-    let plain = |map: &CMap, owner: &Element| -> Result<String, Diagnostic> {
-        Ok(format!(
-            "{} {op} {}",
-            generate_condition_expr(l, map, owner)?,
-            generate_condition_expr(r, map, owner)?
-        ))
-    };
+    // Обычный случай печатает СУЩЕСТВУЮЩИЙ печатник сравнений: он
+    // восстанавливает имя константы перечисления (фича 0167), и своя печать
+    // это знание теряет — поймал чужой тест `c_enum_constants_tests`.
+    let plain = |map: &CMap, owner: &Element| generate_comparison(l, r, op, map, owner);
     match crate::generator::mixed_sign::plan(
         crate::generator::mixed_sign::operand_type_cond(l).as_ref(),
         crate::generator::mixed_sign::operand_type_cond(r).as_ref(),
@@ -571,10 +574,7 @@ fn compare(
             } else {
                 format!("(({unsigned}) {op} (uint64_t)({signed}))")
             };
-            let negative_wins = matches!(
-                (op, signed_is_left),
-                ("<" | "<=", true) | (">" | ">=", false)
-            );
+            let negative_wins = crate::generator::mixed_sign::negative_wins(op, signed_is_left);
             Ok(if negative_wins {
                 format!("({neg} || {same})")
             } else {

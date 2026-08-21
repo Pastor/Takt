@@ -303,14 +303,26 @@ pub(in crate::generator::c) fn generate_expr(
             }
         }
         ExpressionNode::Equal(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 8, has_model)?;
-            printer.print(" == ");
-            generate_expr(printer, map, owner, params, r, 9, has_model)?;
+            // Смешанная знаковость (фикс 0359-01): равенство ломается на 64
+            // битах так же, как `<` — первая редакция его не покрыла.
+            if let Some(text) = mixed_sign_compare(l, "==", r, map, owner, &params, has_model)? {
+                printer.print(&text);
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 8, has_model)?;
+                printer.print(" == ");
+                generate_expr(printer, map, owner, params, r, 9, has_model)?;
+            }
         }
         ExpressionNode::NotEqual(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 8, has_model)?;
-            printer.print(" != ");
-            generate_expr(printer, map, owner, params, r, 9, has_model)?;
+            // Смешанная знаковость (фикс 0359-01): равенство ломается на 64
+            // битах так же, как `<` — первая редакция его не покрыла.
+            if let Some(text) = mixed_sign_compare(l, "!=", r, map, owner, &params, has_model)? {
+                printer.print(&text);
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 8, has_model)?;
+                printer.print(" != ");
+                generate_expr(printer, map, owner, params, r, 9, has_model)?;
+            }
         }
 
         // ── Логические ────────────────────────────────────────────────────────
@@ -832,10 +844,7 @@ fn mixed_sign_compare(
     } else {
         format!("(({unsigned}) {op} (uint64_t)({signed}))")
     };
-    let negative_wins = matches!(
-        (op, signed_is_left),
-        ("<" | "<=", true) | (">" | ">=", false)
-    );
+    let negative_wins = crate::generator::mixed_sign::negative_wins(op, signed_is_left);
     Ok(Some(if negative_wins {
         format!("({neg} || {same})")
     } else {

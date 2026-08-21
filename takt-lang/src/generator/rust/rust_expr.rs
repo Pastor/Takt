@@ -531,8 +531,8 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::More(a, b) => expr_compare(a, ">", b, scope),
         ExpressionNode::LessEqual(a, b) => expr_compare(a, "<=", b, scope),
         ExpressionNode::MoreEqual(a, b) => expr_compare(a, ">=", b, scope),
-        ExpressionNode::Equal(a, b) => comparison(a, "==", b, scope),
-        ExpressionNode::NotEqual(a, b) => comparison(a, "!=", b, scope),
+        ExpressionNode::Equal(a, b) => expr_compare(a, "==", b, scope),
+        ExpressionNode::NotEqual(a, b) => expr_compare(a, "!=", b, scope),
 
         // Логические.
         ExpressionNode::And(a, b) => binary(a, "&&", b, scope),
@@ -965,10 +965,7 @@ fn expr_compare(
             } else {
                 format!("({unsigned} {op} ({signed} as u64))")
             };
-            let negative_wins = matches!(
-                (op, signed_is_left),
-                ("<" | "<=", true) | (">" | ">=", false)
-            );
+            let negative_wins = crate::generator::mixed_sign::negative_wins(op, signed_is_left);
             Ok(if negative_wins {
                 format!("({neg} || {same})")
             } else {
