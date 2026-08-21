@@ -351,3 +351,4 @@
 | 0365 | Распакованный массив у цели sv: сброс и переменный индекс | [0365-sv-unpacked-array.md](0365-sv-unpacked-array.md) | — (новая фича) |
 | 0366 | Раскрытие вложенного агрегата — общий носитель | [0366-nested-aggregate-carrier.md](0366-nested-aggregate-carrier.md) | — (новая фича) |
 | 0367 | Массив структур у цели sv синтезируется | [0367-sv-struct-array.md](0367-sv-struct-array.md) | — (новая фича) |
+| 0368 | Элемент агрегата печатается по типу элемента | [0368-aggregate-element-type.md](0368-aggregate-element-type.md) | — (новая фича) |

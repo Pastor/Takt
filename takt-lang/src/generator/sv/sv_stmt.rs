@@ -479,8 +479,19 @@ fn print_expression_statement(
 /// Нужен для восстановления варианта перечисления по значению: без целевого типа
 /// `Number(2)` неотличимо от обычного числа.
 fn target_type(target: &ExpressionNode) -> Option<TypeNode> {
+    // Элемент массива несёт ТИП ЭЛЕМЕНТА (фича 0368): прежде здесь стоял
+    // `None`, и `modes[0] := Work;` печаталось `modes_next[0] = 1;` —
+    // verilator отвечает **ошибкой** `ENUMVALUE` («Implicit conversion to enum
+    // … Suggest use enum's mnemonic»), при том что та же запись СКАЛЯРОМ
+    // работает у всех девяти потребителей.
+    if let ExpressionNode::ArraySubscript(base, _) = target {
+        return match crate::generator::sv::sv_array::array_type_expr(base)? {
+            TypeNode::Array(_, elem) => Some(*elem),
+            _ => None,
+        };
+    }
     let ExpressionNode::Variable(var) = target else {
-        // Индексация и доступ к биту дают элемент либо бит, а не перечисление.
+        // Доступ к биту даёт бит, а не перечисление.
         return None;
     };
     match &*var.borrow() {

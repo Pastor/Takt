@@ -308,3 +308,114 @@ int main(void) {{
     assert_eq!(c_val("g01"), 9, "запись grid[0][1] дошла до C");
     assert_eq!(c_val("g10"), 4, "grid[1][0] не затронут записью");
 }
+
+/// **Фича 0368.** Элемент агрегата печатается ПО ТИПУ ЭЛЕМЕНТА.
+///
+/// Замер 2026-08-21: `var gains: [q(8, 8); 2] := {1.5, 2.5};` доезжало до
+/// целей дробным литералом — `cc -Werror` отвечал «implicit conversion from
+/// 'double' to 'int16_t' changes value from 1.5 to 1», `rustc` — `E0308`, а
+/// `sv` — `SV-002`; `var modes: [Mode; 2] := {Idle, Work};` давало у `rust`
+/// `[0, 1]` в поле `[Mode; 2]`. Та же запись **скаляром** работает у всех
+/// девяти потребителей.
+///
+/// ⚠️ Сверяются ЗНАЧЕНИЯ: понижение q-литерала — это умножение на 2ⁿ, и
+/// ошибка в нём даёт валидный C с другим числом.
+#[test]
+fn aggregate_element_types_match_generated_c() {
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] aggregate_element_types_match_generated_c: компилятор `cc` не найден");
+        return;
+    }
+
+    let source = "\
+enum Mode { Idle = 0, Work = 7 }
+model AggElem {
+    var gains: [q(8,8); 2] := {1.5, 2.5};
+    var modes: [Mode; 2] := {Idle, Work};
+    var whole: u8 := 0;
+    var code: u8 := 0;
+    start Idle2 {
+        always {
+            whole := (gains[0] + gains[1]) as u8;
+            modes[0] := Work;
+            code := modes[0] as u8;
+        }
+    }
+}
+start Entry = AggElem;
+";
+    let (ast, _) = takt_lang::parse(source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let _ = unit.tick();
+    let sim = |name: &str| -> i128 {
+        match unit.variable(name) {
+            Some(Value::Number(n)) => n,
+            other => panic!("{name}: не целое {other:?}"),
+        }
+    };
+    let sim_whole = sim("whole");
+    let sim_code = sim("code");
+    assert_eq!(sim_whole, 4, "1.5 + 2.5 = 4.0");
+    assert_eq!(sim_code, 7, "modes[0] := Work → 7");
+
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0368_aggelem");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    takt_lang::compile_to_c(
+        "aggelem",
+        source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "aggelem.h"
+
+int main(void) {{
+    Aggelem m;
+    Aggelem_init(&m);
+    for (int i = 0; i < {MAX_TICKS}; i++) {{
+        Aggelem_tick(&m);
+        if (Aggelem_is_done(&m)) break;
+    }}
+    printf("whole=%d\n", (int)m.entry.whole);
+    printf("code=%d\n", (int)m.entry.code);
+    printf("g0=%d\n", (int)m.entry.gains[0]);
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("harness_aggelem.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+    let bin = dir.join("aggelem_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
+        .arg(&dir)
+        .arg(dir.join("aggelem.c"))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    let out = String::from_utf8_lossy(&run.stdout);
+    let c_val = |key: &str| -> i128 {
+        out.lines()
+            .find_map(|l| l.strip_prefix(&format!("{key}="))?.trim().parse().ok())
+            .unwrap_or_else(|| panic!("C не напечатал '{key}': {out}"))
+    };
+
+    assert_eq!(sim_whole, c_val("whole"), "расхождение whole");
+    assert_eq!(sim_code, c_val("code"), "расхождение code");
+    // Понижение q-литерала: 1.5 в q(8, 8) — это 384, а не 1.
+    assert_eq!(c_val("g0"), 384, "литерал 1.5 понижен в q-представление");
+}

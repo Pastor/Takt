@@ -584,6 +584,22 @@ fn lower_folded_fixed(
 ) -> Result<crate::parser::ast::Expression, Diagnostic> {
     use crate::parser::ast::Expression as E;
     use crate::semantic::type_node::TypeNode;
+    // Агрегат понижается ПОЭЛЕМЕНТНО по типу элемента (фича 0368): прежде
+    // правило смотрело только на скалярный тип, и
+    // `var gains: [q(8, 8); 2] := {1.5, 2.5};` доезжало до целей дробным
+    // литералом — `cc -Werror` отвечал «implicit conversion from 'double' to
+    // 'int16_t' changes value from 1.5 to 1», `rustc` — `E0308`, `sv` —
+    // `SV-002`, при том что та же запись СКАЛЯРОМ работает у всех девяти
+    // потребителей.
+    if let (Some(TypeNode::Array(_, elem)), E::Initializer(loc, items) | E::Array(loc, items)) =
+        (ty, &literal)
+    {
+        let mut lowered = Vec::with_capacity(items.len());
+        for item in items {
+            lowered.push(lower_folded_fixed(item.clone(), Some(elem))?);
+        }
+        return Ok(E::Initializer(*loc, lowered));
+    }
     let (Some(TypeNode::Fixed { m, n, .. }), E::Rational(loc, text, negative)) = (ty, &literal)
     else {
         return Ok(literal);
