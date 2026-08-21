@@ -128,6 +128,17 @@ pub(in crate::generator::c) fn generate_code_block(
             for stmt in block {
                 generate_code_block(printer, map, owner, params.clone(), stmt, has_model)?;
             }
+            // Неиспользуемая локальная гасится заглушкой (фича 0376): без неё
+            // `cc -Wall -Wextra -Werror` отвечает «unused variable», то есть
+            // вывод не собирается под флагами гейта этой же цели при нулевом
+            // коде возврата `taktc`. Идиома та же, что у структурного
+            // параметра (0260); место — конец блока, где переменная ещё в
+            // области видимости.
+            for name in crate::generator::local_stub::unused_locals(block) {
+                printer
+                    .ident(&format!("(void){};", normalize_lowercase_snakecase(name)))
+                    .nl();
+            }
         }
 
         StatementNode::Expression(expr, loc) => {

@@ -320,6 +320,18 @@ pub(crate) fn print_block(
         let eaten = print_statement_ctx(&items[idx], &items[idx + 1..], scope, p, out)?;
         idx += 1 + eaten;
     }
+    // Неиспользуемая локальная гасится заглушкой (фича 0376): без неё
+    // `rustc -D warnings` отвечает «unused variable», то есть вывод не
+    // собирается под флагами гейта этой же цели при нулевом коде возврата
+    // `taktc`. Идиома — та же, что у неиспользуемого параметра (0337); место —
+    // конец блока, где переменная ещё в области видимости.
+    for name in crate::generator::local_stub::unused_locals(items) {
+        p.ident(&format!(
+            "let _ = {};",
+            crate::semantic::naming::normalize_lowercase_snakecase(name)
+        ))
+        .nl();
+    }
     Ok(())
 }
 
