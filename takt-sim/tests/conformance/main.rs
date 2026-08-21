@@ -42,6 +42,7 @@ mod conformance_duration_default_tests;
 mod conformance_float_modes_tests;
 mod conformance_forward_type_tests;
 mod conformance_local_decl_tests;
+mod conformance_mixed_sign_tests;
 mod conformance_named_cond_tests;
 mod conformance_param_apply_tests;
 mod conformance_param_modes_tests;

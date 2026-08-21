@@ -157,6 +157,23 @@ fn unmapped(shown: &str, why: &str) -> Diagnostic {
     .with_code("ST-002")
 }
 
+/// Имя целого типа IEC по разрядности и знаковости — публично для правила
+/// смешанного сравнения (фича 0359): преобразование `X_TO_Y` строится из имён
+/// обоих типов, и второго списка имён быть не должно.
+pub(in crate::generator::st) fn iec_integer_name(bits: u8, signed: bool) -> Option<&'static str> {
+    match (bits, signed) {
+        (8, false) => Some("USINT"),
+        (16, false) => Some("UINT"),
+        (32, false) => Some("UDINT"),
+        (64, false) => Some("ULINT"),
+        (8, true) => Some("SINT"),
+        (16, true) => Some("INT"),
+        (32, true) => Some("DINT"),
+        (64, true) => Some("LINT"),
+        _ => None,
+    }
+}
+
 /// T3..T10: целые Takt → целые IEC.
 ///
 /// ⚠ `INT` в IEC — **16-битный** знаковый, а не 32-битный, как в C.

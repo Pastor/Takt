@@ -106,10 +106,10 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
                 },
             },
         },
-        ConditionNode::Less(a, b) => cond_binary(a, "<", b, scope),
-        ConditionNode::More(a, b) => cond_binary(a, ">", b, scope),
-        ConditionNode::LessEqual(a, b) => cond_binary(a, "<=", b, scope),
-        ConditionNode::MoreEqual(a, b) => cond_binary(a, ">=", b, scope),
+        ConditionNode::Less(a, b) => cond_compare(a, "<", b, scope),
+        ConditionNode::More(a, b) => cond_compare(a, ">", b, scope),
+        ConditionNode::LessEqual(a, b) => cond_compare(a, "<=", b, scope),
+        ConditionNode::MoreEqual(a, b) => cond_compare(a, ">=", b, scope),
         ConditionNode::Add(a, b) => cond_binary(a, "+", b, scope),
         ConditionNode::Subtract(a, b) => cond_binary(a, "-", b, scope),
 
@@ -288,6 +288,56 @@ fn cond_binary(
         op,
         print_condition(b, scope)?
     ))
+}
+
+/// Сравнение операндов РАЗНОЙ знаковости (фича 0359).
+///
+/// Прежде печаталось как есть, и `self.s < self.u` при `i8`/`u8` давало
+/// **`E0308`** при нулевом коде возврата `taktc`: в Rust смешанное сравнение не
+/// компилируется вовсе. Операнды приводятся к типу, вмещающему оба; когда
+/// такого типа нет (`u64` против знакового) — раскрытие проверкой знака.
+fn cond_compare(
+    a: &ConditionNode,
+    op: &str,
+    b: &ConditionNode,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    match crate::generator::mixed_sign::plan(
+        crate::generator::mixed_sign::operand_type_cond(a).as_ref(),
+        crate::generator::mixed_sign::operand_type_cond(b).as_ref(),
+    ) {
+        crate::generator::mixed_sign::Plan::AsIs => cond_binary(a, op, b, scope),
+        crate::generator::mixed_sign::Plan::Widen { bits } => Ok(format!(
+            "(({} as i{bits}) {op} ({} as i{bits}))",
+            print_condition(a, scope)?,
+            print_condition(b, scope)?
+        )),
+        crate::generator::mixed_sign::Plan::SignGuard { signed_is_left } => {
+            let (lt, rt) = (print_condition(a, scope)?, print_condition(b, scope)?);
+            let (signed, unsigned) = if signed_is_left {
+                (lt.as_str(), rt.as_str())
+            } else {
+                (rt.as_str(), lt.as_str())
+            };
+            // Операнд печатается дважды — в условии Takt эффектов не бывает
+            // (присваивание есть оператор, 0187).
+            let neg = format!("({signed} < 0)");
+            let same = if signed_is_left {
+                format!("(({signed} as u64) {op} {unsigned})")
+            } else {
+                format!("({unsigned} {op} ({signed} as u64))")
+            };
+            let negative_wins = matches!(
+                (op, signed_is_left),
+                ("<" | "<=", true) | (">" | ">=", false)
+            );
+            Ok(if negative_wins {
+                format!("({neg} || {same})")
+            } else {
+                format!("(!{neg} && {same})")
+            })
+        }
+    }
 }
 
 /// Печатает сравнение булева операнда (`bit`/`bool`) с литералом — фикс 0148-01.

@@ -52,6 +52,7 @@ mod st_map;
 mod st_model;
 mod st_operand_type;
 mod st_reserved;
+mod st_sign;
 mod st_stmt;
 mod st_time;
 mod st_type;

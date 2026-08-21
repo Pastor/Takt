@@ -241,26 +241,10 @@ pub(in crate::generator::c) fn generate_condition_expr(
             generate_condition_expr(l, map, owner)?,
             generate_condition_expr(r, map, owner)?
         )),
-        ConditionNode::Less(l, r) => Ok(format!(
-            "{} < {}",
-            generate_condition_expr(l, map, owner)?,
-            generate_condition_expr(r, map, owner)?
-        )),
-        ConditionNode::More(l, r) => Ok(format!(
-            "{} > {}",
-            generate_condition_expr(l, map, owner)?,
-            generate_condition_expr(r, map, owner)?
-        )),
-        ConditionNode::LessEqual(l, r) => Ok(format!(
-            "{} <= {}",
-            generate_condition_expr(l, map, owner)?,
-            generate_condition_expr(r, map, owner)?
-        )),
-        ConditionNode::MoreEqual(l, r) => Ok(format!(
-            "{} >= {}",
-            generate_condition_expr(l, map, owner)?,
-            generate_condition_expr(r, map, owner)?
-        )),
+        ConditionNode::Less(l, r) => compare(l, "<", r, map, owner),
+        ConditionNode::More(l, r) => compare(l, ">", r, map, owner),
+        ConditionNode::LessEqual(l, r) => compare(l, "<=", r, map, owner),
+        ConditionNode::MoreEqual(l, r) => compare(l, ">=", r, map, owner),
         ConditionNode::Equal(l, r) => {
             if let Some(model) = state_of_model(l) {
                 generate_state_comparison(model, r, "==", map, owner)
@@ -539,4 +523,63 @@ fn enum_constant_for_comparison(typed: &ConditionNode, value: &ConditionNode) ->
     };
     let scope = upper.as_ref().and_then(|w| w.upgrade())?;
     crate::generator::c::c_enum::constant_of(ty, *n, &scope)
+}
+
+/// Сравнение операндов РАЗНОЙ знаковости (фича 0359).
+///
+/// На 8/16/32 битах операнды продвигаются до `int`, и печать «как есть» верна.
+/// На **64** битах — нет: `int64_t < uint64_t` считается беззнаковым, и
+/// `-1 < 200` давало **ложь**, а `cc -Wextra -Werror` отвечал
+/// `-Wsign-compare`. Тот же класс, что 0334 (сдвиг на 32/64 битах).
+///
+/// Общего типа для `u64` и знакового в C нет, поэтому правило раскрывается
+/// проверкой знака: отрицательное меньше любого беззнакового. Операнд
+/// печатается дважды — в условии Takt эффектов не бывает (0187).
+fn compare(
+    l: &ConditionNode,
+    op: &str,
+    r: &ConditionNode,
+    map: &CMap,
+    owner: &Element,
+) -> Result<String, Diagnostic> {
+    let plain = |map: &CMap, owner: &Element| -> Result<String, Diagnostic> {
+        Ok(format!(
+            "{} {op} {}",
+            generate_condition_expr(l, map, owner)?,
+            generate_condition_expr(r, map, owner)?
+        ))
+    };
+    match crate::generator::mixed_sign::plan(
+        crate::generator::mixed_sign::operand_type_cond(l).as_ref(),
+        crate::generator::mixed_sign::operand_type_cond(r).as_ref(),
+    ) {
+        // Продвижение до `int` уже делает своё дело; лишнее приведение
+        // изменило бы вывод корпуса без нужды.
+        crate::generator::mixed_sign::Plan::AsIs
+        | crate::generator::mixed_sign::Plan::Widen { .. } => plain(map, owner),
+        crate::generator::mixed_sign::Plan::SignGuard { signed_is_left } => {
+            let lt = generate_condition_expr(l, map, owner)?;
+            let rt = generate_condition_expr(r, map, owner)?;
+            let (signed, unsigned) = if signed_is_left {
+                (lt.as_str(), rt.as_str())
+            } else {
+                (rt.as_str(), lt.as_str())
+            };
+            let neg = format!("({signed} < 0)");
+            let same = if signed_is_left {
+                format!("((uint64_t)({signed}) {op} ({unsigned}))")
+            } else {
+                format!("(({unsigned}) {op} (uint64_t)({signed}))")
+            };
+            let negative_wins = matches!(
+                (op, signed_is_left),
+                ("<" | "<=", true) | (">" | ">=", false)
+            );
+            Ok(if negative_wins {
+                format!("({neg} || {same})")
+            } else {
+                format!("(!{neg} && {same})")
+            })
+        }
+    }
 }

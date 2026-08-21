@@ -105,10 +105,14 @@ pub(crate) fn print_expression(
         // Сравнения: `!=` в ST записывается `<>`, остальные совпадают.
         ExpressionNode::Equal(a, b) => binary(a, "=", b, model),
         ExpressionNode::NotEqual(a, b) => binary(a, "<>", b, model),
-        ExpressionNode::Less(a, b) => binary(a, "<", b, model),
-        ExpressionNode::More(a, b) => binary(a, ">", b, model),
-        ExpressionNode::LessEqual(a, b) => binary(a, "<=", b, model),
-        ExpressionNode::MoreEqual(a, b) => binary(a, ">=", b, model),
+        ExpressionNode::Less(a, b) => crate::generator::st::st_sign::expr_compare(a, "<", b, model),
+        ExpressionNode::More(a, b) => crate::generator::st::st_sign::expr_compare(a, ">", b, model),
+        ExpressionNode::LessEqual(a, b) => {
+            crate::generator::st::st_sign::expr_compare(a, "<=", b, model)
+        }
+        ExpressionNode::MoreEqual(a, b) => {
+            crate::generator::st::st_sign::expr_compare(a, ">=", b, model)
+        }
         // Побитовые операции — только через битовую строку (см. шапку модуля).
         ExpressionNode::BitwiseAnd(a, b) => bitwise(a, "AND", b, model),
         ExpressionNode::BitwiseOr(a, b) => bitwise(a, "OR", b, model),
@@ -335,10 +339,14 @@ pub(crate) fn print_condition(
         // Ключевое отличие от цели `c`: там печатается `==`, здесь `=`.
         ConditionNode::Equal(a, b) => binary_cond(a, "=", b, model),
         ConditionNode::NotEqual(a, b) => binary_cond(a, "<>", b, model),
-        ConditionNode::Less(a, b) => binary_cond(a, "<", b, model),
-        ConditionNode::More(a, b) => binary_cond(a, ">", b, model),
-        ConditionNode::LessEqual(a, b) => binary_cond(a, "<=", b, model),
-        ConditionNode::MoreEqual(a, b) => binary_cond(a, ">=", b, model),
+        ConditionNode::Less(a, b) => crate::generator::st::st_sign::compare_cond(a, "<", b, model),
+        ConditionNode::More(a, b) => crate::generator::st::st_sign::compare_cond(a, ">", b, model),
+        ConditionNode::LessEqual(a, b) => {
+            crate::generator::st::st_sign::compare_cond(a, "<=", b, model)
+        }
+        ConditionNode::MoreEqual(a, b) => {
+            crate::generator::st::st_sign::compare_cond(a, ">=", b, model)
+        }
         ConditionNode::BitAccess(inner, member) => bit_access(
             &|| print_condition(inner, model),
             inner_cond_type(inner),
@@ -444,7 +452,7 @@ fn variable_name(var: &VariableNode) -> String {
 /// сильнее `=`, то есть читается как `(NOT a) = b` — другое выражение. Гейт
 /// поймал это на `elevator` («Invalid data type for 'NOT' expression»), но
 /// страшнее случай, когда типы совпадут и разница пройдёт **молча**.
-fn binary(
+pub(super) fn binary(
     a: &ExpressionNode,
     op: &str,
     b: &ExpressionNode,
@@ -471,7 +479,7 @@ fn fixed_binary(
 }
 
 /// Печатает операнд, заключая составное выражение в скобки.
-fn wrap_expr(expr: &ExpressionNode, model: &ModelNode) -> Result<String, Diagnostic> {
+pub(super) fn wrap_expr(expr: &ExpressionNode, model: &ModelNode) -> Result<String, Diagnostic> {
     let text = print_expression(expr, model)?;
     Ok(if is_atom_expr(expr) {
         text
@@ -495,7 +503,7 @@ fn is_atom_expr(expr: &ExpressionNode) -> bool {
 }
 
 /// Печатает бинарную операцию условия, скобкуя составные операнды (см. [`binary`]).
-fn binary_cond(
+pub(super) fn binary_cond(
     a: &ConditionNode,
     op: &str,
     b: &ConditionNode,
@@ -510,7 +518,7 @@ fn binary_cond(
 }
 
 /// Печатает операнд-условие, заключая составное в скобки.
-fn wrap_cond(cond: &ConditionNode, model: &ModelNode) -> Result<String, Diagnostic> {
+pub(super) fn wrap_cond(cond: &ConditionNode, model: &ModelNode) -> Result<String, Diagnostic> {
     let text = print_condition(cond, model)?;
     Ok(if is_atom_cond(cond) {
         text
