@@ -393,8 +393,26 @@ pub(super) fn map_typed_variable(
             // `uint{N}_t name` (число элементов как разрядность) для всего, кроме
             // `Rational`, — то есть правильная форма существовала, но лишь для
             // одного типа элемента. Теперь она общая для всех.
-            let elem_type = map_c_type(elem, model, float_width)?;
-            Ok(format!("{} {}[{}]", elem_type, name, size))
+            //
+            // ⚠️ ВЛОЖЕННЫЙ МАССИВ — НЕСКОЛЬКО РАЗМЕРНОСТЕЙ (фича 0364):
+            // `[[u8; 2]; 2]` → `uint8_t grid[2][2]`. Прежде тип элемента шёл
+            // через `map_c_type`, который для массива отдаёт
+            // `Unrepresentable`, — и цель отказывала `CC-015` на записи,
+            // которую исполняют эталон, `rust`, `sv` и `st`. Спуск
+            // останавливается на бит-векторе: `[bit;N]` — упакованное значение
+            // (правило 0078), а не размерность.
+            let mut dims = vec![*size];
+            let mut current: &TypeNode = elem;
+            while let TypeNode::Array(inner_size, inner_elem) = current {
+                if bit_vector::is_bit_vector(current).is_some() {
+                    break;
+                }
+                dims.push(*inner_size);
+                current = inner_elem;
+            }
+            let elem_type = map_c_type(current, model, float_width)?;
+            let suffix: String = dims.iter().map(|d| format!("[{}]", d)).collect();
+            Ok(format!("{} {}{}", elem_type, name, suffix))
         }
         _t => map_c_type(typ, model, float_width).map(|c_type| format!("{} {}", c_type, name)),
     }
@@ -560,12 +578,15 @@ mod tests {
         );
     }
 
-    /// **0029-01.** Невыразимый тип элемента → `CC-015`.
+    /// **Фича 0364.** Вложенный массив — несколько размерностей.
     ///
-    /// Достижимый случай — вложенный массив: `[[u8;2];2]` (проба `nested.takt`).
-    /// Тип элемента `[u8;2]` в C как тип не выражается.
+    /// Прежде здесь стояло обратное утверждение: `[[u8;2];2]` объявлялся
+    /// невыразимым (`CC-015`), потому что тип элемента шёл через `map_c_type`,
+    /// который массиву отдаёт `Unrepresentable`. Отказ был **закреплён
+    /// тестом**, тогда как в C форма выразима объявителем и её переводят
+    /// эталон, `rust`, `sv` и `st` (класс 0191 — тест, фиксирующий дефект).
     #[test]
-    fn test_unrepresentable_element_maps_to_cc_015() {
+    fn test_nested_array_is_printed_with_two_dimensions() {
         let elem = TypeNode::Array(
             2,
             Box::new(TypeNode::Integer {
@@ -573,12 +594,36 @@ mod tests {
                 signed: false,
             }),
         );
-        let err = typed_err(&TypeNode::Array(2, Box::new(elem)), "grid");
+        assert_eq!(
+            typed(&TypeNode::Array(2, Box::new(elem)), "grid").as_deref(),
+            Some("uint8_t grid[2][2]")
+        );
+    }
+
+    /// **Фича 0364.** Массив ШИРОКИХ бит-векторов остаётся невыразимым.
+    ///
+    /// `[bit;128]` — массив слов (правило 0078), и его тип неотделим от имени:
+    /// как элемент другого массива он представления не имеет. Замер
+    /// 2026-08-21: эталон такой вход исполняет, `st` отказывает `ST-011`, а
+    /// цель `c` обязана дать `CC-015` — то есть отказ здесь остаётся
+    /// **границей**, а не пробелом печати.
+    #[test]
+    fn test_array_of_wide_bit_vectors_is_unrepresentable() {
+        let rows = TypeNode::Array(2, Box::new(TypeNode::Array(128, Box::new(TypeNode::Bit))));
+        let err = typed_err(&rows, "rows");
         assert_eq!(err, CTypeError::Unrepresentable);
         assert_eq!(
-            err.into_diagnostic("переменная 'grid'").code.as_deref(),
+            err.into_diagnostic("переменная 'rows'").code.as_deref(),
             Some("CC-015")
         );
+    }
+
+    /// **Фича 0364.** Спуск по размерностям останавливается на бит-векторе:
+    /// `[bit;N≤64]` — упакованный СКАЛЯР (правило 0078), а не размерность.
+    #[test]
+    fn test_array_of_bit_vectors_keeps_one_dimension() {
+        let rows = TypeNode::Array(2, Box::new(TypeNode::Array(8, Box::new(TypeNode::Bit))));
+        assert_eq!(typed(&rows, "rows").as_deref(), Some("uint8_t rows[2]"));
     }
 
     /// **0029-01.** Массив как параметр функции печатается объявителем.

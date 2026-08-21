@@ -312,3 +312,4 @@
 | 0361 | Приведение к тому же типу опускается | [0361-same-type-cast.md](0361-same-type-cast.md) | ГОТОВО |
 | 0362 | Проба прогоняет инструменты целей | [0362-probe-target-tools.md](0362-probe-target-tools.md) | ГОТОВО |
 | 0363 | Индексация многомерного массива у цели st | [0363-st-multidim-subscript.md](0363-st-multidim-subscript.md) | ГОТОВО |
+| 0364 | Вложенный массив у цели c | [0364-c-nested-array.md](0364-c-nested-array.md) | ГОТОВО |

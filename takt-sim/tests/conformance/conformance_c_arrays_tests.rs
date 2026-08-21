@@ -159,3 +159,152 @@ int main(void) {{
     assert_eq!(sim_elem(1), 200, "эталон data[1] = 200");
     assert_eq!(c_val("counter"), 1, "counter = 1 (тело always исполнилось)");
 }
+
+/// **Фича 0364.** Вложенный массив `[[u8; 2]; 2]` — значения совпадают с C.
+///
+/// Прежде цель `c` этот вход **отвергала** (`CC-015` «тип не представим в C»),
+/// тогда как эталон, `rust`, `sv` и (после 0363) `st` его исполняют. Дефектов
+/// было три, и каждый давал свою форму невалидного C после снятия предыдущего:
+/// объявление (`uint8_t grid[2][2]`), инициализация переменной
+/// (`model->grid[0] = {1, 2};` — формы нет в C) и присваивание агрегата в теле
+/// (та же форма, другой печатник).
+///
+/// ⚠️ Сверяются ЗНАЧЕНИЯ, а не факт компиляции: перестановка индексов даёт
+/// валидный C с другим поведением. Поэтому элементы различны, а один из них
+/// перезаписывается в теле.
+#[test]
+fn nested_array_matches_generated_c() {
+    if !cc_available() {
+        eprintln!(
+            "[ПРОПУСК] nested_array_matches_generated_c: компилятор `cc` не найден — \
+             сверка вложенного массива не выполнена"
+        );
+        return;
+    }
+
+    // Размерности РАЗНЫЕ (2 строки по 3): на квадратной матрице перестановка
+    // размерностей в объявлении неразличима — мутация «печатать `[3][2]`»
+    // компилируется и даёт те же значения.
+    let source = "\
+model NestConf {
+    var grid: [[u8;3];2] := {{1, 2, 3}, {4, 5, 6}};
+    var mirror: [[u8;3];2] := {{0, 0, 0}, {0, 0, 0}};
+    var picked: u8 := 0;
+    var sum: u8 := 0;
+    var copied: u8 := 0;
+    start Idle {
+        always {
+            grid[0][1] := 9;
+            picked := grid[1][0];
+            sum := grid[0][0] + grid[0][1] + grid[1][2];
+            mirror := {{7, 8, 9}, {10, 11, 12}};
+            copied := mirror[1][2];
+        }
+    }
+}
+start Entry = NestConf;
+";
+    let (ast, _) = takt_lang::parse(source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let _ = unit.tick();
+    let sim_scalar = |unit: &takt_sim::Unit, name: &str| -> i128 {
+        match unit.variable(name) {
+            Some(Value::Number(n)) => n,
+            other => panic!("{name}: не целое {other:?}"),
+        }
+    };
+    let sim_picked = sim_scalar(&unit, "picked");
+    let sim_sum = sim_scalar(&unit, "sum");
+    let sim_copied = sim_scalar(&unit, "copied");
+
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0364_nested");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    takt_lang::compile_to_c(
+        "nestconf",
+        source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "nestconf.h"
+
+int main(void) {{
+    Nestconf m;
+    Nestconf_init(&m);
+    for (int i = 0; i < {MAX_TICKS}; i++) {{
+        Nestconf_tick(&m);
+        if (Nestconf_is_done(&m)) break;
+    }}
+    printf("picked=%d\n", (int)m.entry.picked);
+    printf("sum=%d\n", (int)m.entry.sum);
+    printf("copied=%d\n", (int)m.entry.copied);
+    for (int r = 0; r < 2; r++) {{
+        for (int c = 0; c < 3; c++) {{
+            printf("g%d%d=%d\n", r, c, (int)m.entry.grid[r][c]);
+        }}
+    }}
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("harness_nested.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+    let bin = dir.join("nestconf_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
+        .arg(&dir)
+        .arg(dir.join("nestconf.c"))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    let out = String::from_utf8_lossy(&run.stdout);
+    let c_val = |key: &str| -> i128 {
+        out.lines()
+            .find_map(|l| l.strip_prefix(&format!("{key}="))?.trim().parse().ok())
+            .unwrap_or_else(|| panic!("C не напечатал '{key}': {out}"))
+    };
+
+    assert_eq!(
+        sim_picked,
+        c_val("picked"),
+        "расхождение picked: симулятор={sim_picked}, C={}",
+        c_val("picked")
+    );
+    assert_eq!(
+        sim_sum,
+        c_val("sum"),
+        "расхождение sum: симулятор={sim_sum}, C={}",
+        c_val("sum")
+    );
+    assert_eq!(
+        sim_copied,
+        c_val("copied"),
+        "расхождение copied: симулятор={sim_copied}, C={}",
+        c_val("copied")
+    );
+    // Значения эталона: элементы различны, одна ячейка перезаписана в теле, а
+    // вторая переменная получает агрегат целиком — на симметричной матрице и
+    // на одинаковых значениях перестановка индексов была бы неразличима.
+    assert_eq!(
+        sim_picked, 4,
+        "grid[1][0] = 4 (вторая строка, первый столбец)"
+    );
+    assert_eq!(sim_sum, 16, "1 + 9 + 6");
+    assert_eq!(sim_copied, 12, "mirror[1][2] после присваивания агрегата");
+    assert_eq!(c_val("g01"), 9, "запись grid[0][1] дошла до C");
+    assert_eq!(c_val("g10"), 4, "grid[1][0] не затронут записью");
+}
