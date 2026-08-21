@@ -3,7 +3,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
-use crate::generator::rust::rust_expr::{Scope, const_ident, print_expression};
+use crate::generator::rust::rust_expr::{Scope, const_ident};
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::{check_name_collisions, rust_type_name, rust_value_name};
 use crate::generator::rust::rust_port::{PortClass, port_class};
@@ -409,7 +409,12 @@ pub(crate) fn emit_constants(
                 continue;
             }
             let ty_name = rust_type(ty, &format!("константа '{}'", name))?;
-            let value = print_expression(expr, &scope)?;
+            // Значение печатается ПО ТИПУ приёмника (фича 0347): у константы
+            // структурного типа агрегат `{3, 4}` обязан стать литералом
+            // структуры. Прежде общий печатник давал `[3, 4]` — `E0308` при
+            // нулевом коде возврата `taktc`, тогда как та же запись в
+            // ПЕРЕМЕННОЙ печаталась верно с фичи 0293.
+            let value = crate::generator::rust::rust_expr::coerce_to(expr, ty, &scope)?;
             p.ident(&format!("const {}: {} = {};", ident, ty_name, value))
                 .nl();
         }

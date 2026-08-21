@@ -1,0 +1,33 @@
+// Сверка КОНСТАНТЫ структурного и массивного типа (фича 0347).
+//
+// `const BASE: Cell := {3, 4};` — цель `rust` печатала `const … : Cell = [3,
+// 4];` (`E0308`), цель `sv` отвечала `SV-002` «значение обязано быть известно
+// на этапе компиляции», хотя оно известно. Обе — при НУЛЕВОМ коде возврата
+// `taktc`; эталон, `c` и `st` вход исполняли.
+//
+// ⚠️ `SCALE` — контрольная константа-скаляр: она работала всегда.
+struct Cell { v: u8, w: u8 }
+
+const BASE: Cell := {3, 4};
+const TABLE: [u8;2] := {5, 6};
+const SCALE: u8 := 2;
+
+var cs: u8 := 0;
+var ts: u8 := 0;
+var ctl: u8 := 0;
+
+out o_cs: u8 at 0;
+out o_ts: u8 at 1;
+out o_ctl: u8 at 2;
+
+start Run {
+    always {
+        cs := BASE.v + BASE.w;
+        ts := TABLE[0] + TABLE[1];
+        ctl := SCALE + 1;
+        o_cs := cs;
+        o_ts := ts;
+        o_ctl := ctl;
+    }
+    ref Run: cs = 7;
+}

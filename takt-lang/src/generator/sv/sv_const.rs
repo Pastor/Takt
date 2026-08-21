@@ -196,7 +196,22 @@ pub(crate) fn emit_constants(
             }
             check_sv_name(&signal, *loc)?;
             let decl = sv_type(ty, &format!("константа '{}'", name))?;
-            let value = constant_value(expr, name, *loc).map_err(|_| {
+            // Значение печатается тем же носителем, что и цепь сброса (фича
+            // 0347): он знает агрегаты — структуру печатает именованным
+            // литералом, массив шаблоном присваивания. Прежде здесь стоял
+            // `constant_value`, знавший только скаляры, и `const BASE: Cell :=
+            // {3, 4};` давал `SV-002` «значение обязано быть известно», хотя
+            // оно известно, — то есть отказ означал пробел печати, а не
+            // невыразимость (класс 0345).
+            let value = reset_value(
+                expr,
+                ty,
+                &enums_of(blocks),
+                &format!("константы '{name}'"),
+                *loc,
+                Some(model_rc),
+            )
+            .map_err(|_| {
                 sv002(&format!(
                     "инициализатор константы '{}': значение обязано быть известно \
                      на этапе компиляции — localparam вычисляется синтезатором, \
@@ -427,4 +442,19 @@ fn struct_reset(
     // Порядок — объявленный: в `struct packed` первое поле занимает старшие
     // разряды, и перестановка молча изменила бы значение.
     Ok(format!("{{{}}}", parts.join(", ")))
+}
+
+/// Перечисления всех уровней снимка — для восстановления варианта по значению.
+///
+/// ⚠️ Собирается тем же обходом, что у `Fsm`: второй способ узнать состав
+/// перечислений разошёлся бы с первым (класс 0084/0193/0195).
+fn enums_of(blocks: &[Block]) -> BTreeMap<String, Vec<(String, i128)>> {
+    let mut out = BTreeMap::new();
+    for (_, model_rc) in blocks {
+        for def in model_rc.borrow().enums.values() {
+            out.entry(def.name.clone())
+                .or_insert_with(|| def.variants.clone());
+        }
+    }
+    out
 }

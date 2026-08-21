@@ -252,9 +252,13 @@ fn generate_program(
     sv_module::emit_module_header(&mut p, &module, &ports, mmio_map.as_ref(), time_ms_bits);
 
     p.up();
-    sv_const::emit_constants(&mut p, map, &blocks)?;
+    // Типы — ДО констант (фича 0347): `localparam cell_t …` ссылается на
+    // `typedef struct packed … cell_t`, и обратный порядок давал verilator
+    // «Reference to 'cell_t' before declaration». Тот же класс, что порядок
+    // самих структур (0341), но между **разделами** файла.
     sv_type::emit_structs(&mut p, &blocks)?;
     sv_fsm::emit_enums(&mut p, &blocks)?;
+    sv_const::emit_constants(&mut p, map, &blocks)?;
     sv_fsm::emit_state_enums(&mut p, map, &blocks)?;
     sv_fsm::emit_step_enums(&mut p, &fsm)?;
     sv_fsm::emit_signals(&mut p, &fsm);
