@@ -139,6 +139,20 @@ pub(crate) fn emit_shared_struct(
 ///
 /// `inits` — уже посчитанные значения инициализаторов общих переменных (по имени
 /// переменной); печать идёт в порядке `union` (детерминизм 0048).
+///
+/// ⚠️ **Умолчание строит `default_value` — тот же носитель, что у прямых полей**
+/// (фича 0357). Прежде здесь стояла строка `"Default::default()"`, то есть
+/// **второй** носитель знания «чему равно умолчание типа»: он работал, лишь пока
+/// у структуры выводится `Default` (фича 0351 показала, что выводится он не
+/// всегда), и разошёлся бы с первым при первом же новом типе — класс
+/// 0084/0193/0195.
+///
+/// ⚠️ **Ветвь защитная: достижимого входа у неё нет.** Зонд 2026-08-21
+/// (`panic!` вместо фолбэка) прошёл весь корпус и все 13 наборов тестов, включая
+/// входы с общей переменной корня и с переменной, читаемой только функцией,
+/// которую зовёт под-модель. Переменная попадает в `union` из объявлений корня,
+/// а `model_fields` корня их и обходит — значит значение в `inits` есть. Ветвь
+/// оставлена: молчаливая подмена умолчания была бы хуже, чем лишний путь.
 pub(crate) fn emit_shared_new_block(
     p: &mut Printer,
     map: &RustMap,
@@ -151,11 +165,18 @@ pub(crate) fn emit_shared_new_block(
     p.ident(&format!("shared: {} {{", shared_type_name(map)))
         .nl();
     p.up();
-    for (vname, _) in union {
-        let value = inits
-            .get(vname)
-            .cloned()
-            .unwrap_or_else(|| "Default::default()".to_string());
+    let root = map.root_model_node();
+    for (vname, ty) in union {
+        let value = match inits.get(vname) {
+            Some(value) => value.clone(),
+            None => match root.as_ref() {
+                Some(model) => {
+                    crate::generator::rust::rust_decl::default_value(ty, &model.borrow())?
+                }
+                // Корня нет — умолчание строить не из чего; прежнее поведение.
+                None => "Default::default()".to_string(),
+            },
+        };
         p.ident(&format!(
             "{}: {},",
             rust_value_name(vname, Location::Codegen)?,
