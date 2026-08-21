@@ -57,6 +57,7 @@ mod conformance_shift_tests;
 mod conformance_slice_tests;
 mod conformance_st_duration_tests;
 mod conformance_st_every_tests;
+mod conformance_st_multidim_tests;
 mod conformance_st_per_tick_tests;
 mod conformance_st_tests;
 mod conformance_state_of_model_tests;

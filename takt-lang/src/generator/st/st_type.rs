@@ -208,6 +208,23 @@ fn array_type(typ: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
     let mut dims: Vec<String> = Vec::new();
     let mut current = typ;
     while let TypeNode::Array(size, elem) = current {
+        // ⚠️ СПУСК ОСТАНАВЛИВАЕТСЯ НА БИТ-ВЕКТОРЕ (фича 0363): `[bit;N≤64]` —
+        // упакованный СКАЛЯР (правило 0078), а не размерность. Прежде цикл шёл
+        // сквозь него, и `[[bit;8]; 2]` печатался `ARRAY [0..1, 0..7] OF BOOL`,
+        // тогда как индексация (и эталон) видят два элемента: `iec2c` отвечал
+        // «array has 2 indexes» при нулевом коде возврата `taktc`. Признак
+        // берётся у того же слоя, что и печать самого бит-вектора выше, —
+        // второе правило упаковки разъехалось бы с первым.
+        if !std::ptr::eq(current, typ)
+            && crate::semantic::bit_vector::is_bit_vector(current).is_some_and(|nbits| {
+                matches!(
+                    crate::semantic::bit_vector::layout(nbits),
+                    crate::semantic::bit_vector::BitVectorLayout::Scalar { .. }
+                )
+            })
+        {
+            break;
+        }
         if *size == 0 {
             return Err(Diagnostic::error(
                 Location::Codegen,

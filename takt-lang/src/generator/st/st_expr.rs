@@ -135,11 +135,17 @@ pub(crate) fn print_expression(
             model,
         ),
         // База — выражение (фича 0358): печатается тем же печатником.
-        ExpressionNode::ArraySubscript(base, index) => Ok(format!(
-            "{}[{}]",
-            print_expression(base, model)?,
-            print_expression(index, model)?
-        )),
+        //
+        // ⚠️ ЦЕПОЧКА ИНДЕКСАЦИЙ СХЛОПЫВАЕТСЯ В ОДНУ (фича 0363): в IEC 61131-3
+        // массивы НЕ вкладываются, и `st_type` печатает `[[u8; 2]; 2]`
+        // многомерной формой `ARRAY [0..1, 0..1] OF USINT` (T12 задачи 0041).
+        // Индексация обязана следовать объявлению: `grid[1, 0]`, а не форма C
+        // `grid[1][0]` — на второй `iec2c` отвечает «Number of
+        // subscripts/indexes does not match … (array has 0 indexes)».
+        ExpressionNode::ArraySubscript(_, _) => {
+            let (root, indices) = super::st_multidim::expression_subscript_chain(expr, model)?;
+            Ok(format!("{}[{}]", root, indices.join(", ")))
+        }
         // Присваивание — оператор ST, а не выражение; точку с запятой ставит
         // вызывающий (печатник операторов, часть 2 задачи).
         ExpressionNode::Assign(lhs, rhs) => Ok(format!(
@@ -384,11 +390,13 @@ pub(crate) fn print_condition(
             member,
             model,
         ),
-        ConditionNode::ArraySubscript(base, index) => Ok(format!(
-            "{}[{}]",
-            print_condition(base, model)?,
-            print_condition(index, model)?
-        )),
+        // Цепочка индексаций схлопывается в одну (фича 0363) — то же правило,
+        // что у печатника выражений: печатников ДВА, и правка одного чинит
+        // половину входов (урок 0359).
+        ConditionNode::ArraySubscript(_, _) => {
+            let (root, indices) = super::st_multidim::condition_subscript_chain(cond, model)?;
+            Ok(format!("{}[{}]", root, indices.join(", ")))
+        }
         // Вариант перечисления → именованная константа, которую объявляет
         // `st_decl` (откат Option C: перечислимых типов MatIEC не знает).
         ConditionNode::EnumVariant(enum_node, variant, _) => {
