@@ -1,0 +1,132 @@
+//! Сверка эталона с целью `c`: арифметика в типе приёмника (фича 0360).
+//!
+//! # Зачем сверка значений
+//!
+//! Правка расширяет **операнды**, а не результат, и разницу видно только
+//! числом: `(a + b) as u16` считало бы в восьми битах и обернуло бы **до**
+//! расширения — 310 стало бы 54. Компиляция обе формы принимает.
+//!
+//! Цель `c` печатает эту запись как прежде (продвижение до `int` уже верно),
+//! поэтому сверка сторожит именно **согласие**: правка у трёх других целей не
+//! должна разойтись с тем, что считают эталон и `c`.
+
+use std::path::Path;
+use std::process::Command;
+
+const FIXTURE: &str = "tests/data/eval/conformance_mixed_arith.takt";
+const TICKS: usize = 5;
+
+fn cc_available() -> bool {
+    Command::new("cc")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Трасса `(lo, hi)` эталона по тактам.
+fn simulator_trace() -> Vec<(i128, i128)> {
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    let (ast, _) = takt_lang::parse(&source, 0).expect("разбор фикстуры");
+    let model = takt_lang::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = takt_sim::build_unit(model).expect("построение Unit");
+    let mut trace = Vec::with_capacity(TICKS);
+    for _ in 0..TICKS {
+        let _ = unit.tick();
+        let number = |name: &str| match unit.variable(name) {
+            Some(takt_sim::Value::Number(v)) => v,
+            other => panic!("порт '{name}': ожидалось число, получено {other:?}"),
+        };
+        trace.push((number("sum"), number("step")));
+    }
+    trace
+}
+
+/// Трасса `(lo, hi)` порождённого C по тактам.
+fn generated_c_trace(dir: &Path) -> Vec<(i128, i128)> {
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    takt_lang::compile_to_c(
+        "conformance_mixed_arith",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "conformance_mixed_arith.h"
+
+static long last_lo, last_hi;
+
+static void write_numeric(ConformanceMixedArith_Out_NumericPort port, int64_t val, void *ud) {{
+    (void)ud;
+    if (port == CONFORMANCE_MIXED_ARITH_PORT_SUM) last_lo = (long)val; else last_hi = (long)val;
+}}
+
+int main(void) {{
+    ConformanceMixedArith m = {{0}};
+    ConformanceMixedArith_init(&m);
+    m.write_numeric = write_numeric;
+    m.userdata = 0;
+    for (int i = 0; i < {TICKS}; i++) {{
+        ConformanceMixedArith_tick(&m);
+        printf("%ld %ld\n", last_lo, last_hi);
+    }}
+    return 0;
+}}
+"#
+    );
+    std::fs::write(dir.join("harness.c"), harness).expect("харнесс");
+
+    let bin = dir.join("bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-I"])
+        .arg(dir)
+        .arg(dir.join("conformance_mixed_arith.c"))
+        .arg(dir.join("harness.c"))
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск C");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|l| {
+            let (lo, hi) = l.trim().split_once(' ')?;
+            Some((lo.parse().ok()?, hi.parse().ok()?))
+        })
+        .collect()
+}
+
+/// Трасса совпадает у эталона и цели `c` при арифметике в типе приёмника.
+#[test]
+fn mixed_arith_traces_match() {
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] mixed_arith_traces_match: `cc` не найден");
+        return;
+    }
+    let dir = std::env::temp_dir().join("takt_0360_arith");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог");
+
+    let reference = simulator_trace();
+    // Предусловие: трасса накапливающая — иначе сверка зелена и там, где поле
+    // не читается вовсе.
+    assert_eq!(
+        reference,
+        vec![(310, 1), (320, 2), (330, 3), (340, 4), (340, 4)],
+        "предусловие сверки: эталон обязан дать накапливающую трассу"
+    );
+    let generated = generated_c_trace(&dir);
+    assert_eq!(
+        reference, generated,
+        "трассы обязаны совпадать: эталон {reference:?}, цель c {generated:?}"
+    );
+}

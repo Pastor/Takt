@@ -97,8 +97,82 @@ pub(crate) fn coerce_to(
                 unwrap_outer(&print_expression(value, scope)?)
             ))
         }
+        // Арифметика печатается В ТИПЕ ПРИЁМНИКА (фича 0360). Прежде операнды
+        // печатались как есть, и `r: u16 := a + b;` при `a, b: u8` давало
+        // **`E0308`** — вывод не компилировался вовсе, при нулевом коде
+        // возврата `taktc`. Эталон и цель `c` (продвижение до `int`) считают
+        // такую запись верно.
+        //
+        // ⚠️ Приводятся ОПЕРАНДЫ, а не результат: `(a + b) as u16` считало бы в
+        // `u8` и обёртывало **до** расширения — 300 стало бы 44.
+        (
+            TypeNode::Integer { .. },
+            ExpressionNode::Add(l, r)
+            | ExpressionNode::Subtract(l, r)
+            | ExpressionNode::Multiply(l, r)
+            | ExpressionNode::Divide(l, r)
+            | ExpressionNode::Modulo(l, r),
+        ) if operands_need_cast(l, r, target) => {
+            let op = match value {
+                ExpressionNode::Add(..) => "+",
+                ExpressionNode::Subtract(..) => "-",
+                ExpressionNode::Multiply(..) => "*",
+                ExpressionNode::Divide(..) => "/",
+                _ => "%",
+            };
+            let name = crate::generator::rust::rust_type::rust_type(target, "приёмник арифметики")?;
+            // Обёртка по правилу 0127 сохраняется: печатник арифметики её и
+            // ставит, поэтому операнды приводятся, а операция печатается им же.
+            Ok(format!(
+                "({} {op} {})",
+                cast_operand(l, &name, scope)?,
+                cast_operand(r, &name, scope)?
+            ))
+        }
+        // Именованное значение ИНОГО целого типа приводится к приёмнику
+        // (фича 0360): `rr := r;` при `r: i16` и `rr: u16` давало `E0308` —
+        // вывод не компилировался, тогда как эталон и цель `c` (неявное
+        // преобразование) запись исполняют.
+        (TypeNode::Integer { .. }, ExpressionNode::Variable(_))
+            if crate::generator::mixed_sign::operand_type_expr(value)
+                .is_some_and(|ty| matches!(ty, TypeNode::Integer { .. }) && ty != *target) =>
+        {
+            let name = crate::generator::rust::rust_type::rust_type(target, "приёмник значения")?;
+            Ok(format!("({} as {name})", print_expression(value, scope)?))
+        }
         _ => print_expression(value, scope),
     }
+}
+
+/// Нужно ли приводить операнды арифметики к типу приёмника (фича 0360).
+///
+/// Признак узкий: оба операнда — **именованные значения** целого типа, и хотя
+/// бы у одного тип отличается от приёмника. Литерал сюда не входит (у него
+/// типа нет, он подстраивается), выражение — тоже: приведение там означало бы
+/// догадку о промежуточном типе.
+fn operands_need_cast(l: &ExpressionNode, r: &ExpressionNode, target: &TypeNode) -> bool {
+    let (Some(lt), Some(rt)) = (
+        crate::generator::mixed_sign::operand_type_expr(l),
+        crate::generator::mixed_sign::operand_type_expr(r),
+    ) else {
+        return false;
+    };
+    matches!(target, TypeNode::Integer { .. })
+        && matches!(lt, TypeNode::Integer { .. })
+        && matches!(rt, TypeNode::Integer { .. })
+        && (lt != *target || rt != *target)
+}
+
+/// Печатает операнд с приведением к типу приёмника, если он иного типа.
+fn cast_operand(
+    node: &ExpressionNode,
+    target_name: &str,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    Ok(format!(
+        "({} as {target_name})",
+        print_expression(node, scope)?
+    ))
 }
 
 /// Целочисленные типы Rust, у которых есть `From<bool>` (фича 0335).
