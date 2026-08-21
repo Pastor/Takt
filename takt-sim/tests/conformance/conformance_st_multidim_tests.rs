@@ -233,3 +233,171 @@ fn st_multidim_trace_matches_reference_tick_by_tick() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ── Фича 0366: вложенный агрегат раскрывается до листьев ────────────────────
+
+const AGG_FIXTURE: &str = "tests/data/eval/st_nested_aggregate.takt";
+const AGG_ROOT: &str = "STNESTEDAGGREGATE";
+const AGG_OBSERVED: &[(&str, &str)] = &[("n", "GRID0.N"), ("a", "GRID0.A"), ("b", "GRID0.B")];
+
+/// Трасса эталона по фикстуре вложенного агрегата.
+fn aggregate_simulate_trace() -> Vec<Vec<i128>> {
+    let source = std::fs::read_to_string(AGG_FIXTURE).expect("фикстура читается");
+    let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for _ in 0..TICKS {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "симуляция не должна падать: {result:?}"
+        );
+        trace.push(
+            AGG_OBSERVED
+                .iter()
+                .map(|(name, _)| sim_value(&unit, name))
+                .collect(),
+        );
+    }
+    trace
+}
+
+/// Трасса цели `st` по той же фикстуре.
+fn aggregate_st_trace(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<Vec<i128>> {
+    let source = std::fs::read_to_string(AGG_FIXTURE).expect("фикстура читается");
+    let st_dir = dir.join("st");
+    std::fs::create_dir_all(&st_dir).expect("каталог ST");
+    takt_lang::compile_to_st(
+        "st_nested_aggregate.takt",
+        &source,
+        st_dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение ST");
+
+    let work = dir.join("iec2c");
+    std::fs::create_dir_all(&work).expect("рабочий каталог iec2c");
+    let transpile = Command::new(iec2c)
+        .arg("-I")
+        .arg(lib)
+        .arg(st_dir.join("st_nested_aggregate.st"))
+        .current_dir(&work)
+        .output()
+        .expect("запуск iec2c");
+    assert!(
+        transpile.status.success() && work.join("POUS.c").is_file(),
+        "iec2c не оттранслировал порождённый ST:\n{}",
+        String::from_utf8_lossy(&transpile.stderr)
+    );
+
+    let prints = AGG_OBSERVED
+        .iter()
+        .map(|(_, path)| format!(r#"        printf("%lld ", (long long)fb.{path}.value);"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "iec_std_lib.h"
+TIME __CURRENT_TIME;
+BOOL __DEBUG = 0;
+#include "POUS.h"
+#include "POUS.c"
+
+int main(void) {{
+    {AGG_ROOT}_data__ fb = {{0}};
+    {AGG_ROOT}_init__(&fb, __BOOL_LITERAL(FALSE));
+    for (int i = 0; i < {TICKS}; i++) {{
+        {AGG_ROOT}_body__(&fb);
+{prints}
+        printf("\n");
+    }}
+    return 0;
+}}
+"#
+    );
+    let harness_path = work.join("harness.c");
+    std::fs::write(&harness_path, harness).expect("запись драйвера");
+
+    let bin = work.join("st_nested_aggregate_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c99", "-w", "-I"])
+        .arg(lib.join("C"))
+        .arg("-I")
+        .arg(&work)
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый ST (через iec2c) не собирается:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    let run = Command::new(&bin).output().expect("запуск драйвера ST");
+    assert!(run.status.success(), "драйвер ST завершился с ошибкой");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| {
+            l.split_whitespace()
+                .map(|v| v.parse().expect("число в трассе"))
+                .collect()
+        })
+        .collect()
+}
+
+/// Вложенный агрегат: значения совпадают такт в такт.
+///
+/// ⚠️ До фичи 0366 цель отвергала обе записи (`ST-011`): раскрытие агрегата
+/// было одноуровневым. Проверяются ЗНАЧЕНИЯ, а не факт компиляции: путь к
+/// листу, собранный неверно (перепутанные поле и индекс), даёт валидный ST с
+/// другими числами.
+#[test]
+fn st_nested_aggregate_trace_matches_reference() {
+    let Some((iec2c, lib)) = iec2c_available() else {
+        eprintln!("iec2c не установлен — сверка пропущена (см. scripts/ensure-iec2c.sh)");
+        return;
+    };
+    if !cc_available() {
+        eprintln!("cc недоступен — сверка пропущена");
+        return;
+    }
+
+    let dir = std::env::temp_dir().join(format!(
+        "takt_st_nested_aggregate_{}",
+        std::thread::current()
+            .name()
+            .unwrap_or("main")
+            .replace(':', "_")
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("рабочий каталог");
+
+    let reference = aggregate_simulate_trace();
+    assert_eq!(
+        reference[0],
+        vec![1, 4, 7],
+        "эталон первого такта: n = 1, a = pts[1].y = 4, b = cells[1][0] = 7"
+    );
+    let target = aggregate_st_trace(&dir, &iec2c, &lib);
+    assert_eq!(
+        target.len(),
+        reference.len(),
+        "длина трасс:\nэталон {reference:?}\nst     {target:?}"
+    );
+    for (tick, (r, t)) in reference.iter().zip(target.iter()).enumerate() {
+        assert_eq!(
+            t,
+            r,
+            "такт {} разошёлся.\nнаблюдаемые: {:?}\nэталон: {reference:?}\nst:     {target:?}",
+            tick + 1,
+            AGG_OBSERVED.iter().map(|(n, _)| *n).collect::<Vec<_>>()
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

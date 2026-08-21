@@ -108,21 +108,20 @@ pub(crate) fn print_statement(
                 // отвечал `SV-002` «инициализатор структуры» — отказ на записи,
                 // которую эталон, `c` и `rust` исполняют.
                 if let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = &**expr {
-                    let fields = match ty {
-                        TypeNode::Struct(sname) => scope.structs.get(sname),
-                        _ => None,
-                    };
-                    let places = crate::generator::aggregate::places(
-                        fields.map(Vec::as_slice),
-                        Some(ty),
-                        items.len(),
-                    );
-                    for (item, place) in items.iter().zip(places) {
-                        let value = match &place.ty {
-                            Some(elem) => scope.coerce(elem, item)?,
-                            None => print_expression(item, scope)?,
+                    // Агрегат раскрывается ДО ЛИСТЬЕВ общим носителем (фича
+                    // 0366): прежде раскрытие было одноуровневым, и
+                    // `pts := {{1, 2}, {3, 4}};` давало `SV-002` на записи,
+                    // которую исполняют эталон, `rust` и `c`.
+                    let fields_of = |sname: &str| scope.structs.get(sname).cloned();
+                    let leaves = crate::generator::aggregate::leaves(Some(ty), items, &fields_of);
+                    refuse_struct_in_array(&leaves)?;
+                    for leaf in leaves {
+                        let value = match &leaf.ty {
+                            Some(elem) => scope.coerce(elem, leaf.value)?,
+                            None => print_expression(leaf.value, scope)?,
                         };
-                        p.ident(&format!("{name}{} = {value};", place.suffix)).nl();
+                        let suffix = crate::generator::aggregate::c_like_suffix(&leaf.path);
+                        p.ident(&format!("{name}{suffix} = {value};")).nl();
                     }
                     return Ok(());
                 }
@@ -433,21 +432,17 @@ fn print_expression_statement(
             // индекс, у структуры — имя поля. Прежде индекс печатался всегда,
             // и структура адресовалась как массив.
             let target_ty = target_type(target);
-            let fields = match &target_ty {
-                Some(TypeNode::Struct(sname)) => scope.structs.get(sname),
-                _ => None,
-            };
-            let places = crate::generator::aggregate::places(
-                fields.map(Vec::as_slice),
-                target_ty.as_ref(),
-                items.len(),
-            );
-            for (item, place) in items.iter().zip(places) {
-                let rhs = match &place.ty {
-                    Some(ty) => scope.coerce(ty, item)?,
-                    None => print_expression(item, scope)?,
+            let fields_of = |sname: &str| scope.structs.get(sname).cloned();
+            // Раскрытие до листьев — общий носитель (фича 0366).
+            let leaves = crate::generator::aggregate::leaves(target_ty.as_ref(), items, &fields_of);
+            refuse_struct_in_array(&leaves)?;
+            for leaf in leaves {
+                let rhs = match &leaf.ty {
+                    Some(ty) => scope.coerce(ty, leaf.value)?,
+                    None => print_expression(leaf.value, scope)?,
                 };
-                p.ident(&format!("{lhs}{} = {rhs};", place.suffix)).nl();
+                let suffix = crate::generator::aggregate::c_like_suffix(&leaf.path);
+                p.ident(&format!("{lhs}{suffix} = {rhs};")).nl();
             }
             Ok(())
         }
@@ -498,6 +493,39 @@ fn target_type(target: &ExpressionNode) -> Option<TypeNode> {
         | crate::semantic::VariableNode::Const { ty, .. } => Some(ty.clone()),
         crate::semantic::VariableNode::Unresolved => None,
     }
+}
+
+/// Поле структуры ВНУТРИ распакованного массива синтезатор не принимает.
+///
+/// Замер 2026-08-21 (yosys): шаблон присваивания `'{…}` он поддерживает только
+/// для присваивания массива целиком («Assignment pattern is only supported for
+/// whole unpacked array assignments»), а частичную запись поля элемента при
+/// умолчании массива целиком объявляет защёлкой («Latch inferred»). Поэтому
+/// раскрытие агрегата, чей путь проходит через поле внутри массива,
+/// отвергается — вместо молчаливо несинтезируемого вывода.
+///
+/// ⚠️ Граница названа фичей 0366 и **не** покрывает запись `pts[0].x := 5;`
+/// без агрегата: она сегодня печатается и не синтезируется — отдельный класс.
+fn refuse_struct_in_array(
+    leaves: &[crate::generator::aggregate::Leaf<'_>],
+) -> Result<(), Diagnostic> {
+    use crate::generator::aggregate::Step;
+    let bad = leaves.iter().any(|leaf| {
+        let mut seen_index = false;
+        leaf.path.iter().any(|step| match step {
+            Step::Index(_) => {
+                seen_index = true;
+                false
+            }
+            Step::Field(_) => seen_index,
+        })
+    });
+    if bad {
+        return Err(sv002(
+            "агрегат, записывающий поля структуры внутри массива: синтезатор              принимает шаблон присваивания только для массива целиком, а              частичную запись поля элемента считает защёлкой. Присвойте              элементам массива значения по отдельности либо держите поля              отдельными переменными",
+        ));
+    }
+    Ok(())
 }
 
 /// Печатает левую часть присваивания.

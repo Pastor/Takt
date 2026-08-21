@@ -349,3 +349,4 @@
 | 0363 | Индексация многомерного массива у цели st | [0363-st-multidim-subscript.md](0363-st-multidim-subscript.md) | — (новая фича) |
 | 0364 | Вложенный массив у цели c | [0364-c-nested-array.md](0364-c-nested-array.md) | — (новая фича) |
 | 0365 | Распакованный массив у цели sv: сброс и переменный индекс | [0365-sv-unpacked-array.md](0365-sv-unpacked-array.md) | — (новая фича) |
+| 0366 | Раскрытие вложенного агрегата — общий носитель | [0366-nested-aggregate-carrier.md](0366-nested-aggregate-carrier.md) | — (новая фича) |

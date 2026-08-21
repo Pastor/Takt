@@ -89,3 +89,58 @@ pub(crate) fn flat_array_items(
     }
     Some(parts)
 }
+
+/// Путь к листу агрегата в форме IEC (фича 0366).
+///
+/// Подряд идущие индексы сливаются в одну пару скобок — так же, как
+/// индексация цепочкой (`grid[1, 0]`, фича 0363): в IEC 61131-3 массивы не
+/// вкладываются, и адресация обязана следовать объявлению.
+pub(crate) fn iec_suffix(path: &[crate::generator::aggregate::Step]) -> String {
+    use crate::generator::aggregate::Step;
+    let mut out = String::new();
+    let mut indices: Vec<String> = Vec::new();
+    let flush = |out: &mut String, indices: &mut Vec<String>| {
+        if !indices.is_empty() {
+            out.push('[');
+            out.push_str(&indices.join(", "));
+            out.push(']');
+            indices.clear();
+        }
+    };
+    for step in path {
+        match step {
+            Step::Index(i) => indices.push(i.to_string()),
+            Step::Field(f) => {
+                flush(&mut out, &mut indices);
+                out.push('.');
+                out.push_str(f);
+            }
+        }
+    }
+    flush(&mut out, &mut indices);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::generator::aggregate::Step;
+
+    use super::iec_suffix;
+
+    #[test]
+    fn nested_indices_collapse_into_one_bracket() {
+        assert_eq!(
+            iec_suffix(&[Step::Index(1), Step::Index(0)]),
+            "[1, 0]".to_string()
+        );
+    }
+
+    /// Поле разрывает цепочку: `pts[1].x` — два разных адресуемых объекта.
+    #[test]
+    fn field_breaks_the_chain() {
+        assert_eq!(
+            iec_suffix(&[Step::Index(1), Step::Field("x".to_string()), Step::Index(0)]),
+            "[1].x[0]".to_string()
+        );
+    }
+}
