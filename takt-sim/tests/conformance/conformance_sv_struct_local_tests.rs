@@ -268,3 +268,103 @@ fn struct_local_declaration_precedes_statements() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ── Фича 0375: частично использованная локальная структура ──────────────────
+
+/// Фикстура, где поле локальной структуры ЗАПИСАНО, но не прочитано.
+const PARTIAL: &str = "struct Pair { lo: u8, hi: u8 }\n\
+                       var n: u8 := 0;\n\
+                       out a: u8 at 0;\n\
+                       start Run {\n\
+                           always {\n\
+                               n := n + 1;\n\
+                               var tmp: Pair := {n, n + 20};\n\
+                               a := tmp.lo;\n\
+                           }\n\
+                           ref Run: n < 100;\n\
+                       }\n";
+
+/// Фикстура с локальным МАССИВОМ структур: поглотитель обязан склеивать его
+/// поэлементно — `&{1'b0, tmp}` над распакованным массивом yosys встречает
+/// «Invalid array access».
+const PARTIAL_ARRAY: &str = "struct Pair { lo: u8, hi: u8 }\n\
+                             var n: u8 := 0;\n\
+                             out a: u8 at 0;\n\
+                             start Run {\n\
+                                 always {\n\
+                                     n := n + 1;\n\
+                                     var cells: [Pair; 2] := {{n, n + 1}, {n + 2, n + 3}};\n\
+                                     a := cells[0].lo;\n\
+                                 }\n\
+                                 ref Run: n < 100;\n\
+                             }\n";
+
+fn generate_source(tag: &str, source: &str) -> PathBuf {
+    let dir = build_dir(tag);
+    takt_lang::compile_to_sv(
+        "partial",
+        source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+    dir
+}
+
+/// Поле, записанное но не прочитанное, поглощается: гейт цели зелён.
+///
+/// ⚠️ Класс виден **verilator**, а не yosys: `%Warning-UNUSEDSIGNAL: Bits of
+/// signal are not used: 'tmp'[15:8]`, и гейт цели считает предупреждение
+/// ошибкой — при нулевом коде возврата `taktc`.
+#[test]
+fn partially_used_struct_local_passes_the_lint() {
+    if !verilator_available() {
+        eprintln!("[ПРОПУСК] partially_used_struct_local_passes_the_lint: нет verilator");
+        return;
+    }
+    for (tag, source) in [("partial", PARTIAL), ("partial_array", PARTIAL_ARRAY)] {
+        let dir = generate_source(tag, source);
+        let out = Command::new("verilator")
+            .current_dir(&dir)
+            .args(["--lint-only", "-Wall", "partial.sv"])
+            .output()
+            .expect("запуск verilator");
+        assert!(
+            out.status.success(),
+            "линт цели обязан принять вывод ('{tag}'):\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// Тот же вывод СИНТЕЗИРУЕТСЯ, и поглотитель массива идёт поэлементно.
+#[test]
+fn absorber_of_unpacked_array_is_elementwise() {
+    let dir = generate_source("partial_array_text", PARTIAL_ARRAY);
+    let sv = std::fs::read_to_string(dir.join("partial.sv")).expect("вывод цели");
+    assert!(
+        sv.contains("_unused_cells = &{1'b0, cells[0].lo, cells[0].hi, cells[1].lo, cells[1].hi};"),
+        "поглотитель распакованного массива обязан склеивать ЭЛЕМЕНТЫ:\n{sv}"
+    );
+    if !yosys_available() {
+        eprintln!("[ПРОПУСК] absorber_of_unpacked_array_is_elementwise: нет yosys");
+        return;
+    }
+    let synth = Command::new("yosys")
+        .current_dir(&dir)
+        .args([
+            "-q",
+            "-p",
+            "read_verilog -sv partial.sv; synth -top partial",
+        ])
+        .output()
+        .expect("запуск yosys");
+    assert!(
+        synth.status.success(),
+        "порождённый SystemVerilog не синтезируется:\n{}",
+        String::from_utf8_lossy(&synth.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
