@@ -592,6 +592,31 @@ fn extract_type_known(
             Ok(ret_type)
         }
 
+        // ── Поле структуры → ТИП ПОЛЯ (фича 0371) ────────────────────────────
+        //
+        // Прежде здесь стоял `Unsupported`, и приведение `g.kp as u8` при поле
+        // `q(8, 8)` печаталось БЕЗ масштабирования: замер 2026-08-21 дал у
+        // эталона `1`, а у `c`, `rust`, `sv` и `st` — **128**, молча и при
+        // нулевом коде возврата `taktc` (у `st` вдобавок `ST-011` на
+        // выражении над полями). Тип поля объявлен рядом — догадываться не о
+        // чем.
+        //
+        // ⚠️ Доступ к РАЗРЯДУ (`x.3`, `Member::Number`) сюда не входит: его
+        // тип — вопрос правила 0356, и трогать его этой фичей нельзя.
+        ExpressionNode::BitAccess(inner, crate::parser::ast::Member::Identifier(field)) => {
+            let base = extract_type_known(inner, model.clone(), known)?;
+            let TypeNode::Struct(struct_name) = base else {
+                return Ok(TypeNode::Unsupported);
+            };
+            let found = model.borrow().search_struct(&struct_name).and_then(|def| {
+                def.fields
+                    .iter()
+                    .find(|(name, _)| *name == field.name)
+                    .map(|(_, ty)| ty.clone())
+            });
+            Ok(found.unwrap_or(TypeNode::Unsupported))
+        }
+
         // ── Выражения без выводимого типа ────────────────────────────────────
         ExpressionNode::String(_)
         | ExpressionNode::Address(_, _)

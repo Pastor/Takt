@@ -386,7 +386,8 @@ fn fixed_binary(
     b: &ExpressionNode,
     scope: &Scope,
 ) -> Option<Result<String, Diagnostic>> {
-    rust_fixed::fixed_format(expr).map(|(m, n, sat)| rust_fixed::binary(op, a, b, scope, m, n, sat))
+    rust_fixed::fixed_format_in(expr, scope.model)
+        .map(|(m, n, sat)| rust_fixed::binary(op, a, b, scope, m, n, sat))
 }
 
 /// Печатает сравнение, приводя операнды друг к другу по типу.
@@ -497,7 +498,7 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         // В Rust `!` — и логическое, и побитовое отрицание (в C — `~`).
         ExpressionNode::BitwiseNot(a) => Ok(format!("(!{})", print_expression(a, scope)?)),
         ExpressionNode::UnaryPlus(a) => print_expression(a, scope),
-        ExpressionNode::Negate(a) => match rust_fixed::fixed_format(expr) {
+        ExpressionNode::Negate(a) => match rust_fixed::fixed_format_in(expr, scope.model) {
             Some((m, n, sat)) => rust_fixed::negate(a, scope, m, n, sat),
             None => Ok(format!("(-{})", print_expression(a, scope)?)),
         },
@@ -567,7 +568,9 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Cast(inner, ty) => {
             // Fixed-point (0061): масштабирующее приведение, когда источник либо
             // цель — q(m, n); иначе обычный `as`.
-            if matches!(ty, TypeNode::Fixed { .. }) || rust_fixed::fixed_format(inner).is_some() {
+            if matches!(ty, TypeNode::Fixed { .. })
+                || rust_fixed::fixed_format_in(inner, scope.model).is_some()
+            {
                 rust_fixed::cast(inner, ty, scope)
             } else if crate::generator::mixed_sign::operand_type_expr(inner)
                 .is_some_and(|from| from == *ty)
@@ -698,7 +701,7 @@ fn compound_assign(
     // `takt_q`-путь, а не нативное `x *= y` (то дало бы целочисленное умножение
     // представлений без сдвига на n — молча неверный результат и паника на
     // переполнении в debug).
-    if rust_fixed::fixed_format(value).is_some() {
+    if rust_fixed::fixed_format_in(value, scope.model).is_some() {
         return Ok(None);
     }
     // Беззнаковая арифметика печатается обёрткой (`wrapping_*`, фича 0127):

@@ -602,3 +602,4 @@
 | 0368-01 | 0368 | Элемент агрегата печатается по типу элемента | [0368-01-aggregate-element-type.md](0368-01-aggregate-element-type.md) |
 | 0369-01 | 0369 | Массив в параметре функции у цели sv | [0369-01-sv-array-parameter.md](0369-01-sv-array-parameter.md) |
 | 0370-01 | 0370 | Понижение q-литерала доходит до полей структуры | [0370-01-struct-field-fixed.md](0370-01-struct-field-fixed.md) |
+| 0371-01 | 0371 | Приведение q из поля структуры масштабируется | [0371-01-fixed-cast-from-field.md](0371-01-fixed-cast-from-field.md) |

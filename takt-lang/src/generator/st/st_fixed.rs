@@ -16,7 +16,7 @@
 //! `c`/`rust` — сверка идёт побитово через вещественный порт (`… as float`).
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::st::st_expr::{inner_expr_type, print_expression};
+use crate::generator::st::st_expr::{inner_expr_type_in, print_expression};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::type_node::type_fixed::fixed_storage_bits;
 use crate::semantic::{ExpressionNode, ModelNode};
@@ -152,17 +152,22 @@ pub(crate) enum FixedOp {
 
 /// Формат `q(m, n)` выражения, если его тип — `Fixed` (рекурсивно по арифметике;
 /// `SE-059` гарантирует единый формат операндов).
-pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8, bool)> {
+pub(crate) fn fixed_format(expr: &ExpressionNode, model: &ModelNode) -> Option<(u8, u8, bool)> {
     // Признак насыщения (фича 0170) едет вместе с разрядностями.
-    if let Some(TypeNode::Fixed { m, n, sat }) = inner_expr_type(expr) {
+    //
+    // ⚠️ Тип операнда спрашивается С ОГЛЯДКОЙ НА МОДЕЛЬ (фича 0371): поле
+    // структуры знает только `inner_expr_type_in` (0349), и без него
+    // `g.kp as u8` печаталось как `INT_TO_USINT(g.kp)` — без масштабирования,
+    // то есть **128** против `1` у эталона, молча.
+    if let Some(TypeNode::Fixed { m, n, sat }) = inner_expr_type_in(expr, model) {
         return Some((m, n, sat));
     }
     match expr {
         ExpressionNode::Add(a, b)
         | ExpressionNode::Subtract(a, b)
         | ExpressionNode::Multiply(a, b)
-        | ExpressionNode::Divide(a, b) => fixed_format(a).or_else(|| fixed_format(b)),
-        ExpressionNode::Negate(a) | ExpressionNode::Parenthesis(a) => fixed_format(a),
+        | ExpressionNode::Divide(a, b) => fixed_format(a, model).or_else(|| fixed_format(b, model)),
+        ExpressionNode::Negate(a) | ExpressionNode::Parenthesis(a) => fixed_format(a, model),
         _ => None,
     }
 }
@@ -245,22 +250,22 @@ pub(crate) fn cast(
     target: &TypeNode,
     model: &ModelNode,
 ) -> Result<String, Diagnostic> {
-    let src = fixed_format(inner);
+    let src = fixed_format(inner, model);
     let printed = print_expression(inner, model)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов.
         (Some((_, from_n, _)), TypeNode::Fixed { m: tm, n: tn, sat }) => {
-            let li = to_lint(&printed, iec_signed(storage_of(inner)));
+            let li = to_lint(&printed, iec_signed(storage_of(inner, model)));
             rescale(&li, from_n, *tn, *tm, *sat)
         }
         // q → float: repr / 2^n (точно представимо в LREAL).
         (Some((_, from_n, _)), TypeNode::Rational) => {
-            let s = iec_signed(storage_of(inner));
+            let s = iec_signed(storage_of(inner, model));
             Ok(format!("({s}_TO_LREAL({printed}) / {}.0)", 1u64 << from_n))
         }
         // q → целое/бит: floor(repr / 2^n) = целая часть.
         (Some((_, from_n, _)), _) => {
-            let s = iec_signed(storage_of(inner));
+            let s = iec_signed(storage_of(inner, model));
             let tgt = int_name_of_target(target)?;
             let li = to_lint(&printed, s);
             Ok(format!(
@@ -270,7 +275,7 @@ pub(crate) fn cast(
         }
         // float → q: floor(f · 2^n) — LREAL_TO_INT в IEC ОКРУГЛЯЕТ, не floor.
         (None, TypeNode::Fixed { .. })
-            if matches!(inner_expr_type(inner), Some(TypeNode::Rational)) =>
+            if matches!(inner_expr_type_in(inner, model), Some(TypeNode::Rational)) =>
         {
             Err(Diagnostic::error(
                 crate::generator::site::at(Location::Codegen),
@@ -283,7 +288,7 @@ pub(crate) fn cast(
         // целое/бит → q: repr = v · 2^n с переносом либо насыщением к W.
         (None, TypeNode::Fixed { m: tm, n: tn, sat }) => {
             let ts = iec_signed(fixed_storage_bits(tm + tn));
-            let src_ty = inner_expr_type(inner).ok_or_else(untyped_source)?;
+            let src_ty = inner_expr_type_in(inner, model).ok_or_else(untyped_source)?;
             let src_name = match src_ty {
                 TypeNode::Integer { bits, signed } => iec_int(bits, signed),
                 TypeNode::Bit | TypeNode::Bool => "BOOL",
@@ -304,8 +309,8 @@ pub(crate) fn cast(
 }
 
 /// Тип хранения (в битах) выражения-`q` — по его выведенному формату.
-fn storage_of(expr: &ExpressionNode) -> u8 {
-    match fixed_format(expr) {
+fn storage_of(expr: &ExpressionNode, model: &ModelNode) -> u8 {
+    match fixed_format(expr, model) {
         // ⚠️ Ширина хранения от признака насыщения НЕ зависит: `sat` меняет
         // поведение при переполнении, а не размер поля.
         Some((m, n, _)) => fixed_storage_bits(m + n),
