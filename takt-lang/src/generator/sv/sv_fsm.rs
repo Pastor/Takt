@@ -111,6 +111,11 @@ pub(crate) struct Fsm {
     /// библиотеки, воспроизведённый по образцу `rust`/`st` вместе с их дефектом:
     /// `--quiet` такой вывод не глушил, а формат расходился с общим.
     pub(crate) warnings: std::cell::RefCell<Vec<Diagnostic>>,
+    /// Локальные переменные тел, содержащие СТРУКТУРУ (фича 0373).
+    ///
+    /// Заполняется **печатником тел** по ходу печати (отсюда `RefCell`);
+    /// правило и его причина — в [`sv_locals`](crate::generator::sv::sv_locals).
+    pub(crate) hoisted_locals: crate::generator::sv::sv_locals::HoistedLocals,
 }
 
 /// Собирает аргументы инстанцирования по всем реализациям карты (фича 0185).
@@ -274,6 +279,7 @@ impl Fsm {
             structs: BTreeMap::new(),
             step_enums: Vec::new(),
             warnings: std::cell::RefCell::new(Vec::new()),
+            hoisted_locals: crate::generator::sv::sv_locals::HoistedLocals::default(),
         };
 
         // Аргументы инстанцирования (фича 0185): значение сброса регистра
@@ -605,29 +611,11 @@ pub(crate) fn emit_functions(
             let mut locals = Vec::new();
             hoist_locals(body, &mut locals);
             emit_hoisted_locals(p, &locals)?;
-            // Пролог распаковки (фича 0369): плоский вектор раскладывается в
-            // распакованный массив с ИМЕНЕМ ПАРАМЕТРА, и тело печатается
-            // дальше как прежде — второго знания об адресации не заводится.
+            // Пролог распаковки (фичи 0369, 0372) — у носителя раскладки.
             for (param, ty, flat_param) in &unpack {
-                let decl = sv_type(ty, &format!("параметр '{}' функции '{}'", param, name))?;
-                p.ident(&format!("{};", decl.declare(param))).nl();
-                let flat = crate::generator::sv::sv_array::flat_param_name(param);
-                let mut low = 0;
-                for (suffix, part_width, part_ty) in &flat_param.parts {
-                    // Перечисления в SystemVerilog строго типизированы: без
-                    // приведения verilator отвечает ОШИБКОЙ `ENUMVALUE`
-                    // («Implicit conversion to enum … from logic[1:0]»), а гейт
-                    // цели считает предупреждение ошибкой (фича 0372).
-                    let slice = format!("{flat}[{}:{}]", low + part_width - 1, low);
-                    let value = match part_ty {
-                        crate::semantic::type_node::TypeNode::Enum(enum_name) => {
-                            format!("{}'({})", sv_enum_type_name(enum_name), slice)
-                        }
-                        _ => slice,
-                    };
-                    p.ident(&format!("{param}{suffix} = {value};")).nl();
-                    low += part_width;
-                }
+                crate::generator::sv::sv_array::emit_unpack_prologue(
+                    p, param, ty, flat_param, name,
+                )?;
             }
             // Возврат печатается присваиванием имени функции и исполнения не
             // прерывает, поэтому досрочный возврат сменил бы смысл молча.
@@ -704,6 +692,22 @@ pub(crate) fn emit_comb(
         .nl();
     p.ident("always_comb begin").nl();
     p.up();
+    // Тело печатается в БУФЕР (фича 0373): пока оно печатается, печатник тел
+    // складывает в `fsm.hoisted_locals` локальные переменные со структурой —
+    // их объявления обязаны стоять в начале процесса, а собрать их отдельным
+    // обходом значило бы завести второй список того же набора (класс
+    // 0084/0193/0195).
+    let mut body_text = String::new();
+    {
+        let mut buffer = p.fork(&mut body_text);
+        sv_time::emit_time_updates(&mut buffer, &fsm.time_levels)?;
+        emit_model_body(&mut buffer, map, fsm, root)?;
+    }
+    // Объявления ПЕРВЫМИ: в SystemVerilog они обязаны предшествовать
+    // операторам блока (фича 0373). Локальные тел, содержащие структуру,
+    // объявляются здесь: внутри ветви `case` yosys объявляет такую переменную
+    // защёлкой, тогда как verilator модуль принимает.
+    crate::generator::sv::sv_locals::emit_declarations(p, &fsm.hoisted_locals);
     // Умолчания обязательны: неполное присваивание даёт защёлку, а
     // `verilator -Wall` — LATCH. Это условие гейта, а не стиль.
     p.ident("// Умолчание «остаться как есть». Без него неполное присваивание")
@@ -725,10 +729,11 @@ pub(crate) fn emit_comb(
             }
         }
     }
+    crate::generator::sv::sv_locals::emit_defaults(p, &fsm.hoisted_locals);
     p.nl();
-    // Перекрытие умолчаний регистров времени (фича 0134). Логика — в `sv_time`.
-    sv_time::emit_time_updates(p, &fsm.time_levels)?;
-    emit_model_body(p, map, fsm, root)?;
+    // Перекрытие умолчаний регистров времени (фича 0134) и тело — уже
+    // напечатаны в буфер выше.
+    p.print(&body_text);
     p.down();
     p.ident("end").nl().nl();
     Ok(())

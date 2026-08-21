@@ -1,0 +1,55 @@
+// Сверка ЛОКАЛЬНОЙ переменной со структурой у цели `sv` (фича 0373).
+//
+// Локальные переменные тел цель объявляет `automatic` внутри ветви `case`
+// (фича 0304). Для переменной, содержащей СТРУКТУРУ, этого мало: тело пишет её
+// поля, а внутри ветви yosys полным присваиванием такую запись не считает —
+// «Latch inferred for signal `$unnamed_block$1.tmp.lo`», при том что verilator
+// модуль принимает и `taktc` возвращает ноль. Эталон, `c`, `st` и `rust` тот
+// же вход исполняют.
+//
+// Фикстура держит ТРИ формы записи разом, потому что синтезатор различает их:
+//   `field`  — запись по полям (`tmp.lo := …`);
+//   `whole`  — присваивание структуры ЦЕЛИКОМ (возврат функции);
+//   `nested` — массив структур, где пишется поле элемента.
+//
+// Наблюдаемые меняются по тактам и различают поля: постоянные значения не
+// отличают верную раскладку от перепутанной (урок 0369).
+struct Pair {
+    lo: u8,
+    hi: u8
+}
+
+var n: u8 := 0;
+
+out field_lo: u8 at 0;
+out field_hi: u8 at 1;
+out whole_lo: u8 at 2;
+out whole_hi: u8 at 3;
+out nested_first: u8 at 4;
+out nested_last: u8 at 5;
+
+fn make(v: u8) -> Pair {
+    var built: Pair := {0, 0};
+    built.lo := v;
+    built.hi := v + 40;
+    return built;
+}
+
+start Run {
+    always {
+        n := n + 1;
+
+        var field: Pair := {n, n + 10};
+        field_lo := field.lo;
+        field_hi := field.hi;
+
+        var whole: Pair := make(n + 20);
+        whole_lo := whole.lo;
+        whole_hi := whole.hi;
+
+        var cells: [Pair; 2] := {{n + 60, n + 70}, {n + 80, n + 90}};
+        nested_first := cells[0].lo;
+        nested_last := cells[1].hi;
+    }
+    ref Run: n < 100;
+}

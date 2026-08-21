@@ -25,16 +25,47 @@ pub(crate) fn emit_named_blocks(
 ) -> Result<(), Diagnostic> {
     for b in state.get_named_blocks(block) {
         if let Some(stmt) = b.statement() {
-            // Объявления локальных переменных — ДО операторов (фича 0304):
-            // прежде они не печатались вовсе, и вывод был невалиден при нулевом
-            // коде возврата.
-            let mut locals = Vec::new();
-            crate::generator::sv::sv_stmt::hoist_locals(stmt, &mut locals);
-            crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &locals)?;
-            print_statement(p, stmt, &fsm.scope())?;
+            emit_block_body(p, stmt, fsm)?;
         }
     }
     Ok(())
+}
+
+/// Печатает тело блока: объявления локальных, затем операторы.
+///
+/// Объявления локальных переменных идут **до** операторов (фича 0304): прежде
+/// они не печатались вовсе, и вывод был невалиден при нулевом коде возврата.
+///
+/// ⚠️ **Локальная переменная, содержащая СТРУКТУРУ, поднимается в начало
+/// `always_comb`** (фича 0373). Тело пишет её поля (`tmp.lo = …`), а внутри
+/// ветви `case` yosys такую запись полным присваиванием не считает: «Latch
+/// inferred for signal `$unnamed_block$1.tmp.lo`» — при том что verilator
+/// модуль принимает, а `taktc` возвращает ноль. Формы измерены прогоном
+/// **обоих** инструментов (урок 0045): именованный блок, `= '0`, `'{N{'0}}` и
+/// объявление на уровне модуля без умолчаний yosys отвергает; принимает он
+/// объявление в начале процесса с нулевыми умолчаниями по листьям.
+///
+/// ⚠️ Прочие локальные (скаляр, перечисление, массив скаляров) печатаются
+/// **на месте**, как прежде: подъём изменил бы вывод корпуса без нужды.
+fn emit_block_body(
+    p: &mut Printer,
+    stmt: &crate::semantic::StatementNode,
+    fsm: &Fsm,
+) -> Result<(), Diagnostic> {
+    let mut locals = Vec::new();
+    crate::generator::sv::sv_stmt::hoist_locals(stmt, &mut locals);
+    let scope = fsm.scope();
+    let fields_of = |name: &str| scope.structs.get(name).cloned();
+    let mut inline = Vec::new();
+    for (name, ty) in locals {
+        if crate::generator::sv::sv_array::contains_struct(ty, &fields_of) {
+            crate::generator::sv::sv_locals::hoist(&fsm.hoisted_locals, scope.structs, name, ty)?;
+        } else {
+            inline.push((name, ty));
+        }
+    }
+    crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &inline)?;
+    print_statement(p, stmt, &scope)
 }
 
 /// Печатает именованные блоки **уровня модели** (фича 0083): `always` вне
@@ -47,10 +78,7 @@ pub(crate) fn emit_model_named_blocks(
 ) -> Result<(), Diagnostic> {
     for b in model.get_named_blocks(block) {
         if let Some(stmt) = b.statement() {
-            let mut locals = Vec::new();
-            crate::generator::sv::sv_stmt::hoist_locals(stmt, &mut locals);
-            crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &locals)?;
-            print_statement(p, stmt, &fsm.scope())?;
+            emit_block_body(p, stmt, fsm)?;
         }
     }
     Ok(())
