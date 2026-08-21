@@ -312,10 +312,15 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
             .ok_or_else(|| sv002("неразрешённая переменная в условии")),
         // База — выражение (фича 0358): печатается тем же печатником условий,
         // поэтому `b.data[1]` выходит через ту же форму доступа к полю.
+        // Печатников два (ADR 0019), и сужение индекса нужно обоим (фича 0365).
         ConditionNode::ArraySubscript(base, index) => Ok(format!(
             "{}[{}]",
             print_condition(base, scope)?,
-            print_condition(index, scope)?
+            crate::generator::sv::sv_array::index_text(
+                crate::generator::sv::sv_array::array_type_cond(base).as_ref(),
+                crate::generator::mixed_sign::operand_type_cond(index).as_ref(),
+                print_condition(index, scope)?,
+            )
         )),
         ConditionNode::BitAccess(inner, member) => {
             Ok(print_member(&print_condition(inner, scope)?, member))
@@ -455,10 +460,17 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Variable(var) => signal_of(var)
             .map(|name| scope.read(&name))
             .ok_or_else(|| sv002("неразрешённая переменная")),
+        // Индекс сужается до ширины, которую требует размер массива (фича
+        // 0365): иначе verilator отвечает `WIDTHTRUNC`, а гейт цели считает
+        // предупреждение ошибкой. Правило — общий носитель `sv_array`.
         ExpressionNode::ArraySubscript(base, index) => Ok(format!(
             "{}[{}]",
             print_expression(base, scope)?,
-            print_expression(index, scope)?
+            crate::generator::sv::sv_array::index_text(
+                crate::generator::sv::sv_array::array_type_expr(base).as_ref(),
+                crate::generator::mixed_sign::operand_type_expr(index).as_ref(),
+                print_expression(index, scope)?,
+            )
         )),
         ExpressionNode::BitAccess(inner, member) => {
             Ok(print_member(&print_expression(inner, scope)?, member))

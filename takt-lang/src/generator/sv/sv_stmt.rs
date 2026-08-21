@@ -511,10 +511,20 @@ fn print_assign_target(target: &ExpressionNode, scope: &Scope) -> Result<String,
             .ok_or_else(|| sv002("неразрешённая переменная в левой части присваивания")),
         // База — выражение (фича 0358): она сама печатается КАК ЦЕЛЬ ЗАПИСИ,
         // поэтому `b.data[1] := …` даёт `b_next.data[1] = …`.
+        //
+        // ⚠️ Индекс сужается тем же носителем, что и при чтении (фича 0365):
+        // печатников индексации ТРИ — выражения, условия и цель записи, — и
+        // правка двух оставляла `WIDTHTRUNC` на записи (замер: линт цели
+        // отвергал модуль, а сверка значений этого не видела, потому что
+        // тестбенч собирается с `-Wno-fatal`).
         ExpressionNode::ArraySubscript(base, index) => Ok(format!(
             "{}[{}]",
             print_assign_target(base, scope)?,
-            print_expression(index, scope)?
+            crate::generator::sv::sv_array::index_text(
+                crate::generator::sv::sv_array::array_type_expr(base).as_ref(),
+                crate::generator::mixed_sign::operand_type_expr(index).as_ref(),
+                print_expression(index, scope)?,
+            )
         )),
         // Запись в бит/поле: `x.0 := 1;` → `x_next[0] = 1;`. Основание — то же,
         // что и при чтении: в SV вектор индексируется как массив.

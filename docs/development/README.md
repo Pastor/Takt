@@ -596,3 +596,4 @@
 | 0362-01 | 0362 | Проба прогоняет инструменты целей | [0362-01-probe-target-tools.md](0362-01-probe-target-tools.md) |
 | 0363-01 | 0363 | Индексация многомерного массива у цели st | [0363-01-st-multidim-subscript.md](0363-01-st-multidim-subscript.md) |
 | 0364-01 | 0364 | Вложенный массив у цели c | [0364-01-c-nested-array.md](0364-01-c-nested-array.md) |
+| 0365-01 | 0365 | Распакованный массив у цели sv: сброс и переменный индекс | [0365-01-sv-unpacked-array.md](0365-01-sv-unpacked-array.md) |
