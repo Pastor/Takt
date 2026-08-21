@@ -588,3 +588,4 @@
 | 0354-01 | 0354 | Умолчание duration у эталона несёт свой вид значения | [0354-01-sim-duration-default.md](0354-01-sim-duration-default.md) |
 | 0355-01 | 0355 | Срез массива переводят четыре цели | [0355-01-array-slice-in-targets.md](0355-01-array-slice-in-targets.md) |
 | 0356-01 | 0356 | Разряд участвует в арифметике как 0/1 | [0356-01-sim-bit-in-arithmetic.md](0356-01-sim-bit-in-arithmetic.md) |
+| 0357-01 | 0357 | Умолчание общей переменной строит один носитель | [0357-01-rust-shared-default-value.md](0357-01-rust-shared-default-value.md) |
