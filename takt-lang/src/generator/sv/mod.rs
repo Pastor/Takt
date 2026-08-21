@@ -47,6 +47,7 @@ mod sv_enums;
 mod sv_expr;
 mod sv_fixed;
 mod sv_fsm;
+mod sv_locals;
 mod sv_map;
 mod sv_mmio;
 mod sv_module;

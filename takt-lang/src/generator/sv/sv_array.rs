@@ -157,7 +157,53 @@ pub(crate) fn needs_leafwise(
     }
 }
 
-fn contains_struct(ty: &TypeNode, fields_of: &crate::generator::aggregate::FieldsOf<'_>) -> bool {
+/// Нулевые умолчания ПО ЛИСТЬЯМ для поднятой локальной переменной (фича 0373).
+///
+/// Возвращает пары `(суффикс пути, нулевое значение)`. Умолчание печатается
+/// безусловно в начале `always_comb`: без него yosys объявляет защёлку, потому
+/// что тело пишет поля лишь в своей ветви `case`.
+pub(crate) fn leaf_zero_defaults(
+    ty: &TypeNode,
+    fields_of: &crate::generator::aggregate::FieldsOf<'_>,
+) -> Vec<(String, String)> {
+    // Упакованное значение (структура вне массива) сбрасывается ЦЕЛИКОМ:
+    // тело присваивает его целиком (`made = make(n);`), и умолчание по полям
+    // с таким присваиванием не сходится — yosys объявляет защёлку (прогон
+    // 2026-08-21). Правило то же, что у регистров (0367): по листьям идёт
+    // только структура ВНУТРИ распакованного массива.
+    let mut out = Vec::new();
+    if !needs_leafwise(ty, fields_of) {
+        // Упакованное значение (структура вне массива) сбрасывается и ЦЕЛИКОМ,
+        // и по полям — потому что тело вправе писать его обоими способами:
+        // `made = make(n);` либо `tmp.lo = …`. Умолчание, не совпавшее по
+        // форме с записью, yosys защёлкой не считает — он видит незаданной ту
+        // «форму», которой присваивает тело (прогон 2026-08-21). Значение одно
+        // и то же, поэтому лишним присваиванием смысл не меняется.
+        out.push((String::new(), "'0".to_string()));
+    }
+    let mut nodes = Vec::new();
+    walk_type(ty, fields_of, &mut String::new(), &mut nodes);
+    out.extend(nodes.into_iter().map(|(suffix, leaf_ty)| {
+        // Ширина листа берётся у `scalar_width`; если её нет (лист сам
+        // структура, чьи поля неизвестны), печатается `'0` — форма,
+        // законная для любого упакованного значения.
+        let zero = match scalar_width(&leaf_ty) {
+            Some(width) => format!("{width}'d0"),
+            None => "'0".to_string(),
+        };
+        (suffix, zero)
+    }));
+    out
+}
+
+/// Содержит ли тип структуру — сам ею будучи либо элементом массива.
+///
+/// Признак нужен и локальным объявлениям цели (фича 0373): запись в поле yosys
+/// полным присваиванием не считает.
+pub(crate) fn contains_struct(
+    ty: &TypeNode,
+    fields_of: &crate::generator::aggregate::FieldsOf<'_>,
+) -> bool {
     match ty {
         TypeNode::Struct(name) => fields_of(name).is_some(),
         TypeNode::Array(_, elem) if crate::semantic::bit_vector::is_bit_vector(ty).is_none() => {
@@ -330,6 +376,45 @@ fn packed_width(
         }
         other => scalar_width(other),
     }
+}
+
+/// Печатает пролог распаковки параметра-массива (фичи 0369, 0372).
+///
+/// Плоский вектор раскладывается в переменную **с именем параметра**, и тело
+/// печатается дальше прежними печатниками — второго знания об адресации не
+/// заводится.
+///
+/// ⚠️ Часть-ПЕРЕЧИСЛЕНИЕ приводится к своему типу: перечисления в
+/// SystemVerilog строго типизированы, и без приведения verilator отвечает
+/// **ошибкой** `ENUMVALUE` («Implicit conversion to enum … from logic[1:0]»),
+/// а гейт цели считает предупреждение ошибкой.
+pub(crate) fn emit_unpack_prologue(
+    p: &mut crate::generator::indent::Printer,
+    param: &str,
+    ty: &TypeNode,
+    flat: &FlatParam,
+    function: &str,
+) -> Result<(), Diagnostic> {
+    let decl = super::sv_type::sv_type(ty, &format!("параметр '{param}' функции '{function}'"))?;
+    p.ident(&format!("{};", decl.declare(param))).nl();
+    let flat_name = flat_param_name(param);
+    let mut low = 0;
+    for (suffix, part_width, part_ty) in &flat.parts {
+        let slice = format!("{flat_name}[{}:{}]", low + part_width - 1, low);
+        let value = match part_ty {
+            TypeNode::Enum(enum_name) => {
+                format!(
+                    "{}'({})",
+                    super::sv_type::sv_enum_type_name(enum_name),
+                    slice
+                )
+            }
+            _ => slice,
+        };
+        p.ident(&format!("{param}{suffix} = {value};")).nl();
+        low += part_width;
+    }
+    Ok(())
 }
 
 /// Аргумент-массив печатается КОНКАТЕНАЦИЕЙ частей (фичи 0369, 0372).

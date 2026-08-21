@@ -604,3 +604,4 @@
 | 0370-01 | 0370 | Понижение q-литерала доходит до полей структуры | [0370-01-struct-field-fixed.md](0370-01-struct-field-fixed.md) |
 | 0371-01 | 0371 | Приведение q из поля структуры масштабируется | [0371-01-fixed-cast-from-field.md](0371-01-fixed-cast-from-field.md) |
 | 0372-01 | 0372 | Составной элемент массива в параметре функции | [0372-01-composite-array-parameter.md](0372-01-composite-array-parameter.md) |
+| 0373-01 | 0373 | Локальная переменная структурного типа у цели sv | [0373-01-sv-struct-local.md](0373-01-sv-struct-local.md) |
