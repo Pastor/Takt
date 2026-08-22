@@ -233,7 +233,7 @@ fn check_stmt(stmt: &StatementNode, model: &ModelNode) -> Result<(), Diagnostic>
             }
             check_stmt(body, model)?;
         }
-        StatementNode::Variable(_, _, Some(e)) => check_expr(e, model)?,
+        StatementNode::Variable(_, _, Some(e), _) => check_expr(e, model)?,
         StatementNode::Return(Some(e)) => check_expr(e, model)?,
         StatementNode::Match { expr, arms } => {
             check_expr(expr, model)?;

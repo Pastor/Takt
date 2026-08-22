@@ -159,7 +159,7 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>, found: &mut 
             }
             check_stmt(body, model, found);
         }
-        StatementNode::Variable(_, _, Some(expr)) => {
+        StatementNode::Variable(_, _, Some(expr), _) => {
             check_expr(expr, model, found, Position::Value, Location::Builtin)
         }
         StatementNode::Return(Some(expr)) => {

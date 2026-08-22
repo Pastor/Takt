@@ -96,7 +96,7 @@ pub(crate) fn print_statement(
         //
         // Регистровой пары у локальной переменной нет: она живёт внутри одного
         // вычисления, а не между тактами.
-        StatementNode::Variable(name, ty, init) => {
+        StatementNode::Variable(name, ty, init, _) => {
             if let Some(expr) = init {
                 // Инициализатор — позиция приёмника с известным типом (фича
                 // 0338): `var res: Mode := Idle;` приходит сюда числом (узла
@@ -247,7 +247,7 @@ pub(crate) fn print_statement(
 /// инициализатор остаётся на своём месте отдельным присваиванием.
 pub(crate) fn hoist_locals<'a>(stmt: &'a StatementNode, out: &mut Vec<(&'a str, &'a TypeNode)>) {
     match stmt {
-        StatementNode::Variable(name, ty, _) => out.push((name, ty)),
+        StatementNode::Variable(name, ty, _, _) => out.push((name, ty)),
         StatementNode::Block(stmts) => {
             for s in stmts {
                 hoist_locals(s, out);

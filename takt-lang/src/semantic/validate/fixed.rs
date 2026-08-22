@@ -129,7 +129,7 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>) -> Result<()
             }
             check_stmt(body, model)?;
         }
-        StatementNode::Variable(_, _, Some(e)) => check_expr(e, model)?,
+        StatementNode::Variable(_, _, Some(e), _) => check_expr(e, model)?,
         StatementNode::Return(Some(e)) => check_expr(e, model)?,
         StatementNode::Match { expr, arms } => {
             check_expr(expr, model)?;
@@ -139,7 +139,7 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>) -> Result<()
         }
         StatementNode::None
         | StatementNode::Unresolved(_)
-        | StatementNode::Variable(_, _, None)
+        | StatementNode::Variable(_, _, None, _)
         | StatementNode::Return(None)
         | StatementNode::Continue
         | StatementNode::Break

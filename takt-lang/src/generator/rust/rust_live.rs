@@ -303,7 +303,7 @@ fn verdict_of(name: &str, stmt: &StatementNode) -> Verdict {
     match stmt {
         StatementNode::Block(items) => scan(name, items),
         StatementNode::Expression(expr, _) => verdict_of_expr(name, expr),
-        StatementNode::Variable(decl, _, init) => {
+        StatementNode::Variable(decl, _, init, _) => {
             if init.as_ref().is_some_and(|i| reads_expr(name, i)) {
                 return Verdict::Read;
             }
@@ -528,7 +528,7 @@ mod tests {
         // Ищем объявление и проверяем остаток блока.
         let idx = items
             .iter()
-            .position(|s| matches!(s, StatementNode::Variable(n, _, _) if n == name))
+            .position(|s| matches!(s, StatementNode::Variable(n, _, _, _) if n == name))
             .expect("нет объявления");
         initializer_is_dead(name, &items[idx + 1..])
     }

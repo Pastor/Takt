@@ -295,7 +295,7 @@ pub(crate) fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
             }
             usage_from_stmt(body, set);
         }
-        StatementNode::Variable(_, _, Some(e)) => usage_from_expr(e, set),
+        StatementNode::Variable(_, _, Some(e), _) => usage_from_expr(e, set),
         StatementNode::Return(Some(e)) => usage_from_expr(e, set),
         StatementNode::Match { expr, arms } => {
             usage_from_expr(expr, set);
@@ -395,6 +395,45 @@ fn usage_from_state(state: &crate::semantic::StateNode, set: &mut UsageSet) {
     }
 }
 
+/// Локальные объявления ВЕРХНЕГО уровня блока, к которым блок не обращается —
+/// имя и позиция объявления, в порядке объявления (фичи 0376, 0386).
+///
+/// # Зачем носитель здесь
+///
+/// Признак завела фича 0376 для целей: неиспользуемая локальная ломает вывод
+/// `c` и `rust` под флагами их гейтов, и там её гасит заглушка. Фича 0386
+/// понадобилась тем же признаком **семантике** — сказать об этом автору
+/// (`SE-036`), — а зависимость «семантика → генератор» была бы неверным
+/// направлением. Знание одно; идиома заглушки осталась у целей.
+///
+/// # Почему по блоку
+///
+/// Область видимости локальной — её блок, и вопрос «используется ли имя»
+/// задаётся именно ему: имя, объявленное во вложенном блоке, снаружи не видно,
+/// а использование во вложенном блоке — законное использование.
+///
+/// ⚠️ Объявление СВОЁ имя использованием не считает: [`usage_from_stmt`] берёт
+/// у объявления только инициализатор. На этом признак и стоит.
+pub(crate) fn unused_locals_of_block(
+    block: &[StatementNode],
+) -> Vec<(String, crate::diagnostics::Location)> {
+    let mut used = UsageSet::default();
+    for stmt in block {
+        usage_from_stmt(stmt, &mut used);
+    }
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for stmt in block {
+        let StatementNode::Variable(name, _, _, loc) = stmt else {
+            continue;
+        };
+        if !used.variables.contains(name) && seen.insert(name.clone()) {
+            out.push((name.clone(), *loc));
+        }
+    }
+    out
+}
+
 /// Проверяет наличие неиспользуемых переменных в модели.
 ///
 /// Возвращает список [`Diagnostic`] уровня Warning для каждой переменной,
@@ -469,12 +508,92 @@ fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnost
         }
     }
 
+    // Локальные объявления ТЕЛ (фича 0386): прежде проверялись только
+    // объявления модели, и о неиспользуемой переменной блока автор не узнавал
+    // ниоткуда — вывод целей чинит заглушка 0376, но это молчаливая правка за
+    // автора.
+    for block in &borrowed.named_blocks {
+        if let Some(stmt) = block.statement() {
+            check_unused_locals(stmt, warnings);
+        }
+    }
+    for func in borrowed.functions.values() {
+        if let FunctionDefinitionNode::Local { body, .. } = func {
+            check_unused_locals(body, warnings);
+        }
+    }
+    for state in borrowed.states.values() {
+        for block in state_blocks(state) {
+            if let Some(stmt) = block.statement() {
+                check_unused_locals(stmt, warnings);
+            }
+        }
+    }
+
     // Рекурсивно для вложенных моделей
     let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
     drop(borrowed);
 
     for nested_model in nested {
         check_model_unused(nested_model, warnings);
+    }
+}
+
+/// Именованные блоки состояния (обход общий для двух его видов).
+fn state_blocks(state: &crate::semantic::StateNode) -> &[NamedCodeBlockDefinitionNode] {
+    use crate::semantic::StateNode;
+    match state {
+        StateNode::Simple { named_blocks, .. } | StateNode::Implement { named_blocks, .. } => {
+            named_blocks
+        }
+        StateNode::Unresolved => &[],
+    }
+}
+
+/// `SE-036` о локальных объявлениях тела — рекурсивно по вложенным блокам.
+///
+/// ⚠️ Спрашивается **каждый** блок в отдельности: область видимости локальной —
+/// её блок, и признак живёт в `unused_locals_of_block`. Второго знания о том,
+/// что считать использованием, здесь нет.
+fn check_unused_locals(stmt: &StatementNode, warnings: &mut Vec<Diagnostic>) {
+    if let StatementNode::Block(items) = stmt {
+        for (name, loc) in unused_locals_of_block(items) {
+            warnings.push(
+                Diagnostic::warning(
+                    loc,
+                    format!("переменная '{name}' объявлена, но нигде не используется"),
+                )
+                .with_code("SE-036"),
+            );
+        }
+    }
+    for child in child_statements(stmt) {
+        check_unused_locals(child, warnings);
+    }
+}
+
+/// Вложенные операторы — для спуска проверки локальных объявлений.
+fn child_statements(stmt: &StatementNode) -> Vec<&StatementNode> {
+    match stmt {
+        StatementNode::Block(items) => items.iter().collect(),
+        StatementNode::If { then_, else_, .. } => {
+            let mut v = vec![then_.as_ref()];
+            if let Some(e) = else_ {
+                v.push(e.as_ref());
+            }
+            v
+        }
+        StatementNode::Loop { body, .. } => vec![body.as_ref()],
+        StatementNode::For { init, body, .. } => {
+            let mut v = Vec::new();
+            if let Some(i) = init {
+                v.push(i.as_ref());
+            }
+            v.push(body.as_ref());
+            v
+        }
+        StatementNode::Match { arms, .. } => arms.iter().map(|a| a.body.as_ref()).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -596,7 +715,7 @@ fn collect_from_stmt(stmt: &StatementNode, used: &mut HashSet<String>) {
             }
             collect_from_stmt(body, used);
         }
-        StatementNode::Variable(_, _, Some(e)) => collect_from_expr(e, used),
+        StatementNode::Variable(_, _, Some(e), _) => collect_from_expr(e, used),
         StatementNode::Return(Some(e)) => collect_from_expr(e, used),
         StatementNode::Match { expr, arms } => {
             collect_from_expr(expr, used);

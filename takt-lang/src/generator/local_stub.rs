@@ -36,6 +36,17 @@ use crate::semantic::unused::{UsageSet, usage_from_stmt};
 ///
 /// Порядок — текстовый, значит детерминированный (правило 0048).
 pub(crate) fn unused_locals(block: &[StatementNode]) -> Vec<String> {
+    crate::semantic::unused::unused_locals_of_block(block)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect()
+}
+
+/// Прежняя реализация — перенесена в `semantic::unused` (фича 0386): признак
+/// понадобился и семантике (`SE-036`), а зависимость «семантика → генератор»
+/// была бы неверным направлением.
+#[allow(dead_code)]
+fn unused_locals_moved(block: &[StatementNode]) -> Vec<String> {
     let mut used = UsageSet::default();
     for stmt in block {
         usage_from_stmt(stmt, &mut used);
@@ -43,7 +54,7 @@ pub(crate) fn unused_locals(block: &[StatementNode]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for stmt in block {
-        let StatementNode::Variable(name, _, _) = stmt else {
+        let StatementNode::Variable(name, _, _, _) = stmt else {
             continue;
         };
         // ⚠️ Объявление СВОЁ имя использованием не считает: `usage_from_stmt`
@@ -73,6 +84,7 @@ mod tests {
             name.to_string(),
             u8t(),
             Some(Box::new(ExpressionNode::Number(1))),
+            crate::diagnostics::Location::Implicit,
         )
     }
 

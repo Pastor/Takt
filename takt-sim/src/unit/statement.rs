@@ -189,7 +189,7 @@ fn default_value(ty: &TypeNode) -> Value {
 /// Собирает имена, объявленные в дереве оператора (область плоская).
 fn collect_locals(stmt: &StatementNode, out: &mut Vec<(String, Value)>) {
     match stmt {
-        StatementNode::Variable(name, ty, _) => out.push((name.clone(), default_value(ty))),
+        StatementNode::Variable(name, ty, _, _) => out.push((name.clone(), default_value(ty))),
         StatementNode::Block(stmts) => stmts.iter().for_each(|s| collect_locals(s, out)),
         StatementNode::If { then_, else_, .. } => {
             collect_locals(then_, out);
@@ -274,7 +274,7 @@ pub(crate) fn exec_statement(
                 Ok(Flow::Normal)
             }
         }
-        StatementNode::Variable(name, ty, init) => {
+        StatementNode::Variable(name, ty, init, _) => {
             let Some(init) = init else {
                 // Без инициализатора значение уже расставлено областью видимости.
                 return Ok(Flow::Normal);

@@ -238,7 +238,7 @@ pub(crate) fn print_statement(
             body,
         } => print_for(init, cond, step, body, model, p, out, fn_name),
         // Объявление: тип уезжает в шапку POU, инициализатор остаётся здесь.
-        StatementNode::Variable(name, ty, init) => {
+        StatementNode::Variable(name, ty, init, _) => {
             out.hoisted.push(Hoisted {
                 name: name.clone(),
                 ty: ty.clone(),
@@ -452,7 +452,7 @@ fn contains_continue(stmt: &StatementNode) -> bool {
         StatementNode::None
         | StatementNode::Unresolved(_)
         | StatementNode::Expression(_, _)
-        | StatementNode::Variable(_, _, _)
+        | StatementNode::Variable(_, _, _, _)
         | StatementNode::Return(_)
         | StatementNode::Break
         | StatementNode::InlineFormula(_) => false,

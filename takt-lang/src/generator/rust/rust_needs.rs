@@ -154,7 +154,7 @@ fn walk_statement(
             }
         }
         StatementNode::Expression(expr, _) => walk_expression(expr, model, locals, needs, seen)?,
-        StatementNode::Variable(name, _, init) => {
+        StatementNode::Variable(name, _, init, _) => {
             if let Some(init) = init {
                 walk_expression(init, model, locals, needs, seen)?;
             }
