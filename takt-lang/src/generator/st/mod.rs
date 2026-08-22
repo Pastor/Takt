@@ -44,6 +44,7 @@ mod st_arith;
 mod st_at;
 mod st_compose;
 mod st_decl;
+mod st_decl_types;
 mod st_edges;
 mod st_expr;
 mod st_fixed;
@@ -210,17 +211,17 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
     // в объявлении параметра. ⚠️ Считается по объединению `shared` всех
     // под-моделей, а не «все массивы корня»: иначе локальный массив без единой
     // под-модели тоже получил бы тип — лишняя сущность и сдвиг вывода корпуса.
-    let shared_arrays = st_decl::shared_array_names(map, &blocks, &map.root_name());
+    let shared_arrays = st_decl_types::shared_array_names(map, &blocks, &map.root_name());
 
     // Объявления структур — общие для файла и печатаются раньше всех блоков:
     // в IEC 61131-3 тип обязан быть известен к моменту использования.
-    st_decl::emit_struct_types(&mut p, &blocks, &shared_arrays)?;
+    st_decl_types::emit_struct_types(&mut p, &blocks, &shared_arrays)?;
     // Функции — тоже раньше: опережающие ссылки в ST нестандартны (`iec2c -p`).
     let mut warnings = st_func::emit_functions(&mut p, &blocks)?;
 
     // Формы массивов из параметров функций (фича 0348) считаются один раз:
     // список общий у продюсера типов и у каждого объявления.
-    let array_forms = st_decl::function_array_form_names(&blocks);
+    let array_forms = st_decl_types::function_array_form_names(&blocks);
 
     let root_name = map.root_name();
     for (name, model) in &blocks {
