@@ -620,3 +620,4 @@
 | 0386-01 | 0386 | SE-036 видит локальные объявления тел | [0386-01-unused-local-warning.md](0386-01-unused-local-warning.md) |
 | 0387-01 | 0387 | Локальная переменная, записанная но не прочитанная | [0387-01-write-only-local.md](0387-01-write-only-local.md) |
 | 0388-01 | 0388 | Разделение печати объявлений цели st | [0388-01-st-decl-split.md](0388-01-st-decl-split.md) |
+| 0389-01 | 0389 | Массив в параметре функции цели rust — по ссылке | [0389-01-rust-array-by-reference.md](0389-01-rust-array-by-reference.md) |

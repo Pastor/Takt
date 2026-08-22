@@ -87,20 +87,32 @@ pub(crate) fn emit_functions(
 
             let mut signature = Vec::new();
             for (pname, pty) in params {
-                signature.push(format!(
-                    "{}: {}",
-                    rust_value_name(pname, *loc)?,
-                    rust_type(pty, &format!("параметр '{}' функции '{}'", pname, name))?
-                ));
+                // Массив передаётся ПО ССЫЛКЕ (фича 0389): по значению это
+                // копия на каждый вызов, тогда как цель `c` передаёт указатель,
+                // а `st` — `VAR_IN_OUT`. Признак — общий с печатью аргумента:
+                // разъехавшись, они дают `E0308`.
+                let printed = rust_type(pty, &format!("параметр '{}' функции '{}'", pname, name))?;
+                let printed = if crate::generator::rust::rust_byref::is_array_by_reference(pty) {
+                    format!("&{printed}")
+                } else {
+                    printed
+                };
+                signature.push(format!("{}: {}", rust_value_name(pname, *loc)?, printed));
             }
             // Переменные модели — после объявленных параметров и в порядке
             // `BTreeMap` (детерминизм, фича 0048).
             for (vname, vty) in &needs.vars {
-                signature.push(format!(
-                    "{}: {}",
-                    rust_value_name(vname, *loc)?,
-                    rust_type(vty, &format!("переменная '{}' в функции '{}'", vname, name))?
-                ));
+                // Массив передаётся ПО ССЫЛКЕ (фича 0389): по значению это
+                // копия на каждый вызов, тогда как цель `c` передаёт указатель,
+                // а `st` — `VAR_IN_OUT`. Признак — общий с печатью аргумента.
+                let printed_ty =
+                    rust_type(vty, &format!("переменная '{}' в функции '{}'", vname, name))?;
+                let printed_ty = if crate::generator::rust::rust_byref::is_array_by_reference(vty) {
+                    format!("&{printed_ty}")
+                } else {
+                    printed_ty
+                };
+                signature.push(format!("{}: {}", rust_value_name(vname, *loc)?, printed_ty));
             }
             // HAL идёт ПОСЛЕДНИМ параметром, а не первым. Причина —
             // заимствования: аргумент нередко сам читает порт
