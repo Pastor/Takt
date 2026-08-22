@@ -376,3 +376,5 @@
 | 0391 | Умолчание переменной перечислимого типа: ноль против первого варианта | [0391-enum-default-value.md](0391-enum-default-value.md) | — (новая фича) |
 | 0394 | Разряд за объявленной шириной бит-вектора принимают молча | [0394-bit-beyond-declared-width.md](0394-bit-beyond-declared-width.md) | — (новая фича) |
 | 0390 | Порт составного типа: нормировать ли в семантике | [0390-port-composite-type-policy.md](0390-port-composite-type-policy.md) | — (новая фича) |
+| 0395 | Специализация импортированной модели | [0395-imported-model-specialization.md](0395-imported-model-specialization.md) | — (новая фича) |
+| 0393 | every при самопереходе | [0393-every-on-self-transition.md](0393-every-on-self-transition.md) | — (новая фича) |
