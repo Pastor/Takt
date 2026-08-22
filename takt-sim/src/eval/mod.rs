@@ -74,7 +74,7 @@ impl StructRegistry for EmptyStructs {
 /// Вызывается **на месте присваивания**: там известен тип цели
 /// (`VariableNode::ty()`), и там же результат может быть отвергнут. Внутрь
 /// `Context::set_value` приведение не убрано намеренно — метод объявлен без
-/// `Result`, а S2 обязан уметь отказать; см. `docs/development/0025-01-eval-core.md`.
+/// `Result`, а S2 обязан уметь отказать; см. `../../../docs/features/0025-simulator-expression-eval.md#разработка`.
 ///
 /// # Соответствие C
 ///

@@ -60,12 +60,13 @@ fi
 # `docs/` цитирует старое имя по правилу 21 и обязан проходить. Файл берётся
 # НАСТОЯЩИЙ (ADR самой фичи): синтетический не доказал бы, что префикс совпадает
 # так, как совпадает в дереве.
-ADR="docs/adr/0161-fixture-comments-rename.md"
-if [ ! -f "$ROOT/$ADR" ]; then
-    fail "нет $ADR — проверка исключений не проведена"
-elif ! grep -qE '(^|[^A-Za-z0-9_])Lam($|[^A-Za-z0-9_-])' "$ROOT/$ADR"; then
-    fail "$ADR не содержит старого имени — проверка исключений вырождена"
-elif (cd "$ROOT" && "$GATE" "$ADR" >/dev/null 2>&1); then
+# ⚠️ Раздел «Архитектура (ADR)» живёт в карточке фичи (правило 32).
+CARD="docs/features/0161-fixture-comments-rename.md"
+if [ ! -f "$ROOT/$CARD" ]; then
+    fail "нет $CARD — проверка исключений не проведена"
+elif ! grep -qE '(^|[^A-Za-z0-9_])Lam($|[^A-Za-z0-9_-])' "$ROOT/$CARD"; then
+    fail "$CARD не содержит старого имени — проверка исключений вырождена"
+elif (cd "$ROOT" && "$GATE" "$CARD" >/dev/null 2>&1); then
     ok "исключение docs/ действует на настоящем файле"
 else
     fail "docs/ проверяется, хотя обязан быть исключён"

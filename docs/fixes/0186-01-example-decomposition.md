@@ -1,6 +1,6 @@
 # Фикс 0186-01: примеры раздела дублировали модели вместо переиспользования
 
-> Фича: [../features/0186-book-processor-example.md](../features/0186-book-processor-example.md) · задачи [0186-02](../development/0186-02-book-processor-example.md), [0186-03](../development/0186-03-book-processor-example.md), [0186-04](../development/0186-04-book-processor-example.md)
+> Фича: [../features/0186-book-processor-example.md](../features/0186-book-processor-example.md) · задачи [0186-02](../features/0186-book-processor-example.md#разработка), [0186-03](../features/0186-book-processor-example.md#разработка), [0186-04](../features/0186-book-processor-example.md#разработка)
 
 ## Что было не так
 

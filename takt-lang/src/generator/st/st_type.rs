@@ -30,7 +30,7 @@
 //!   вариантов — 3-я редакция IEC, MatIEC её не знает). Действует откат Option C:
 //!   целочисленный тип + именованные константы (их печатает `st_decl`).
 //!
-//! [`analyze/0041-02`]: ../../../../docs/analyze/0041-02-type-mapping.md
+//! [`analyze/0041-02`]: ../../../../../../../../docs/features/0041-st-backend.md#анализ
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::ModelNode;

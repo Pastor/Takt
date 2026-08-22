@@ -1,6 +1,6 @@
 # Исправление XXXX-YY: <заголовок>
 
-> Фича: [../features/XXXX-slug.md](../features/XXXX-slug.md) · анализ: [../analyze/XXXX-slug.md](../analyze/XXXX-slug.md) · отчёт: [../reports/XXXX-slug.md](../reports/README.md)
+> Фича: [../features/XXXX-slug.md](../features/XXXX-slug.md) · анализ: [../analyze/XXXX-slug.md](../analyze/XXXX-slug.md) · отчёт: [../reports/XXXX-slug.md](../features/README.md)
 
 ## Проблема
 

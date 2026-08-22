@@ -1,6 +1,6 @@
 # Исправление 0061-01: перенос `q(m, n)` идёт к ширине хранения, а не к `W`
 
-> Фича: [../features/0061-fixed-point-type.md](../features/0061-fixed-point-type.md) · ADR: [../adr/0061-fixed-point-type.md](../adr/0061-fixed-point-type.md) · смежно: фича [0170](../features/0170-fixed-point-saturation.md) (насыщение — при её проработке дефект и вскрыт)
+> Фича: [../features/0061-fixed-point-type.md](../features/0061-fixed-point-type.md) · ADR: [../features/0061-fixed-point-type.md#архитектура-adr](../features/0061-fixed-point-type.md#архитектура-adr) · смежно: фича [0170](../features/0170-fixed-point-saturation.md) (насыщение — при её проработке дефект и вскрыт)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-14), заведён в тот же день.
 - **Обнаружено:** проба стадии архитектуры фичи 0170 (насыщение для `q`) —

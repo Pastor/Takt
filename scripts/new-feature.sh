@@ -7,11 +7,12 @@
 #   scripts/new-feature.sh [--with-dev] [--register] XXXX slug "Заголовок"
 #   scripts/new-feature.sh --stage NAME [--register] [--subtask NN] XXXX slug "Заголовок"
 #
-#   --with-dev     дополнительно создать заготовки development (XXXX-01) и tests
+#   --with-dev     СОВМЕСТИМОСТЬ: ничего не меняет — все стадии живут разделами
+#                  одной карточки (правило 32)
 #   --register     дописать строки в реестры README соответствующих папок
-#   --stage NAME   обработать ОДНУ стадию: feature|adr|analyze|dev|tests|report
-#                  (добор поздней стадии по мере жизненного цикла; report ранее
-#                  был недоступен). Прочие стадии не трогаются.
+#   --stage NAME   feature|fixes создают файл; adr|analyze|dev|tests|report —
+#                  подсказка, какой РАЗДЕЛ карточки заполняется (правило 32:
+#                  стадии файлов не заводят).
 #   --subtask NN   номер dev-подзадачи для --stage dev (по умолчанию 01)
 #
 # Идемпотентность (фича 0094): --register НЕ дублирует строки — если строка с
@@ -66,8 +67,8 @@ case "$SUBTASK" in
   *) echo "Ошибка: --subtask NN — две цифры (напр. 03), получено: '$SUBTASK'" >&2; exit 2 ;;
 esac
 case "$STAGE" in
-  ""|feature|adr|analyze|dev|tests|report) : ;;
-  *) echo "Ошибка: --stage NAME ∈ {feature,adr,analyze,dev,tests,report}, получено: '$STAGE'" >&2; exit 2 ;;
+  ""|feature|adr|analyze|dev|tests|report|fixes) : ;;
+  *) echo "Ошибка: --stage NAME ∈ {feature,adr,analyze,dev,tests,report,fixes}, получено: '$STAGE'" >&2; exit 2 ;;
 esac
 
 # Корень репозитория: NF_ROOT (для тестов) либо каталог скрипта/..
@@ -146,62 +147,47 @@ do_stage() {
       render feature.md "$ROOT/docs/features/$NUM-$SLUG.md" 0
       if [ "$REGISTER" = 1 ]; then
         insert_row "$ROOT/docs/features/README.md" "| [$NUM]" \
-          "| [$NUM](./$NUM-$SLUG.md) | $TITLE_ESC | [ADR](../adr/$NUM-$SLUG.md) · [анализ](../analyze/$NUM-$SLUG.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |"
+          "| [$NUM](./$NUM-$SLUG.md) | $TITLE_ESC | СОЗДАНА | СОЗДАНА |"
       fi
       ;;
-    adr)
-      render adr.md "$ROOT/docs/adr/$NUM-$SLUG.md" 0
-      # Статус заготовки — Draft (фича 0094): Accepted проставляется по факту
-      # принятия решения на стадии 2, а не при создании заготовки.
+    # ⚠️ Стадии 2…6 файлов НЕ создают (правило 32): их результат — раздел той же
+    # карточки. Флаг `--stage` остался подсказкой: он называет раздел, который
+    # надо заполнить, и ничего не пишет на диск.
+    adr)      stage_hint "Архитектура (ADR)" ;;
+    analyze)  stage_hint "Анализ" ;;
+    dev)      stage_hint "Разработка → ### Задача $NUM-$SUBTASK" ;;
+    tests)    stage_hint "Тест-план" ;;
+    report)   stage_hint "Отчёт о тестировании" ;;
+    fixes)
+      render fixes.md "$ROOT/docs/fixes/$NUM-$SUBTASK-$SLUG.md" 1
       if [ "$REGISTER" = 1 ]; then
-        insert_row "$ROOT/docs/adr/README.md" "| [$NUM]" \
-          "| [$NUM](./$NUM-$SLUG.md) | $TITLE_ESC | Draft | фича $NUM |"
-      fi
-      ;;
-    analyze)
-      render analyze.md "$ROOT/docs/analyze/$NUM-$SLUG.md" 0
-      if [ "$REGISTER" = 1 ]; then
-        insert_row "$ROOT/docs/analyze/README.md" "| $NUM |" \
-          "| $NUM | $TITLE_ESC | [$NUM-$SLUG.md]($NUM-$SLUG.md) | — (новая фича) |"
-      fi
-      ;;
-    dev)
-      render development.md "$ROOT/docs/development/$NUM-$SUBTASK-$SLUG.md" 1
-      if [ "$REGISTER" = 1 ]; then
-        insert_row "$ROOT/docs/development/README.md" "| $NUM-$SUBTASK |" \
+        insert_row "$ROOT/docs/fixes/README.md" "| $NUM-$SUBTASK |" \
           "| $NUM-$SUBTASK | $NUM | $TITLE_ESC | [$NUM-$SUBTASK-$SLUG.md]($NUM-$SUBTASK-$SLUG.md) |"
-      fi
-      ;;
-    tests)
-      render tests.md "$ROOT/docs/tests/$NUM-$SLUG.md" 0
-      if [ "$REGISTER" = 1 ]; then
-        insert_row "$ROOT/docs/tests/README.md" "| $NUM |" \
-          "| $NUM | $TITLE_ESC | [$NUM-$SLUG.md]($NUM-$SLUG.md) | СОЗДАНА |"
-      fi
-      ;;
-    report)
-      render reports.md "$ROOT/docs/reports/$NUM-$SLUG.md" 0
-      if [ "$REGISTER" = 1 ]; then
-        insert_row "$ROOT/docs/reports/README.md" "| $NUM |" \
-          "| $NUM | $TITLE_ESC | [$NUM-$SLUG.md]($NUM-$SLUG.md) | СОЗДАНА |"
       fi
       ;;
   esac
 }
 
+# stage_hint <раздел>: напоминание, какой раздел карточки заполняется.
+# Файлов не создаёт — стадии живут разделами (правило 32).
+stage_hint() {
+  card="docs/features/$NUM-$SLUG.md"
+  if [ -f "$ROOT/$card" ]; then
+    echo "Стадия пишется в раздел «$1» карточки $card (правило 32)."
+  else
+    echo "Карточки $card нет: заведите её (scripts/new-feature.sh --register $NUM $SLUG \"$TITLE\")." >&2
+    exit 1
+  fi
+}
+
 if [ -n "$STAGE" ]; then
-  # Режим добора одной стадии.
+  # Режим одной стадии: `feature`/`fixes` создают файл, прочие — подсказка.
   do_stage "$STAGE"
 else
-  # Дефолтный режим заведения фичи (обратно совместим): feature/adr/analyze
-  # всегда, dev/tests — при --with-dev.
+  # Дефолтный режим: заводится ОДНА карточка со всеми разделами-заготовками
+  # (правило 32). Флаг --with-dev сохранён для совместимости вызовов и ничего
+  # не меняет: разделы разработки и тест-плана живут в той же карточке.
   do_stage feature
-  do_stage adr
-  do_stage analyze
-  if [ "$WITH_DEV" = "1" ]; then
-    do_stage dev
-    do_stage tests
-  fi
 fi
 
-echo "Готово. Не забудьте: заполнить заготовки, обновить статус в FEATURES.md и внести запись в CHANGES.md."
+echo "Готово. Не забудьте: заполнить разделы карточки, обновить статус в FEATURES.md и внести запись в CHANGES.md."

@@ -1,6 +1,6 @@
 # Исправление 0150-01: гейт фичи падал на своей же фикстуре, `runner.rs` перерос лимит
 
-> Фича: [../features/0150-sim-positional-scenario-deprecation.md](../features/0150-sim-positional-scenario-deprecation.md) · анализ: [../analyze/0150-sim-positional-scenario-deprecation.md](../analyze/0150-sim-positional-scenario-deprecation.md) · отчёт: [../reports/0150-sim-positional-scenario-deprecation.md](../reports/0150-sim-positional-scenario-deprecation.md)
+> Фича: [../features/0150-sim-positional-scenario-deprecation.md](../features/0150-sim-positional-scenario-deprecation.md) · анализ: [../features/0150-sim-positional-scenario-deprecation.md#анализ](../features/0150-sim-positional-scenario-deprecation.md#анализ) · отчёт: [../features/0150-sim-positional-scenario-deprecation.md#отчёт-о-тестировании](../features/0150-sim-positional-scenario-deprecation.md#отчёт-о-тестировании)
 
 ## Проблема
 

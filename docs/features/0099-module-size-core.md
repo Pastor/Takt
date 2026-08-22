@@ -14,9 +14,9 @@
 |---|---|
 | Архитектура (ADR) | не заведена (стадия 2) |
 | Анализ | не заведён (стадия 3) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0099-YY-*`) |
-| Тест-план | [`docs/tests/README.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
+| Разработка | [`docs/development/`](README.md) (задачи `0099-YY-*`) |
+| Тест-план | [`docs/features/README.md`](README.md) |
+| Отчёт о тестировании | [`docs/features/README.md`](README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0099-YY-*`) |
 
 ## Краткое описание

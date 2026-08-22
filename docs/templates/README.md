@@ -10,13 +10,8 @@
 
 | Шаблон | Целевой путь | Привязка к обратной функциональности |
 |---|---|--------------------------------------|
-| [`feature.md`](feature.md) | `docs/features/XXXX-slug.md` | нет                                  |
-| [`adr.md`](adr.md) | `docs/adr/XXXX-slug.md` | нет                                  |
-| [`analyze.md`](analyze.md) | `docs/analyze/XXXX-slug.md` (или `XXXX-YY-slug.md` при декомпозиции) | опц. раздел                          |
-| [`development.md`](development.md) | `docs/development/XXXX-YY-slug.md` | да                     |
-| [`tests.md`](tests.md) | `docs/tests/XXXX-slug.md` | да                        |
-| [`reports.md`](reports.md) | `docs/reports/XXXX-slug.md` | да            |
-| [`fixes.md`](fixes.md) | `docs/fixes/XXXX-YY-slug.md` | нет                                  |
+| [`feature.md`](feature.md) | `docs/features/XXXX-slug.md` — **все стадии** разделами (правило 32) | нет |
+| [`fixes.md`](fixes.md) | `docs/fixes/XXXX-YY-slug.md` — единственный отдельный артефакт | да |
 
 ## Плейсхолдеры
 
@@ -24,7 +19,7 @@
 - `YY` — номер подзадачи/фикса внутри фичи (2 знака).
 - `slug` — краткое латинское имя в kebab-case.
 - `<заголовок>` — русское наименование фичи/задачи.
-- `YYYY-MM-DD` — дата (в `adr.md`).
+- `YYYY-MM-DD` — дата (в разделе «Архитектура (ADR)» карточки).
 
 ## Использование
 

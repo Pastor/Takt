@@ -1,6 +1,6 @@
 # Исправление 0038-01: `semantic_tokens` не классифицирует члены под-моделей
 
-> Фича: [../features/0038-intellij-semantic-tokens.md](../features/0038-intellij-semantic-tokens.md) · обнаружено зондом задачи [0038-03](../development/0038-03-server-tokens-tests.md)
+> Фича: [../features/0038-intellij-semantic-tokens.md](../features/0038-intellij-semantic-tokens.md) · обнаружено зондом задачи [0038-03](../features/0038-intellij-semantic-tokens.md#разработка)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-07-19).
 - **Tier 2 — молчаливо неверная подсветка, но НЕ порождаемый код.** Дефект в

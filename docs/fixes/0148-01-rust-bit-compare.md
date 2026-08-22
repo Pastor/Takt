@@ -1,6 +1,6 @@
 # Исправление 0148-01: сравнение `bit` с литералом даёт некомпилируемый Rust
 
-> Фича: [../features/0148-rust-printers-coverage.md](../features/0148-rust-printers-coverage.md) · анализ: [../analyze/0148-rust-printers-coverage.md](../analyze/0148-rust-printers-coverage.md) · отчёт: [../reports/0148-rust-printers-coverage.md](../reports/0148-rust-printers-coverage.md)
+> Фича: [../features/0148-rust-printers-coverage.md](../features/0148-rust-printers-coverage.md) · анализ: [../features/0148-rust-printers-coverage.md#анализ](../features/0148-rust-printers-coverage.md#анализ) · отчёт: [../features/0148-rust-printers-coverage.md#отчёт-о-тестировании](../features/0148-rust-printers-coverage.md#отчёт-о-тестировании)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-07-29). Заведён в тот же день, при разработке
   тестов ветвей печатников.

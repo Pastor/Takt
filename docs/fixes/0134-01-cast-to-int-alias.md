@@ -1,6 +1,6 @@
 # Фикс 0134-01: приведение `x as u8` давало `Unsupported` — два списка встроенных типов
 
-> Фича: [../features/0134-language-time-model.md](../features/0134-language-time-model.md) · вскрыт при задаче [0134-03](../development/0134-03-simulator-clock.md) (требования заказчика к `duration`)
+> Фича: [../features/0134-language-time-model.md](../features/0134-language-time-model.md) · вскрыт при задаче [0134-03](../features/0134-language-time-model.md#разработка) (требования заказчика к `duration`)
 
 ## Симптом
 

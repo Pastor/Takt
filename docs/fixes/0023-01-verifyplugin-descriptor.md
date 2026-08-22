@@ -1,6 +1,6 @@
 # Исправление 0023-01: проверка совместимости с новыми IDE (verifyPlugin) + валидность дескриптора
 
-> Фича: [../features/0023-intellij-navigation-include.md](../features/0023-intellij-navigation-include.md) · отчёт: [../reports/0023-intellij-navigation-include.md](../reports/0023-intellij-navigation-include.md) · связан с фиксом [0022-01](0022-01-untilbuild-open-range.md)
+> Фича: [../features/0023-intellij-navigation-include.md](../features/0023-intellij-navigation-include.md) · отчёт: [../features/0023-intellij-navigation-include.md#отчёт-о-тестировании](../features/0023-intellij-navigation-include.md#отчёт-о-тестировании) · связан с фиксом [0022-01](0022-01-untilbuild-open-range.md)
 
 ## Проблема
 

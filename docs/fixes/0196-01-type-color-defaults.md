@@ -1,6 +1,6 @@
 # Исправление 0196-01: цвет имени типа не задан ни по умолчанию, ни в настройках
 
-> Фича: [../features/0196-editor-type-highlighting.md](../features/0196-editor-type-highlighting.md) · анализ: [../analyze/0196-editor-type-highlighting.md](../analyze/0196-editor-type-highlighting.md) · отчёт: [../reports/0196-editor-type-highlighting.md](../reports/0196-editor-type-highlighting.md)
+> Фича: [../features/0196-editor-type-highlighting.md](../features/0196-editor-type-highlighting.md) · анализ: [../features/0196-editor-type-highlighting.md#анализ](../features/0196-editor-type-highlighting.md#анализ) · отчёт: [../features/0196-editor-type-highlighting.md#отчёт-о-тестировании](../features/0196-editor-type-highlighting.md#отчёт-о-тестировании)
 
 ## Проблема
 

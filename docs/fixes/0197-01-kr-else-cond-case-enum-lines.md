@@ -1,6 +1,6 @@
 # Исправление 0197-01: канон стиля — K&R `else`, заглавные имена `cond`/`invariant`, перечисление по варианту на строке
 
-> Фича: [../features/0197-language-code-style.md](../features/0197-language-code-style.md) · ADR: [../adr/0197-language-code-style.md](../adr/0197-language-code-style.md) · смежно: [0024](../features/0024-lam-formatter.md) (форматтер), [0226](../features/0226-naming-convention-warning.md) (канон именования)
+> Фича: [../features/0197-language-code-style.md](../features/0197-language-code-style.md) · ADR: [../features/0197-language-code-style.md#архитектура-adr](../features/0197-language-code-style.md#архитектура-adr) · смежно: [0024](../features/0024-lam-formatter.md) (форматтер), [0226](../features/0226-naming-convention-warning.md) (канон именования)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-14), заведён в тот же день.
 - **Обнаружено:** требованием заказчика 2026-08-14 — пересмотр трёх правил

@@ -1,6 +1,6 @@
 # Исправление 0045-01: устаревшие стабы SV в каталоге вывода (доделка гейта 0045-02)
 
-> Фича: [../features/0045-sv-backend.md](../features/0045-sv-backend.md) · задача: [../development/0045-02-validation.md](../development/0045-02-validation.md) · обнаружено при эксплуатации (запуск `precheck.sh`, ревью каталога `examples/generated/sv/`)
+> Фича: [../features/0045-sv-backend.md](../features/0045-sv-backend.md) · задача: [../features/0045-sv-backend.md#разработка](../features/0045-sv-backend.md#разработка) · обнаружено при эксплуатации (запуск `precheck.sh`, ревью каталога `examples/generated/sv/`)
 
 - **Статус:** ИСПРАВЛЕН
 
@@ -25,10 +25,10 @@ extend_complex SV-002  досрочный возврат из функции `is
 
 ## Причина
 
-Задача [0045-02](../development/0045-02-validation.md) (гейт SV) закрывалась на
-**каркасе** [0045-01](../development/0045-01-sv-backend.md), когда транслировались
+Задача [0045-02](../features/0045-sv-backend.md#разработка) (гейт SV) закрывалась на
+**каркасе** [0045-01](../features/0045-sv-backend.md#разработка), когда транслировались
 **все пять** примеров корпуса — их стабы попали в коммит `1bc357b`. Позже
-[0045-06](../development/0045-06-expressions-functions.md) добавила отказы
+[0045-06](../features/0045-sv-backend.md#разработка) добавила отказы
 `SV-002`/`SV-005`, и три примера перестали транслироваться.
 
 `precheck.sh` пишет вывод через `lamc ... -o "$SV_OUTPUT"`: файл создаётся только

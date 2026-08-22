@@ -1,6 +1,6 @@
 # Исправление 0272-01: сторож обвязки замера падал под нагрузкой
 
-> Фича: [../features/0272-build-measurement-harness.md](../features/0272-build-measurement-harness.md) · отчёт: [../reports/0272-build-measurement-harness.md](../reports/0272-build-measurement-harness.md)
+> Фича: [../features/0272-build-measurement-harness.md](../features/0272-build-measurement-harness.md) · отчёт: [../features/0272-build-measurement-harness.md#отчёт-о-тестировании](../features/0272-build-measurement-harness.md#отчёт-о-тестировании)
 
 ## Проблема
 

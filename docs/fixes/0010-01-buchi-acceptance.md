@@ -1,6 +1,6 @@
 # Исправление 0010-01: вырожденное условие принятия автомата Бюхи (GPVW)
 
-> Фича: [../features/0010-verification-ltl.md](../features/0010-verification-ltl.md) · обнаружено при разработке [фичи 0049](../features/0049-model-checking-ltl.md) (задача [0049-02](../development/0049-02-product-emptiness.md))
+> Фича: [../features/0010-verification-ltl.md](../features/0010-verification-ltl.md) · обнаружено при разработке [фичи 0049](../features/0049-model-checking-ltl.md) (задача [0049-02](../features/0049-model-checking-ltl.md#разработка))
 
 ## Проблема
 

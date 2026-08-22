@@ -1,6 +1,6 @@
 # Исправление 0199-01: `taktc fmt` теряет реализацию модели
 
-> Фича: [../features/0199-model-implements-brace-form.md](../features/0199-model-implements-brace-form.md) · найдено фичей [0230](../features/0230-format-corpus-sentinel.md) · анализ: [../analyze/0199-model-implements-brace-form.md](../analyze/0199-model-implements-brace-form.md)
+> Фича: [../features/0199-model-implements-brace-form.md](../features/0199-model-implements-brace-form.md) · найдено фичей [0230](../features/0230-format-corpus-sentinel.md) · анализ: [../features/0199-model-implements-brace-form.md#анализ](../features/0199-model-implements-brace-form.md#анализ)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-05), заведён в тот же день.
 - **Обнаружено:** фичей [0230](../features/0230-format-corpus-sentinel.md) —
