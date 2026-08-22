@@ -279,10 +279,11 @@ pub(crate) fn cast(
         // на этапе компиляции»), но в теле не делал никто: замер 2026-08-22 дал
         // `ST-011` — причём с текстом «тип источника не выводится статически»,
         // хотя источник есть литерал. Счёт — у общего носителя
-        // (`generator::fixed_literal`), поэтому значение совпадает с эталоном
+        // (`const_eval::fixed_literal`), поэтому значение совпадает с эталоном
         // и с прочими целями по построению.
         (None, TypeNode::Fixed { .. })
-            if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) =>
+            if let Some(repr) =
+                crate::semantic::const_eval::fixed_literal::cast_repr(inner, target) =>
         {
             Ok(format!("{repr}"))
         }

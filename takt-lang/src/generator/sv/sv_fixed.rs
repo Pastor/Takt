@@ -212,8 +212,8 @@ pub(crate) fn cast(
     // отвергается `SV-002` («в синтезируемом RTL плавающей точки нет»), и
     // печать пришла бы раньше — отказ на записи, которую эталон исполняет.
     // Плавающей точки в выводе не появляется: печатается уже посчитанное
-    // ЦЕЛОЕ представление (счёт — у общего носителя `generator::fixed_literal`).
-    if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) {
+    // ЦЕЛОЕ представление (счёт — у общего носителя `const_eval::fixed_literal`).
+    if let Some(repr) = crate::semantic::const_eval::fixed_literal::cast_repr(inner, target) {
         let w = match target {
             TypeNode::Fixed { m, n, .. } => (m + n) as u32,
             _ => unreachable!("cast_repr отвечает только на цель q(m, n)"),

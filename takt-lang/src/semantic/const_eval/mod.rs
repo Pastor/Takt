@@ -51,6 +51,7 @@ mod call;
 mod decimal;
 // Таблица целочисленных операций — одна на константное вычисление (фича 0208):
 // её зовёт и этот вычислитель, и выражение адреса.
+pub(crate) mod fixed_literal;
 pub mod fixed_repr;
 pub mod int_cast;
 pub(crate) mod int_ops;
