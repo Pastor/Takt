@@ -823,6 +823,13 @@ fn call(
         .iter()
         .enumerate()
         .map(|(i, a)| match param_types.get(i).and_then(Option::as_ref) {
+            // Массив передаётся ПО ССЫЛКЕ (фича 0389): по значению это копия
+            // на каждый вызов, тогда как цель `c` передаёт указатель, а `st` —
+            // `VAR_IN_OUT`. Наблюдаемого расхождения нет — это цена, и платить
+            // её незачем.
+            Some(ty) if crate::generator::rust::rust_byref::is_array_by_reference(ty) => {
+                Ok(format!("&{}", print_expression(a, scope)?))
+            }
             Some(ty) => coerce_to(a, ty, scope),
             None => print_expression(a, scope),
         })
