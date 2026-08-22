@@ -81,7 +81,7 @@ fn walk_statement(stmt: &StatementNode, exprs: &mut Vec<crate::semantic::Express
         }
         StatementNode::Expression(expr, _) => exprs.push((**expr).clone()),
         StatementNode::Return(Some(expr)) => exprs.push((**expr).clone()),
-        StatementNode::Variable(_, _, Some(expr)) => exprs.push((**expr).clone()),
+        StatementNode::Variable(_, _, Some(expr), _) => exprs.push((**expr).clone()),
         StatementNode::If { cond, then_, else_ } => {
             exprs.push((**cond).clone());
             walk_statement(then_, exprs);

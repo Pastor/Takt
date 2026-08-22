@@ -48,7 +48,7 @@ pub(crate) fn collect_assigned(stmt: &StatementNode, out: &mut BTreeSet<String>)
     match stmt {
         StatementNode::Block(items) => items.iter().for_each(|i| collect_assigned(i, out)),
         StatementNode::Expression(expr, _) => collect_assigned_expr(expr, out),
-        StatementNode::Variable(_, _, Some(init)) => collect_assigned_expr(init, out),
+        StatementNode::Variable(_, _, Some(init), _) => collect_assigned_expr(init, out),
         StatementNode::If { cond, then_, else_ } => {
             collect_assigned_expr(cond, out);
             collect_assigned(then_, out);
@@ -85,7 +85,7 @@ pub(crate) fn collect_assigned(stmt: &StatementNode, out: &mut BTreeSet<String>)
         }
         StatementNode::Return(Some(expr)) => collect_assigned_expr(expr, out),
         StatementNode::Return(None)
-        | StatementNode::Variable(_, _, None)
+        | StatementNode::Variable(_, _, None, _)
         | StatementNode::Continue
         | StatementNode::Break
         | StatementNode::InlineFormula(_)
@@ -275,7 +275,7 @@ pub(crate) fn print_block(
         BTreeMap::new();
     let mut moved: BTreeSet<usize> = BTreeSet::new();
     for (i, item) in items.iter().enumerate() {
-        let StatementNode::Variable(name, ty, Some(_)) = item else {
+        let StatementNode::Variable(name, ty, Some(_), _) = item else {
             continue;
         };
         let rest_of = &items[i + 1..];
@@ -507,7 +507,7 @@ pub(crate) fn print_statement_ctx(
                 .nl();
             Ok(0)
         }
-        StatementNode::Variable(name, ty, init) => {
+        StatementNode::Variable(name, ty, init, _) => {
             let ident = rust_value_name(name, crate::diagnostics::Location::Codegen)?;
             let ty_name = rust_type(ty, &format!("переменная '{}'", name))?;
             // `mut` ставится по факту присваивания, а не по объявлению: в Takt

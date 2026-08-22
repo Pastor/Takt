@@ -344,7 +344,7 @@ fn local_var_in_block_resolves() {
     // Первый оператор — Statement::Variable(x, ...)
     if let StatementNode::Block(stmts) = stmt {
         assert!(
-            matches!(stmts.first(), Some(StatementNode::Variable(n, _, _)) if n == "x"),
+            matches!(stmts.first(), Some(StatementNode::Variable(n, _, _, _)) if n == "x"),
             "первый оператор должен быть Variable(x): {:?}",
             stmts.first()
         );
@@ -369,7 +369,10 @@ fn local_var_initializer_is_preserved() {
     if let StatementNode::Block(stmts) = stmt {
         // Инициализатор должен быть Some(Bool(false))
         assert!(
-            matches!(stmts.first(), Some(StatementNode::Variable(_, _, Some(_)))),
+            matches!(
+                stmts.first(),
+                Some(StatementNode::Variable(_, _, Some(_), _))
+            ),
             "у переменной x должен быть инициализатор: {:?}",
             stmts.first()
         );
@@ -400,7 +403,7 @@ fn local_const_in_block_resolves() {
     );
     if let StatementNode::Block(stmts) = stmt {
         assert!(
-            matches!(stmts.first(), Some(StatementNode::Variable(n, _, _)) if n == "C"),
+            matches!(stmts.first(), Some(StatementNode::Variable(n, _, _, _)) if n == "C"),
             "первый оператор должен быть Variable(C): {:?}",
             stmts.first()
         );
@@ -479,7 +482,7 @@ fn local_var_scope_exits_block() {
     // Но Statement::Variable(inner) должен быть внутри блока
     if let StatementNode::Block(stmts) = resolved {
         assert!(
-            matches!(stmts.first(), Some(StatementNode::Variable(n, _, _)) if n == "inner"),
+            matches!(stmts.first(), Some(StatementNode::Variable(n, _, _, _)) if n == "inner"),
             "разрешённый блок должен содержать Variable(inner): {:?}",
             stmts.first()
         );
@@ -519,7 +522,7 @@ fn local_var_in_for_init_resolves() {
     } = stmt
     {
         assert!(
-            matches!(init_box.as_ref(), StatementNode::Variable(n, _, _) if n == "i"),
+            matches!(init_box.as_ref(), StatementNode::Variable(n, _, _, _) if n == "i"),
             "init for должен быть Variable(i): {:?}",
             init_box
         );
@@ -594,7 +597,7 @@ fn variable_statement_resolves() {
     let m = Rc::new(RefCell::new(ModelNode::default()));
     let result = resolve_statement(&StatementNode::Unresolved(stmt), vec![], m).unwrap();
     assert!(
-        matches!(result, StatementNode::Variable(ref n, _, None) if n == "tmp"),
+        matches!(result, StatementNode::Variable(ref n, _, None, _) if n == "tmp"),
         "ожидался Variable(tmp, _, None), получен: {:?}",
         result
     );

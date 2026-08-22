@@ -334,3 +334,4 @@
 | 0383 | Приведение дробного литерала к q(m, n) в теле | [0383-fixed-cast-literal-in-body.md](0383-fixed-cast-literal-in-body.md) | ГОТОВО |
 | 0384 | Приведение имени константы к q(m, n) | [0384-fixed-cast-const.md](0384-fixed-cast-const.md) | ГОТОВО |
 | 0385 | Слово from — контекстное ключевое | [0385-contextual-from.md](0385-contextual-from.md) | ГОТОВО |
+| 0386 | SE-036 видит локальные объявления тел | [0386-unused-local-warning.md](0386-unused-local-warning.md) | ГОТОВО |

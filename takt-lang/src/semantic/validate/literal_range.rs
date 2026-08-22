@@ -190,7 +190,7 @@ fn check_stmt(stmt: &StatementNode, found: &mut Vec<Diagnostic>) {
             check_stmt(body, found);
         }
         // Объявление локальной переменной с инициализатором-литералом.
-        StatementNode::Variable(name, ty, Some(expr)) => {
+        StatementNode::Variable(name, ty, Some(expr), _) => {
             if let Some(value) = literal(expr) {
                 check(
                     value,

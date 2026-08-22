@@ -256,7 +256,10 @@ fn resolve_ast_statement(
                 }
                 _ => ty,
             };
-            Ok(StatementNode::Variable(name, ty, init))
+            // Позиция объявления (фича 0386): без неё предупреждение о
+            // неиспользуемой локальной печаталось бы с координатой `1:1` —
+            // ложью вместо отсутствия (класс 0264).
+            Ok(StatementNode::Variable(name, ty, init, *loc))
         }
 
         // ── Оператор return ────────────────────────────────────────────────────
@@ -356,7 +359,7 @@ fn register_local_var(
     stmt: &StatementNode,
     model: &Rc<RefCell<ModelNode>>,
 ) -> Option<(String, Option<VariableNode>)> {
-    if let StatementNode::Variable(name, ty, _) = stmt {
+    if let StatementNode::Variable(name, ty, _, _) = stmt {
         if name.is_empty() {
             return None;
         }

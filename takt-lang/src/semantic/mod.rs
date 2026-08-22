@@ -706,8 +706,8 @@ pub enum StatementNode {
         /// Тело цикла.
         body: Box<StatementNode>,
     },
-    /// Объявление локальной переменной: `(имя, тип, инициализатор?)`.
-    Variable(String, TypeNode, Option<Box<ExpressionNode>>),
+    /// Объявление: `(имя, тип, инициализатор?, позиция)` — позиция с 0386.
+    Variable(String, TypeNode, Option<Box<ExpressionNode>>, Location),
     /// Оператор `return [выражение]`.
     Return(Option<Box<ExpressionNode>>),
     /// Оператор `continue`.

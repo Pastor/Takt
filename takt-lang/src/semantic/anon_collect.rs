@@ -406,7 +406,7 @@ fn walk_stmt(
             }
             walk_stmt(body, found, out);
         }
-        StatementNode::Variable(_, _, Some(expr)) => walk_expr(expr, found, out),
+        StatementNode::Variable(_, _, Some(expr), _) => walk_expr(expr, found, out),
         StatementNode::Return(Some(expr)) => walk_expr(expr, found, out),
         StatementNode::Match { expr, arms } => {
             walk_expr(expr, found, out);

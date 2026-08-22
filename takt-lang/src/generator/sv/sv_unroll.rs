@@ -56,7 +56,7 @@ pub(in crate::generator::sv) fn unroll(
     cond: Option<&ExpressionNode>,
     step: Option<&ExpressionNode>,
 ) -> Option<Unrolled> {
-    let StatementNode::Variable(name, _, Some(start)) = init? else {
+    let StatementNode::Variable(name, _, Some(start), _) = init? else {
         return None;
     };
     let mut value = literal(start)?;

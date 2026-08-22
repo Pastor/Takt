@@ -383,7 +383,7 @@ fn lower_stmt(stmt: &mut StatementNode, m: u8, n: u8) -> Result<(), Diagnostic> 
         }
         // Локальное объявление: понижаем **тип**; литерал-инициализатор в теле
         // не понижаем (паритет с 0061 — понижаются лишь `variables`-map).
-        StatementNode::Variable(_, ty, init) => {
+        StatementNode::Variable(_, ty, init, _) => {
             *ty = lower_ty(ty, m, n);
             if let Some(e) = init {
                 lower_expr(e, m, n)?;

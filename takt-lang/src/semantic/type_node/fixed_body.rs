@@ -274,7 +274,7 @@ fn lower_stmt(
             lower_stmt(body, model, ret)?;
         }
         // Локальное объявление: приёмник — объявленный тип.
-        StatementNode::Variable(_, ty, init) => {
+        StatementNode::Variable(_, ty, init, _) => {
             let fixed = fixed_of_type(ty);
             if let Some(e) = init {
                 lower_expr(e, model)?;

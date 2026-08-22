@@ -428,7 +428,7 @@ fn adopt_stmt(ctx: &mut Adoption, stmt: &mut StatementNode) {
             }
             adopt_stmt(ctx, body);
         }
-        StatementNode::Variable(_, _, init) => {
+        StatementNode::Variable(_, _, init, _) => {
             if let Some(e) = init {
                 adopt_expr(ctx, e);
             }

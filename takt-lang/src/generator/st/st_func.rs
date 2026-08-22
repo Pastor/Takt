@@ -175,7 +175,7 @@ pub(crate) fn state_params(
 /// Собирает имена переменных, объявленных внутри тела.
 fn collect_locals(stmt: &StatementNode, out: &mut Vec<String>) {
     match stmt {
-        StatementNode::Variable(name, _, _) => out.push(name.clone()),
+        StatementNode::Variable(name, _, _, _) => out.push(name.clone()),
         StatementNode::Block(items) => items.iter().for_each(|s| collect_locals(s, out)),
         StatementNode::If { then_, else_, .. } => {
             collect_locals(then_, out);

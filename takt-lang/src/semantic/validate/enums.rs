@@ -421,7 +421,7 @@ fn check_enum_stmt(
             check_enum_stmt(body, model, out);
         }
         StatementNode::Return(Some(e)) => check_enum_expr(e, model, out),
-        StatementNode::Variable(_, _, Some(e)) => check_enum_expr(e, model, out),
+        StatementNode::Variable(_, _, Some(e), _) => check_enum_expr(e, model, out),
         _ => {}
     }
 }
