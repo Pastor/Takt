@@ -64,8 +64,17 @@ fn emit_block_body(
             inline.push((name, ty));
         }
     }
-    crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &inline)?;
-    print_statement(p, stmt, &scope)
+    // Локальные, значение которых нигде не читается, получают поглотитель
+    // (фича 0387): иначе `verilator -Wall` отвечает `UNUSEDSIGNAL`, а гейт цели
+    // считает предупреждение ошибкой.
+    let unread = crate::semantic::unused::unread_locals(stmt);
+    crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &inline, &unread)?;
+    print_statement(p, stmt, &scope)?;
+    // ⚠️ Присваивание поглотителя идёт ПОСЛЕ тела: `always_comb`, читающий
+    // сигнал раньше записи, verilator встречает `ALWCOMBORDER` («behavior may
+    // imply latch»), а гейт цели считает предупреждение ошибкой.
+    crate::generator::sv::sv_stmt::emit_local_sinks(p, &inline, &unread);
+    Ok(())
 }
 
 /// Печатает именованные блоки **уровня модели** (фича 0083): `always` вне

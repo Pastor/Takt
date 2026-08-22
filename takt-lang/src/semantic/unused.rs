@@ -20,6 +20,17 @@ use std::rc::Rc;
 /// Множество использованных имён в модели.
 #[derive(Debug, Default)]
 pub struct UsageSet {
+    /// Считать ли ЦЕЛЬ присваивания использованием (фича 0387).
+    ///
+    /// По умолчанию `false` — «использование» значит любое упоминание, и на
+    /// этом стоят фильтры печати целей. Признак «локальная только пишется»
+    /// (0387) спрашивает **чтения**: `spare := n + 5;` без единого чтения — это
+    /// мёртвая переменная, и вывод шести целей отвергают их же инструменты
+    /// (`-Wunused-but-set-variable`, `unused variable`, `UNUSEDSIGNAL`).
+    ///
+    /// ⚠️ Флаг ставится **вместо** второго обхода: копия правила «что считать
+    /// упоминанием» разошлась бы с оригиналом молча (класс 0084/0193/0195).
+    pub(crate) reads_only: bool,
     /// Используемые переменные (var)
     pub variables: HashSet<String>,
     /// Используемые константы (const) — ключом [`const_key`], а не голым именем
@@ -88,6 +99,7 @@ fn note_variable_usage(var: &VariableNode, set: &mut UsageSet) {
 /// переменные, функции, именованные условия, блоки, состояния.
 pub fn compute_usage(model: Rc<RefCell<ModelNode>>) -> UsageSet {
     let mut set = UsageSet {
+        reads_only: false,
         variables: HashSet::new(),
         constants: HashSet::new(),
         ports: HashSet::new(),
@@ -136,6 +148,26 @@ fn collect_model_usage(model: Rc<RefCell<ModelNode>>, set: &mut UsageSet) {
 
     for nested_model in nested {
         collect_model_usage(nested_model, set);
+    }
+}
+
+/// Чтения ВНУТРИ места записи (фича 0387).
+///
+/// `arr[i] := 5;` не читает `arr`, но читает `i`; `p.x := 1;` не читает `p`.
+/// Всё, что местом записи не является, разбирается обычным сборщиком — там
+/// упоминание и есть чтение.
+fn reads_of_place(place: &ExpressionNode, set: &mut UsageSet) {
+    match place {
+        ExpressionNode::Variable(_) => {}
+        ExpressionNode::Parenthesis(inner) | ExpressionNode::BitAccess(inner, _) => {
+            reads_of_place(inner, set)
+        }
+        ExpressionNode::ArraySubscript(base, index) => {
+            reads_of_place(base, set);
+            usage_from_expr(index, set);
+        }
+        ExpressionNode::ArraySlice(base, _, _) => reads_of_place(base, set),
+        other => usage_from_expr(other, set),
     }
 }
 
@@ -232,9 +264,18 @@ fn usage_from_expr(expr: &ExpressionNode, set: &mut UsageSet) {
         | ExpressionNode::Less(l, r)
         | ExpressionNode::More(l, r)
         | ExpressionNode::LessEqual(l, r)
-        | ExpressionNode::MoreEqual(l, r)
-        | ExpressionNode::Assign(l, r) => {
+        | ExpressionNode::MoreEqual(l, r) => {
             usage_from_expr(l, set);
+            usage_from_expr(r, set);
+        }
+        ExpressionNode::Assign(l, r) => {
+            if set.reads_only {
+                // Цель присваивания — МЕСТО ЗАПИСИ, а не чтение; читаются
+                // только индексы и базы внутри неё (фича 0387).
+                reads_of_place(l, set);
+            } else {
+                usage_from_expr(l, set);
+            }
             usage_from_expr(r, set);
         }
         ExpressionNode::ConditionalOperator(cond, then_e, else_e) => {
@@ -417,7 +458,14 @@ fn usage_from_state(state: &crate::semantic::StateNode, set: &mut UsageSet) {
 pub(crate) fn unused_locals_of_block(
     block: &[StatementNode],
 ) -> Vec<(String, crate::diagnostics::Location)> {
-    let mut used = UsageSet::default();
+    // ⚠️ Спрашиваются ЧТЕНИЯ, а не упоминания (фича 0387): `spare := n + 5;`
+    // без единого чтения — мёртвая переменная, и вывод шести целей отвергают их
+    // же инструменты (`-Wunused-but-set-variable` у `cc`, `unused variable` у
+    // `rustc`, `UNUSEDSIGNAL` у verilator) при нулевом коде возврата `taktc`.
+    let mut used = UsageSet {
+        reads_only: true,
+        ..UsageSet::default()
+    };
     for stmt in block {
         usage_from_stmt(stmt, &mut used);
     }
@@ -432,6 +480,28 @@ pub(crate) fn unused_locals_of_block(
         }
     }
     out
+}
+
+/// Имена локальных объявлений ВСЕГО тела, значение которых нигде не читается
+/// (фича 0387).
+///
+/// Отличие от [`unused_locals_of_block`] — глубина: там один блок, здесь всё
+/// тело, включая вложенные блоки. Нужен целям, объявляющим локальные **в
+/// начале процесса** (`sv`): поглотитель печатается рядом с объявлением, а не
+/// в конце блока.
+pub(crate) fn unread_locals(stmt: &StatementNode) -> Vec<String> {
+    let mut out = Vec::new();
+    collect_unread(stmt, &mut out);
+    out
+}
+
+fn collect_unread(stmt: &StatementNode, out: &mut Vec<String>) {
+    if let StatementNode::Block(items) = stmt {
+        out.extend(unused_locals_of_block(items).into_iter().map(|(n, _)| n));
+    }
+    for child in child_statements(stmt) {
+        collect_unread(child, out);
+    }
 }
 
 /// Проверяет наличие неиспользуемых переменных в модели.

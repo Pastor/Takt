@@ -610,7 +610,9 @@ pub(crate) fn emit_functions(
             // разрешает объявить переменную посреди тела.
             let mut locals = Vec::new();
             hoist_locals(body, &mut locals);
-            emit_hoisted_locals(p, &locals)?;
+            // Поглотитель для локальной, которую тело только пишет (фича 0387).
+            let unread = crate::semantic::unused::unread_locals(body);
+            emit_hoisted_locals(p, &locals, &unread)?;
             // Пролог распаковки (фичи 0369, 0372) — у носителя раскладки.
             for (param, ty, flat_param) in &unpack {
                 crate::generator::sv::sv_array::emit_unpack_prologue(
@@ -654,6 +656,9 @@ pub(crate) fn emit_functions(
                 }
             }
             p.print(&body_text);
+            // Поглотитель локальной, которую тело только пишет (фича 0387) —
+            // ПОСЛЕ тела: чтение до записи verilator встречает `ALWCOMBORDER`.
+            crate::generator::sv::sv_stmt::emit_local_sinks(p, &locals, &unread);
             p.down();
             p.ident("endfunction").nl().nl();
         }
