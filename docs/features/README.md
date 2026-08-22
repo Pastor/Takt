@@ -405,9 +405,9 @@
 | [0390](./0390-port-composite-type-policy.md) | Порт составного типа: нормировать ли в семантике | [ADR](../adr/0390-port-composite-type-policy.md) · [анализ](../analyze/0390-port-composite-type-policy.md) | АНАЛИЗ |
 | [0391](./0391-enum-default-value.md) | Умолчание переменной перечислимого типа: ноль против первого варианта | [ADR](../adr/0391-enum-default-value.md) · [анализ](../analyze/0391-enum-default-value.md) | АНАЛИЗ |
 | [0392](./0392-c-shift-width-wide.md) | Сдвиг на величину, не меньшую ширины типа, в цели c на 32- и 64-битных типах | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0393](./0393-every-on-self-transition.md) | every при самопереходе: эталон сбрасывает счётчик, восемь целей — нет | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0393](./0393-every-on-self-transition.md) | every при самопереходе: эталон сбрасывает счётчик, восемь целей — нет | [ADR](../adr/0393-every-on-self-transition.md) · [анализ](../analyze/0393-every-on-self-transition.md) | АНАЛИЗ |
 | [0394](./0394-bit-beyond-declared-width.md) | Разряд за объявленной шириной бит-вектора принимают молча | [ADR](../adr/0394-bit-beyond-declared-width.md) · [анализ](../analyze/0394-bit-beyond-declared-width.md) | АНАЛИЗ |
-| [0395](./0395-imported-model-specialization.md) | Специализация импортированной модели: копия снимается после разрешения тел | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0395](./0395-imported-model-specialization.md) | Специализация импортированной модели: копия снимается после разрешения тел | [ADR](../adr/0395-imported-model-specialization.md) · [анализ](../analyze/0395-imported-model-specialization.md) | АНАЛИЗ |
 | [0396](./0396-c-struct-parameter-on-demand.md) | Структурный параметр цели c эмитится всегда, а не по нужде | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0397](./0397-state-of-neighbour-rust-st.md) | Форму S(Модель) = Состояние у соседа не переводят rust и st | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0398](./0398-diagnostics-detailed-analysis.md) | Разбор с примером есть у 83 кодов из 229 | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
