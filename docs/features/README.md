@@ -408,9 +408,9 @@
 | [0393](./0393-every-on-self-transition.md) | every при самопереходе: эталон сбрасывает счётчик, восемь целей — нет | [ADR](../adr/0393-every-on-self-transition.md) · [анализ](../analyze/0393-every-on-self-transition.md) | АНАЛИЗ |
 | [0394](./0394-bit-beyond-declared-width.md) | Разряд за объявленной шириной бит-вектора принимают молча | [ADR](../adr/0394-bit-beyond-declared-width.md) · [анализ](../analyze/0394-bit-beyond-declared-width.md) | АНАЛИЗ |
 | [0395](./0395-imported-model-specialization.md) | Специализация импортированной модели: копия снимается после разрешения тел | [ADR](../adr/0395-imported-model-specialization.md) · [анализ](../analyze/0395-imported-model-specialization.md) | АНАЛИЗ |
-| [0396](./0396-c-struct-parameter-on-demand.md) | Структурный параметр цели c эмитится всегда, а не по нужде | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0396](./0396-c-struct-parameter-on-demand.md) | Структурный параметр цели c эмитится всегда, а не по нужде | [ADR](../adr/0396-c-struct-parameter-on-demand.md) · [анализ](../analyze/0396-c-struct-parameter-on-demand.md) | АНАЛИЗ |
 | [0397](./0397-state-of-neighbour-rust-st.md) | Форму S(Модель) = Состояние у соседа не переводят rust и st | [ADR](../adr/0397-state-of-neighbour-rust-st.md) · [анализ](../analyze/0397-state-of-neighbour-rust-st.md) | АНАЛИЗ |
-| [0398](./0398-diagnostics-detailed-analysis.md) | Разбор с примером есть у 83 кодов из 229 | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0399](./0399-operand-type-single-carrier.md) | Вывод типа операнда живёт четырьмя носителями | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0398](./0398-diagnostics-detailed-analysis.md) | Разбор с примером есть у 83 кодов из 229 | [ADR](../adr/0398-diagnostics-detailed-analysis.md) · [анализ](../analyze/0398-diagnostics-detailed-analysis.md) | АНАЛИЗ |
+| [0399](./0399-operand-type-single-carrier.md) | Вывод типа операнда живёт четырьмя носителями | [ADR](../adr/0399-operand-type-single-carrier.md) · [анализ](../analyze/0399-operand-type-single-carrier.md) | АНАЛИЗ |
 | [0400](./0400-slice-in-call-argument.md) | Срез в АРГУМЕНТЕ вызова не переводит ни одна цель | [ADR](../adr/0400-slice-in-call-argument.md) · [анализ](../analyze/0400-slice-in-call-argument.md) | АНАЛИЗ |
-| [0401](./0401-lsp-imported-symbol-kind.md) | Вид импортированного символа неточен: Imported вместо «порт»/«функция» | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0401](./0401-lsp-imported-symbol-kind.md) | Вид импортированного символа неточен: Imported вместо «порт»/«функция» | [ADR](../adr/0401-lsp-imported-symbol-kind.md) · [анализ](../analyze/0401-lsp-imported-symbol-kind.md) | АНАЛИЗ |
