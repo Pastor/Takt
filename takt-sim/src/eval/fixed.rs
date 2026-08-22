@@ -79,6 +79,37 @@ fn mismatch(op: BinOp, lhs: &Value, rhs: &Value) -> EvalError {
 /// Оба операнда обязаны быть `q` **одного формата** (гарантирует страж `SE-059`);
 /// иначе — [`EvalError::TypeMismatch`], а не молчаливо неверный результат.
 pub(crate) fn binary(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value, EvalError> {
+    // ⚠️ **Целое рядом с q в СРАВНЕНИИ — это представление** (фича 0381).
+    // Семантика понижает литерал в представление везде, где известен тип
+    // приёмника, и `gain > 1.0` доезжает сюда как `Fixed > Number(256)`. Цели
+    // печатают ровно это (`model->gain > 256`), и отказ здесь развёл бы эталон
+    // с ними на записи, которую они исполняют.
+    //
+    // ⚠️ Только сравнение: в АРИФМЕТИКЕ смешение q и целого отвергает
+    // `SE-059` — вход до эталона не доходит, и послабление здесь означало бы
+    // «эталон умнее компилятора» (класс 0034).
+    let (lhs, rhs) = match (lhs, rhs, op.is_comparison()) {
+        (Value::Fixed { m, n, sat, .. }, Value::Number(k), true) => (
+            lhs.clone(),
+            Value::Fixed {
+                repr: *k as i64,
+                m: *m,
+                n: *n,
+                sat: *sat,
+            },
+        ),
+        (Value::Number(k), Value::Fixed { m, n, sat, .. }, true) => (
+            Value::Fixed {
+                repr: *k as i64,
+                m: *m,
+                n: *n,
+                sat: *sat,
+            },
+            rhs.clone(),
+        ),
+        _ => (lhs.clone(), rhs.clone()),
+    };
+    let (lhs, rhs) = (&lhs, &rhs);
     let (
         Value::Fixed {
             repr: ra,

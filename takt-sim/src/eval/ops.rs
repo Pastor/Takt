@@ -56,6 +56,23 @@ pub(crate) enum UnOp {
 }
 
 impl BinOp {
+    /// Сравнение ли это (включая равенство).
+    ///
+    /// Нужно правилу «целое рядом с q есть представление» (фича 0381): оно
+    /// действует **только** в сравнении, потому что в арифметике смешение
+    /// отвергает `SE-059` — вход до эталона не доходит.
+    pub(crate) fn is_comparison(self) -> bool {
+        matches!(
+            self,
+            BinOp::Less
+                | BinOp::More
+                | BinOp::LessEqual
+                | BinOp::MoreEqual
+                | BinOp::Equal
+                | BinOp::NotEqual
+        )
+    }
+
     /// Символ операции — для текстов диагностик.
     pub(crate) fn symbol(self) -> &'static str {
         match self {
