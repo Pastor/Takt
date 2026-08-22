@@ -1,6 +1,6 @@
 # Исправление 0182-01: ПИД-регулятор — тип данных с операциями, а не модель-автомат
 
-> Фича: [../features/0182-pid-library-and-application.md](../features/0182-pid-library-and-application.md) · ADR: [../adr/0182-pid-library-and-application.md](../adr/0182-pid-library-and-application.md) · отчёт: [../reports/0182-pid-library-and-application.md](../reports/0182-pid-library-and-application.md)
+> Фича: [../features/0182-pid-library-and-application.md](../features/0182-pid-library-and-application.md) · ADR: [../features/0182-pid-library-and-application.md#архитектура-adr](../features/0182-pid-library-and-application.md#архитектура-adr) · отчёт: [../features/0182-pid-library-and-application.md#отчёт-о-тестировании](../features/0182-pid-library-and-application.md#отчёт-о-тестировании)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-14), заведён в тот же день.
 - **Обнаружено:** требованием заказчика 2026-08-14 с образцом на C: «пример без

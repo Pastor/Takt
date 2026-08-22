@@ -12,9 +12,9 @@
 |---|---|
 | Архитектура (ADR) | не заведён (стадия 2) |
 | Анализ | не заведён (стадия 3) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0115-YY-*`) |
-| Тест-план | [`docs/tests/0115-book-diagnostics.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/0115-book-diagnostics.md`](../reports/README.md) |
+| Разработка | [`docs/development/`](README.md) (задачи `0115-YY-*`) |
+| Тест-план | [`0115-book-diagnostics.md#тест-план`](README.md) |
+| Отчёт о тестировании | [`0115-book-diagnostics.md#отчёт-о-тестировании`](README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0115-YY-*`) |
 
 ## Краткое описание

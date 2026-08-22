@@ -1,6 +1,6 @@
 # Фикс 0378-01: `ST-023` отвергала тёзку перечисления
 
-> Фича: [../features/0378-st-name-type-clash.md](../features/0378-st-name-type-clash.md) · ADR: [../adr/0378-st-name-type-clash.md](../adr/0378-st-name-type-clash.md)
+> Фича: [../features/0378-st-name-type-clash.md](../features/0378-st-name-type-clash.md) · ADR: [../features/0378-st-name-type-clash.md#архитектура-adr](../features/0378-st-name-type-clash.md#архитектура-adr)
 
 ## Что было
 

@@ -1,6 +1,6 @@
 # Исправление 0301-02: `probe.sh` падал на пробе с объявленным типом
 
-> Фича: [../features/0301-probe-checklist.md](../features/0301-probe-checklist.md) · анализ: [../analyze/0301-probe-checklist.md](../analyze/0301-probe-checklist.md) · отчёт: [../reports/0301-probe-checklist.md](../reports/0301-probe-checklist.md)
+> Фича: [../features/0301-probe-checklist.md](../features/0301-probe-checklist.md) · анализ: [../features/0301-probe-checklist.md#анализ](../features/0301-probe-checklist.md#анализ) · отчёт: [../features/0301-probe-checklist.md#отчёт-о-тестировании](../features/0301-probe-checklist.md#отчёт-о-тестировании)
 
 ## Проблема
 

@@ -5,7 +5,7 @@
 > фичи 0166) показала, что он бьёт и по **последовательной**: причина общая —
 > `Unit::execution` спускается в детей у обоих композитов.
 
-> Фича: [../features/0181-sim-state-implementation-tick.md](../features/0181-sim-state-implementation-tick.md) · анализ: [../analyze/0181-sim-state-implementation-tick.md](../analyze/0181-sim-state-implementation-tick.md) · отчёт: [../reports/0181-sim-state-implementation-tick.md](../reports/0181-sim-state-implementation-tick.md)
+> Фича: [../features/0181-sim-state-implementation-tick.md](../features/0181-sim-state-implementation-tick.md) · анализ: [../features/0181-sim-state-implementation-tick.md#анализ](../features/0181-sim-state-implementation-tick.md#анализ) · отчёт: [../features/0181-sim-state-implementation-tick.md#отчёт-о-тестировании](../features/0181-sim-state-implementation-tick.md#отчёт-о-тестировании)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-07-29). Заведён в тот же день. **Tier 2 —
   эталон молча неверен.** Симулятор — эталон поведения проекта; порождённый код

@@ -1,6 +1,6 @@
 # Исправление 0202-01: версия крейта в живом контексте отстала, а гейт её не видел
 
-> Фича: [../features/0202-fmt-diagnostic-formatting.md](../features/0202-fmt-diagnostic-formatting.md) · ADR: [../adr/0202-fmt-diagnostic-formatting.md](../adr/0202-fmt-diagnostic-formatting.md) · отчёт: [../reports/0202-fmt-diagnostic-formatting.md](../reports/0202-fmt-diagnostic-formatting.md)
+> Фича: [../features/0202-fmt-diagnostic-formatting.md](../features/0202-fmt-diagnostic-formatting.md) · ADR: [../features/0202-fmt-diagnostic-formatting.md#архитектура-adr](../features/0202-fmt-diagnostic-formatting.md#архитектура-adr) · отчёт: [../features/0202-fmt-diagnostic-formatting.md#отчёт-о-тестировании](../features/0202-fmt-diagnostic-formatting.md#отчёт-о-тестировании)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-04). Найден на следующий день после
   закрытия 0202, при взятии в работу фичи 0152.

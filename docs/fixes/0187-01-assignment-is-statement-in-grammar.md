@@ -1,6 +1,6 @@
 # Исправление 0187-01: присваивание отвергается семантикой, а должно — грамматикой
 
-> Фича: [../features/0187-port-io-redesign.md](../features/0187-port-io-redesign.md) · ADR: [../adr/0187-port-io-redesign.md](../adr/0187-port-io-redesign.md) · задача: [../development/0187-06-port-io-redesign.md](../development/0187-06-port-io-redesign.md)
+> Фича: [../features/0187-port-io-redesign.md](../features/0187-port-io-redesign.md) · ADR: [../features/0187-port-io-redesign.md#архитектура-adr](../features/0187-port-io-redesign.md#архитектура-adr) · задача: [../features/0187-port-io-redesign.md#разработка](../features/0187-port-io-redesign.md#разработка)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-01), заведён в тот же день **по требованию
   заказчика**: правило «присваивание — всегда отдельная операция» обязано

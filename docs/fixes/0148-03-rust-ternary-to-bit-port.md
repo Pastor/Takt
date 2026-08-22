@@ -1,6 +1,6 @@
 # Фикс 0148-03: тернарный оператор в `bit`-порт даёт некомпилируемый Rust
 
-> Фича: [../features/0148-rust-printers-coverage.md](../features/0148-rust-printers-coverage.md) · вскрыт при задаче [0183-02](../development/0183-02-duration-type-in-targets.md) (цель `rust` для типа `duration`), 2026-07-29
+> Фича: [../features/0148-rust-printers-coverage.md](../features/0148-rust-printers-coverage.md) · вскрыт при задаче [0183-02](../features/0183-duration-type-in-targets.md#разработка) (цель `rust` для типа `duration`), 2026-07-29
 
 ## Симптом
 

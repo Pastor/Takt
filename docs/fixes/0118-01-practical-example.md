@@ -1,6 +1,6 @@
 # Исправление 0118-01: раздел «Практический пример» — полноценная модель группового управления лифтами
 
-> Фича: [../features/0118-book-showcase.md](../features/0118-book-showcase.md) · использует [фичу 0124](../features/0124-verify-graph-export.md) (экспорт графов верификации) · отчёт: [../reports/README.md](../reports/README.md)
+> Фича: [../features/0118-book-showcase.md](../features/0118-book-showcase.md) · использует [фичу 0124](../features/0124-verify-graph-export.md) (экспорт графов верификации) · отчёт: [../reports/README.md](../features/README.md)
 
 ## Проблема
 

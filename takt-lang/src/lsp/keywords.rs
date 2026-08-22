@@ -112,7 +112,7 @@ pub(super) const TAKT_KEYWORDS: &[(&str, &str)] = &[
 
 /// Ключевые слова языка, **намеренно** не предлагаемые автодополнением.
 ///
-/// Правило 2 ADR 0178 (`docs/adr/0178-editor-layer-language-sync.md`): каждое
+/// Правило 2 ADR 0178 (`../../../docs/features/0178-editor-layer-language-sync.md#архитектура-adr`): каждое
 /// ключевое слово лексера либо в [`TAKT_KEYWORDS`], либо здесь — с
 /// обоснованием. Молча пропустить слово нельзя: сторож
 /// `test_completion_covers_lexer_keywords` покрывает обе стороны.

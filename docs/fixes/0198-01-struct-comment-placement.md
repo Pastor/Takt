@@ -1,6 +1,6 @@
 # Исправление 0198-01: печать структуры теряет место комментария
 
-> Фича: [../features/0198-formatter-comment-in-block.md](../features/0198-formatter-comment-in-block.md) · ADR: [../adr/0198-formatter-comment-in-block.md](../adr/0198-formatter-comment-in-block.md) · анализ: [../analyze/0198-formatter-comment-in-block.md](../analyze/0198-formatter-comment-in-block.md) · отчёт: [../reports/0198-formatter-comment-in-block.md](../reports/0198-formatter-comment-in-block.md) · смежно: [0024](../features/0024-lam-formatter.md) (форматтер), фикс [0197-01](0197-01-kr-else-cond-case-enum-lines.md) (тот же класс у перечисления)
+> Фича: [../features/0198-formatter-comment-in-block.md](../features/0198-formatter-comment-in-block.md) · ADR: [../features/0198-formatter-comment-in-block.md#архитектура-adr](../features/0198-formatter-comment-in-block.md#архитектура-adr) · анализ: [../features/0198-formatter-comment-in-block.md#анализ](../features/0198-formatter-comment-in-block.md#анализ) · отчёт: [../features/0198-formatter-comment-in-block.md#отчёт-о-тестировании](../features/0198-formatter-comment-in-block.md#отчёт-о-тестировании) · смежно: [0024](../features/0024-lam-formatter.md) (форматтер), фикс [0197-01](0197-01-kr-else-cond-case-enum-lines.md) (тот же класс у перечисления)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-14), заведён в тот же день.
 - **Обнаружено:** ревью заказчика 2026-08-14 — после фикса 0197-01 перечисление

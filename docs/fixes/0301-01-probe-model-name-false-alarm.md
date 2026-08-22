@@ -1,6 +1,6 @@
 # Исправление 0301-01: проверка имени файла кричала на идиому корпуса
 
-> Фича: [../features/0301-probe-checklist.md](../features/0301-probe-checklist.md) · ADR: [../adr/0301-probe-checklist.md](../adr/0301-probe-checklist.md) · отчёт: [../reports/0301-probe-checklist.md](../reports/0301-probe-checklist.md)
+> Фича: [../features/0301-probe-checklist.md](../features/0301-probe-checklist.md) · ADR: [../features/0301-probe-checklist.md#архитектура-adr](../features/0301-probe-checklist.md#архитектура-adr) · отчёт: [../features/0301-probe-checklist.md#отчёт-о-тестировании](../features/0301-probe-checklist.md#отчёт-о-тестировании)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-18). Найден **сразу после закрытия** —
   первым же прогоном инструмента на настоящем примере корпуса.

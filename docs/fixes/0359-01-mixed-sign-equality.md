@@ -1,6 +1,6 @@
 # Исправление 0359-01: равенство знакового с беззнаковым осталось непокрытым
 
-> Фича: [../features/0359-mixed-sign-comparison.md](../features/0359-mixed-sign-comparison.md) · ADR: [../adr/0359-mixed-sign-comparison.md](../adr/0359-mixed-sign-comparison.md) · отчёт: [../reports/0359-mixed-sign-comparison.md](../reports/0359-mixed-sign-comparison.md)
+> Фича: [../features/0359-mixed-sign-comparison.md](../features/0359-mixed-sign-comparison.md) · ADR: [../features/0359-mixed-sign-comparison.md#архитектура-adr](../features/0359-mixed-sign-comparison.md#архитектура-adr) · отчёт: [../features/0359-mixed-sign-comparison.md#отчёт-о-тестировании](../features/0359-mixed-sign-comparison.md#отчёт-о-тестировании)
 
 - **Статус:** **ИСПРАВЛЕН** (2026-08-21). Найден **сразу после закрытия** —
   первой же пробой смежной формы.

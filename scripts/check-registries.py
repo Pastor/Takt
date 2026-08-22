@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """check-registries.py — реестры стадий против файлов на диске (фича 0164).
 
-Каждая папка-стадия жизненного цикла (`docs/features/`, `docs/adr/`,
-`docs/analyze/`, `docs/development/`, `docs/tests/`, `docs/reports/`,
-`docs/fixes/`) ведёт реестр `README.md`. Реестр — **вход в проект**: по нему
+Каждая папка пофичевых артефактов — `docs/features/` (карточки: все стадии в
+одном файле, правило 32) и `docs/fixes/` (исправления) — ведёт реестр
+`README.md`. Реестр — **вход в проект**: по нему
 смотрят, что сделано и где это лежит. Наполняется он руками, и до этой фичи
 рассинхрон с диском не ловился ничем.
 
@@ -41,7 +41,9 @@ ROOT = os.environ.get(
 # Папки-стадии жизненного цикла (правило 17). `docs/templates/` не в списке:
 # там плейсхолдеры, а не артефакты фич; `docs/diagnostics/` — реестр кодов, а не
 # стадия.
-STAGES = ("features", "adr", "analyze", "development", "tests", "reports", "fixes")
+# ⚠️ Папок ДВЕ (правило 32, 2026-08-22): стадии живут разделами карточки, и
+# каталогов `adr/analyze/development/tests/reports` больше нет.
+STAGES = ("features", "fixes")
 
 # Ссылка на файл в строке реестра: `[0019](./0019-slug.md)` либо
 # `[0019-slug.md](0019-slug.md)`.
@@ -153,7 +155,7 @@ def main():
 
     total = sum(len(files) for files, _ in stages.values())
     print(
-        f"Реестры стадий: {len(stages)} папок, {total} артефактов — "
+        f"Реестры артефактов: {len(stages)} папок, {total} артефактов — "
         "расхождений с диском нет."
     )
     return 0

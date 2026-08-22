@@ -17,8 +17,8 @@
 //! ключ `Name` имеет ручной `Ord` по паре `(unique, local)`. Собственных
 //! сортировок здесь заводить не нужно — порядок задан типом контейнера.
 //!
-//! [0045-01]: ../../../../docs/development/0045-01-sv-backend.md
-//! [0045-04]: ../../../../docs/development/0045-04-module-ports.md
+//! [0045-01]: ../../../../../../../../docs/features/0045-sv-backend.md#разработка
+//! [0045-04]: ../../../../../../../../docs/features/0045-sv-backend.md#разработка
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::minimap::{Element, Map, Name};

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """check-registry-verdicts.py — вердикт закрытой фичи не бывает заготовкой (фича 0218).
 
-Реестры стадий 5 и 6 (`docs/tests/README.md`, `docs/reports/README.md`) несут
+Реестр фич (`docs/features/README.md`) несёт
 последней колонкой ответ на вопрос «чем кончилось тестирование». Заготовку
 строки пишет `scripts/new-feature.sh` — значением `СОЗДАНА`, и на момент
 создания это верно. Стадия закрытия колонку не правила: чек-лист о ней молчал,
 машина её не смотрела.
 
-Замер при заведении гейта (2026-08-17): `docs/reports/README.md` — **44** таких
-строки, `docs/tests/README.md` — **35**, и ВСЕ до одной принадлежат фичам в
+Замер при заведении гейта (2026-08-17): `docs/features/README.md` — **44** таких
+строки, `docs/features/README.md` — **35**, и ВСЕ до одной принадлежат фичам в
 статусе `ГОТОВО`. То есть реестр отчётов утверждал «тестирование не
 проводилось» ровно там, где оно проведено и задокументировано, — а по такой
 записи проверку заводят заново.
@@ -30,11 +30,11 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEATURES_REGISTRY = os.path.join(ROOT, "docs", "features", "README.md")
-# Реестры стадий 5 и 6: путь → как называется их последняя колонка (для текста
-# отказа: у стадии 5 это «Статус», у стадии 6 — «Вердикт»).
+# ⚠️ Реестр ОДИН (правило 32, 2026-08-22): стадии живут разделами карточки, и
+# реестров `docs/tests/`, `docs/reports/` больше нет. Колонок в строке фичи
+# четыре: номер, название, статус, вердикт тестирования.
 STAGE_REGISTRIES = {
-    os.path.join("docs", "tests", "README.md"): "Статус",
-    os.path.join("docs", "reports", "README.md"): "Вердикт",
+    os.path.join("docs", "features", "README.md"): "Вердикт тестирования",
 }
 # Заготовка, которую пишет генератор.
 PLACEHOLDER = "СОЗДАНА"
@@ -70,7 +70,7 @@ def feature_statuses(lines):
             continue
         match = re.match(r"\[(\d{4})\]", cells[0])
         if match:
-            statuses[match.group(1)] = normalize_status(cells[-1])
+            statuses[match.group(1)] = normalize_status(cells[-2])
     return statuses
 
 
@@ -81,12 +81,15 @@ def check_registry(lines, statuses, relative_path, column):
         cells = table_cells(line)
         if not cells or len(cells) < 3:
             continue
-        feature = cells[0].strip()
+        match = re.match(r"\[(\d{4})\]", cells[0].strip())
+        feature = match.group(1) if match else cells[0].strip()
         if not re.fullmatch(r"\d{4}", feature):
             continue
         if normalize_status(cells[-1]) != PLACEHOLDER:
             continue
-        status = statuses.get(feature)
+        # ⚠️ Статус берётся из ЭТОЙ же строки (предпоследняя ячейка): реестр
+        # один, и второго источника статуса больше нет.
+        status = normalize_status(cells[-2]) or statuses.get(feature)
         if status in TERMINAL:
             problems.append(
                 (
@@ -114,21 +117,22 @@ def self_test():
     """
     statuses = {"0001": "ГОТОВО", "0002": "СОЗДАНА", "0003": "ОТМЕНА"}
 
-    planted = ["| 0001 | Проба | [x](x.md) | СОЗДАНА |"]
+    planted = ["| [0001](./0001-a.md) | Проба | ГОТОВО | СОЗДАНА |"]
     if not run_checks(statuses, {"проба": (planted, "Вердикт")}):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: заготовка у закрытой фичи не поймана")
 
     # Отменённая фича — тоже терминальная: вердикт обязан быть настоящим.
-    planted_cancelled = ["| 0003 | Проба | [x](x.md) | СОЗДАНА |"]
+    planted_cancelled = ["| [0003](./0003-c.md) | Проба | ОТМЕНА | СОЗДАНА |"]
     if not run_checks(statuses, {"проба": (planted_cancelled, "Вердикт")}):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: заготовка у отменённой фичи не поймана")
 
     # Обратная сторона — законные записи ложных находок давать не должны.
     clean = [
-        "| 0002 | Фича в работе | [x](x.md) | СОЗДАНА |",
-        "| 0001 | Закрытая фича | [x](x.md) | ✅ ГОТОВО |",
-        "| 0001 | Закрытая с припиской | [x](x.md) | **ГОТОВО** (тег `v0.5.0`) |",
-        "| Фича | Заголовок | Тест-план | Статус |",
+        "| [0002](./0002-b.md) | Фича в работе | АНАЛИЗ | СОЗДАНА |",
+        "| [0001](./0001-a.md) | Закрытая фича | ГОТОВО | ✅ ГОТОВО |",
+        "| [0001](./0001-a.md) | Закрытая с припиской | ГОТОВО | **ГОТОВО** (тег `v0.5.0`) |",
+        "| [0004](./0004-d.md) | Ранняя фича без отчёта | ГОТОВО | — |",
+        "| Фича | Наименование | Статус | Вердикт тестирования |",
         "текст вне таблицы",
     ]
     found = run_checks(statuses, {"проба": (clean, "Вердикт")})
@@ -169,7 +173,7 @@ def main():
         return 1
     total = sum(len(lines) for lines, _ in registries.values())
     print(
-        f"Вердикты реестров стадий 5–6: проверено {total} строк, "
+        f"Вердикт тестирования в реестре фич: проверено {total} строк, "
         f"заготовок у закрытых фич нет."
     )
     return 0

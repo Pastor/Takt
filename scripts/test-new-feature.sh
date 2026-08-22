@@ -21,7 +21,8 @@ trap 'rm -rf "$TMP"' EXIT
 # Слепок дерева: шаблоны (реальные) + пустые реестры с таблицей.
 mkdir -p "$TMP/docs/templates"
 cp "$ROOT/docs/templates/"*.md "$TMP/docs/templates/"
-for r in features adr analyze development tests reports; do
+# ⚠️ Папок ДВЕ (правило 32): карточки и фиксы — каталогов стадий больше нет.
+for r in features fixes; do
   mkdir -p "$TMP/docs/$r"
   printf '# Реестр\n\n| A | B |\n|---|---|\n' > "$TMP/docs/$r/README.md"
 done
@@ -39,49 +40,44 @@ check() { # <описание> <ожидаемо> <фактически>
 echo "test-new-feature: идемпотентность и стадии (фича 0094)..."
 
 # Два прогона заведения одной фичи — строки не должны дублироваться (A1).
-NF_ROOT="$TMP" "$GEN" --with-dev --register 0099 test-feat "Тест фича" >/dev/null 2>&1
-NF_ROOT="$TMP" "$GEN" --with-dev --register 0099 test-feat "Тест фича" >/dev/null 2>&1
+NF_ROOT="$TMP" "$GEN" --register 0099 test-feat "Тест фича" >/dev/null 2>&1
+NF_ROOT="$TMP" "$GEN" --register 0099 test-feat "Тест фича" >/dev/null 2>&1
 
-for r in features adr analyze tests; do
-  n="$(grep -c '0099' "$TMP/docs/$r/README.md" || true)"
-  check "A1 реестр $r — одна строка 0099" "1" "$n"
+n="$(grep -c '0099' "$TMP/docs/features/README.md" || true)"
+check "A1 реестр фич — одна строка 0099" "1" "$n"
+[ -f "$TMP/docs/features/0099-test-feat.md" ] && card=1 || card=0
+check "A1 карточка создана" "1" "$card"
+
+# A2: карточка несёт разделы ВСЕХ стадий как заготовки (правило 32) — их
+# заводят по мере прохождения, поэтому в шаблоне они лежат закомментированными.
+for sec in 'Архитектура (ADR)' 'Анализ' 'Разработка' 'Тест-план' 'Отчёт о тестировании'; do
+  hit="$(grep -c "$sec" "$TMP/docs/features/0099-test-feat.md" || true)"
+  [ "$hit" -ge 1 ] || { echo "  ПРОВАЛ: A2 в карточке нет упоминания раздела «$sec»" >&2; fail=1; }
 done
-n="$(grep -c '0099-01' "$TMP/docs/development/README.md" || true)"
-check "A1 реестр development — одна строка 0099-01" "1" "$n"
+[ "$fail" = 0 ] && echo "  OK: A2 карточка называет все стадии-разделы"
 
-# A2: ADR-строка реестра — Draft, не Accepted; шаблон тоже Draft.
-draft="$(grep -c 'Draft' "$TMP/docs/adr/README.md" || true)"
-check "A2 ADR-строка реестра содержит Draft" "1" "$draft"
-acc="$(grep -c 'Accepted' "$TMP/docs/adr/README.md" || true)"
-check "A2 ADR-строка реестра НЕ Accepted" "0" "$acc"
-tpl_acc="$(grep -c '^- \*\*Status:\*\* Accepted' "$ROOT/docs/templates/adr.md" || true)"
-check "A2 шаблон adr.md НЕ Accepted" "0" "$tpl_acc"
-
-# A3: --stage report создаёт и регистрирует отчёт (ранее невозможно).
+# A3: стадии 2…6 файлов НЕ создают (правило 32) — только подсказывают раздел.
+before="$(find "$TMP/docs" -name '*.md' | wc -l | tr -d ' ')"
 NF_ROOT="$TMP" "$GEN" --stage report --register 0099 test-feat "Тест фича" >/dev/null 2>&1
-[ -f "$TMP/docs/reports/0099-test-feat.md" ] && rep_file=1 || rep_file=0
-check "A3 отчёт-заготовка создана" "1" "$rep_file"
-rep_row="$(grep -c '0099' "$TMP/docs/reports/README.md" || true)"
-check "A3 строка reports/README одна" "1" "$rep_row"
-# Повтор --stage report не дублирует.
-NF_ROOT="$TMP" "$GEN" --stage report --register 0099 test-feat "Тест фича" >/dev/null 2>&1
-rep_row2="$(grep -c '0099' "$TMP/docs/reports/README.md" || true)"
-check "A3 повтор --stage report не дублирует" "1" "$rep_row2"
+NF_ROOT="$TMP" "$GEN" --stage adr 0099 test-feat "Тест фича" >/dev/null 2>&1
+after="$(find "$TMP/docs" -name '*.md' | wc -l | tr -d ' ')"
+check "A3 стадии 2…6 файлов не создают" "$before" "$after"
 
-# A4: --subtask 03 добирает 0099-03 идемпотентно.
-NF_ROOT="$TMP" "$GEN" --stage dev --subtask 03 --register 0099 test-feat "Тест фича" >/dev/null 2>&1
-NF_ROOT="$TMP" "$GEN" --stage dev --subtask 03 --register 0099 test-feat "Тест фича" >/dev/null 2>&1
-[ -f "$TMP/docs/development/0099-03-test-feat.md" ] && sub_file=1 || sub_file=0
-check "A4 dev-подзадача 0099-03 создана" "1" "$sub_file"
-sub_row="$(grep -c '0099-03' "$TMP/docs/development/README.md" || true)"
-check "A4 строка 0099-03 одна (идемпотентно)" "1" "$sub_row"
+# A4: фикс — единственный отдельный артефакт; заводится идемпотентно.
+NF_ROOT="$TMP" "$GEN" --stage fixes --subtask 03 --register 0099 test-feat "Тест фича" >/dev/null 2>&1
+NF_ROOT="$TMP" "$GEN" --stage fixes --subtask 03 --register 0099 test-feat "Тест фича" >/dev/null 2>&1
+[ -f "$TMP/docs/fixes/0099-03-test-feat.md" ] && fix_file=1 || fix_file=0
+check "A4 фикс 0099-03 создан" "1" "$fix_file"
+fix_row="$(grep -c '0099-03' "$TMP/docs/fixes/README.md" || true)"
+check "A4 строка 0099-03 одна (идемпотентно)" "1" "$fix_row"
 
-# A5: дефолтный путь для НОВОЙ фичи создаёт feature/adr/analyze.
+# A5: дефолтный путь для НОВОЙ фичи создаёт ОДИН файл — карточку.
 NF_ROOT="$TMP" "$GEN" 0088 other-feat "Другая" >/dev/null 2>&1
-for f in features/0088-other-feat adr/0088-other-feat analyze/0088-other-feat; do
-  [ -f "$TMP/docs/$f.md" ] || { echo "  ПРОВАЛ: A5 нет $f.md" >&2; fail=1; }
+[ -f "$TMP/docs/features/0088-other-feat.md" ] || { echo "  ПРОВАЛ: A5 нет карточки 0088" >&2; fail=1; }
+for gone in adr analyze development tests reports; do
+  [ -e "$TMP/docs/$gone" ] && { echo "  ПРОВАЛ: A5 создан каталог стадии docs/$gone" >&2; fail=1; }
 done
-[ "$fail" = 0 ] && echo "  OK: A5 дефолтный путь создаёт feature/adr/analyze"
+[ "$fail" = 0 ] && echo "  OK: A5 дефолтный путь создаёт одну карточку и не заводит каталогов стадий"
 
 if [ "$fail" != 0 ]; then
   echo "test-new-feature: ПРОВАЛЕНО" >&2

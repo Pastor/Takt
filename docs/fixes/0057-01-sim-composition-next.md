@@ -59,8 +59,8 @@
 
 ## Как исправлено (фичей 0181, 2026-07-29)
 
-Разбор — [ADR 0181](../adr/0181-sim-state-implementation-tick.md), отчёт —
-[reports/0181](../reports/0181-sim-state-implementation-tick.md). Кратко:
+Разбор — [ADR 0181](../features/0181-sim-state-implementation-tick.md#архитектура-adr), отчёт —
+[reports/0181](../features/0181-sim-state-implementation-tick.md#отчёт-о-тестировании). Кратко:
 
 1. **Композиция строится** дочерним юнитом узла (`UnitKind::Node::state_impls`)
    с контекстом узла как общим родителем. Прежде `build_node` поле `implements`

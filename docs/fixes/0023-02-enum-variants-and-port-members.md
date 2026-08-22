@@ -1,6 +1,6 @@
 # Исправление 0023-02: навигация к константам enum и к портам в выражениях `port.N`
 
-> Фича: [../features/0023-intellij-navigation-include.md](../features/0023-intellij-navigation-include.md) · разработка: [../development/0023-01-intellij-navigation-include.md](../development/0023-01-intellij-navigation-include.md) · связан с фиксом [0023-01](0023-01-verifyplugin-descriptor.md)
+> Фича: [../features/0023-intellij-navigation-include.md](../features/0023-intellij-navigation-include.md) · разработка: [../features/0023-intellij-navigation-include.md#разработка](../features/0023-intellij-navigation-include.md#разработка) · связан с фиксом [0023-01](0023-01-verifyplugin-descriptor.md)
 
 ## Проблема
 

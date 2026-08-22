@@ -1,6 +1,6 @@
 # Исправление 0148-02: присваивание порта из порта даёт E0499 в цели `rust`
 
-> Фича: [../features/0148-rust-printers-coverage.md](../features/0148-rust-printers-coverage.md) · анализ: [../analyze/0148-rust-printers-coverage.md](../analyze/0148-rust-printers-coverage.md) · отчёт: [../reports/0148-rust-printers-coverage.md](../reports/0148-rust-printers-coverage.md)
+> Фича: [../features/0148-rust-printers-coverage.md](../features/0148-rust-printers-coverage.md) · анализ: [../features/0148-rust-printers-coverage.md#анализ](../features/0148-rust-printers-coverage.md#анализ) · отчёт: [../features/0148-rust-printers-coverage.md#отчёт-о-тестировании](../features/0148-rust-printers-coverage.md#отчёт-о-тестировании)
 
 - **Статус:** **ЗАВЕДЁН** (2026-07-29), обнаружен при разработке фичи 0148.
 - **Tier 2 — порождённый код не компилируется.** Отказ громкий; молча неверного

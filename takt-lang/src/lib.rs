@@ -421,7 +421,7 @@ pub fn compile_to_rust(
 /// непереводимой конструкции (`SV-0xx`) либо при ошибке записи файла (`SV-001`).
 ///
 /// [0029]: https://github.com/Pastor/Takt/blob/main/docs/features/0029-c-type-mapping.md
-/// [ADR 0033]: https://github.com/Pastor/Takt/blob/main/docs/adr/0033-init-tick-alignment.md
+/// [ADR 0033]: https://github.com/Pastor/Takt/blob/main/../../docs/features/0033-init-tick-alignment.md#архитектура-adr
 pub fn compile_to_sv(
     filename: &str,
     source: &str,
