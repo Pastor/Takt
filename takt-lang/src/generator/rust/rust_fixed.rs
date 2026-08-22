@@ -245,16 +245,22 @@ pub(crate) fn binary(
     // Приоритет `as` выше `+`/`*`/`>>`, поэтому `la as i64 + lb as i64` группирует
     // верно и без скобок вокруг операндов.
     let (la, lb) = (print_expression(a, scope)?, print_expression(b, scope)?);
+    // Приведение операнда печатается ПО НУЖДЕ: у целочисленного литерала тип
+    // выводится из соседа, а `512 as i128` — это `clippy::unnecessary_cast`,
+    // то есть отказ гейта самой цели (класс 0263/0361). Литерал попадает сюда
+    // с фичи 0383: до неё приведение дробного литерала к `q` цель отвергала.
+    let (wa64, wb64) = (widened(&la, "i64"), widened(&lb, "i64"));
+    let (wa128, wb128) = (widened(&la, "i128"), widened(&lb, "i128"));
     let inner = match op {
-        FixedOp::Add => format!("{la} as i64 + {lb} as i64"),
-        FixedOp::Subtract => format!("{la} as i64 - {lb} as i64"),
+        FixedOp::Add => format!("{wa64} + {wb64}"),
+        FixedOp::Subtract => format!("{wa64} - {wb64}"),
         // Точное произведение 2W, floor к −∞ через арифметический `>>` (в Rust
         // определён для знакового — правило 4 ADR, C-цель обходит C11 хелпером).
-        FixedOp::Multiply => format!("({la} as i128 * {lb} as i128) >> {n}"),
+        FixedOp::Multiply => format!("({wa128} * {wb128}) >> {n}"),
         // Делимое ← n влево (в Rust `<<` знакового определён), деление к нулю.
         // Скобка вокруг `(la as i128)` обязательна: `la as i128 << n` Rust парсит
         // как generic `i128<...>`, а не сдвиг (E0747-подобная ошибка).
-        FixedOp::Divide => format!("(({la} as i128) << {n}) / {lb} as i128"),
+        FixedOp::Divide => format!("(({wa128}) << {n}) / {wb128}"),
     };
     let wide = matches!(op, FixedOp::Multiply | FixedOp::Divide);
     Ok(wrap_to(&inner, m, n, wide, sat))
@@ -312,6 +318,17 @@ pub(crate) fn cast(
             let t = rust_type(target, "приведение q → целое")?;
             Ok(format!("((({printed} as i64) >> {from_n}) as {t})"))
         }
+        // Литерал → q: значение известно при компиляции (фича 0383).
+        //
+        // ⚠️ Именно это и обещал текст соседнего отказа («литеральный float
+        // понижается на этапе компиляции»), но в теле не делал никто: замер
+        // 2026-08-22 дал `RS-011` на записи, которую эталон исполняет. Счёт —
+        // у общего носителя (`generator::fixed_literal`).
+        (None, TypeNode::Fixed { .. })
+            if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) =>
+        {
+            Ok(format!("{repr}"))
+        }
         // float → q: floor(f · 2^n) — нет в no_std без libm.
         (None, TypeNode::Fixed { .. })
             if matches!(expression_type(inner), Some(TypeNode::Rational)) =>
@@ -335,4 +352,24 @@ pub(crate) fn cast(
             Ok(format!("({printed} as {t})"))
         }
     }
+}
+
+/// Операнд с приведением к широкому типу — **по нужде** (фича 0383).
+///
+/// ⚠️ Признак задаётся НАПЕЧАТАННОМУ тексту, а не узлу: печать литерала
+/// принадлежит соседним ветвям (представление `q` считает
+/// `generator::fixed_literal`), и второй способ узнать «это литерал» разошёлся
+/// бы с первым.
+fn widened(printed: &str, ty: &str) -> String {
+    if is_int_literal(printed) {
+        printed.to_string()
+    } else {
+        format!("{printed} as {ty}")
+    }
+}
+
+/// Истина, если текст — целочисленный литерал (возможно, со знаком минус).
+fn is_int_literal(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }

@@ -337,3 +337,4 @@
 | 0380 | Fixed-point в параметре функции | [0380-fixed-point-parameter.md](0380-fixed-point-parameter.md) | ГОТОВО (сверка с отчётом пройдена) |
 | 0381 | Понижение q-литерала в телах и условиях | [0381-fixed-literal-in-body.md](0381-fixed-literal-in-body.md) | ГОТОВО (сверка с отчётом пройдена) |
 | 0382 | Понижение q-литерала в поле структуры и элементе массива | [0382-fixed-literal-in-place.md](0382-fixed-literal-in-place.md) | ГОТОВО (сверка с отчётом пройдена) |
+| 0383 | Приведение дробного литерала к q(m, n) в теле | [0383-fixed-cast-literal-in-body.md](0383-fixed-cast-literal-in-body.md) | ГОТОВО (сверка с отчётом пройдена) |
