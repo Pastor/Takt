@@ -217,10 +217,11 @@ pub(super) fn cast(
         // ⚠️ Прежде здесь печатался `floor((2.5) * 256.0)` — вызов libm В
         // РАНТАЙМЕ ради константы; тот самый класс, который назвала 0317, но
         // починила только в инициализаторах. Счёт — у общего носителя
-        // (`generator::fixed_literal` → `const_eval::fixed_repr`), поэтому
+        // (`const_eval::fixed_literal` → `const_eval::fixed_repr`), поэтому
         // значение совпадает с эталоном по построению.
         (None, TypeNode::Fixed { m: tm, n: tn, .. })
-            if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) =>
+            if let Some(repr) =
+                crate::semantic::const_eval::fixed_literal::cast_repr(inner, target) =>
         {
             printer.print(&format!("({}){}", storage_type(*tm, *tn), repr));
         }

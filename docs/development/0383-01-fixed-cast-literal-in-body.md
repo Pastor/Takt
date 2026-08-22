@@ -12,7 +12,7 @@
 
 ## Что сделано
 
-**1. Общая обёртка для целей.** `generator/fixed_literal.rs`:
+**1. Общая обёртка для целей.** `semantic/const_eval/fixed_literal.rs`:
 `cast_repr(inner, target)` отвечает «это приведение литерала, и вот его
 представление». Счёт — у `const_eval::fixed_repr` (0317); в носитель добавлен
 узкий вход `from_decimal_text` (печатник видит текст литерала, а разбор

@@ -323,9 +323,10 @@ pub(crate) fn cast(
         // ⚠️ Именно это и обещал текст соседнего отказа («литеральный float
         // понижается на этапе компиляции»), но в теле не делал никто: замер
         // 2026-08-22 дал `RS-011` на записи, которую эталон исполняет. Счёт —
-        // у общего носителя (`generator::fixed_literal`).
+        // у общего носителя (`const_eval::fixed_literal`).
         (None, TypeNode::Fixed { .. })
-            if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) =>
+            if let Some(repr) =
+                crate::semantic::const_eval::fixed_literal::cast_repr(inner, target) =>
         {
             Ok(format!("{repr}"))
         }
@@ -358,7 +359,7 @@ pub(crate) fn cast(
 ///
 /// ⚠️ Признак задаётся НАПЕЧАТАННОМУ тексту, а не узлу: печать литерала
 /// принадлежит соседним ветвям (представление `q` считает
-/// `generator::fixed_literal`), и второй способ узнать «это литерал» разошёлся
+/// `const_eval::fixed_literal`), и второй способ узнать «это литерал» разошёлся
 /// бы с первым.
 fn widened(printed: &str, ty: &str) -> String {
     if is_int_literal(printed) {

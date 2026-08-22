@@ -195,6 +195,18 @@ fn usage_from_expr(expr: &ExpressionNode, set: &mut UsageSet) {
                 usage_from_expr(arg, set);
             }
         }
+        // Приведение, ЗНАЧЕНИЕ которого печатается константой (фичи 0383,
+        // 0384), имени константы в выводе не оставляет — и требовать её
+        // объявления нельзя: цель `rust` под `-D warnings` отвечает «constant
+        // is never used», а `sv` — `SV-003` на самом объявлении `float`.
+        //
+        // ⚠️ Это множество отвечает на вопрос «нужно ли ИМЯ в выводе», а не
+        // «пользуется ли автор объявлением»: второй вопрос у `SE-036` свой
+        // сборщик (`collect_from_expr`), и он остаётся полным — иначе автор
+        // получил бы «константа не используется» о константе, которую
+        // использует.
+        ExpressionNode::Cast(e, ty)
+            if crate::semantic::const_eval::fixed_literal::cast_repr(e, ty).is_some() => {}
         ExpressionNode::Not(e)
         | ExpressionNode::BitwiseNot(e)
         | ExpressionNode::UnaryPlus(e)

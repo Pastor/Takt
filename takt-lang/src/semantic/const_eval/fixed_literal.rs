@@ -1,4 +1,4 @@
-//! Приведение **литерала** к `q(m, n)` — общий носитель для целей (фича 0383).
+//! Приведение **литерала** к `q(m, n)` — общий носитель (фичи 0383, 0384).
 //!
 //! # Что было
 //!
@@ -32,9 +32,10 @@
 //! `fixed_repr` (0317): второго знания о масштабе 2ⁿ, floor к −∞ и переносе
 //! по `W = m + n` не заводится.
 
+use super::fixed_repr;
 use crate::semantic::ExpressionNode;
-use crate::semantic::const_eval::fixed_repr;
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::variable::VariableNode;
 
 /// Представление приведения `литерал as q(m, n)`, если источник — литерал.
 ///
@@ -63,6 +64,17 @@ fn literal_repr(expr: &ExpressionNode, n: u8) -> Option<i128> {
         ExpressionNode::Rational(text, negative) => {
             fixed_repr::from_decimal_text(text, *negative, n)
         }
+        // Имя КОНСТАНТЫ — тот же случай (фича 0384): её инициализатор свёрнут в
+        // литерал ещё на стадии 2 (правило 0192), и в ячейке ссылки лежит
+        // именно он. Спрашивать вычислитель заново не нужно — и нечем:
+        // печатник модели не видит.
+        //
+        // ⚠️ Изменяемая переменная сюда НЕ подпадает: её значение известно
+        // только в такте.
+        ExpressionNode::Variable(cell) => match &*cell.borrow() {
+            VariableNode::Const { expr, .. } => literal_repr(expr, n),
+            _ => None,
+        },
         _ => None,
     }
 }
