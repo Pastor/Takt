@@ -374,3 +374,7 @@
 | [0392](./0392-c-shift-width-wide.md) | Сдвиг на величину, не меньшую ширины типа, в цели c | Draft | фича 0392 |
 | [0397](./0397-state-of-neighbour-rust-st.md) | Форму S(Модель) = Состояние у соседа не переводят rust и st | Draft | фича 0397 |
 | [0400](./0400-slice-in-call-argument.md) | Срез в аргументе вызова | Draft | фича 0400 |
+| [0396](./0396-c-struct-parameter-on-demand.md) | x | Draft | фича 0396 |
+| [0398](./0398-diagnostics-detailed-analysis.md) | x | Draft | фича 0398 |
+| [0399](./0399-operand-type-single-carrier.md) | x | Draft | фича 0399 |
+| [0401](./0401-lsp-imported-symbol-kind.md) | x | Draft | фича 0401 |
