@@ -371,3 +371,6 @@
 | [0390](./0390-port-composite-type-policy.md) | Порт составного типа: нормировать ли в семантике | Draft | фича 0390 |
 | [0395](./0395-imported-model-specialization.md) | Специализация импортированной модели | Draft | фича 0395 |
 | [0393](./0393-every-on-self-transition.md) | every при самопереходе | Draft | фича 0393 |
+| [0392](./0392-c-shift-width-wide.md) | Сдвиг на величину, не меньшую ширины типа, в цели c | Draft | фича 0392 |
+| [0397](./0397-state-of-neighbour-rust-st.md) | Форму S(Модель) = Состояние у соседа не переводят rust и st | Draft | фича 0397 |
+| [0400](./0400-slice-in-call-argument.md) | Срез в аргументе вызова | Draft | фича 0400 |
