@@ -1,0 +1,35 @@
+// Бак с подпиткой: показывает три формы подключения.
+//
+// `import "файл";` вносит библиотеку целиком под именем файла,
+// `import * as Имя from "файл";` — под своим именем,
+// `import { имя } from "файл";` берёт отдельные объявления,
+// а `import имя;` записывает путь без кавычек и расширения.
+import units;
+import * as Lib from "thermostat.takt";
+import {CEILING as Top} from "units.takt";
+
+model Tank {
+    in level: u8;
+    out pump: bit;
+
+    var target: u8 := 0;
+
+    start Filling {
+        enter {
+            pump := 1;
+            target := Top;
+        }
+
+        ref Holding: level >= target;
+    }
+
+    state Holding {
+        enter {
+            pump := 0;
+        }
+
+        ref Filling: level <= FLOOR;
+    }
+}
+
+start Main = Tank;

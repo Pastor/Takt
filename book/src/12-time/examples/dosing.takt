@@ -1,0 +1,58 @@
+// Дозатор: наполняет бак порциями, выдерживая паузы, и раз в секунду
+// сообщает наверх, сколько отмерено.
+//
+// Пример показывает все формы выдержки — литеральную, в тактах, через
+// константу и заданную значением, — а также периодическое действие.
+model Dosing {
+    clock 1kHz; // такт 1 мс
+
+    const SETTLE: duration := 2s; // пауза между порциями
+
+    in level_ok: bit;
+    out valve: bit;
+    out beacon: bit;
+
+    var portions: u8 := 0;
+    var hold: duration := 500ms; // выдержка, вычисляемая на ходу
+
+    start Idle {
+        enter {
+            valve := 0;
+        }
+
+        // Выдержка литералом и выдержка в тактах: вторая не зависит от
+        // объявленной частоты.
+        ref Filling: after 250ms;
+        ref Filling: after 5t;
+    }
+
+    state Filling {
+        // Периодическое действие: маяк моргает раз в секунду, пока идёт налив.
+        every 1s {
+            beacon := 1;
+        }
+
+        enter {
+            valve := 1;
+            portions := portions + 1;
+        }
+
+        // Выдержка через именованную константу и заданная значением.
+        ref Settling: after SETTLE;
+        ref Settling: after (SETTLE + 500ms);
+        ref Settling: after hold;
+    }
+
+    state Settling {
+        enter {
+            valve := 0;
+            hold := hold + 100ms;
+        }
+
+        // Сравнение с длительностью и арифметика над ней в условии.
+        ref Idle: hold > 1s;
+        ref Idle: level_ok = 1;
+    }
+}
+
+start Main = Dosing;

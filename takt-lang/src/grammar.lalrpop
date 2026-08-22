@@ -711,20 +711,16 @@ Precedence1NoBrace: Expression = {
 Precedence0: Expression = {
    <Identifier> => Expression::Variable(<>),
    <FunctionCall> => <>,
-   <l:@L> <mut a:ParameterList> <r:@R> => {
-      // Форма `"(" Expression ")"`: скобки вокруг выражения, а не список
-      // параметров. Значение ПЕРЕМЕЩАЕТСЯ из списка, а не клонируется (фича
-      // 0156): скобка редуцируется изнутри наружу, поэтому клон на каждом уровне
-      // копировал всё накопленное поддерево — рекурсия `Clone` роняла разбор на
-      // глубине ≈ 561 (поток 2 МиБ), а стоимость была квадратичной.
-      if a.len() == 1 && matches!(&a[0].1, Some(Parameter{ name: None, .. })) {
-          let (_, parameter) = a.pop().expect("длина списка проверена выше");
-          let ty = parameter.expect("вариант Some проверен выше").ty;
-          let loc = ty.loc();
-          return Expression::Parenthesis(loc, Box::new(ty));
-      }
-
-      Expression::List(Location::source(file_no, l, r), a)
+   // Скобки вокруг выражения.
+   //
+   // ⚠️ Прежде правило разбирало `ParameterList` и при двух и более элементах
+   // строило `Expression::List` — форму `(a, b)`. Она изъята из языка фичей
+   // 0404: эталон её не исполнял (`SIM-014`), не переводила ни одна цель
+   // (`CC-022`), а имена внутри списка не считались использованием и давали
+   // ложное `SE-036`. Конструкция существовала только в разборе; теперь такую
+   // запись отвергает грамматика (`SY-002`), как и любую другую несуществующую.
+   <l:@L> "(" <e:Expression> ")" <r:@R> => {
+      Expression::Parenthesis(Location::source(file_no, l, r), Box::new(e))
   },
   // Анонимное обращение к ячейке `#0xNNNN` / `#0xNNNN:bit` (фича 0189).
   //

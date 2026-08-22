@@ -67,6 +67,8 @@ model Control {
     state Report {
         enter {
             done := 1;
+            // Отладочный вывод: сообщение видно в трассе симулятора.
+            debug("отчёт готов");
         }
 
         exit {

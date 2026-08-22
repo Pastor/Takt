@@ -1,0 +1,52 @@
+// Смеситель: мешалка и дозатор работают одновременно, а модель установки
+// собрана из них композицией.
+//
+// Пример показывает реализацию модели через `=` и именованный блок
+// уровня модели: он исполняется каждый такт, до разбора состояний.
+model Stirrer {
+    out blade: bit;
+
+    var turns: u8 := 0;
+
+    start Spinning {
+        enter {
+            blade := 1;
+        }
+
+        always {
+            turns := turns + 1;
+        }
+    }
+}
+
+model Feeder {
+    in hopper_full: bit;
+    out screw: bit;
+
+    start Feeding {
+        enter {
+            screw := 1;
+        }
+
+        ref Waiting: hopper_full = 0;
+    }
+
+    state Waiting {
+        enter {
+            screw := 0;
+        }
+    }
+}
+
+// Реализация модели: установка ЕСТЬ параллельная работа двух узлов.
+model Mixer = Stirrer | Feeder {
+    out running: bit;
+
+    // Именованный блок уровня модели: исполняется каждый такт, прежде чем
+    // управление дойдёт до состояния.
+    always {
+        running := 1;
+    }
+}
+
+start Main = Mixer;
