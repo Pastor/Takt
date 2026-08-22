@@ -402,11 +402,11 @@
 | [0387](./0387-write-only-local.md) | Локальная переменная, записанная но не прочитанная | [ADR](../adr/0387-write-only-local.md) · [анализ](../analyze/0387-write-only-local.md) · [тест-план](../tests/0387-write-only-local.md) · [отчёт](../reports/0387-write-only-local.md) | ГОТОВО |
 | [0388](./0388-st-decl-split.md) | Разделение печати объявлений цели st | [ADR](../adr/0388-st-decl-split.md) · [анализ](../analyze/0388-st-decl-split.md) · [тест-план](../tests/0388-st-decl-split.md) · [отчёт](../reports/0388-st-decl-split.md) | ГОТОВО |
 | [0389](./0389-rust-array-by-reference.md) | Массив в параметре функции цели rust — по ссылке | [ADR](../adr/0389-rust-array-by-reference.md) · [анализ](../analyze/0389-rust-array-by-reference.md) · [тест-план](../tests/0389-rust-array-by-reference.md) · [отчёт](../reports/0389-rust-array-by-reference.md) | ГОТОВО |
-| [0390](./0390-port-composite-type-policy.md) | Порт составного типа: нормировать ли в семантике | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0391](./0391-enum-default-value.md) | Умолчание переменной перечислимого типа: ноль против первого варианта | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0390](./0390-port-composite-type-policy.md) | Порт составного типа: нормировать ли в семантике | [ADR](../adr/0390-port-composite-type-policy.md) · [анализ](../analyze/0390-port-composite-type-policy.md) | АНАЛИЗ |
+| [0391](./0391-enum-default-value.md) | Умолчание переменной перечислимого типа: ноль против первого варианта | [ADR](../adr/0391-enum-default-value.md) · [анализ](../analyze/0391-enum-default-value.md) | АНАЛИЗ |
 | [0392](./0392-c-shift-width-wide.md) | Сдвиг на величину, не меньшую ширины типа, в цели c на 32- и 64-битных типах | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0393](./0393-every-on-self-transition.md) | every при самопереходе: эталон сбрасывает счётчик, восемь целей — нет | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0394](./0394-bit-beyond-declared-width.md) | Разряд за объявленной шириной бит-вектора принимают молча | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0394](./0394-bit-beyond-declared-width.md) | Разряд за объявленной шириной бит-вектора принимают молча | [ADR](../adr/0394-bit-beyond-declared-width.md) · [анализ](../analyze/0394-bit-beyond-declared-width.md) | АНАЛИЗ |
 | [0395](./0395-imported-model-specialization.md) | Специализация импортированной модели: копия снимается после разрешения тел | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0396](./0396-c-struct-parameter-on-demand.md) | Структурный параметр цели c эмитится всегда, а не по нужде | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0397](./0397-state-of-neighbour-rust-st.md) | Форму S(Модель) = Состояние у соседа не переводят rust и st | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
