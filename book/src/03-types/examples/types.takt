@@ -1,4 +1,5 @@
 // Кабина лифта: едет к целевому этажу и открывает двери по прибытии.
+type Floor = u8; // псевдоним: имя вместо ширины
 enum Direction {
     Up,
     Down,
@@ -16,7 +17,7 @@ out door: bool; // (4) двери открыты/закрыты
 const TOP: u8 := 9;
 
 var direction: Direction := Idle;
-var current: u8 := 1; // (5) целое: текущий этаж
+var current: Floor := 1; // (5) псевдоним `Floor` — то же целое
 var target: u8 := 5;
 var speed: q(4, 4) := 0.0; // (6) фикс-точка: доля номинала
 var log: [u8; 3] := {1, 1, 1}; // (7) массив последних этажей

@@ -1,0 +1,80 @@
+// Упаковка слова состояния: показания датчика нормируются, флаги
+// собираются в один байт, а старший разряд служит признаком аварии.
+//
+// Пример показывает арифметику, побитовые операции, сдвиги, приведение
+// типа и доступ к разрядам — то, из чего состоит работа с регистрами.
+const SCALE_SHIFT: u8 := 2; // деление на 4 сдвигом
+const ALARM_MASK: u8 := 128;
+
+struct Bounds {
+    high: u8,
+    top: u8
+}
+
+in raw: u8;
+in ready: bit;
+out status: u8;
+
+var window: [u8; 4] := {0, 0, 0, 0};
+var recent: [u8; 2] := {0, 0};
+var level: u8 := 0;
+var scaled: u16 := 0;
+var flags: u8 := 0;
+var trend: i8 := 0;
+var alarm: bit := 0;
+var limits: Bounds := {0, 250};
+
+fn average(values: [u8; 2]) -> u8 {
+    return (values[0] + values[1]) / 2;
+}
+
+start Sample {
+    always {
+        // Арифметика и приведение к более широкому типу.
+        level := raw;
+        scaled := (level as u16) * 3;
+
+        // Сдвиги: умножение и деление на степень двойки.
+        flags := flags << 1;
+        level := level >> SCALE_SHIFT;
+
+        // Побитовые операции: установка, снятие и переключение флага.
+        flags := flags | 1;
+        flags := flags & 127;
+        flags := flags ^ 2;
+        flags := ~flags;
+
+        // Унарные операции и условный оператор.
+        trend := -trend;
+        trend := +trend;
+        alarm := !ready;
+        status := ready = 1 ? flags : 0;
+
+        // Срез массива и доступ к элементу.
+        recent := window[0:2];
+        level := average(recent);
+
+        // Доступ к разряду по номеру и к полю структуры по имени.
+        alarm := flags.7;
+        limits.high := level;
+        level := limits.high;
+
+        // Логическое ИЛИ в выражении и сравнение «не больше».
+        alarm := (level <= 10) || (ready = 0);
+
+        // Сообщение в трассу симулятора.
+        debug("такт обработан");
+    }
+
+    // Условия ребра: скобки, отрицание, арифметика и разряд.
+    ref Alarm: (level <= 10) & !ready;
+    ref Alarm: level + 1 = 200;
+    ref Alarm: flags.7 = 1;
+}
+
+state Alarm {
+    enter {
+        status := flags | ALARM_MASK;
+        scaled := 2 ** 8;
+    }
+}

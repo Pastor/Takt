@@ -35,7 +35,8 @@ model Feeder {
         enter {
             belt := 0;
         }
-        ref Feeding: S(Press) = Idle; // (1) полная запись
+        ref Feeding: S(Press) = Idle;
+        // (1) полная запись
     }
 
     // Пресс свободен — двигаем ленту и считаем поданную заготовку.
@@ -44,7 +45,8 @@ model Feeder {
             belt := 1;
             fed := fed + 1;
         }
-        ref Holding: Press != Idle; // (2) краткая запись, отрицание
+        ref Holding: Press != Idle;
+        // (2) краткая запись, отрицание
     }
 }
 

@@ -101,9 +101,11 @@ fn all_constructs() -> BTreeSet<String> {
 /// Признак — упоминание имени в грамматике либо в лексере: там и только там
 /// узлы АСД рождаются. Всё прочее — узлы без правила (класс 0201).
 fn reachable(all: &BTreeSet<String>) -> BTreeSet<String> {
-    let mut builders = read("takt-lang/src/grammar.lalrpop");
+    let mut builders = without_comments(&read("takt-lang/src/grammar.lalrpop"));
     for file in ["lexer.rs", "lexer_time.rs", "time_literal.rs"] {
-        builders.push_str(&read(&format!("takt-lang/src/parser/{file}")));
+        builders.push_str(&without_comments(&read(&format!(
+            "takt-lang/src/parser/{file}"
+        ))));
     }
     all.iter()
         .filter(|kind| {
@@ -112,6 +114,23 @@ fn reachable(all: &BTreeSet<String>) -> BTreeSet<String> {
         })
         .cloned()
         .collect()
+}
+
+/// Убирает строчные комментарии: узел строит КОД, а не пояснение к нему.
+///
+/// ⚠️ Без этого изъятая из языка конструкция остаётся «достижимой» через
+/// упоминание в комментарии — и гейт требует примера для того, чего грамматика
+/// уже не строит. Поймано при изъятии `Expression::List` (фича 0404): правило
+/// сняли, а пояснение о снятии оставили — и оно же вернуло требование.
+fn without_comments(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| match line.find("//") {
+            Some(at) => &line[..at],
+            None => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Упомянуто ли имя целиком, а не как приставка чужого.

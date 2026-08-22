@@ -1,0 +1,62 @@
+// Пресс: свойства безопасности записаны формулами и проверяются
+// инструментом, а не глазами.
+//
+// Пример показывает три способа объявить обязательство: именованный
+// инвариант, охранную формулу и темпоральное свойство (LTL).
+in guard_closed: bit; // защитное ограждение опущено
+in start_button: bit;
+out ram: bit; // привод ползуна
+
+var cycles: u8 := 0;
+
+// Именованные условия — атомы формул: у обязательства должно быть имя,
+// иначе его не о чем читать.
+cond Safe = guard_closed = 1;
+cond Pressing = cycles > 0;
+
+// (1) Инвариант уровня модели: обязательство на КАЖДОМ такте.
+invariant GuardWhilePressing = guard_closed = 1 | cycles = 0;
+
+// (2) Охранная формула: краткая форма и явная — синонимы.
+: cycles <= 200;
+: [Guard] Safe | !Pressing;
+
+// (3) Темпоральные свойства: путь по графу состояний.
+: [LTL] G Safe, F Pressing;
+: [LTL] X true, !false;
+: [LTL] Safe U Pressing, Safe R Pressing;
+: [LTL] G (Safe & Pressing) -> F Pressing;
+: [LTL] G (Safe | !Pressing);
+
+// (4) Блок внешнего анализатора: обязательства на его языке. Компилятор
+// разбирает запись и передаёт её инструменту, семантику даёт инструмент.
+formula "smt" {
+    assume(cycles, 200)
+    {
+        holds(unit.cycles, "press", true, 42)
+        reachable(check(cycles))
+    }
+}
+
+start Open {
+    // (5) Инвариант состояния: обязательство, пока автомат здесь.
+    invariant RamUp = cycles <= 200;
+
+    enter {
+        ram := 0;
+    }
+
+    ref Pressing: guard_closed = 1 & start_button = 1;
+}
+
+state Pressing {
+    // (6) Охранная формула состояния.
+    : Safe;
+
+    enter {
+        ram := 1;
+        cycles := cycles + 1;
+    }
+
+    ref Open: guard_closed = 0;
+}
