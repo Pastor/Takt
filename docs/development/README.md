@@ -613,3 +613,4 @@
 | 0379-01 | 0379 | Сброс перечислимого регистра у цели sv | [0379-01-sv-enum-reset.md](0379-01-sv-enum-reset.md) |
 | 0380-01 | 0380 | Fixed-point в параметре функции | [0380-01-fixed-point-parameter.md](0380-01-fixed-point-parameter.md) |
 | 0381-01 | 0381 | Понижение q-литерала в телах и условиях | [0381-01-fixed-literal-in-body.md](0381-01-fixed-literal-in-body.md) |
+| 0382-01 | 0382 | Понижение q-литерала в поле структуры и элементе массива | [0382-01-fixed-literal-in-place.md](0382-01-fixed-literal-in-place.md) |
