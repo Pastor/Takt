@@ -21,7 +21,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
-use crate::generator::st::st_reserved::check_st_declaration;
+use crate::generator::st::st_reserved::{check_st_declaration, check_st_field_name};
 use crate::generator::st::st_type::{self, get_st_type};
 use crate::semantic::FunctionDefinitionNode;
 use crate::semantic::minimap::Name;
@@ -145,6 +145,7 @@ pub(crate) fn emit_struct_types(
         p.ident("STRUCT").nl();
         p.up();
         for (field, ty) in fields {
+            check_st_field_name(field)?; // фича 0385: `from` в IEC ключевое
             p.ident(&format!("{} : {};", field, ty)).nl();
         }
         p.down();

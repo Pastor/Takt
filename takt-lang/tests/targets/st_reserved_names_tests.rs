@@ -62,14 +62,50 @@ fn accepts(bin: &Path, lib: &Path, dir: &Path, name: &str) -> bool {
         .success()
 }
 
+/// Принимает ли `iec2c` файл, где `name` — имя ПОЛЯ структуры (фича 0385).
+///
+/// ⚠️ Проба своя, а не `accepts`: замер показал, что поле и переменная
+/// различаются — из 79 имён `IEC_RESERVED` поле принимает **52**, потому что
+/// стандартные ФУНКЦИИ внутри `STRUCT` ни с чем не сталкиваются.
+fn accepts_field(bin: &Path, lib: &Path, dir: &Path, name: &str) -> bool {
+    let source = format!(
+        "TYPE\n    ProbeRec :\n    STRUCT\n        {name} : USINT;\n        span : USINT;\n    \
+         END_STRUCT;\nEND_TYPE\n\nFUNCTION_BLOCK Probe\nVAR_OUTPUT\n    o : USINT;\nEND_VAR\n\
+         VAR\n    rec : ProbeRec;\nEND_VAR\n    o := rec.{name};\nEND_FUNCTION_BLOCK\n"
+    );
+    let file = dir.join("probe_field.st");
+    std::fs::write(&file, source).expect("запись пробы");
+    let out = dir.join("out_field");
+    std::fs::create_dir_all(&out).expect("каталог вывода");
+    Command::new(bin)
+        .arg("-I")
+        .arg(lib)
+        .arg("-T")
+        .arg(&out)
+        .arg(&file)
+        .output()
+        .expect("запуск iec2c")
+        .status
+        .success()
+}
+
 /// Имена из списка `IEC_RESERVED` цели.
 ///
 /// ⚠️ Список берётся **из исходника** цели, а не повторяется здесь: вторая
 /// копия разошлась бы с первой (класс 0084/0193/0195).
 fn reserved_names() -> Vec<String> {
+    names_of("const IEC_RESERVED:")
+}
+
+/// Имена из списка `IEC_RESERVED_FIELD` цели (фича 0385).
+fn reserved_field_names() -> Vec<String> {
+    names_of("const IEC_RESERVED_FIELD:")
+}
+
+fn names_of(marker: &str) -> Vec<String> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/generator/st/st_reserved.rs");
     let text = std::fs::read_to_string(&path).expect("исходник st_reserved");
-    let start = text.find("const IEC_RESERVED").expect("список найден");
+    let start = text.find(marker).expect("список найден");
     let end = text[start..].find("];").expect("конец списка") + start;
     let mut names = Vec::new();
     let mut rest = &text[start..end];
@@ -121,5 +157,57 @@ fn every_reserved_name_is_rejected_by_iec2c() {
     assert!(
         extra.is_empty(),
         "эти имена `iec2c` ПРИНИМАЕТ — значит цель отказывает на них зря: {extra:#?}"
+    );
+}
+
+/// Каждое имя списка полей `iec2c` отвергает — и НЕ отвергает контрольное.
+///
+/// ⚠️ Список полей — **свой**, и это замер (фича 0385): из 79 имён
+/// `IEC_RESERVED` поле структуры принимает 52. Запретить полю всё подряд
+/// значило бы отнять валидную модель (урок фикса 0378-01), поэтому обоснование
+/// каждой записи проверяется прогоном.
+#[test]
+fn every_reserved_field_name_is_rejected_by_iec2c() {
+    let names = reserved_field_names();
+    assert!(
+        names.len() > 20,
+        "список имён, запрещённых полю, подозрительно мал: {}",
+        names.len()
+    );
+
+    let Some((bin, lib)) = iec2c() else {
+        eprintln!("[ПРОПУСК] every_reserved_field_name_is_rejected_by_iec2c: iec2c не найден");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!(
+        "takt_0385_{}",
+        std::thread::current()
+            .name()
+            .unwrap_or("single")
+            .replace(':', "_")
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог");
+
+    // Контроль: обычное имя поля инструмент принимает.
+    assert!(
+        accepts_field(&bin, &lib, &dir, "counter"),
+        "контроль: обычное имя поля обязано приниматься — иначе проверка вырождена"
+    );
+    // Контроль обратный: имя ФУНКЦИИ IEC полем законно (в `IEC_RESERVED` оно
+    // есть, а здесь его быть не должно) — иначе список читался бы как «тот же».
+    assert!(
+        accepts_field(&bin, &lib, &dir, "ln"),
+        "контроль: `ln` полем принимается — список полей не равен IEC_RESERVED"
+    );
+
+    let extra: Vec<String> = names
+        .iter()
+        .filter(|name| accepts_field(&bin, &lib, &dir, name))
+        .cloned()
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "эти имена `iec2c` ПРИНИМАЕТ полем — цель отказывает на них зря: {extra:#?}"
     );
 }

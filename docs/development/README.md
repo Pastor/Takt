@@ -616,3 +616,4 @@
 | 0382-01 | 0382 | Понижение q-литерала в поле структуры и элементе массива | [0382-01-fixed-literal-in-place.md](0382-01-fixed-literal-in-place.md) |
 | 0383-01 | 0383 | Приведение дробного литерала к q(m, n) в теле | [0383-01-fixed-cast-literal-in-body.md](0383-01-fixed-cast-literal-in-body.md) |
 | 0384-01 | 0384 | Приведение имени константы к q(m, n) | [0384-01-fixed-cast-const.md](0384-01-fixed-cast-const.md) |
+| 0385-01 | 0385 | Слово from — контекстное ключевое | [0385-01-contextual-from.md](0385-01-contextual-from.md) |

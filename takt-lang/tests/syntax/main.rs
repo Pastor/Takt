@@ -17,6 +17,7 @@
 //! обязан вычищать из него `:` — после слияния имя потока несёт префикс модуля.
 
 mod ast_tests;
+mod contextual_from_tests;
 mod dead_lexeme_tests;
 mod feature_0021_operators;
 mod fmt_diagnostic_tests;
