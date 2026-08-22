@@ -359,3 +359,4 @@
 | [0380](./0380-fixed-point-parameter.md) | Fixed-point в параметре функции | Draft | фича 0380 |
 | [0381](./0381-fixed-literal-in-body.md) | Понижение q-литерала в телах и условиях | Draft | фича 0381 |
 | [0382](./0382-fixed-literal-in-place.md) | Понижение q-литерала в поле структуры и элементе массива | Draft | фича 0382 |
+| [0383](./0383-fixed-cast-literal-in-body.md) | Приведение дробного литерала к q(m, n) в теле | Draft | фича 0383 |

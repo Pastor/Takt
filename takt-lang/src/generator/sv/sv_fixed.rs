@@ -206,6 +206,20 @@ pub(crate) fn cast(
     target: &TypeNode,
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
+    // Литерал → q: значение известно при компиляции (фича 0383).
+    //
+    // ⚠️ Проверка стоит ДО печати источника: вещественный литерал сам по себе
+    // отвергается `SV-002` («в синтезируемом RTL плавающей точки нет»), и
+    // печать пришла бы раньше — отказ на записи, которую эталон исполняет.
+    // Плавающей точки в выводе не появляется: печатается уже посчитанное
+    // ЦЕЛОЕ представление (счёт — у общего носителя `generator::fixed_literal`).
+    if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) {
+        let w = match target {
+            TypeNode::Fixed { m, n, .. } => (m + n) as u32,
+            _ => unreachable!("cast_repr отвечает только на цель q(m, n)"),
+        };
+        return Ok(sized_signed_literal(repr, w));
+    }
     // Формат источника — с оглядкой на объявления структур (фича 0371).
     let src = fixed_format_in(inner, scope.structs);
     let printed = print_expression(inner, scope)?;
@@ -279,4 +293,19 @@ fn sv003_cast() -> Diagnostic {
             .to_string(),
     )
     .with_code("SV-003")
+}
+
+/// Знаковый литерал представления шириной `w` — форма, принятая обоими
+/// инструментами SV (фича 0383).
+///
+/// ⚠️ Ширина указывается явно: безразмерный литерал внутри выражения даёт
+/// `WIDTHEXPAND`/`WIDTHCONCAT`, а гейт цели считает предупреждение ошибкой
+/// (уроки 0157 и 0349). Отрицательное значение печатается через унарный минус —
+/// размерный литерал в SV беззнаков.
+fn sized_signed_literal(repr: i64, w: u32) -> String {
+    if repr < 0 {
+        format!("({w}'(-{w}'d{}))", repr.unsigned_abs())
+    } else {
+        format!("{w}'d{repr}")
+    }
 }

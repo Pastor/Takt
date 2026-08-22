@@ -212,6 +212,18 @@ pub(super) fn cast(
             widened(printer, map, owner, params, inner, has_model)?;
             printer.print(&format!(", (int64_t)1 << {})", from_n));
         }
+        // Литерал → q: значение известно при компиляции (фича 0383).
+        //
+        // ⚠️ Прежде здесь печатался `floor((2.5) * 256.0)` — вызов libm В
+        // РАНТАЙМЕ ради константы; тот самый класс, который назвала 0317, но
+        // починила только в инициализаторах. Счёт — у общего носителя
+        // (`generator::fixed_literal` → `const_eval::fixed_repr`), поэтому
+        // значение совпадает с эталоном по построению.
+        (None, TypeNode::Fixed { m: tm, n: tn, .. })
+            if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) =>
+        {
+            printer.print(&format!("({}){}", storage_type(*tm, *tn), repr));
+        }
         // float → q: floor(f * 2^n).
         // ⚠️ Форма печати здесь своя, не через `open_wrap`: при `W = S` вывод
         // обязан остаться прежним байт-в-байт — `(int16_t)floor(…)`, без лишней

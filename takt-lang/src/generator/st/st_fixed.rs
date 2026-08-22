@@ -273,6 +273,19 @@ pub(crate) fn cast(
                 1u64 << from_n
             ))
         }
+        // Литерал → q: значение известно при компиляции (фича 0383).
+        //
+        // ⚠️ Это и обещал текст соседнего отказа («литеральный float понижается
+        // на этапе компиляции»), но в теле не делал никто: замер 2026-08-22 дал
+        // `ST-011` — причём с текстом «тип источника не выводится статически»,
+        // хотя источник есть литерал. Счёт — у общего носителя
+        // (`generator::fixed_literal`), поэтому значение совпадает с эталоном
+        // и с прочими целями по построению.
+        (None, TypeNode::Fixed { .. })
+            if let Some(repr) = crate::generator::fixed_literal::cast_repr(inner, target) =>
+        {
+            Ok(format!("{repr}"))
+        }
         // float → q: floor(f · 2^n) — LREAL_TO_INT в IEC ОКРУГЛЯЕТ, не floor.
         (None, TypeNode::Fixed { .. })
             if matches!(inner_expr_type_in(inner, model), Some(TypeNode::Rational)) =>

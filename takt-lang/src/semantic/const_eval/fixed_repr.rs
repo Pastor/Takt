@@ -85,6 +85,18 @@ pub fn from_decimal(mantissa: i128, scale: u32, n: u8) -> Option<i128> {
     Some(numerator.div_euclid(denominator))
 }
 
+/// Представление литерала, записанного текстом десятичной дроби (фича 0383).
+///
+/// Узкий вход для **целей**: печатник видит `ExpressionNode::Rational(текст,
+/// знак)` и не имеет доступа к разбору десятичной записи, который живёт внутри
+/// константного вычислителя. Счёт — тот же [`from_decimal`], поэтому второго
+/// знания о floor и масштабе 2ⁿ не заводится.
+pub fn from_decimal_text(text: &str, negative: bool, n: u8) -> Option<i128> {
+    let decimal = super::decimal::Decimal::parse(text, negative)?;
+    let (mantissa, scale) = decimal.parts();
+    from_decimal(mantissa, scale, n)
+}
+
 /// Текст десятичной дроби `repr · 2⁻ⁿ` и знак — точный, без потерь.
 ///
 /// Знаменатель — степень двойки, поэтому дробь **конечна** в десятичной записи:
