@@ -21,6 +21,7 @@ mod contextual_from_tests;
 mod dead_lexeme_tests;
 mod feature_0021_operators;
 mod fmt_diagnostic_tests;
+mod format_comment_before_block_tests;
 mod format_comment_binding_tests;
 mod format_comment_position_tests;
 mod format_formula_assembly_tests;
