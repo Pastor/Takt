@@ -4,7 +4,7 @@
 - **Date:** 2026-08-22
 - **Authors:** Архитектор + Аналитик
 - **Related issues:** [Фича 0393](../features/0393-every-on-self-transition.md);
-  механика времени — [0134](0134-time-model.md), вход в стартовое состояние —
+  механика времени — [0134](0134-language-time-model.md), вход в стартовое состояние —
   [0033](0033-init-tick-alignment.md)
 
 ## Context
