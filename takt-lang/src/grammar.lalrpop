@@ -314,6 +314,7 @@ FormulaDefine: Box<FormulaDefine> = {
     <l:@L> "formula" <dialect:StringLiteral?> <block:FormulaBlock> <r:@R> => {
         Box::new(FormulaDefine {
             loc: Location::source(file_no, l, r),
+            dialect: dialect.map(|dialect| dialect.to_owned()),
             formula: block
         })
     },
