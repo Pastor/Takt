@@ -41,6 +41,9 @@ mod children;
 mod dismantle;
 
 pub(crate) use dismantle::dismantle;
+// Раскрытие узла в дочерние переиспользует счёт покрытия конструкций
+// (`crate::coverage`, фича 0403): второй обход дерева разошёлся бы с этим.
+pub(crate) use children::push_children;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;

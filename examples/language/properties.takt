@@ -1,0 +1,65 @@
+// Свойства и время: инварианты, охранные формулы, LTL, выдержки.
+//
+// Свойство — обязательство модели, которое инструменты проверяют: инвариант
+// исполняется на такте, LTL-формула проверяется на графе состояний.
+model Properties {
+    clock 100Hz;
+
+    const DWELL: duration := 2s;
+
+    var level: u8 := 0;
+    var alarm: bit := 0;
+    var beats: u8 := 0;
+
+    cond Overflow = level > 200;
+
+    // Именованный инвариант уровня модели: обязательство на каждом такте.
+    invariant LevelInRange = level <= 250;
+
+    // Охранная формула: краткая форма и явная — синонимы.
+    : level <= 250;
+    : [Guard] alarm = 0 | Overflow;
+    : true;
+
+    // Именованные условия — атомы временной логики.
+    cond Filling = level > 0;
+    cond Alarmed = alarm = 1;
+
+    // Временная логика: свойство пути по графу состояний. Атом формулы —
+    // имя состояния либо имя условия.
+    : [LTL] G (!Overflow) & F Filling;
+    : [LTL] X true, Filling U Alarmed, G Filling -> F Alarmed;
+    : [LTL] !false, Filling R (!Alarmed | Filling);
+
+    start Fill {
+        // Инвариант состояния: обязательство, пока автомат здесь.
+        invariant NotAlarming = alarm = 0;
+
+        // Периодическое действие: тело исполняется раз в указанный период.
+        every 500ms {
+            beats := beats + 1;
+        }
+
+        always {
+            level := level + 1;
+            : level <= 250;
+
+            // Обязательство внутри тела блока.
+        }
+
+        // Выдержка: литеральная, через константу и вычисляемая.
+        ref Hold: after 1s;
+        // Выдержка в тактах: частота для неё не нужна.
+        ref Hold: after 5t;
+        ref Hold: after DWELL;
+        ref Hold: after (DWELL + 500ms);
+    }
+
+    state Hold {
+        always {
+            alarm := 1;
+        }
+    }
+}
+
+start Main = Properties;

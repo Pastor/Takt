@@ -1,0 +1,77 @@
+// Объявления: типы, значения, порты, функции.
+//
+// Пример показывает формы ОБЪЯВЛЕНИЙ языка. Автомат здесь вспомогательный:
+// он лишь даёт объявлениям место, где их видно.
+
+/* Блочный комментарий: формы комментария — часть языка. */
+
+/// Документирующий комментарий относится к следующему объявлению.
+model Declarations {
+    // Частота такта модели: с ней выдержки считаются в тактах.
+    clock 1kHz;
+
+    // Псевдоним типа, перечисление и структура.
+    type Level = u8;
+
+    enum Mode {
+        Idle,
+        Work = 4,
+        Halt
+    }
+
+    struct Gains {
+        kp: q(8, 8),
+        ki: q(8, 8)
+    }
+
+    // Значения: константа, параметр модели, переменная.
+    const LIMIT: Level := 200;
+    parameter step: u8 := 5;
+
+    var mode: Mode := Idle;
+    var gains: Gains := {1.5, 0.25};
+    var window: [u8; 4] := {1, 2, 3, 4};
+    var hold: duration := 250ms;
+    var ratio: float := 0.5;
+    var flag: bit := 1;
+    var ready: bool := false;
+
+    // Порты всех трёх направлений; у входа задано размещение `at`.
+    in sensor: u8 at 256;
+    out valve: bit;
+    inout bus: u8 at 260;
+
+    // Размещение порта отдельным оператором — третий источник адреса.
+    address valve = 0x108:2;
+
+    // Функция с телом и объявление внешней функции без тела.
+    fn clamp(value: u8, top: u8) -> u8 {
+        if value > top {
+            return top;
+        }
+        return value;
+    }
+
+    extern fn read_hardware_counter() -> u8;
+
+    // Именованный блок уровня модели исполняется каждый такт.
+    always {
+        valve := 1;
+    }
+
+    start Ready {
+        always {
+            var level: Level := clamp(sensor, LIMIT);
+            bus := level + step;
+            ready := level > 0;
+            flag := window[0];
+            mode := Work;
+            ratio := 0.75;
+            hold := 500ms;
+            gains.kp := 2.0;
+        }
+    }
+}
+
+// Реализация модели состоянием файла: `start Имя = Модель;`.
+start Main = Declarations;

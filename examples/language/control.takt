@@ -1,0 +1,78 @@
+// Управление: ветвления, циклы, выбор, переходы автомата.
+//
+// Тело блока и переходы между состояниями — две разные формы управления, и
+// показаны обе: операторы внутри `always`, рёбра `ref` и `next` между
+// состояниями.
+model Control {
+    var index: u8 := 0;
+    var total: u8 := 0;
+    var window: [u8; 4] := {1, 2, 3, 4};
+    var mode: u8 := 0;
+    var done: bit := 0;
+
+    // Именованное условие: имя даёт условию смысл и одно место правки.
+    cond Finished = total >= 10;
+
+    fn total_of(source: [u8; 4]) -> u8 {
+        var sum: u8 := 0;
+        for var i: u8 := 0; i < 4; i := i + 1 {
+            sum := sum + source[i];
+        }
+        return sum;
+    }
+
+    start Scan {
+        always {
+            if index < 4 {
+                // Ветвление с обеими ветвями.
+                total := total + window[index];
+                index := index + 1;
+            } else {
+                index := 0;
+            }
+            while index < 4 {
+                if window[index] = 0 {
+
+                    // Цикл с условием и цикл без условия: выход по `break`,
+                    // пропуск шага — `continue`.
+                    index := index + 1;
+                    continue;
+                }
+                break;
+            }
+            loop {
+                break;
+            }
+
+            // Выбор по значению: разбор случаев и ветвь по умолчанию.
+            match mode {
+                0 => {
+                    total := total_of(window);
+                }
+                1 | 2 => {
+                    total := 0;
+                }
+                _ => {
+                    done := 1;
+                }
+            }
+        }
+
+        // Переход по условию — по имени условия.
+        ref Report: Finished;
+        // Безусловный переход: он завершает цепочку рёбер.
+        next Report;
+    }
+
+    state Report {
+        enter {
+            done := 1;
+        }
+
+        exit {
+            total := 0;
+        }
+    }
+}
+
+start Main = Control;

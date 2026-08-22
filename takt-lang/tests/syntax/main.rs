@@ -26,6 +26,7 @@ mod format_comment_position_tests;
 mod format_style_canon_tests;
 mod format_tests;
 mod format_unsupported_tests;
+mod language_coverage_tests;
 mod lexer_tests;
 mod parse_depth_tests;
 mod parser_tests;
