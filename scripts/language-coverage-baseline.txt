@@ -25,24 +25,6 @@ never Statement::Error # узел восстановления после оши
 examples Expression::List # список в скобках `(a, b)` разбирается, но семантики и потребителя у него нет — примером учить нечему
 examples Expression::String # строкового ТИПА в языке нет (лексема `string` мертва, класс 0201): записи со смыслом для примера не существует
 
-# ── Заблокировано форматтером ─────────────────────────────────────────────
-#
-# `taktc fmt` печать узлов `formula` и `assembly` не поддерживает (`FM-001`,
-# замер 2026-08-23 — прогон на живом примере), а канон корпуса сторожит
-# `fmt --check`: пример с этими конструкциями в `examples/` не удержится,
-# пока печать не заведена. Это ПРОБЕЛ ИНСТРУМЕНТА, найденный самой фичей
-# 0403, а не свойство языка: обе конструкции разбираются и переводятся.
-examples ModelElement::Formula # `taktc fmt` не печатает узел `formula` (FM-001) — пример не пройдёт `fmt --check`
-examples Statement::Formula # блок `formula` в теле: та же причина
-examples Statement::Assembly # `taktc fmt` не печатает узел `assembly` (FM-001) — та же причина
-examples FormulaStatement::Block # достижим только внутри блока `formula`
-examples FormulaStatement::Function # достижим только внутри блока `formula`
-examples FormulaExpression::Bool # достижим только внутри блока `formula`
-examples FormulaExpression::Function # достижим только внутри блока `formula`
-examples FormulaExpression::Number # достижим только внутри блока `formula`
-examples FormulaExpression::String # достижим только внутри блока `formula`
-examples FormulaExpression::SuffixAccess # достижим только внутри блока `formula`
-examples FormulaExpression::Variable # достижим только внутри блока `formula`
 
 # ── Долг документа `book/` ────────────────────────────────────────────────
 #

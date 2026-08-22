@@ -178,6 +178,19 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             out.line(&expr::inline_formula(f)?);
             Ok(())
         }
+        // Вставка на языке цели: `assembly "c" { … }` (фича 0405). Тело —
+        // обычный блок операторов Takt, поэтому печатается общей раскладкой.
+        S::Assembly { dialect, block, .. } => {
+            let head = match dialect {
+                Some(dialect) => format!("assembly {} ", expr::one_string(dialect)),
+                None => "assembly ".to_string(),
+            };
+            block_with_head(out, &head, block)
+        }
+        // Блок формул в теле (фича 0405): свой язык, своя печать.
+        S::Formula { dialect, block, .. } => {
+            super::formula::print_block(out, dialect.as_ref(), block)
+        }
         // Вынужденная ветка: перечисление `#[non_exhaustive]`. Отказ, а не
         // молчаливая потеря оператора. Позиция и **название вида** берутся у
         // самого узла (фича 0229): прежде здесь печатался `Debug`-дамп со всей

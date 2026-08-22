@@ -31,6 +31,16 @@ model Properties {
     : [LTL] X true, Filling U Alarmed, G Filling -> F Alarmed;
     : [LTL] !false, Filling R (!Alarmed | Filling);
 
+    // Блок формул на языке внешнего анализатора: диалект, вызовы и вложенный
+    // блок. Такие обязательства проверяет внешний инструмент, а не компилятор.
+    formula "smt" {
+        assume(level, 250)
+        {
+            holds(unit.level, "fill", true, 42)
+            reachable(check(level))
+        }
+    }
+
     start Fill {
         // Инвариант состояния: обязательство, пока автомат здесь.
         invariant NotAlarming = alarm = 0;
@@ -41,10 +51,16 @@ model Properties {
         }
 
         always {
+            // Обязательство внутри тела блока, блок формул и вставка на языке
+            // цели — три формы, у каждой свой разбор.
             level := level + 1;
             : level <= 250;
-
-            // Обязательство внутри тела блока.
+            formula {
+                step_holds(level)
+            }
+            assembly "c" {
+                beats := beats + 0;
+            }
         }
 
         // Выдержка: литеральная, через константу и вычисляемая.

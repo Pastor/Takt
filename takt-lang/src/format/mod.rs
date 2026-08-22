@@ -24,6 +24,8 @@
 
 mod comments;
 mod expr;
+/// Печать блока `formula` — своего языка внутри Takt (фича 0405).
+mod formula;
 mod stmt;
 
 use crate::parser::ast;
@@ -480,8 +482,7 @@ fn print_element_inner(
             Ok(())
         }
         ast::ModelElement::Function(f) => print_function(out, f),
-        // Узлы, печать которых относится к последующим задачам фичи.
-        ast::ModelElement::Formula(_) => Err(unsupported(loc, "formula")),
+        ast::ModelElement::Formula(f) => formula::print_block(out, f.dialect.as_ref(), &f.formula),
         ast::ModelElement::Condition(c) => {
             // `cond Имя = условие;` — печатается ПЕЧАТЬЮ УСЛОВИЙ, а не выражений:
             // `=` здесь равенство (инвариант ADR 0019).
@@ -838,6 +839,35 @@ fn print_function(out: &mut Out, func: &ast::FunctionDefine) -> Result<(), Forma
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Отказ печати несёт код, позицию узла и текст без внутреннего дампа.
+    ///
+    /// Проверка живёт здесь, а не в интеграционном наборе, и это следствие
+    /// замера фичи 0405: достижимых непечатаемых узлов в языке не осталось —
+    /// все оставшиеся ветви отказа принадлежат узлам, которых грамматика не
+    /// строит (класс 0201). Построить вход снаружи нечем, а свойство отказа
+    /// проверять надо: сообщение видит пользователь.
+    #[test]
+    fn unsupported_refusal_has_code_position_and_plain_text() {
+        let loc = crate::diagnostics::Location::Source(0, 42, 50);
+        let FormatError::Unsupported(diagnostic) = unsupported(loc, "проба") else {
+            panic!("конструктор обязан давать ветвь Unsupported");
+        };
+        assert_eq!(diagnostic.code.as_deref(), Some("FM-001"));
+        assert_eq!(diagnostic.loc, loc, "позиция берётся у узла");
+        assert!(
+            diagnostic.message.contains("'проба'"),
+            "текст называет ВИД узла: {}",
+            diagnostic.message
+        );
+        for forbidden in ["Source(", "loc:", "Statement::"] {
+            assert!(
+                !diagnostic.message.contains(forbidden),
+                "внутреннее представление наружу не выходит ({forbidden}): {}",
+                diagnostic.message
+            );
+        }
+    }
 
     #[test]
     fn formats_minimal_model() {

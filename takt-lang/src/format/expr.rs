@@ -321,11 +321,16 @@ fn with_init(head: String, init: Option<&ast::Expression>) -> Result<String, For
 
 /// Строковый литерал печатается в исходном виде, включая кавычки.
 fn string_literal(parts: &[ast::StringLiteral]) -> String {
-    parts
-        .iter()
-        .map(|p| format!("\"{}\"", p.string))
-        .collect::<Vec<_>>()
-        .join(" ")
+    parts.iter().map(one_string).collect::<Vec<_>>().join(" ")
+}
+
+/// Один строковый литерал в кавычках.
+///
+/// Отдельная точка нужна печати блока формул (фича 0405): там литерал стоит
+/// поодиночке — диалектом заголовка и аргументом вызова. Своя копия кавычек
+/// разошлась бы с этой (класс 0084/0193/0195).
+pub(crate) fn one_string(part: &ast::StringLiteral) -> String {
+    format!("\"{}\"", part.string)
 }
 
 fn ident(name: &Option<ast::Identifier>) -> String {
