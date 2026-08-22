@@ -57,11 +57,21 @@ SYNTAX = os.path.join(ROOT, "book", "takt.sublime-syntax")
 LEXER = os.path.join(ROOT, "takt-lang", "src", "parser", "lexer.rs")
 GRAMMAR = os.path.join(ROOT, "takt-lang", "src", "grammar.lalrpop")
 
-# Слова, которые лексер держит в KEYWORDS, но языком они являются только внутри
-# аннотации `: [LTL] … ;`: правило `Identifier` грамматики принимает каждое как
-# обычное имя. Приложение говорит об этом отдельной фразой, и вносить их в
-# список «ключевых слов» значило бы утверждать неверное.
-LTL_CONTEXTUAL = {"X", "F", "G", "U", "R", "LTL", "Guard"}
+# Слова, которые лексер держит в KEYWORDS, но ключевыми они являются только В
+# ПОЗИЦИИ: правило `Identifier` грамматики принимает каждое как обычное имя.
+# Приложение говорит об этом отдельной фразой, и вносить их в список «ключевых
+# слов» значило бы утверждать неверное.
+#
+#   X, F, G, U, R, LTL, Guard  — операторы темпоральной логики внутри
+#                                аннотации `: [LTL] … ;`;
+#   from                       — терминал директивы импорта (фича 0385): вне
+#                                `import … from "…";` слово не значит ничего,
+#                                и `struct Line { from: u8 }` законен.
+#
+# ⚠️ Исключение действует только на ОБЯЗАТЕЛЬНОСТЬ: подсвечивать контекстное
+# слово не запрещено (класс H2 смотрит на `keywords_code`), и `from` в директиве
+# импорта выделяется по-прежнему — там оно и читается ключевым.
+CONTEXTUAL = {"X", "F", "G", "U", "R", "LTL", "Guard", "from"}
 
 # Терминалы-знаки грамматики, которых в сводке пунктуации быть не должно.
 # `::` языком не является: путь `A::B` разбирается двумя токенами `":"`, и
@@ -251,7 +261,7 @@ def check(doc_text, lexer_text, grammar_text, list_text=None, syntax_text=None,
         if not group:
             sys.exit(f"ОШИБКА: {name} пуст — гейт проверял бы пустое множество.")
 
-    for word in sorted(keywords_code - keywords_doc - LTL_CONTEXTUAL):
+    for word in sorted(keywords_code - keywords_doc - CONTEXTUAL):
         problems.append(("K1", word, "ключевое слово лексера отсутствует в списке документа"))
     for word in sorted(keywords_doc - keywords_code):
         problems.append(("K2", word, "слово документа не является ключевым в лексере"))
@@ -286,7 +296,7 @@ def check_lexical(lexical_text, keywords_code, punct_code):
         if not group:
             sys.exit(f"ОШИБКА: {name} пуста — гейт проверял бы пустое множество.")
 
-    for word in sorted(keywords_code - words - LTL_CONTEXTUAL):
+    for word in sorted(keywords_code - words - CONTEXTUAL):
         problems.append(("L1", word, "ключевое слово лексера отсутствует в разделе «Лексика»"))
     for word in sorted(words - keywords_code):
         problems.append(("L2", word, "раздел «Лексика» называет слово, которого в лексере нет"))
@@ -294,9 +304,9 @@ def check_lexical(lexical_text, keywords_code, punct_code):
     # видит, — а называть их ключевыми раздел не вправе: прогон 2026-08-20
     # показал, что `var X: u8 := 1;` компилируется, и `SY-002` сам перечисляет
     # их среди допустимых идентификаторов. Прежде раздел утверждал обратное.
-    for word in sorted(words & LTL_CONTEXTUAL):
+    for word in sorted(words & CONTEXTUAL):
         problems.append(
-            ("L2", word, "контекстное слово LTL названо ключевым: вне аннотации это обычное имя")
+            ("L2", word, "контекстное слово названо ключевым: вне своей позиции это обычное имя")
         )
     for sign in sorted(punct_code - signs):
         problems.append(("L3", sign, "терминал грамматики отсутствует в таблицах раздела «Лексика»"))
@@ -323,7 +333,7 @@ def check_highlight(list_text, syntax_text, keywords_code):
             "ключевых слов — гейт проверял бы пустое множество."
         )
 
-    expected = keywords_code - LTL_CONTEXTUAL - HIGHLIGHT_EXCLUDED
+    expected = keywords_code - CONTEXTUAL - HIGHLIGHT_EXCLUDED
     for word in sorted(expected - listed):
         problems.append(("H1", word, "ключевое слово лексера не выделяется в тексте документа"))
     for word in sorted(listed - keywords_code - extra):
@@ -345,7 +355,7 @@ def report(problems):
         "book/src/appendix-grammar/index.typ. Приведите его абзацы «Ключевые слова»\n"
         "и «Операторы и пунктуация» к языку (правило 24: языковая фича обязана\n"
         "пройти стадию «Документирование»). Контекстные слова LTL —\n"
-        f"{' '.join(sorted(LTL_CONTEXTUAL))} — в список не вносятся: вне аннотации\n"
+        f"{' '.join(sorted(CONTEXTUAL))} — в список не вносятся: вне аннотации\n"
         ": [LTL] … ; они обычные идентификаторы.\n"
         "Классы H1…H4 (фича 0240) говорят о ПОДСВЕТКЕ: списки\n"
         "book/takt-keywords.txt (инлайн-код) и book/takt.sublime-syntax (блоки кода)\n"

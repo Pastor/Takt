@@ -356,13 +356,18 @@ doc_comment     = "///" { any_char_except_newline } ( newline | eof ) ;
 
 #strong[Ключевые слова:] `_` `address` `after` `as` `assembly` `at`
 `break` `clock` `cond` `const` `continue` `else` `enum` `every` `extern`
-`false` `fn` `for` `formula` `from` `if` `import` `in` `inout`
+`false` `fn` `for` `formula` `if` `import` `in` `inout`
 `invariant` `loop` `match` `model` `next` `out` `parameter` `ref`
 `return` `start` `state` `struct` `true` `type` `var` `while`.
 
 Слово `_` — образец «любое значение» в ветви `match`. Началом
 идентификатора тот же знак остаётся: `_x` — имя, `_` — ключевое
 слово.
+
+Слово `from` в списке #strong[не значится]: ключевым оно является
+только в директиве импорта (`import … from "файл";`). Вне её это
+обычное имя, и `struct Line { from: u8, to: u8 }` — законное
+объявление.
 
 #strong[Операторы и пунктуация:] присваивание `:=`; арифметические
 `+ - * / % **`; побитовые `& | ^ ~ << >>`; логические `&& || !`;

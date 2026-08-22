@@ -114,6 +114,7 @@ Identifier: Identifier = {
     <l:@L> "R" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "R".to_string()},
     <l:@L> "LTL" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "LTL".to_string()},
     <l:@L> "Guard" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "Guard".to_string()},
+    <l:@L> "from" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "from".to_string()},
 }
 
 IdentifierOrError: Option<Identifier> = {
