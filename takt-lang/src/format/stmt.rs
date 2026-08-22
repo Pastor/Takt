@@ -55,8 +55,27 @@ fn close_body(out: &mut Out, block: &ast::Statement) {
 /// `ast::Statement` помечен `#[non_exhaustive]`, поэтому ветка `_` **вынужденная**
 /// (как `TypeNode` в фиче 0025). Она возвращает **ошибку**: неизвестный оператор
 /// нельзя молча выбросить из исходника пользователя.
-#[allow(clippy::wildcard_enum_match_arm)]
 pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), FormatError> {
+    // Ведущие комментарии и пустая строка выдаются ЗДЕСЬ, до печати самого
+    // оператора (фича 0406). Прежде их выдавал только `node_line`, а он
+    // печатает неблочные операторы; у блочных заголовок идёт через `line`, и
+    // комментарий, написанный ПЕРЕД оператором, всплывал первой строкой его
+    // тела — комментарий менял хозяина (четвёртое место класса 0198/0295).
+    //
+    // Для неблочных это не двойная выдача: `leading` потребляет комментарии до
+    // смещения, и повторный вызов внутри `node_line` уже ничего не находит.
+    let loc = statement.loc();
+    out.blank_before(&loc);
+    out.leading_for(&loc);
+    print_inner(out, statement)
+}
+
+/// Печатает сам оператор — без выдачи ведущих комментариев.
+///
+/// Отдельная точка нужна ветви `else`: там строка ждёт продолжения (`} else `),
+/// и выдать в неё комментарий значило бы разорвать K&R-раскладку (фикс 0197-01).
+#[allow(clippy::wildcard_enum_match_arm)]
+fn print_inner(out: &mut Out, statement: &ast::Statement) -> Result<(), FormatError> {
     use ast::Statement as S;
     match statement {
         S::Block { statements, .. } => {
@@ -97,7 +116,7 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             };
             out.join(" else ");
             if matches!(**else_, S::If(..)) {
-                print(out, else_)
+                print_inner(out, else_)
             } else {
                 // Заголовка у простого `else` нет вовсе: `{` даёт сам блок.
                 block_with_head(out, "", else_)
