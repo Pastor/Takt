@@ -14,7 +14,7 @@
 use super::*;
 use crate::parser::ast::{Identifier, Member};
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::validate::base_type::base_type;
+use crate::semantic::validate::base_type::{base_type, cond_base_type};
 
 /// Ce19 (`SE-061`): доступ к несуществующему полю структуры.
 ///
@@ -175,25 +175,6 @@ fn check_cond(cond: &ConditionNode, model: &ModelNode) -> Result<(), Diagnostic>
         _ => {}
     }
     Ok(())
-}
-
-/// Тип базы доступа в условии (аналог [`base_type`] для `ConditionNode`).
-fn cond_base_type(cond: &ConditionNode, model: &ModelNode) -> Option<TypeNode> {
-    match cond {
-        ConditionNode::Variable(var_rc, _) => Some(var_rc.borrow().ty().clone()),
-        ConditionNode::Parenthesis(inner) => cond_base_type(inner, model),
-        ConditionNode::BitAccess(inner, Member::Identifier(field)) => {
-            let TypeNode::Struct(name) = cond_base_type(inner, model)? else {
-                return None;
-            };
-            let s = model.search_struct(&name)?;
-            s.fields
-                .iter()
-                .find(|(f, _)| *f == field.name)
-                .map(|(_, t)| t.clone())
-        }
-        _ => None,
-    }
 }
 
 fn check_cond_member(

@@ -25,25 +25,50 @@
 //! семантике** — за её границей формы не существует, и потребителям не по чему
 //! расходиться (приём 0143/0185/0192).
 //!
-//! ⚠️ **Условие ребра приходит СЫРЫМ АСД** (`Condition::Unresolved`,
-//! инвариант проекта): цели печатают его, разрешая имена против модели. Поэтому
-//! обход идёт и по `ast::Condition` — тип операнда там берётся **по имени** из
-//! карты переменных, ровно как это делает цель.
+//! ⚠️ **Условие ребра доезжает сюда РАЗРЕШЁННЫМ** — и это замер, а не чтение
+//! инварианта. Первая редакция (0381) обходила ещё и сырой `ast::Condition`,
+//! полагаясь на правило «условия рёбер `ref` не разрешаются»; правило верно, но
+//! относится к **одной форме** — паттерну `S(Модель) = Состояние`. Стадия 6
+//! разрешает остальные, а `resolve_condition` отдаёт `Unresolved` ровно на
+//! неразрешённом **имени**, где ни литерала, ни сравнения не бывает. Зонд
+//! 2026-08-22: обход сырого АСД не сработал ни разу на всём корпусе и тестах,
+//! и его отключение не уронило ни одного из ~3600 тестов — поэтому он снят
+//! (фича 0382, уроки 0233 и 0278: недостижимую ветвь нельзя ни проверить, ни
+//! удержать от расхождения).
 //!
 //! ⚠️ Носитель представления — прежний `lower_fixed_literal` (0061): второго
 //! знания о масштабе 2ⁿ не заводится.
+//!
+//! # Место записи — не только имя (фича 0382)
+//!
+//! Приёмником 0381 считала **голое имя**: формат q брался у ячейки ссылки. Поле
+//! структуры и элемент массива под правило не подпали, хотя тип объявлен рядом.
+//! Замер 2026-08-22:
+//!
+//! | Запись | эталон | цель `c` | `st`, `rust`, `sv` |
+//! |---|---|---|---|
+//! | `g.kp := 2.0;` при `kp: q(8, 8)` | `2` | `model->g.kp = 2.0;` → **0** | вывод отвергают их инструменты |
+//! | `gains[0] := 2.0;` | верно | то же | то же |
+//! | `if g.kp > 1.0`, `ref Done: g.kp > 0.25;` | `SIM-005` **в такте** | считает по представлению | то же |
+//!
+//! ⚠️ Тип места спрашивается у **общего** носителя
+//! [`validate::base_type`](crate::semantic::validate::base_type) (0358) — того
+//! же, которым живут `SE-061`, `SE-028`/`SE-030` и поэлементная печать среза.
+//! Своего разбора «структура → поле» и «массив → элемент» здесь нет: три копии
+//! одного правила (выражение, условие, сырой АСД) разъехались бы молча.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::parser::ast;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::type_node::type_fixed::lower_fixed_literal;
+use crate::semantic::validate::base_type::{base_type, cond_base_type};
 use crate::semantic::{
-    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, NamedCodeBlockDefinitionNode,
-    StateNode, StatementNode, VariableNode,
+    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
+    NamedCodeBlockDefinitionNode, StateNode, StatementNode,
 };
 
 /// Понижает q-литералы в телах и условиях модели и её под-моделей.
@@ -60,74 +85,89 @@ fn lower_model(
         return Ok(()); // разделяемая под-модель уже обработана
     }
     let nested: Vec<Rc<RefCell<ModelNode>>> = model.borrow().models.values().cloned().collect();
-    {
-        // Снимок типов переменных: обход условий-АСД спрашивает тип ПО ИМЕНИ —
-        // так же, как это делает цель, печатая неразрешённое условие ребра.
-        let names = fixed_names(&model.borrow());
-        let mut b = model.borrow_mut();
-        for func in b.functions.values_mut() {
-            lower_function(func, &names)?;
-        }
-        for blk in b.named_blocks.iter_mut() {
-            lower_block(blk, &names)?;
-        }
-        for cond in b.conditions.values_mut() {
-            lower_condition(&mut cond.value, &names)?;
-        }
-        for state in b.states.values_mut() {
-            lower_state(state, &names)?;
-        }
-    }
+    lower_bodies(model)?;
     for child in &nested {
         lower_model(child, visited)?;
     }
     Ok(())
 }
 
-/// Имена переменных q-типа и их формат.
-fn fixed_names(model: &ModelNode) -> Vec<(String, (u8, u8))> {
-    model
-        .variables
-        .iter()
-        .filter_map(|(name, var)| match var {
-            VariableNode::Simple {
-                ty: TypeNode::Fixed { m, n, .. },
-                ..
-            }
-            | VariableNode::Const {
-                ty: TypeNode::Fixed { m, n, .. },
-                ..
-            }
-            | VariableNode::Port {
-                ty: TypeNode::Fixed { m, n, .. },
-                ..
-            } => Some((name.clone(), (*m, *n))),
-            _ => None,
-        })
-        .collect()
+/// Понижает литералы в телах и условиях ОДНОЙ модели.
+///
+/// ⚠️ Тела **изымаются** из модели на время обхода (`mem::take`) и возвращаются
+/// на место. Причина — носитель типа места читает `ModelNode` (структуры,
+/// объявления), а изменяемое заимствование модели этого не допускает: обход,
+/// написанный «в лоб», падал бы `BorrowMutError` на первом же поле структуры.
+/// Тела и таблицы объявлений — непересекающиеся части узла, поэтому изъятие
+/// наблюдаемо только внутри этой функции; ошибка возвращается **после** того,
+/// как тела положены обратно.
+fn lower_bodies(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let (mut functions, mut named_blocks, mut conditions, mut states) = {
+        let mut b = model.borrow_mut();
+        (
+            std::mem::take(&mut b.functions),
+            std::mem::take(&mut b.named_blocks),
+            std::mem::take(&mut b.conditions),
+            std::mem::take(&mut b.states),
+        )
+    };
+    let outcome = lower_taken(
+        &model.borrow(),
+        &mut functions,
+        &mut named_blocks,
+        &mut conditions,
+        &mut states,
+    );
+    {
+        let mut b = model.borrow_mut();
+        b.functions = functions;
+        b.named_blocks = named_blocks;
+        b.conditions = conditions;
+        b.states = states;
+    }
+    outcome
 }
 
-fn lower_function(
-    func: &mut FunctionDefinitionNode,
-    names: &[(String, (u8, u8))],
+fn lower_taken(
+    model: &ModelNode,
+    functions: &mut BTreeMap<String, FunctionDefinitionNode>,
+    named_blocks: &mut [NamedCodeBlockDefinitionNode],
+    conditions: &mut BTreeMap<String, ConditionDefinitionNode>,
+    states: &mut BTreeMap<String, StateNode>,
 ) -> Result<(), Diagnostic> {
+    for func in functions.values_mut() {
+        lower_function(func, model)?;
+    }
+    for blk in named_blocks.iter_mut() {
+        lower_block(blk, model)?;
+    }
+    for cond in conditions.values_mut() {
+        lower_condition(&mut cond.value, model)?;
+    }
+    for state in states.values_mut() {
+        lower_state(state, model)?;
+    }
+    Ok(())
+}
+
+fn lower_function(func: &mut FunctionDefinitionNode, model: &ModelNode) -> Result<(), Diagnostic> {
     let FunctionDefinitionNode::Local { ret, body, .. } = func else {
         return Ok(());
     };
     let ret_fixed = fixed_of_type(ret);
-    lower_stmt(body, names, ret_fixed)
+    lower_stmt(body, model, ret_fixed)
 }
 
 fn lower_block(
     blk: &mut NamedCodeBlockDefinitionNode,
-    names: &[(String, (u8, u8))],
+    model: &ModelNode,
 ) -> Result<(), Diagnostic> {
     match blk {
         NamedCodeBlockDefinitionNode::Enter { body, .. }
         | NamedCodeBlockDefinitionNode::Exit { body, .. }
         | NamedCodeBlockDefinitionNode::Always { body, .. }
         | NamedCodeBlockDefinitionNode::Unknown { body, .. }
-        | NamedCodeBlockDefinitionNode::Every { body, .. } => lower_stmt(body, names, None),
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => lower_stmt(body, model, None),
         // Пустой и неразрешённый блоки тела не несут.
         NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {
             Ok(())
@@ -135,7 +175,7 @@ fn lower_block(
     }
 }
 
-fn lower_state(state: &mut StateNode, names: &[(String, (u8, u8))]) -> Result<(), Diagnostic> {
+fn lower_state(state: &mut StateNode, model: &ModelNode) -> Result<(), Diagnostic> {
     let (blocks, refs) = match state {
         StateNode::Simple {
             named_blocks,
@@ -150,12 +190,12 @@ fn lower_state(state: &mut StateNode, names: &[(String, (u8, u8))]) -> Result<()
         StateNode::Unresolved => return Ok(()),
     };
     for blk in blocks.iter_mut() {
-        lower_block(blk, names)?;
+        lower_block(blk, model)?;
     }
     // Условие ребра `ref` — сырой АСД (инвариант проекта), и цели печатают его,
     // разрешая имена против модели: понижение обязано идти туда же.
     for reference in refs.iter_mut() {
-        lower_condition(&mut reference.cond, names)?;
+        lower_condition(&mut reference.cond, model)?;
     }
     Ok(())
 }
@@ -168,18 +208,13 @@ fn fixed_of_type(ty: &TypeNode) -> Option<(u8, u8)> {
     }
 }
 
-/// Формат q у ИМЕНОВАННОГО значения выражения.
-fn fixed_of_expr(expr: &ExpressionNode) -> Option<(u8, u8)> {
-    match expr {
-        ExpressionNode::Variable(cell) => match &*cell.borrow() {
-            VariableNode::Simple { ty, .. }
-            | VariableNode::Const { ty, .. }
-            | VariableNode::Port { ty, .. } => fixed_of_type(ty),
-            VariableNode::Unresolved => None,
-        },
-        ExpressionNode::Parenthesis(inner) => fixed_of_expr(inner),
-        _ => None,
-    }
+/// Формат q у МЕСТА в выражении (переменная, поле структуры, элемент массива).
+///
+/// ⚠️ Разбор цепочки принадлежит носителю
+/// [`base_type`](crate::semantic::validate::base_type) (0358) — своего знания о
+/// структурах и массивах здесь нет (фича 0382).
+fn fixed_of_expr(expr: &ExpressionNode, model: &ModelNode) -> Option<(u8, u8)> {
+    base_type(expr, model).as_ref().and_then(fixed_of_type)
 }
 
 /// Понижает литерал на месте, если он числовой; прочее не трогает.
@@ -198,28 +233,28 @@ fn lower_literal(expr: &mut ExpressionNode, (m, n): (u8, u8)) -> Result<(), Diag
 
 fn lower_stmt(
     stmt: &mut StatementNode,
-    names: &[(String, (u8, u8))],
+    model: &ModelNode,
     ret: Option<(u8, u8)>,
 ) -> Result<(), Diagnostic> {
     match stmt {
         StatementNode::Block(items) => {
             for s in items.iter_mut() {
-                lower_stmt(s, names, ret)?;
+                lower_stmt(s, model, ret)?;
             }
         }
-        StatementNode::Expression(e, _) => lower_expr(e, names)?,
+        StatementNode::Expression(e, _) => lower_expr(e, model)?,
         StatementNode::If { cond, then_, else_ } => {
-            lower_expr(cond, names)?;
-            lower_stmt(then_, names, ret)?;
+            lower_expr(cond, model)?;
+            lower_stmt(then_, model, ret)?;
             if let Some(e) = else_ {
-                lower_stmt(e, names, ret)?;
+                lower_stmt(e, model, ret)?;
             }
         }
         StatementNode::Loop { cond, body } => {
             if let Some(c) = cond {
-                lower_expr(c, names)?;
+                lower_expr(c, model)?;
             }
-            lower_stmt(body, names, ret)?;
+            lower_stmt(body, model, ret)?;
         }
         StatementNode::For {
             init,
@@ -228,21 +263,21 @@ fn lower_stmt(
             body,
         } => {
             if let Some(s) = init {
-                lower_stmt(s, names, ret)?;
+                lower_stmt(s, model, ret)?;
             }
             if let Some(c) = cond {
-                lower_expr(c, names)?;
+                lower_expr(c, model)?;
             }
             if let Some(s) = step {
-                lower_expr(s, names)?;
+                lower_expr(s, model)?;
             }
-            lower_stmt(body, names, ret)?;
+            lower_stmt(body, model, ret)?;
         }
         // Локальное объявление: приёмник — объявленный тип.
         StatementNode::Variable(_, ty, init) => {
             let fixed = fixed_of_type(ty);
             if let Some(e) = init {
-                lower_expr(e, names)?;
+                lower_expr(e, model)?;
                 if let Some(f) = fixed {
                     lower_literal(e, f)?;
                 }
@@ -250,15 +285,15 @@ fn lower_stmt(
         }
         // Возврат: приёмник — объявленный тип функции.
         StatementNode::Return(Some(e)) => {
-            lower_expr(e, names)?;
+            lower_expr(e, model)?;
             if let Some(f) = ret {
                 lower_literal(e, f)?;
             }
         }
         StatementNode::Match { expr, arms } => {
-            lower_expr(expr, names)?;
+            lower_expr(expr, model)?;
             for arm in arms.iter_mut() {
-                lower_stmt(&mut arm.body, names, ret)?;
+                lower_stmt(&mut arm.body, model, ret)?;
             }
         }
         StatementNode::None
@@ -272,14 +307,14 @@ fn lower_stmt(
 }
 
 /// Понижает литералы в выражении: присваивание, сравнение, аргумент вызова.
-fn lower_expr(expr: &mut ExpressionNode, names: &[(String, (u8, u8))]) -> Result<(), Diagnostic> {
+fn lower_expr(expr: &mut ExpressionNode, model: &ModelNode) -> Result<(), Diagnostic> {
     // Сначала вглубь: приёмник виден на своём уровне.
     for child in children_mut(expr) {
-        lower_expr(child, names)?;
+        lower_expr(child, model)?;
     }
     match expr {
         ExpressionNode::Assign(target, value) => {
-            if let Some(f) = fixed_of_expr(target) {
+            if let Some(f) = fixed_of_expr(target, model) {
                 lower_literal(value, f)?;
             }
         }
@@ -294,7 +329,7 @@ fn lower_expr(expr: &mut ExpressionNode, names: &[(String, (u8, u8))]) -> Result
             // ухудшало бы сообщение — вместо «'q(8, 8)' и 'float'» автор
             // получал «'q(8, 8)' и '[bit;16]'», то есть тип, которого он не
             // писал. Сравнение — другое дело: оно законно и работает.
-            match (fixed_of_expr(l), fixed_of_expr(r)) {
+            match (fixed_of_expr(l, model), fixed_of_expr(r, model)) {
                 (Some(f), None) => lower_literal(r, f)?,
                 (None, Some(f)) => lower_literal(l, f)?,
                 _ => {}
@@ -315,55 +350,56 @@ fn lower_expr(expr: &mut ExpressionNode, names: &[(String, (u8, u8))]) -> Result
         }
         _ => {}
     }
-    let _ = names;
     Ok(())
 }
 
 /// Понижает литералы в РАЗРЕШЁННОМ условии (`cond`, формулы).
-fn lower_condition(
-    cond: &mut ConditionNode,
-    names: &[(String, (u8, u8))],
-) -> Result<(), Diagnostic> {
+fn lower_condition(cond: &mut ConditionNode, model: &ModelNode) -> Result<(), Diagnostic> {
     use ConditionNode as C;
     match cond {
-        // Ребро `ref` хранит СЫРОЙ АСД (инвариант проекта), `cond` — уже
-        // разрешённое условие: путей два, и правило у них одно.
-        C::Unresolved(raw) => lower_ast_condition(raw, names),
+        // ⚠️ `Unresolved` НЕ значит «сырое условие ребра» (фича 0382).
+        //
+        // Фича 0381 завела здесь обход сырого АСД со всеми сравнениями,
+        // полагая, что условия рёбер до целей доезжают неразрешёнными. Замер
+        // 2026-08-22 это опроверг: стадия 6 (`resolve_state_references`) зовёт
+        // `resolve_condition`, а тот отдаёт `Unresolved` РОВНО в одном месте —
+        // на **неразрешённом имени** (`ast::Condition::Variable`). Ни числа,
+        // ни сравнения в этой обёртке не бывает по построению, а сам случай —
+        // правая часть паттерна `S(Модель) = Состояние` (инвариант проекта),
+        // где обе стороны суть имена. Зонд подтвердил: на всём корпусе и
+        // тестах обход сырого АСД не сработал ни разу, а отключение его целиком
+        // не уронило ни одного теста.
+        //
+        // Сторож предпосылки — `fixed_place_tests::edge_condition_is_resolved`:
+        // он падает, если условие ребра со сравнением снова станет сырым (так
+        // будет, если проход переедет ВЫШЕ стадии 6).
+        C::Unresolved(_) => Ok(()),
         C::Equal(l, r)
         | C::NotEqual(l, r)
         | C::Less(l, r)
         | C::More(l, r)
         | C::LessEqual(l, r)
         | C::MoreEqual(l, r) => {
-            lower_condition(l, names)?;
-            lower_condition(r, names)?;
-            match (cond_fixed_of(l), cond_fixed_of(r)) {
+            lower_condition(l, model)?;
+            lower_condition(r, model)?;
+            match (cond_fixed_of(l, model), cond_fixed_of(r, model)) {
                 (Some(f), None) => lower_cond_literal(r, f),
                 (None, Some(f)) => lower_cond_literal(l, f),
                 _ => Ok(()),
             }
         }
         C::And(l, r) | C::Or(l, r) => {
-            lower_condition(l, names)?;
-            lower_condition(r, names)
+            lower_condition(l, model)?;
+            lower_condition(r, model)
         }
-        C::Not(inner) | C::Parenthesis(inner) => lower_condition(inner, names),
+        C::Not(inner) | C::Parenthesis(inner) => lower_condition(inner, model),
         _ => Ok(()),
     }
 }
 
-/// Формат q у именованного значения РАЗРЕШЁННОГО условия.
-fn cond_fixed_of(cond: &ConditionNode) -> Option<(u8, u8)> {
-    match cond {
-        ConditionNode::Variable(cell, _) => match &*cell.borrow() {
-            VariableNode::Simple { ty, .. }
-            | VariableNode::Const { ty, .. }
-            | VariableNode::Port { ty, .. } => fixed_of_type(ty),
-            VariableNode::Unresolved => None,
-        },
-        ConditionNode::Parenthesis(inner) => cond_fixed_of(inner),
-        _ => None,
-    }
+/// Формат q у МЕСТА в разрешённом условии — тот же носитель (фича 0382).
+fn cond_fixed_of(cond: &ConditionNode, model: &ModelNode) -> Option<(u8, u8)> {
+    cond_base_type(cond, model).as_ref().and_then(fixed_of_type)
 }
 
 /// Понижает числовой литерал разрешённого условия.
@@ -375,67 +411,6 @@ fn lower_cond_literal(cond: &mut ConditionNode, (m, n): (u8, u8)) -> Result<(), 
     };
     if let Some(v) = lower_fixed_literal(&expr, m, n, Location::Codegen)? {
         *cond = ConditionNode::Number(v);
-    }
-    Ok(())
-}
-
-/// Понижает литералы в СЫРОМ условии АСД (ребро `ref`, инвариант проекта).
-///
-/// Тип операнда берётся **по имени** из карты переменных — так же, как это
-/// делает цель, печатая неразрешённое условие.
-fn lower_ast_condition(
-    cond: &mut ast::Condition,
-    names: &[(String, (u8, u8))],
-) -> Result<(), Diagnostic> {
-    use ast::Condition as C;
-    match cond {
-        C::Equal(_, l, r)
-        | C::NotEqual(_, l, r)
-        | C::Less(_, l, r)
-        | C::More(_, l, r)
-        | C::LessEqual(_, l, r)
-        | C::MoreEqual(_, l, r) => {
-            lower_ast_condition(l, names)?;
-            lower_ast_condition(r, names)?;
-            match (ast_fixed_of(l, names), ast_fixed_of(r, names)) {
-                (Some(f), None) => lower_ast_literal(r, f)?,
-                (None, Some(f)) => lower_ast_literal(l, f)?,
-                _ => {}
-            }
-        }
-        C::And(_, l, r) | C::Or(_, l, r) => {
-            lower_ast_condition(l, names)?;
-            lower_ast_condition(r, names)?;
-        }
-        C::Not(_, inner) | C::Parenthesis(_, inner) | C::AfterExpr(_, inner) => {
-            lower_ast_condition(inner, names)?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-/// Формат q у имени в сыром условии.
-fn ast_fixed_of(cond: &ast::Condition, names: &[(String, (u8, u8))]) -> Option<(u8, u8)> {
-    match cond {
-        ast::Condition::Variable(id) => names
-            .iter()
-            .find(|(name, _)| *name == id.name)
-            .map(|(_, f)| *f),
-        ast::Condition::Parenthesis(_, inner) => ast_fixed_of(inner, names),
-        _ => None,
-    }
-}
-
-/// Понижает числовой литерал сырого условия.
-fn lower_ast_literal(cond: &mut ast::Condition, (m, n): (u8, u8)) -> Result<(), Diagnostic> {
-    let (loc, expr) = match cond {
-        ast::Condition::Number(loc, k) => (*loc, ExpressionNode::Number(*k)),
-        ast::Condition::Rational(loc, s, neg) => (*loc, ExpressionNode::Rational(s.clone(), *neg)),
-        _ => return Ok(()),
-    };
-    if let Some(v) = lower_fixed_literal(&expr, m, n, loc)? {
-        *cond = ast::Condition::Number(loc, v);
     }
     Ok(())
 }
