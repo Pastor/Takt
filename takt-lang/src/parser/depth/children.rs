@@ -19,7 +19,7 @@ use crate::parser::ast;
 ///
 /// Порядок укладки значения не имеет: обход ищет максимум глубины, а не первое
 /// вхождение в порядке текста.
-pub(super) fn push_children<'a>(node: NodeRef<'a>, out: &mut Vec<NodeRef<'a>>) {
+pub(crate) fn push_children<'a>(node: NodeRef<'a>, out: &mut Vec<NodeRef<'a>>) {
     match node {
         NodeRef::Model(model) => {
             if let Some(implements) = &model.implements {

@@ -1,0 +1,54 @@
+// Композиция и подключение: импорт, вложенные модели, параллельная и
+// последовательная работа, обращение к ячейке памяти по адресу.
+
+// Подключение файла целиком: имя библиотеке даёт имя файла.
+import lib_common;
+
+// Подключение под своим именем и подключение отдельных имён.
+import * as Lib from "std.takt";
+import {MAX_LEVEL as Ceiling} from "lib_units.takt";
+
+model Sensor {
+    parameter threshold: u8 := 10;
+
+    var raw: u8 := 0;
+    var high: bit := 0;
+
+    start Read {
+        always {
+            // Ячейка памяти без имени: адрес, ширина доступа и разряд.
+            raw := doubled(#0x200 as u8) + SCALE;
+            high := #0x201.3;
+        }
+
+        ref Steady: raw > threshold;
+        ref Steady: raw >= Ceiling;
+    }
+
+    state Steady {
+        always {
+            high := 1;
+        }
+    }
+}
+
+model Actuator {
+    var pulses: u8 := 0;
+
+    start Drive {
+        always {
+            pulses := pulses + 1;
+        }
+
+        // Наблюдение за состоянием соседа по композиции.
+        ref Wait: S(Sensor) = Steady;
+    }
+
+    state Wait;
+}
+
+// Модель-композиция: обе под-модели тикаются каждый такт.
+model Plant = Sensor(threshold := 20) | Actuator {
+}
+
+start Main = Plant;

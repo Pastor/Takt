@@ -1,0 +1,3 @@
+// Библиотека единиц: значения, подключаемые по именам.
+const SETTLE: duration := 750ms;
+const MAX_LEVEL: u8 := 240;
