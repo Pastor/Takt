@@ -324,12 +324,38 @@ pub(crate) fn has_early_return(stmt: &StatementNode) -> bool {
 pub(crate) fn emit_hoisted_locals(
     p: &mut Printer,
     locals: &[(&str, &TypeNode)],
+    unread: &[String],
 ) -> Result<(), Diagnostic> {
     for (name, ty) in locals {
         let decl = super::sv_type::sv_type(ty, &format!("переменная '{}'", name))?;
         p.ident(&format!("{};", decl.declare(name))).nl();
+        emit_sink_declaration(p, name, unread);
     }
     Ok(())
+}
+
+/// Объявление ПОГЛОТИТЕЛЯ для локальной, значение которой нигде не читается
+/// (фича 0387).
+///
+/// ⚠️ `verilator -Wall` отвечает `UNUSEDSIGNAL`, а гейт цели считает
+/// предупреждение ошибкой — при нулевом коде возврата `taktc` и при том, что
+/// эталон и цели `st` вход исполняют. Идиома та же, что у неиспользуемого
+/// параметра (0337) и у поднятых локальных со структурой (0375): редукция с
+/// константой, которую синтезатор выбрасывает сам.
+fn emit_sink_declaration(p: &mut Printer, name: &str, unread: &[String]) {
+    if unread.iter().any(|n| n == name) {
+        p.ident(&format!("logic _unused_{name};")).nl();
+    }
+}
+
+/// Присваивание поглотителя — печатается после объявлений (фича 0387).
+pub(crate) fn emit_local_sinks(p: &mut Printer, locals: &[(&str, &TypeNode)], unread: &[String]) {
+    for (name, _) in locals {
+        if unread.iter().any(|n| n == name) {
+            p.ident(&format!("_unused_{name} = &{{1'b0, {name}}};"))
+                .nl();
+        }
+    }
 }
 
 /// То же для тела блока состояния или модели — с `automatic` (фича 0304).
@@ -349,10 +375,12 @@ pub(crate) fn emit_hoisted_locals(
 pub(crate) fn emit_hoisted_locals_auto(
     p: &mut Printer,
     locals: &[(&str, &TypeNode)],
+    unread: &[String],
 ) -> Result<(), Diagnostic> {
     for (name, ty) in locals {
         let decl = super::sv_type::sv_type(ty, &format!("переменная '{}'", name))?;
         p.ident(&format!("automatic {};", decl.declare(name))).nl();
+        emit_sink_declaration(p, name, unread);
     }
     Ok(())
 }
