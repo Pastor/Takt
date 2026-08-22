@@ -373,3 +373,6 @@
 | 0387 | Локальная переменная, записанная но не прочитанная | [0387-write-only-local.md](0387-write-only-local.md) | — (новая фича) |
 | 0388 | Разделение печати объявлений цели st | [0388-st-decl-split.md](0388-st-decl-split.md) | — (новая фича) |
 | 0389 | Массив в параметре функции цели rust — по ссылке | [0389-rust-array-by-reference.md](0389-rust-array-by-reference.md) | — (новая фича) |
+| 0391 | Умолчание переменной перечислимого типа: ноль против первого варианта | [0391-enum-default-value.md](0391-enum-default-value.md) | — (новая фича) |
+| 0394 | Разряд за объявленной шириной бит-вектора принимают молча | [0394-bit-beyond-declared-width.md](0394-bit-beyond-declared-width.md) | — (новая фича) |
+| 0390 | Порт составного типа: нормировать ли в семантике | [0390-port-composite-type-policy.md](0390-port-composite-type-policy.md) | — (новая фича) |
