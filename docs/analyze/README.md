@@ -364,3 +364,4 @@
 | 0378 | Имя переменной, совпавшее с именем типа, у цели st | [0378-st-name-type-clash.md](0378-st-name-type-clash.md) | — (новая фича) |
 | 0379 | Сброс перечислимого регистра у цели sv | [0379-sv-enum-reset.md](0379-sv-enum-reset.md) | — (новая фича) |
 | 0380 | Fixed-point в параметре функции | [0380-fixed-point-parameter.md](0380-fixed-point-parameter.md) | — (новая фича) |
+| 0381 | Понижение q-литерала в телах и условиях | [0381-fixed-literal-in-body.md](0381-fixed-literal-in-body.md) | — (новая фича) |

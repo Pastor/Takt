@@ -123,5 +123,12 @@ pub(crate) fn construct_stages_within(
     // сделала стадии терминальными.
     let model = construct_model_stage5(model)?;
     let model = construct_model_stage4(model)?;
-    construct_model_stage6(model)
+    let model = construct_model_stage6(model)?;
+    // Понижение q-литерала в телах и условиях (фича 0381) — ПОСЛЕ разрешения
+    // тел: приёмник (переменная, параметр, возврат) известен только здесь.
+    // Прежде литерал доезжал до целей как написан, и `gain := 2.0;` цель `c`
+    // печатала `model->gain = 2.0;` — значение 2 вместо 512 в представлении
+    // q(8, 8), а условие ребра давало ДРУГОЙ автомат.
+    crate::semantic::type_node::fixed_body::lower_fixed_literals(&model).map_err(one)?;
+    Ok(model)
 }

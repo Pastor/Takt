@@ -30,6 +30,7 @@
 //! `validate_enum_type_declarations`. Данное разделение позволяет обрабатывать
 //! взаимные ссылки между перечислениями и переменными.
 
+pub(crate) mod fixed_body;
 pub mod type_fixed;
 
 use crate::diagnostics::Diagnostic;
