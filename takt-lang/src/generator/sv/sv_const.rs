@@ -5,11 +5,12 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
+use crate::generator::sv::sv_expr::Scope;
 use crate::generator::sv::sv_expr::sv002;
-use crate::generator::sv::sv_expr::{Scope, sv_enum_variant_name};
 use crate::generator::sv::sv_fsm::Block;
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::check_sv_name;
+use crate::generator::sv::sv_names::sv_enum_variant_name;
 use crate::generator::sv::sv_type::sv_type;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, StatementNode, VariableNode};
@@ -103,7 +104,7 @@ fn constant_value(
             // (`sv_expr::const_signal`): константа-параметр несёт префикс
             // владельца, иначе ветвь сброса ссылалась бы на localparam соседа.
             VariableNode::Const { upper, name, .. } => Ok(
-                crate::generator::sv::sv_expr::const_signal(upper.as_ref(), name),
+                crate::generator::sv::sv_names::const_signal(upper.as_ref(), name),
             ),
             _ => Err(sv008(state, loc)),
         },
@@ -139,7 +140,7 @@ pub(crate) fn constant_enter_assignments(
                 let ExpressionNode::Variable(var) = &**target else {
                     return Err(sv008(state, loc));
                 };
-                let name = crate::generator::sv::sv_expr::signal_of(var)
+                let name = crate::generator::sv::sv_names::signal_of(var)
                     .ok_or_else(|| sv008(state, loc))?;
                 // Значение печатается ПО ТИПУ ЦЕЛИ: для перечисления число
                 // восстанавливается в имя варианта, иначе ветвь сброса даст
@@ -189,7 +190,7 @@ pub(crate) fn emit_constants(
             // Ключ фильтра «используется» — та же пара (владелец, имя), фича
             // 0193: голым именем неиспользуемая тёзка проходила бы вслед за
             // используемой.
-            let signal = crate::generator::sv::sv_expr::const_signal(upper.as_ref(), name);
+            let signal = crate::generator::sv::sv_names::const_signal(upper.as_ref(), name);
             let used = crate::semantic::unused::const_key(upper.as_ref(), name);
             if !map.usage().constants.contains(&used) || !seen.insert(signal.clone()) {
                 continue;

@@ -483,6 +483,7 @@ impl Fsm {
             registered: &self.registered,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &self.enums,
             structs: &self.structs,
             warnings: &self.warnings,
@@ -594,10 +595,19 @@ pub(crate) fn emit_functions(
                     name
                 )));
             }
+            // Локальные имена функции — параметры и её `var` (фича 0424):
+            // без них локальная переменная, чьё имя совпало с переменной
+            // модели, печаталась бы сигналом модели.
+            let local_names: BTreeSet<String> = params
+                .iter()
+                .map(|(param, _)| param.clone())
+                .chain(locals.iter().map(|(local, _)| (*local).to_string()))
+                .collect();
             let scope = Scope {
                 registered: &fsm.registered,
                 function: Some(name),
                 function_ret: Some(ret),
+                locals: &local_names,
                 enums: &fsm.enums,
                 structs: &fsm.structs,
                 warnings: &fsm.warnings,
