@@ -147,6 +147,18 @@ pub struct GenerateOptions {
     /// экземпляров. ⚠️ Оба режима обязаны давать одинаковое поведение
     /// (потактовая сверка — сторож гибрида, ADR 0185 Option E).
     pub specialize: bool,
+    /// Guard границ массива в порождённом коде (фича 0433), CLI-флаг
+    /// `--bounds-check`. Умолчание — `false`.
+    ///
+    /// При включении проход `semantic::bounds_guard` оборачивает операторы с
+    /// индексацией **переменным** индексом проверкой и заводит синтетический
+    /// выходной порт `bounds_fault`: доступ за границей не выполняется, а
+    /// признак уходит наружу (решение заказчика 2026-08-23). Литеральный и
+    /// константный индекс судит семантика (`SE-028`, фичи 0028 и 0434).
+    ///
+    /// ⚠️ Умолчание `false` — тоже решение заказчика: guard стоит тактов и
+    /// вентилей, а включение изменило бы вывод всего корпуса.
+    pub bounds_check: bool,
     /// Для целей `c`/`rust`/`st`: реализовать `float` целочисленным Q-путём
     /// (embedded без FPU) вместо нативного (фича 0096, CLI-флаг
     /// `--float-embedded`). Действует только вместе с [`float_as_q`](Self::float_as_q);
@@ -185,6 +197,7 @@ impl GenerateOptions {
             float_embedded: false,
             tick_hz: None,
             specialize: false,
+            bounds_check: false,
             bus: None,
         }
     }
@@ -202,6 +215,7 @@ impl Default for GenerateOptions {
             float_embedded: false,
             tick_hz: None,
             specialize: false,
+            bounds_check: false,
             bus: None,
         }
     }

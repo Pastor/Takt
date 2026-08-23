@@ -43,6 +43,8 @@ fn codegen_handles_deep_state_chain() {
     let out = std::env::temp_dir()
         .join(format!("takt_pid{}", std::process::id()))
         .join("takt_deep_chain.c");
+    // Каталог процесса (0429) создаётся здесь: файл пишет не тест, а инструмент.
+    let _ = std::fs::create_dir_all(out.parent().expect("каталог процесса"));
     takt_lang::compile_to_c(
         "deep.takt",
         &src,
@@ -61,6 +63,8 @@ fn plantuml_handles_deep_state_chain() {
     let out = std::env::temp_dir()
         .join(format!("takt_pid{}", std::process::id()))
         .join("takt_deep_chain.puml");
+    // Каталог процесса (0429) создаётся здесь: файл пишет не тест, а инструмент.
+    let _ = std::fs::create_dir_all(out.parent().expect("каталог процесса"));
     takt_lang::compile_to_plantuml("deep.takt", &src, out.to_str().expect("путь"), &[])
         .expect("цепочка из 5000 состояний обязана давать диаграмму");
     let _ = std::fs::remove_file(&out);

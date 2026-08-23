@@ -25,6 +25,7 @@ mod conformance_array_param_tests;
 mod conformance_array_return_tests;
 mod conformance_bit_arith_tests;
 mod conformance_bit_write_tests;
+mod conformance_bounds_guard_tests;
 mod conformance_builtin_tests;
 mod conformance_c_arrays_tests;
 mod conformance_c_bitvec_tests;

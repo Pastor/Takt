@@ -37,7 +37,7 @@ pub fn compile_to_sv_mmio(
     env: &AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options)?;
 
     if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)

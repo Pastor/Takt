@@ -459,6 +459,10 @@ fn print_usage() {
     eprintln!("                         Флаги --verbose и --quiet взаимоисключающие");
     eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
+    eprintln!("  --bounds-check         Guard границ массива: доступ за границей не выполняется,");
+    eprintln!(
+        "                         признак уходит в выходной порт bounds_fault (по умолчанию выкл.)"
+    );
     eprintln!("  --address-map <файл>   Внешняя карта адресов портов (.ld-подобный формат)");
     eprintln!("  -D, --define N=VALUE   Символ платформы для выражений адреса (повторяем);");
     eprintln!("                         слитно: -DN=VALUE. Значение — 0x…/десятичное[:бит].");

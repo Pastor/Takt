@@ -351,6 +351,8 @@ fn cli_output_to_file_matches_stdout() {
     let out_file = std::env::temp_dir()
         .join(format!("takt_pid{}", std::process::id()))
         .join("takt_0043_out.map");
+    // Каталог процесса (0429) создаётся здесь: файл пишет не тест, а инструмент.
+    let _ = std::fs::create_dir_all(out_file.parent().expect("каталог процесса"));
     let file_run = taktc()
         .args([
             "address-map",

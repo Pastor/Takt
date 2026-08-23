@@ -16,6 +16,8 @@ fn error_of(fixture: &str) -> takt_lang::diagnostics::Diagnostic {
     let out = std::env::temp_dir()
         .join(format!("takt_pid{}", std::process::id()))
         .join("takt_diag53_out.c");
+    // Каталог процесса (0429) создаётся здесь: файл пишет не тест, а инструмент.
+    let _ = std::fs::create_dir_all(out.parent().expect("каталог процесса"));
     takt_lang::compile_to_c(
         &path,
         &source,
