@@ -34,6 +34,7 @@
 //! ячейку от любой другой с мёртвым `Weak` уже нельзя.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::semantic::formula::Formula;
 use crate::semantic::{
     ConditionNode, ExpressionNode, FunctionDefinitionNode, MatchPatternNode, ModelNode,
     NamedCodeBlockDefinitionNode, StateNode, StatementNode, VariableNode,
@@ -55,6 +56,15 @@ struct Adoption {
     missing: BTreeMap<String, Location>,
     /// Уже обойдённые модели (композиция разделяет под-модели по `Rc`).
     visited: HashSet<*const RefCell<ModelNode>>,
+    /// Заменять ячейку новой, а не править её на месте (фича 0395).
+    ///
+    /// ⚠️ У импорта правка на месте верна: ячейка принадлежит библиотеке,
+    /// которая после импорта не жива, и делить её не с кем. У **копии-
+    /// специализации** делить есть с кем: `ModelNode::copy` клонирует узлы
+    /// тел, но `Rc`-ячейки внутри них разделяет с исходной моделью, — правка
+    /// на месте испортила бы исходную (замер 0395: вторая специализация
+    /// печатала доступ через поле первой, `cc`: «no member named 'run'»).
+    fresh_cells: bool,
 }
 
 /// Усыновляет **выборочно импортированную** модель: `import { M } from "lib";`.
@@ -83,6 +93,7 @@ pub(in crate::semantic) fn adopt_selected_model(
         renames: renames.clone(),
         missing: BTreeMap::new(),
         visited: HashSet::new(),
+        fresh_cells: false,
     };
     // Выбранная модель вносится в дерево импортёра — значит её владелец теперь
     // импортёр. Её собственные под-модели остаются при ней (см. `adopt_subtree`).
@@ -98,6 +109,51 @@ pub(in crate::semantic) fn adopt_selected_model(
     }
     adopt_model(&mut ctx, model);
     ctx.report()
+}
+
+/// Перепривязывает тела **копии-специализации** к ней самой (фича 0395).
+///
+/// Модель, пришедшая из другого файла, к моменту специализации уже прошла весь
+/// конвейер (0296): её тела разрешены, и в них лежат ячейки-снимки
+/// (`Rc<RefCell<VariableNode>>`, урок 0204) с владельцем — **исходной**
+/// моделью. `copy` клонирует узлы тел, но владельца ячеек не меняет, и цель
+/// `c` печатала доступ через поле исходной модели —
+/// `model->tuner.out_value = CONST_APP_TUNER_GAIN;` в теле копии, то есть
+/// `cc`: «no member named 'tuner'» при **нулевом** коде возврата `taktc`.
+/// Ровно поэтому фича 0296 закрыла вход отказом `SE-120`.
+///
+/// Приём — тот же, что у импорта: признак «ячейка чужая» это `Rc::ptr_eq`
+/// владельца с исходной моделью, и после смены владельца доступ строится по
+/// копии. Имена не меняются (`renames` тождественны), поэтому `SE-074`
+/// недостижим: карта имён взята у самой исходной модели.
+///
+/// ⚠️ **Вызывать обязательно ДО того, как копия внесена в дерево**: признак
+/// принадлежности — живой `Rc` исходной модели, ровно как у импорта.
+///
+/// ⚠️ Вложенных моделей у специализируемой модели не бывает (`SE-087`),
+/// поэтому обход поддерева упирается в один узел.
+pub(in crate::semantic) fn adopt_specialized_copy(
+    copy: &Rc<RefCell<ModelNode>>,
+    source: &Rc<RefCell<ModelNode>>,
+) {
+    // Тождественные имена: копия несёт ту же карту объявлений, что исходная, —
+    // переименования здесь нет по существу, а без записи в `renames` ячейка
+    // попала бы в `missing` и обход счёл бы её незаимпортированной.
+    let renames: BTreeMap<String, String> = source
+        .borrow()
+        .variables
+        .keys()
+        .map(|name| (name.clone(), name.clone()))
+        .collect();
+    let mut ctx = Adoption {
+        library: Rc::clone(source),
+        importer: Rc::clone(copy),
+        renames,
+        missing: BTreeMap::new(),
+        visited: HashSet::new(),
+        fresh_cells: true,
+    };
+    adopt_subtree(&mut ctx, copy);
 }
 
 /// Усыновляет **весь импортированный файл**: `import "lib.takt";` (и форма
@@ -223,6 +279,7 @@ pub(in crate::semantic) fn adopt_whole_file(
         renames,
         missing: BTreeMap::new(),
         visited: HashSet::new(),
+        fresh_cells: false,
     };
     // Обход начинается с самого корня библиотеки: его состояния и блоки тоже
     // ссылаются на перенесённые объявления.
@@ -243,7 +300,7 @@ impl Adoption {
     /// псевдонимом (`import { meas as pv }`), и тело обязано ссылаться на то имя,
     /// под которым объявление живёт у импортёра, — иначе генератор напечатает
     /// доступ к несуществующему полю.
-    fn adopt_var_cell(&mut self, cell: &Rc<RefCell<VariableNode>>) {
+    fn adopt_var_cell(&mut self, cell: &mut Rc<RefCell<VariableNode>>) {
         let (owned, name, loc) = {
             let b = cell.borrow();
             (self.is_library_owned(&b), b.name().to_string(), b.loc())
@@ -255,6 +312,16 @@ impl Adoption {
             self.missing.entry(name).or_insert(loc);
             return;
         };
+        if self.fresh_cells {
+            // Ячейка разделена с исходной моделью — правка на месте испортила
+            // бы её (фича 0395). Снимок берётся с той же ячейки, поэтому
+            // значение и тип сохраняются, а владелец становится своим.
+            let mut copy = cell.borrow().clone();
+            set_upper(&mut copy, &self.importer);
+            set_name(&mut copy, alias);
+            *cell = Rc::new(RefCell::new(copy));
+            return;
+        }
         let mut b = cell.borrow_mut();
         set_upper(&mut b, &self.importer);
         set_name(&mut b, alias);
@@ -379,14 +446,72 @@ fn adopt_block(ctx: &mut Adoption, blk: &mut NamedCodeBlockDefinitionNode) {
     }
 }
 
+/// Обход состояния: тела именованных блоков, условия рёбер и формулы.
+///
+/// ⚠️ **Условия рёбер и формулы обходятся с фичи 0395.** Прежде обход брал
+/// только `named_blocks`, и для импорта дыра не проявлялась: ячейки условий
+/// импортированной модели принадлежат ей самой, а перепривязки требуют лишь
+/// пришедшие от корня библиотеки. Специализация же меняет владельца **всех**
+/// ячеек модели, и без этих полей условие `ref Idle: out_value > 0;` копии
+/// читало поле исходной модели — `model->tuner.out_value` в теле `TunerP1`.
+///
+/// ⚠️ `next` — **отдельное поле**, а не элемент `references` (урок 0181):
+/// обход, взявший только список, теряет безусловный переход.
 fn adopt_state(ctx: &mut Adoption, st: &mut StateNode) {
     match st {
-        StateNode::Simple { named_blocks, .. } | StateNode::Implement { named_blocks, .. } => {
+        StateNode::Simple {
+            named_blocks,
+            references,
+            formulas,
+            ..
+        } => {
             for blk in named_blocks.iter_mut() {
                 adopt_block(ctx, blk);
             }
+            for r in references.iter_mut() {
+                adopt_cond(ctx, &mut r.cond);
+            }
+            for f in formulas.iter_mut() {
+                adopt_formula(ctx, f);
+            }
+        }
+        StateNode::Implement {
+            named_blocks,
+            references,
+            next,
+            formulas,
+            ..
+        } => {
+            for blk in named_blocks.iter_mut() {
+                adopt_block(ctx, blk);
+            }
+            for r in references.iter_mut() {
+                adopt_cond(ctx, &mut r.cond);
+            }
+            if let Some(n) = next.as_mut() {
+                adopt_cond(ctx, &mut n.cond);
+            }
+            for f in formulas.iter_mut() {
+                adopt_formula(ctx, f);
+            }
         }
         StateNode::Unresolved => {}
+    }
+}
+
+/// Обход формулы: охранное условие несёт ячейки так же, как условие ребра.
+///
+/// ⚠️ `Formula::LTL` ячеек не содержит — её атомы это имена состояний и
+/// предикаты по сырому АСД (`verification/ltl.rs`), разбираемые отдельно.
+fn adopt_formula(ctx: &mut Adoption, f: &mut Formula) {
+    match f {
+        Formula::Guard(cond, _, _) => adopt_cond(ctx, cond),
+        Formula::Formulas(items) => {
+            for item in items.iter_mut() {
+                adopt_formula(ctx, item);
+            }
+        }
+        Formula::None | Formula::LTL(_) => {}
     }
 }
 

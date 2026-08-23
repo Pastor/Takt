@@ -47,6 +47,7 @@ mod conformance_fixed_param_tests;
 mod conformance_fixed_place_tests;
 mod conformance_float_modes_tests;
 mod conformance_forward_type_tests;
+mod conformance_import_specialize_tests;
 mod conformance_local_decl_tests;
 mod conformance_mixed_arith_tests;
 mod conformance_mixed_sign_tests;
