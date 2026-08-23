@@ -48,7 +48,9 @@ fn reference_value(src: &str) -> Value {
 
 /// Значение константы в порождённом C (строка `#define`).
 fn generated_c_const(tag: &str, src: &str) -> String {
-    let dir = std::env::temp_dir().join(format!("takt_0407_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0407_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     takt_lang::compile_to_c(

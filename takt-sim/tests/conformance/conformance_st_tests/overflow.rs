@@ -129,7 +129,9 @@ fn unsigned_overflow_wraps_like_generated_st() {
         eprintln!("[ПРОПУСК] unsigned_overflow_wraps_like_generated_st: `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt_conformance_0127_st_overflow");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0127_st_overflow");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let st = run_generated_st_overflow(&dir, &iec2c, &lib);

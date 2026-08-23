@@ -46,7 +46,9 @@ const WITHOUT_INIT: &str = "in btn: bit at 0x100:0;\n\
                             start S { always { seen := btn; ready := seen; level := 1; } }";
 
 fn out_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_0187_04_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0187_04_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     dir

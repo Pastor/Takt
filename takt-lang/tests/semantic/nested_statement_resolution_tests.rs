@@ -153,7 +153,9 @@ fn valid_nested_body_is_emitted_into_generated_c() {
     // тело вложенного оператора **доезжает до порождённого кода**. Прежде оно
     // молча исчезало, и именно это делало дефект дороже отсутствия сообщения.
     let (_, source) = fixture("nested_valid.takt");
-    let dir = std::env::temp_dir().join("takt-0155-nested-valid");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt-0155-nested-valid");
     let _ = std::fs::remove_dir_all(&dir);
     takt_lang::compile_to_c(
         &fixture("nested_valid.takt").0,

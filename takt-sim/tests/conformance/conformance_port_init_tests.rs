@@ -335,7 +335,9 @@ fn initial_port_value_matches_generated_c() {
         eprintln!("[ПРОПУСК] initial_port_value_matches_generated_c: `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt_0187_05_c");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0187_05_c");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let c = generated_c_trace(&dir);
@@ -359,7 +361,9 @@ fn initial_port_value_matches_generated_sv() {
         eprintln!("[ПРОПУСК] initial_port_value_matches_generated_sv: verilator не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt_0187_05_sv");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0187_05_sv");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let sv = sv_trace(&dir);
@@ -394,7 +398,9 @@ fn initial_port_value_is_set_before_first_body_call_in_st() {
         eprintln!("[ПРОПУСК] initial_port_value_is_set_before_first_body_call_in_st: `cc` нет");
         return;
     }
-    let dir = std::env::temp_dir().join("takt_0187_05_st");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0187_05_st");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let st = st_trace(&dir, &iec2c, &lib);

@@ -129,7 +129,9 @@ fn duration_values_match_simulator_and_generated_rust() {
         );
         return;
     }
-    let dir = std::env::temp_dir().join("takt_0183_rust_duration");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0183_rust_duration");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let reference = simulator_values();
@@ -154,7 +156,9 @@ fn duration_values_match_simulator_and_generated_rust() {
 /// отображается в `u32`. Предмет проверки не изменился.
 #[test]
 fn cast_between_duration_and_number_emits_no_arithmetic_in_rust() {
-    let dir = std::env::temp_dir().join("takt_0183_rust_duration_text");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0183_rust_duration_text");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");

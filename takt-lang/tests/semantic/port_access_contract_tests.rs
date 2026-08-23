@@ -67,7 +67,9 @@ const NESTED_ASSIGN: &str = "in btn: bit at 0x100:0;\n\
                              }";
 
 fn out_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_0187_06_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0187_06_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     dir

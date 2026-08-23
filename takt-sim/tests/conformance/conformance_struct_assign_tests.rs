@@ -115,13 +115,15 @@ fn aggregate_assignment_matches_simulator_and_generated_c() {
         eprintln!("[ПРОПУСК] aggregate_assignment_matches_simulator_and_generated_c: cc не найден");
         return;
     }
-    let dir = std::env::temp_dir().join(format!(
-        "takt_0340_conf_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0340_conf_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let generated = generated_c_values(&dir);

@@ -23,13 +23,15 @@ const FIXTURE: &str = "../takt-sim/tests/data/eval/conformance_call_order.takt";
 #[test]
 fn callee_is_printed_before_caller() {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
-    let dir = std::env::temp_dir().join(format!(
-        "takt_0344_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0344_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     takt_lang::compile_to_st(

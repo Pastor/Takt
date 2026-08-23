@@ -243,7 +243,9 @@ fn formatter_prints_parameter_declaration() {
 /// заданных значений).
 #[test]
 fn parameter_reaches_c_as_a_field() {
-    let dir = std::env::temp_dir().join("takt-0185-01-c");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt-0185-01-c");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог для вывода");
     compile_to_c(

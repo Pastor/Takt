@@ -68,7 +68,9 @@ start Entry = BitVec;
     assert_eq!(num("b11"), 1, "бит 11 (старший из 12) из 4095");
 
     // Порождённый C: тип `v` — uint16_t (12 → округление вверх до 16).
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0078_bitvec");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0078_bitvec");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     takt_lang::compile_to_c(
         "bitvec",

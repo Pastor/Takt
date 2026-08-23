@@ -10,7 +10,9 @@ use takt_lang::generator::GenerateOptions;
 
 /// Каталог сборки под тест (тесты идут однопоточно).
 fn out_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_sv_mmio_test_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_sv_mmio_test_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     dir

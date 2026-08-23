@@ -62,7 +62,9 @@ start Root = Machine;
 
     /// Порождает C и склеивает содержимое всех файлов вывода.
     fn generated_c(source: &str, dir_name: &str) -> String {
-        let dir = std::env::temp_dir().join(dir_name);
+        let dir = std::env::temp_dir()
+            .join(format!("takt_pid{}", std::process::id()))
+            .join(dir_name);
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("каталог вывода");
         // Имя корневой (анонимной) модели берётся из имени файла — оно не должно

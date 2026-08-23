@@ -133,7 +133,9 @@ fn struct_fields_match_generated_c() {
         ("t", sim_scalar(&unit, "t")),
     ];
 
-    let dir = std::env::temp_dir().join("takt_conformance_struct");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_struct");
     std::fs::create_dir_all(&dir).expect("каталог");
     let c: std::collections::HashMap<String, i128> = run_generated_c(&dir).into_iter().collect();
 

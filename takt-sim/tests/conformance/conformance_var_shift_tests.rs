@@ -162,13 +162,15 @@ fn shift_by_type_width_matches_simulator_and_generated_rust() {
         );
         return;
     }
-    let dir = std::env::temp_dir().join(format!(
-        "takt_0334_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0334_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let generated = generated_rust_values(&dir);
@@ -186,13 +188,15 @@ fn shift_by_type_width_matches_simulator_and_generated_rust() {
 /// `examples/` нет ни одного.
 #[test]
 fn shift_amount_cast_is_printed_only_when_needed() {
-    let dir = std::env::temp_dir().join(format!(
-        "takt_0334_cast_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0334_cast_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let source = "var v: u8 := 200;\nvar wide: u32 := 8;\nvar r: u8 := 0;\n\

@@ -37,7 +37,9 @@ start Entry = Counter;
 "#;
 
 fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_0083_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0083_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     dir

@@ -223,7 +223,12 @@ fn out_dir(tag: &str) -> String {
         .name()
         .unwrap_or("unnamed")
         .replace(':', "_");
-    format!("{}/takt0211_{thread}_{tag}", std::env::temp_dir().display())
+    format!(
+        "{}/takt0211_{thread}_{tag}",
+        std::env::temp_dir()
+            .join(format!("takt_pid{}", std::process::id()))
+            .display()
+    )
 }
 
 #[test]

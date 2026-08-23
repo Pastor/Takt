@@ -43,7 +43,9 @@ fn guard_warnings(tag: &str, src: &str) -> Vec<takt_lang::diagnostics::Diagnosti
         .name()
         .unwrap_or("single")
         .replace(':', "_");
-    let dir: PathBuf = std::env::temp_dir().join(format!("takt_0282_{thread}_{tag}"));
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0282_{thread}_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     takt_lang::compile_to_st(

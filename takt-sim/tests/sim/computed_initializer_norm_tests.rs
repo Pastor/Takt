@@ -40,7 +40,9 @@ fn reference_value(src: &str) -> Value {
 
 /// Строка инициализации `u` в порождённом C.
 fn generated_c_init(tag: &str, src: &str) -> String {
-    let dir = std::env::temp_dir().join(format!("takt_0207_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0207_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     takt_lang::compile_to_c(

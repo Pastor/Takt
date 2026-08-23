@@ -40,7 +40,9 @@ fn out_dir(tag: &str) -> std::path::PathBuf {
         .name()
         .unwrap_or("single")
         .replace(':', "_");
-    let dir = std::env::temp_dir().join(format!("takt0213_{thread}_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt0213_{thread}_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог вывода");
     dir

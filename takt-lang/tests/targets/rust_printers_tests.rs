@@ -25,7 +25,9 @@ use takt_lang::generator::GenerateOptions;
 
 /// Порождает модуль Rust и возвращает его текст.
 fn emit(tag: &str, source: &str) -> String {
-    let dir = std::env::temp_dir().join(format!("takt_0148_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0148_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     takt_lang::compile_to_rust(
@@ -41,7 +43,9 @@ fn emit(tag: &str, source: &str) -> String {
 
 /// Порождает и ожидает **отказ**; возвращает код диагностики.
 fn emit_err(tag: &str, source: &str) -> String {
-    let dir = std::env::temp_dir().join(format!("takt_0148_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0148_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     match takt_lang::compile_to_rust(

@@ -146,7 +146,9 @@ fn per_tick_trace_matches_generated_c() {
         eprintln!("[ПРОПУСК] per_tick_trace_matches_generated_c: компилятор `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt-0185-04-conformance");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt-0185-04-conformance");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
 

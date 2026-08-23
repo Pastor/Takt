@@ -146,7 +146,9 @@ fn translate_all(tag: &str, src: &str) -> Vec<String> {
         .name()
         .unwrap_or("x")
         .replace(':', "_");
-    let dir = std::env::temp_dir().join(format!("takt_0287_{thread}_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0287_{thread}_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     let path = dir.to_str().expect("путь в UTF-8");
@@ -186,7 +188,9 @@ fn named_integer_pair_translates_by_every_target() {
 /// «удавался», а отвергал его `rustc` (`E0308`: `u8` в поле `u16`).
 #[test]
 fn declared_width_reaches_generated_rust() {
-    let dir = std::env::temp_dir().join("takt_0287_rust_decl");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0287_rust_decl");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     let src = model_with("const A: u16 := 300;\nconst B := A - 100;", "B + 100");

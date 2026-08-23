@@ -132,13 +132,15 @@ fn every_reserved_name_is_rejected_by_iec2c() {
         eprintln!("[ПРОПУСК] every_reserved_name_is_rejected_by_iec2c: iec2c не найден");
         return;
     };
-    let dir = std::env::temp_dir().join(format!(
-        "takt_0342_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0342_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
 
@@ -179,13 +181,15 @@ fn every_reserved_field_name_is_rejected_by_iec2c() {
         eprintln!("[ПРОПУСК] every_reserved_field_name_is_rejected_by_iec2c: iec2c не найден");
         return;
     };
-    let dir = std::env::temp_dir().join(format!(
-        "takt_0385_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0385_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
 
