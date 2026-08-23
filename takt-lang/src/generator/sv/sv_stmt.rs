@@ -22,7 +22,8 @@
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::sv::sv_expr::sv002;
-use crate::generator::sv::sv_expr::{Scope, print_expression, signal_of};
+use crate::generator::sv::sv_expr::{Scope, print_expression};
+use crate::generator::sv::sv_names::signal_of_in;
 
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, MatchPatternNode, StatementNode};
@@ -536,7 +537,7 @@ fn target_type(target: &ExpressionNode) -> Option<TypeNode> {
 /// записи** (`v` → `v_next`), а не для чтения.
 fn print_assign_target(target: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
     match target {
-        ExpressionNode::Variable(var) => signal_of(var)
+        ExpressionNode::Variable(var) => signal_of_in(var, scope)
             .map(|name| scope.write(&name))
             .ok_or_else(|| sv002("неразрешённая переменная в левой части присваивания")),
         // База — выражение (фича 0358): она сама печатается КАК ЦЕЛЬ ЗАПИСИ,
@@ -594,6 +595,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -624,6 +626,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -652,6 +655,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,

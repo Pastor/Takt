@@ -50,11 +50,10 @@
 pub(crate) use crate::generator::sv::sv_scope::Scope;
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::sv::sv_names::{print_member, signal_of_in, sv_enum_variant_name};
 use crate::generator::sv::sv_state_of;
-use crate::generator::sv::sv_type::sv_enum_type_name;
-use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ConditionNode, ExpressionNode, VariableNode};
+use crate::semantic::{ConditionNode, ExpressionNode};
 
 /// Строит диагностику `SV-002` — узел АСД не покрыт печатью.
 pub(crate) fn sv002(what: &str) -> Diagnostic {
@@ -132,99 +131,6 @@ fn is_constant_divisor(node: &ExpressionNode) -> bool {
 fn warn_variable_divisor(scope: &Scope, divisor: &ExpressionNode) {
     if !is_constant_divisor(divisor) {
         scope.warnings.borrow_mut().push(sv009());
-    }
-}
-
-/// Имя варианта перечисления в SV: `Action`/`Idle` → `ACTION_IDLE`.
-///
-/// Префикс именем перечисления обязателен: метки `enum` в SystemVerilog живут в
-/// **общем пространстве имён модуля**, а не внутри своего типа (в отличие от
-/// Rust, где `Action::Idle` квалифицировано). Два перечисления модели с
-/// одноимённым вариантом (`Idle` у `Action` и у `Mode`) без префикса дали бы
-/// повторное объявление.
-pub(crate) fn sv_enum_variant_name(enum_name: &str, variant: &str) -> String {
-    format!(
-        "{}_{}",
-        sv_enum_type_name(enum_name)
-            .trim_end_matches("_e")
-            .to_uppercase(),
-        crate::semantic::naming::normalize_lowercase_snakecase(variant.to_string()).to_uppercase()
-    )
-}
-
-/// Извлекает имя элемента Takt из узла переменной.
-///
-/// Возвращает **имя Takt**, а не имя сигнала: отображение в сигнал делает
-/// [`Scope`], который один знает про префиксы уплощения.
-pub(crate) fn signal_of(var: &std::rc::Rc<std::cell::RefCell<VariableNode>>) -> Option<String> {
-    match &*var.borrow() {
-        // Переменная модели получает префикс ВЛАДЕЛЬЦА, а не «модели, которую
-        // сейчас печатаем»: имя владельца берётся из самой переменной (`upper`),
-        // поэтому одноимённые переменные разных под-моделей расходятся сами
-        // собой, без карты имён и без риска, что карта отобразит не ту.
-        VariableNode::Simple { upper, name, .. } => {
-            let Some(owner) = upper.as_ref().and_then(|u| u.upgrade()) else {
-                // Владельца нет — это не переменная модели, а локальная
-                // переменная функции: у неё нет ни регистра, ни префикса.
-                return Some(name.clone());
-            };
-            // ⚠️ Параметры и локальные переменные функции — ТОЖЕ `Simple` и
-            // тоже ссылаются на модель. Отличить их можно ровно одним: они не
-            // объявлены в самой модели. Без этой проверки `travel_time(to_stack)`
-            // печатал бы `stacker_to_stack` — сигнал, которого не существует
-            // (проба 2026-07-16: `Can't find definition of variable`).
-            if !owner.borrow().variables.contains_key(name) {
-                return Some(name.clone());
-            }
-            let model: crate::semantic::minimap::Name = owner.into();
-            Some(format!("{}_{}", model.unique_lowercase_snakecase(), name))
-        }
-        // Порт — вывод кристалла, его имя задал автор и оно уникально по модулю
-        // (`collect_ports` дедуплицирует). Константа — `localparam` уровня
-        // модуля: префикс ей не нужен и только мешал бы читать — **кроме**
-        // константы, выведенной из параметра модели (фича 0185).
-        VariableNode::Const { upper, name, .. } => Some(const_signal(upper.as_ref(), name)),
-        VariableNode::Port { name, .. } => Some(name.clone()),
-        VariableNode::Unresolved => None,
-    }
-}
-
-/// Имя `localparam` константы — **с префиксом владельца** (фича 0193; форма
-/// заведена задачей 0185-06 для констант-параметров).
-///
-/// ⚠️ Композиция в цели `sv` **уплощается**, и `localparam` живёт на уровне
-/// модуля: две модели с одноимённой константой разных значений давали **одно**
-/// объявление, и вторая молча получала значение первой (проба: `model A { const
-/// K := 2; } model B { const K := 3; }` давала один `localparam K = 2`).
-/// Поэтому префикс несут **все** константы, а не только выведенные из параметра
-/// модели — правило то же, что у регистров (`Simple` выше), и берётся оно у
-/// **владельца**, а не у «модели, которую печатаем». Исключение для обычных
-/// констант, заведённое 0185-06 ради неизменного вывода корпуса, снято ADR 0193.
-///
-/// ⚠️ Тем же именем идёт дедупликация объявлений (`sv_const::emit_constants`) и
-/// согласуется ключ «константа используется»
-/// ([`crate::semantic::unused::const_key`]): печать и фильтрация — одно правило.
-pub(crate) fn const_signal(
-    upper: Option<&std::rc::Weak<std::cell::RefCell<crate::semantic::ModelNode>>>,
-    name: &str,
-) -> String {
-    let Some(owner) = upper.and_then(|u| u.upgrade()) else {
-        return name.to_string();
-    };
-    let model: crate::semantic::minimap::Name = owner.into();
-    format!("{}_{}", model.unique_lowercase_snakecase(), name)
-}
-
-/// Печатает доступ к члену (`x.0` → `x[0]`, `p.field` → `p.field`).
-///
-/// **Битового доступа как отдельной конструкции в SV нет и не нужно:** вектор
-/// индексируется тем же `[]`, что и массив. Это заметно проще цели `st`, где
-/// `x.0` разворачивается в маску `(USINT_TO_BYTE(x) AND 16#01) <> 16#00` —
-/// MatIEC не знает ни `x.0`, ни `%X0` (`CLAUDE.md`, фича 0041).
-fn print_member(base: &str, member: &Member) -> String {
-    match member {
-        Member::Number(index) => format!("{}[{}]", base, index),
-        Member::Identifier(id) => format!("{}.{}", base, id.name),
     }
 }
 
@@ -307,7 +213,7 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::MoreEqual(l, r) => cmp(l, ">=", r),
         ConditionNode::Equal(l, r) => cmp(l, "==", r),
         ConditionNode::NotEqual(l, r) => cmp(l, "!=", r),
-        ConditionNode::Variable(var, _) => signal_of(var)
+        ConditionNode::Variable(var, _) => signal_of_in(var, scope)
             .map(|name| scope.read(&name))
             .ok_or_else(|| sv002("неразрешённая переменная в условии")),
         // База — выражение (фича 0358): печатается тем же печатником условий,
@@ -459,7 +365,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             print_expression(t, scope)?,
             print_expression(f, scope)?
         )),
-        ExpressionNode::Variable(var) => signal_of(var)
+        ExpressionNode::Variable(var) => signal_of_in(var, scope)
             .map(|name| scope.read(&name))
             .ok_or_else(|| sv002("неразрешённая переменная")),
         // Индекс сужается до ширины, которую требует размер массива (фича
@@ -632,6 +538,8 @@ fn same_printed_type(inner: &ExpressionNode, ty: &crate::semantic::type_node::Ty
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::ast::Member;
+    use crate::semantic::VariableNode;
     use std::collections::BTreeSet;
 
     /// Пустой контекст: регистровых пар нет.
@@ -659,6 +567,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -681,6 +590,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -706,6 +616,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -731,6 +642,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -757,6 +669,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -783,6 +696,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -804,6 +718,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -834,6 +749,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -854,6 +770,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,
@@ -897,6 +814,7 @@ mod tests {
             registered: &set,
             function: None,
             function_ret: None,
+            locals: crate::generator::sv::sv_scope::no_locals(),
             enums: &enums,
             structs: &structs,
             warnings: &warnings,

@@ -127,7 +127,7 @@ pub(crate) fn emit_enums(p: &mut Printer, blocks: &[Block]) -> Result<(), Diagno
                 };
                 p.ident(&format!(
                     "{} = {}{}",
-                    crate::generator::sv::sv_expr::sv_enum_variant_name(&def.name, variant),
+                    crate::generator::sv::sv_names::sv_enum_variant_name(&def.name, variant),
                     literal,
                     comma
                 ))

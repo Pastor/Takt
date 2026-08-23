@@ -6,7 +6,7 @@
 //! значение к типу приёмника.
 
 use super::sv_expr::print_expression;
-use super::sv_expr::sv_enum_variant_name;
+use super::sv_names::sv_enum_variant_name;
 use super::sv_type::sv_enum_type_name;
 use crate::diagnostics::Diagnostic;
 use crate::semantic::ExpressionNode;
@@ -53,6 +53,15 @@ pub(crate) struct Scope<'a> {
     /// инженеру хуже, чем `COMMAND_UP`, — а RTL читают. Поэтому значение
     /// восстанавливается в имя варианта, и приведение остаётся запасным путём
     /// для значения, которому варианта нет.
+    /// Имена, ЛОКАЛЬНЫЕ для печатаемой функции: параметры и её `var` (0424).
+    ///
+    /// ⚠️ Без этого списка локальная переменная, чьё имя совпало с переменной
+    /// модели, печаталась СИГНАЛОМ МОДЕЛИ: признак «локальная» строился как
+    /// «имя не объявлено в модели», а при совпадении он ложен. Замер
+    /// 2026-08-23: функция писала в `alias_array_s_next`, то есть в состояние
+    /// автомата; `verilator` отвечал `MULTIDRIVEN` при нулевом коде возврата
+    /// `taktc`, а цели `c` и `rust` ту же запись переводят верно.
+    pub(crate) locals: &'a BTreeSet<String>,
     pub(crate) enums: &'a BTreeMap<String, Vec<(String, i128)>>,
     /// Поля структур модели: `имя структуры → [(поле, тип)]` (фича 0340).
     ///
@@ -173,4 +182,13 @@ impl Scope<'_> {
             signal.to_string()
         }
     }
+}
+
+/// Пустой набор локальных имён — для контекстов вне тела функции (0424).
+///
+/// ⚠️ Статический, а не временный: `&Default::default()` в литерале `Scope`
+/// живёт до конца выражения, и компилятор такую ссылку не выпускает наружу.
+pub(crate) fn no_locals() -> &'static BTreeSet<String> {
+    static EMPTY: std::sync::OnceLock<BTreeSet<String>> = std::sync::OnceLock::new();
+    EMPTY.get_or_init(BTreeSet::new)
 }
