@@ -173,7 +173,7 @@ pub fn compile_to_c(
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     // Шаги 1–2: разбор и семантика; диагностика получает путь своего файла.
-    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options)?;
 
     // Генератор C требует именованной модели.
     // Корневая (файловая) модель всегда анонимна — задаём имя из имени файла.
@@ -219,7 +219,7 @@ pub fn compile_to_c_hal(
     env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options)?;
 
     if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -284,7 +284,7 @@ pub fn compile_to_st(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options)?;
 
     if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -350,7 +350,7 @@ pub fn compile_to_rust(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options)?;
 
     if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -415,7 +415,7 @@ pub fn compile_to_sv(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options)?;
 
     if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -452,7 +452,7 @@ pub fn compile_to_st_at(
     env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options)?;
 
     if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -506,7 +506,7 @@ pub fn compile_to_plantuml(
     output_path: &str,
     search_paths: &[String],
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, false)?;
+    let unit = parse_and_construct(filename, source, search_paths, &GenerateOptions::default())?;
 
     if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)

@@ -39,7 +39,7 @@ pub(crate) fn parse_and_construct(
     filename: &str,
     source: &str,
     search_paths: &[String],
-    specialize: bool,
+    options: &crate::generator::GenerateOptions,
 ) -> Result<Compilation, Diagnostic> {
     let mut files = diagnostics::FileTable::new(filename);
 
@@ -54,7 +54,7 @@ pub(crate) fn parse_and_construct(
         None,
         search_paths,
         &mut files,
-        specialize,
+        options.specialize,
     )
     .map_err(|d| stamp_file(d, &files))?;
 
@@ -82,6 +82,13 @@ pub(crate) fn parse_and_construct(
             });
         }
         return Err(stamp_file(d, &files));
+    }
+    // Guard границ массива (фича 0433) — по флагу и ПОСЛЕ семантики: проходу
+    // нужен разрешённый тип базы, а печатникам целей о его форме знать не
+    // нужно (приём 0400). Место — конвейер, а не стадии: флаг принадлежит
+    // вызову цели, и эталон зовёт проход своим (`takt-sim --bounds-check`).
+    if options.bounds_check {
+        semantic::bounds_guard::insert_bounds_guards(&model);
     }
     Ok(Compilation { model, files })
 }

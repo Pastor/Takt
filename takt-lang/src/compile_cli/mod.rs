@@ -55,6 +55,9 @@ pub struct CompileOptions {
     pub quiet: bool,
     /// Флаг включения генерации проверок Guard-формул.
     pub guard_enable: bool,
+    /// Guard границ массива в порождённом коде (фича 0433), флаг
+    /// `--bounds-check`. Умолчание — выключен (решение заказчика).
+    pub bounds_check: bool,
     /// Символы платформы для выражений адреса: сырые аргументы `--define`
     /// (фича 0042). Разбор в среду — `takt_lang::parse_defines`.
     ///
@@ -138,6 +141,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut verbose = false;
     let mut quiet = false;
     let mut guard_enable = true;
+    let mut bounds_check = false;
     let mut address_map: Option<String> = None;
     let mut float_width = crate::FloatWidth::default();
     let mut float_as_q: Option<(u8, u8)> = None;
@@ -198,6 +202,11 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
             }
             "--guard-disable" => {
                 guard_enable = false;
+            }
+            // Guard границ массива (фича 0433): выключен по умолчанию — он
+            // стоит тактов и вентилей, а включение изменило бы вывод корпуса.
+            "--bounds-check" => {
+                bounds_check = true;
             }
             "--address-map" => {
                 i += 1;
@@ -292,6 +301,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         verbose,
         quiet,
         guard_enable,
+        bounds_check,
         address_map,
         float_width,
         float_as_q,
@@ -401,6 +411,7 @@ fn generate_options(options: &CompileOptions) -> crate::GenerateOptions {
     // Режим параметров (фича 0185): `specialize` включает копирование моделей
     // по наборам аргументов между стадиями 1 и 2 семантики.
     generate.specialize = options.parameters == ParametersMode::Specialize;
+    generate.bounds_check = options.bounds_check;
     // Адаптер шины (фича 0169): применим только к цели `sv-mmio` — у прочих
     // регистрового файла нет, и попытка кончается `SV-019`, а не молчанием.
     generate.bus = options.bus;

@@ -30,6 +30,16 @@ struct Args {
     #[arg(short = 'n', long = "steps", value_name = "N")]
     steps: Option<usize>,
 
+    /// Guard границ массива (фича 0433): доступ за границей не выполняется, а
+    /// признак уходит в выходной порт `bounds_fault`.
+    ///
+    /// Без флага эталон отвечает `SIM-010` и останавливает прогон — это его
+    /// умолчание и умолчание целей (флаг `--bounds-check` у `taktc`). Флаг
+    /// нужен, чтобы сверять трассы: включённый guard обязан давать у эталона и
+    /// у прошивки одно и то же.
+    #[arg(long = "bounds-check")]
+    bounds_check: bool,
+
     /// Директория для сохранения графики (GIF или SVG).
     /// Режим выбирается полем output_mode в --graphics-config ("gif" по умолчанию).
     #[arg(short = 'o', long = "output", value_name = "DIR")]
@@ -143,6 +153,9 @@ fn run(args: Args) -> Result<RunResult, String> {
     let clock_hz = model_rc.borrow().clock_hz;
 
     // 5. Строим Unit
+    if args.bounds_check {
+        takt_lang::semantic::bounds_guard::insert_bounds_guards(&model_rc);
+    }
     let mut unit = build_unit(model_rc).map_err(|d| format!("Ошибка построения: {}", d.message))?;
 
     // 5а. Загружаем сохранённое состояние (если указано)
