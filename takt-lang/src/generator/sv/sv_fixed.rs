@@ -60,26 +60,21 @@ pub(crate) fn fixed_format_in(
     }
 }
 
-/// Тип поля структуры по выражению-базе (фича 0371).
+/// Тип поля структуры по выражению-базе (фича 0371, носитель — 0399).
 ///
-/// Объявления берутся у снимка карты, который цель уже носит в `Scope`:
-/// второго знания о полях не заводится.
+/// Спуск по типу (`переменная(.поле | [индекс])*`) делает **общий** носитель
+/// `validate::base_type_with`: у цели `sv` модели нет, она носит снимок карты,
+/// поэтому объявления передаются замыканием (приём 0366). Своего разбора
+/// цепочки здесь больше нет — он разошёлся бы с тем, которым живут `SE-061`,
+/// `SE-028`/`SE-030` и печать среза (класс 0084/0193/0195, стоивший четырёх
+/// правок в 0371).
 fn field_type(
     base: &ExpressionNode,
     field: &str,
     structs: &std::collections::BTreeMap<String, Vec<(String, TypeNode)>>,
 ) -> Option<TypeNode> {
-    let base_ty = match base {
-        ExpressionNode::Variable(var) => var.borrow().ty().clone(),
-        ExpressionNode::Parenthesis(inner) => return field_type(inner, field, structs),
-        ExpressionNode::ArraySubscript(inner, _) => {
-            match crate::generator::sv::sv_array::array_type_expr(inner)? {
-                TypeNode::Array(_, elem) => (*elem).clone(),
-                _ => return None,
-            }
-        }
-        _ => return None,
-    };
+    let fields_of = |name: &str| structs.get(name).cloned();
+    let base_ty = crate::semantic::validate::base_type::base_type_with(base, &fields_of)?;
     let TypeNode::Struct(name) = base_ty else {
         return None;
     };

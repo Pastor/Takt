@@ -50,6 +50,7 @@ mod local_aggregate_tests;
 mod mixed_arith_tests;
 mod mixed_sign_tests;
 mod nested_struct_targets_tests;
+mod operand_type_carrier_tests;
 mod port_composite_tests;
 mod port_initial_value_hdl_tests;
 mod rust_default_impl_tests;

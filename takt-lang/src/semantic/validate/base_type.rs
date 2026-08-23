@@ -48,17 +48,47 @@ use crate::semantic::type_node::TypeNode;
 /// Разбирается цепочка `переменная(.поле | [индекс])*` — то, из чего состоит
 /// **место** в языке. Всё прочее даёт `None`.
 pub(crate) fn base_type(expr: &ExpressionNode, model: &ModelNode) -> Option<TypeNode> {
+    base_type_with(expr, &|name| model.search_struct(name).map(|s| s.fields))
+}
+
+/// Способ узнать поля структуры по её имени (фича 0399).
+///
+/// Печатники целей носят объявления по-разному: у `st` и `rust` есть
+/// `ModelNode`, у `sv` — снимок карты. Замыкание примиряет оба, не заводя
+/// второго знания о спуске по типу (приём 0366).
+pub(crate) type FieldsOf<'a> = &'a dyn Fn(&str) -> Option<Vec<(String, TypeNode)>>;
+
+/// То же, но поля структур берутся ЗАМЫКАНИЕМ (фича 0399).
+///
+/// Нужен печатникам целей: у `sv` модели нет — она носит снимок карты
+/// (`Scope::structs`), и знание «как спускаться по типу» иначе пришлось бы
+/// писать второй раз. Приём тот же, что у `aggregate::leaves` (0366).
+///
+/// ⚠️ Ответ **консервативен**: `None` означает «тип надёжно не выводится», и
+/// потребитель обязан идти прежним путём, а не догадываться.
+pub(crate) fn base_type_with(expr: &ExpressionNode, fields_of: FieldsOf<'_>) -> Option<TypeNode> {
     match expr {
         ExpressionNode::Variable(var_rc) => Some(var_rc.borrow().ty().clone()),
-        ExpressionNode::Parenthesis(inner) => base_type(inner, model),
+        ExpressionNode::Parenthesis(inner) => base_type_with(inner, fields_of),
         ExpressionNode::BitAccess(inner, Member::Identifier(field)) => {
-            field_type(base_type(inner, model)?, &field.name, model)
+            field_of(base_type_with(inner, fields_of)?, &field.name, fields_of)
         }
         // Элемент массива — тип элемента; так `b.data[1].x` и `ps[1].x`
         // разбираются одним правилом.
-        ExpressionNode::ArraySubscript(base, _) => element_type(base_type(base, model)?),
+        ExpressionNode::ArraySubscript(base, _) => element_type(base_type_with(base, fields_of)?),
         _ => None,
     }
+}
+
+/// Тип поля по замыканию — шаг спуска, общий для всех входов.
+fn field_of(base: TypeNode, field: &str, fields_of: FieldsOf<'_>) -> Option<TypeNode> {
+    let TypeNode::Struct(name) = base else {
+        return None;
+    };
+    fields_of(&name)?
+        .into_iter()
+        .find(|(f, _)| f == field)
+        .map(|(_, t)| t)
 }
 
 /// Тип места в РАЗРЕШЁННОМ условии (`cond`, формулы) — фича 0382.
