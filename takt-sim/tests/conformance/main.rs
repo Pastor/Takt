@@ -57,6 +57,7 @@ mod conformance_mixed_sign_tests;
 mod conformance_named_cond_tests;
 mod conformance_param_apply_tests;
 mod conformance_param_modes_tests;
+mod conformance_port_array_tests;
 mod conformance_port_init_tests;
 mod conformance_port_split_tests;
 mod conformance_postfix_index_tests;

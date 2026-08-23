@@ -26,6 +26,7 @@
 extern crate core;
 
 use crate::parser::ast;
+use crate::semantic::condition::{observe::lower_for_target, port_split::PortSplit};
 use diagnostics::Diagnostic;
 use std::path::Path;
 
@@ -191,8 +192,7 @@ pub fn compile_to_c(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-
-    crate::semantic::condition::observe::lower_for_target(&unit.model, true, false)?;
+    lower_for_target(&unit.model, PortSplit::All, false)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-as-q` +
     // `--float-embedded` (иначе `float` остаётся нативным `double`).
@@ -229,8 +229,7 @@ pub fn compile_to_c_hal(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-
-    crate::semantic::condition::observe::lower_for_target(&unit.model, true, false)?;
+    lower_for_target(&unit.model, PortSplit::All, false)?;
 
     // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
 
@@ -295,8 +294,7 @@ pub fn compile_to_st(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-
-    crate::semantic::condition::observe::lower_for_target(&unit.model, false, true)?;
+    lower_for_target(&unit.model, PortSplit::ArraysOnly, true)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -362,8 +360,7 @@ pub fn compile_to_rust(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-
-    crate::semantic::condition::observe::lower_for_target(&unit.model, true, true)?;
+    lower_for_target(&unit.model, PortSplit::All, true)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -432,6 +429,7 @@ pub fn compile_to_sv(
     // Фича 0096: при `--float-as-q=m.n` понижаем `float → q(m, n)` (снимая
     // `SV-003`). Для `sv` флаг применяется всегда (без `--float-embedded`).
     apply_float_lowering(&unit.model, options, false)?;
+    lower_for_target(&unit.model, PortSplit::ArraysOnly, false)?; // 0417: порт-массив
 
     unit.emit(generator::Language::SV, output_path, options)
 }
@@ -464,7 +462,7 @@ pub fn compile_to_st_at(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-    crate::semantic::condition::observe::lower_for_target(&unit.model, true, true)?;
+    lower_for_target(&unit.model, PortSplit::All, true)?;
 
     let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
     if let Some(err) = resolution

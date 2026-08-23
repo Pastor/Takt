@@ -41,46 +41,76 @@ use crate::semantic::{
     ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode, StatementNode, VariableNode,
 };
 
-/// Карта разворота: имя исходного порта → его листы `(поле, ячейка порта)`.
-type LeafCells = BTreeMap<String, Vec<(String, Rc<RefCell<VariableNode>>)>>;
+/// Шаг пути к листу: поле структуры либо элемент массива (фича 0417).
+///
+/// ⚠️ Путь ШАГАМИ, а не готовой строкой: форма обращения у поля и у элемента
+/// разная (`po.lo` против `bus[0]`), и различать их обязан разворот — тот же
+/// приём, что у носителя вложенных агрегатов (0366).
+#[derive(Clone, PartialEq)]
+enum Step {
+    Field(String),
+    Index(i128),
+}
 
-/// Лист развёрнутого порта: имя, тип и смещение адреса в байтах.
+/// Карта разворота: имя исходного порта → его листы `(путь, ячейка порта)`.
+type LeafCells = BTreeMap<String, Vec<(Vec<Step>, Rc<RefCell<VariableNode>>)>>;
+
+/// Лист развёрнутого порта: имя, путь, тип и смещение адреса в байтах.
 struct Leaf {
     name: String,
+    path: Vec<Step>,
     ty: TypeNode,
     offset: i128,
 }
 
+/// Что разворачивать (фича 0417).
+///
+/// ⚠️ Вид составного типа значим: порт-СТРУКТУРУ цели `st` и `sv` печатают
+/// сами (0390), а порт-МАССИВ не умеет никто — у `st` вывод отвергает `iec2c`
+/// при нулевом коде возврата, у `sv` цель отказывает `SV-002`. Поэтому массив
+/// разворачивается всем, а структура — только тем, кто её не умеет.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum PortSplit {
+    /// Только массивы (цели `st` и `sv`).
+    ArraysOnly,
+    /// Массивы и структуры (цели, у которых составного порта нет вовсе).
+    All,
+}
+
 /// Разворачивает составные порты по всему дереву.
-pub(crate) fn split_composite_ports(root: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(crate) fn split_composite_ports(
+    root: &Rc<RefCell<ModelNode>>,
+    what: PortSplit,
+) -> Result<(), Diagnostic> {
     let mut visited = HashSet::new();
-    split_model(root, &mut visited)
+    split_model(root, what, &mut visited)
 }
 
 fn split_model(
     model: &Rc<RefCell<ModelNode>>,
+    what: PortSplit,
     visited: &mut HashSet<*const RefCell<ModelNode>>,
 ) -> Result<(), Diagnostic> {
     if !visited.insert(Rc::as_ptr(model)) {
         return Ok(());
     }
     let nested: Vec<Rc<RefCell<ModelNode>>> = model.borrow().models.values().cloned().collect();
-    split_here(model)?;
+    split_here(model, what)?;
     for child in &nested {
-        split_model(child, visited)?;
+        split_model(child, what, visited)?;
     }
     Ok(())
 }
 
 /// Разворачивает порты ОДНОЙ модели и переписывает её тела.
-fn split_here(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+fn split_here(model: &Rc<RefCell<ModelNode>>, what: PortSplit) -> Result<(), Diagnostic> {
     // Какие порты разворачивать — решается до правки: обход тел спрашивает
     // готовую карту, а не ищет объявление заново.
     let targets: Vec<(String, VariableNode)> = model
         .borrow()
         .variables
         .iter()
-        .filter(|(_, var)| matches!(var, VariableNode::Port { ty, .. } if is_composite(ty)))
+        .filter(|(_, var)| matches!(var, VariableNode::Port { ty, .. } if is_composite(ty, what)))
         .map(|(name, var)| (name.clone(), var.clone()))
         .collect();
     if targets.is_empty() {
@@ -100,7 +130,7 @@ fn split_here(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
             continue;
         };
         let mut leaves = Vec::new();
-        collect_leaves(name, ty, 0, &model.borrow(), &mut leaves)?;
+        collect_leaves(name, &[], ty, 0, &model.borrow(), &mut leaves)?;
         let base = literal_address(address);
         let mut made = Vec::new();
         for leaf in &leaves {
@@ -123,10 +153,7 @@ fn split_here(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
                 .borrow_mut()
                 .variables
                 .insert(leaf.name.clone(), port.clone());
-            made.push((
-                leaf.name[name.len() + 1..].to_string(),
-                Rc::new(RefCell::new(port)),
-            ));
+            made.push((leaf.path.clone(), Rc::new(RefCell::new(port))));
         }
         cells.insert(name.clone(), made);
         model.borrow_mut().variables.remove(name);
@@ -136,23 +163,51 @@ fn split_here(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-/// Составной ли тип порта: структура (массивы остаются целям — их развернуть
-/// значило бы решить и вопрос длины, а он у целей свой).
-fn is_composite(ty: &TypeNode) -> bool {
-    matches!(ty, TypeNode::Struct(_))
+/// Составной ли тип порта: структура или массив (фича 0417).
+///
+/// ⚠️ Бит-вектор `[bit; N ≤ 64]` — **скаляр** (правило 0078), а не массив:
+/// разворачивать его значило бы превратить упакованное слово в набор портов.
+fn is_composite(ty: &TypeNode, what: PortSplit) -> bool {
+    match ty {
+        TypeNode::Struct(_) => what == PortSplit::All,
+        TypeNode::Array(..) => crate::semantic::bit_vector::is_bit_vector(ty).is_none(),
+        _ => false,
+    }
 }
 
 /// Листья структуры: имя `<порт>_<поле>`, тип и смещение в байтах.
 fn collect_leaves(
     prefix: &str,
+    path: &[Step],
     ty: &TypeNode,
     offset: i128,
     model: &ModelNode,
     out: &mut Vec<Leaf>,
 ) -> Result<(), Diagnostic> {
+    // Массив раскрывается по элементам: имя `<порт>_<индекс>` (фича 0417).
+    // Бит-вектор сюда не попадает — он скаляр (правило 0078).
+    if let TypeNode::Array(size, elem) = ty
+        && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+    {
+        let step = size_of(elem, model);
+        for index in 0..i128::from(*size) {
+            let mut next = path.to_vec();
+            next.push(Step::Index(index));
+            collect_leaves(
+                &format!("{prefix}_{index}"),
+                &next,
+                elem,
+                offset + index * step,
+                model,
+                out,
+            )?;
+        }
+        return Ok(());
+    }
     let TypeNode::Struct(name) = ty else {
         out.push(Leaf {
             name: prefix.to_string(),
+            path: path.to_vec(),
             ty: ty.clone(),
             offset,
         });
@@ -167,7 +222,16 @@ fn collect_leaves(
     })?;
     let mut at = offset;
     for (field, field_ty) in &def.fields {
-        collect_leaves(&format!("{prefix}_{field}"), field_ty, at, model, out)?;
+        let mut next = path.to_vec();
+        next.push(Step::Field(field.clone()));
+        collect_leaves(
+            &format!("{prefix}_{field}"),
+            &next,
+            field_ty,
+            at,
+            model,
+            out,
+        )?;
         at += size_of(field_ty, model);
     }
     Ok(())
@@ -319,15 +383,7 @@ fn split_aggregate_assign(stmt: &StatementNode, cells: &LeafCells) -> Option<Vec
         }
         other => leaves
             .iter()
-            .map(|(field, _)| {
-                ExpressionNode::BitAccess(
-                    Box::new(other.clone()),
-                    Member::Identifier(crate::parser::ast::Identifier {
-                        loc: *loc,
-                        name: field.clone(),
-                    }),
-                )
-            })
+            .map(|(path, _)| access_by_path(other, path, *loc))
             .collect(),
     };
     Some(
@@ -349,16 +405,55 @@ fn split_aggregate_assign(stmt: &StatementNode, cells: &LeafCells) -> Option<Vec
     )
 }
 
+/// Ячейка листа по одному шагу от имени порта.
+fn leaf_of(base: &ExpressionNode, step: &Step, cells: &LeafCells) -> Option<ExpressionNode> {
+    let ExpressionNode::Variable(var) = base else {
+        return None;
+    };
+    cells
+        .get(var.borrow().name())
+        .and_then(|leaves| {
+            leaves
+                .iter()
+                .find(|(path, _)| path.as_slice() == [step.clone()])
+        })
+        .map(|(_, cell)| ExpressionNode::Variable(Rc::clone(cell)))
+}
+
+/// Обращение к части значения по пути листа: поле — точкой, элемент — индексом.
+fn access_by_path(value: &ExpressionNode, path: &[Step], loc: Location) -> ExpressionNode {
+    let mut expr = value.clone();
+    for step in path {
+        expr = match step {
+            Step::Field(name) => ExpressionNode::BitAccess(
+                Box::new(expr),
+                Member::Identifier(crate::parser::ast::Identifier {
+                    loc,
+                    name: name.clone(),
+                }),
+            ),
+            Step::Index(index) => ExpressionNode::ArraySubscript(
+                Box::new(expr),
+                Box::new(ExpressionNode::Number(*index)),
+            ),
+        };
+    }
+    expr
+}
+
 /// `po.lo` → порт листа; прочее — рекурсия.
 fn rewrite_expr(expr: &mut ExpressionNode, cells: &LeafCells) {
     // Замена вычисляется ОТДЕЛЬНО: заимствование `expr` живо, пока в нём
     // ищут лист, и присвоение внутри `if let` компилятор не пропустит.
     let replacement = match expr {
-        ExpressionNode::BitAccess(base, Member::Identifier(field)) => match &**base {
-            ExpressionNode::Variable(var) => cells
-                .get(var.borrow().name())
-                .and_then(|leaves| leaves.iter().find(|(f, _)| *f == field.name))
-                .map(|(_, cell)| ExpressionNode::Variable(Rc::clone(cell))),
+        ExpressionNode::BitAccess(base, Member::Identifier(field)) => {
+            leaf_of(base, &Step::Field(field.name.clone()), cells)
+        }
+        // Элемент массива-порта (фича 0417). Индекс обязан быть ЛИТЕРАЛОМ:
+        // при переменном лист неизвестен, и такой вход уходит прежним путём —
+        // к отказу цели, а не к молчаливо неверному обращению.
+        ExpressionNode::ArraySubscript(base, index) => match &**index {
+            ExpressionNode::Number(value) => leaf_of(base, &Step::Index(*value), cells),
             _ => None,
         },
         _ => None,

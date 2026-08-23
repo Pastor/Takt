@@ -1,0 +1,199 @@
+//! Порт-МАССИВ: эталон против прошивки цели `c` (фича 0417).
+//!
+//! # Что было
+//!
+//! Замер 2026-08-23 (`scripts/probe.sh` на `out bus: [u8;2] at 0x200;`):
+//! эталон исполняет, `plantuml` принимает, а остальные шесть целей —
+//! `CC-015`, `ST-004`, `RS-016`, `SV-002`; цель **`st` рапортовала об успехе**,
+//! и её вывод отвергал `iec2c` («Incompatible data types for ':=' operation»)
+//! при нулевом коде возврата `taktc`.
+//!
+//! Порт-структура разворачивалась по листам с 0390, массив был назван границей
+//! («вопрос длины у целей свой»). Разворот массива снимает её тем же приёмом:
+//! за границей семантики составного порта не существует.
+//!
+//! ⚠️ Сверяются **значения по листам**: линт и компиляция не видят, попал ли
+//! `src[1]` в `bus_0`. Элементы фикстуры различны и меняются каждый такт —
+//! на постоянных перестановка неотличима от верного вывода.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+const FIXTURE: &str = "tests/data/eval/conformance_port_array.takt";
+const UNIT: &str = "conformance_port_array";
+const TICKS: usize = 3;
+
+fn cc_available() -> bool {
+    Command::new("cc")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn build_dir(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "takt_0417_{tag}_{}_{}",
+        std::process::id(),
+        std::thread::current()
+            .name()
+            .unwrap_or("t")
+            .replace(':', "_")
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог");
+    dir
+}
+
+/// Потактовые значения обоих элементов порта у эталона.
+fn simulator_trace() -> Vec<(i128, i128)> {
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    let (ast, _) = takt_lang::parse(&source, 0).expect("разбор фикстуры");
+    let model = takt_lang::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = takt_sim::build_unit(model).expect("построение Unit");
+    let mut trace = Vec::new();
+    for _ in 0..TICKS {
+        let _ = unit.tick();
+        // У эталона порт остаётся МАССИВОМ: разворот принадлежит целям.
+        match unit.variable("bus") {
+            Some(takt_sim::Value::Array(items)) => {
+                let at = |i: usize| match &items[i] {
+                    takt_sim::Value::Number(v) => *v,
+                    other => panic!("элемент порта обязан быть числом, получено {other:?}"),
+                };
+                trace.push((at(0), at(1)));
+            }
+            other => panic!("порт 'bus' обязан быть массивом, получено {other:?}"),
+        }
+    }
+    trace
+}
+
+/// Те же значения у прошивки — прогоном харнесса с колбэком HAL.
+fn generated_c_trace(dir: &Path) -> Vec<(i128, i128)> {
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    takt_lang::compile_to_c(
+        UNIT,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    // Наблюдение идёт через колбэк портов — ровно так прошивку видит плата.
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "{UNIT}.h"
+
+static long long bus0 = -1;
+static long long bus1 = -1;
+
+static void on_write(ConformancePortArray_Out_NumericPort port, int64_t value, void *ud) {{
+    (void)ud;
+    if (port == CONFORMANCE_PORT_ARRAY_PORT_BUS_0) {{ bus0 = (long long)value; }}
+    if (port == CONFORMANCE_PORT_ARRAY_PORT_BUS_1) {{ bus1 = (long long)value; }}
+}}
+
+int main(void) {{
+    ConformancePortArray m;
+    ConformancePortArray_init(&m);
+    m.write_numeric = on_write;
+    m.userdata = 0;
+    for (int i = 0; i < {TICKS}; i++) {{
+        ConformancePortArray_tick(&m);
+        printf("%lld %lld\n", bus0, bus1);
+    }}
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("harness.c");
+    std::fs::write(&harness_path, &harness).expect("запись харнесса");
+
+    let bin = dir.join("port_bin");
+    let compile = Command::new("cc")
+        .args([
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Wno-unused-parameter",
+            "-Werror",
+            "-o",
+        ])
+        .arg(&bin)
+        .arg(&harness_path)
+        .arg(dir.join(format!("{UNIT}.c")))
+        .arg("-I")
+        .arg(dir)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "cc не собрал харнесс флагами гейта цели:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    let run = Command::new(&bin).output().expect("запуск харнесса");
+    assert!(run.status.success(), "харнесс завершился с ошибкой");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .map(|line| {
+            let mut parts = line
+                .split_whitespace()
+                .map(|p| p.parse::<i128>().expect("число в выводе харнесса"));
+            (parts.next().expect("bus_0"), parts.next().expect("bus_1"))
+        })
+        .collect()
+}
+
+/// Значения листов совпадают потактово — и порядок не перепутан.
+#[test]
+fn port_array_values_match_the_reference() {
+    let sim = simulator_trace();
+    assert_eq!(
+        sim,
+        vec![(8, 11), (9, 13), (10, 15)],
+        "эталон: элементы различны и растут по-разному"
+    );
+
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] port_array_values_match_the_reference: cc не найден");
+        return;
+    }
+    let dir = build_dir("trace");
+    let c = generated_c_trace(&dir);
+    assert_eq!(
+        sim, c,
+        "значения листов порта обязаны совпадать с эталоном потактово"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Адрес листа — базовый плюс смещение элемента (фича 0417).
+///
+/// ⚠️ Раскладка обязана быть предсказуемой: у HAL-целей порт ложится на
+/// регистр, и «где второй элемент» — вопрос не вкуса, а стенда.
+#[test]
+fn leaf_addresses_follow_the_base() {
+    let dir = build_dir("addr");
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    takt_lang::compile_to_c_hal(
+        UNIT,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &[],
+        &takt_lang::address_map::AddressEnv::default(),
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение c-hal");
+    // Таблица адресов HAL живёт в заголовке — там и проверяется раскладка.
+    let text =
+        std::fs::read_to_string(dir.join(format!("{UNIT}.h"))).expect("чтение заголовка HAL");
+    assert!(
+        text.contains("0x200") && text.contains("0x201"),
+        "элементы обязаны лечь по базовому адресу и следующему за ним:\n{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
