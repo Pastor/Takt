@@ -22,6 +22,13 @@ pub(crate) struct Scope<'a> {
     /// тактом. Ключи — **имена сигналов** (уже с префиксом уровня), а не имена
     /// Takt.
     pub(crate) registered: &'a BTreeSet<String>,
+    /// Имена ДВУНАПРАВЛЕННЫХ портов (фича 0428).
+    ///
+    /// У такого порта две стороны: чтение идёт с входа `<имя>_i`, который ведёт
+    /// плата, а запись — в `<имя>_o` (плюс строб `<имя>_we`, его печатает
+    /// оператор). Обычный порт остаётся одним сигналом, поэтому список, а не
+    /// правило по имени.
+    pub(crate) inouts: &'a BTreeSet<String>,
     /// Имя объемлющей функции, если печатается её тело.
     ///
     /// Нужно для `return`: в SystemVerilog функция возвращает значение
@@ -100,6 +107,11 @@ impl Scope<'_> {
     /// `always_comb` (`v_next = v;`) и ветвь сброса; оба печатаются напрямую,
     /// минуя этот метод.
     pub(crate) fn read(&self, signal: &str) -> String {
+        // Двунаправленный порт читается СО СТОРОНЫ ВХОДА: `_next` у него нет —
+        // это вход модуля, а не регистр (фича 0428).
+        if self.inouts.contains(signal) {
+            return crate::generator::sv::sv_module::inout_in(signal);
+        }
         if self.registered.contains(signal) {
             format!("{}_next", signal)
         } else {
@@ -176,6 +188,12 @@ impl Scope<'_> {
     /// У локальной переменной функции и у константы пары нет: первая живёт
     /// внутри одного вычисления, вторая вообще не регистр.
     pub(crate) fn write(&self, signal: &str) -> String {
+        // Запись двунаправленного порта идёт в сторону ВЫХОДА (фича 0428);
+        // строб `_we` печатает оператор присваивания.
+        if self.inouts.contains(signal) {
+            let out = crate::generator::sv::sv_module::inout_out(signal);
+            return format!("{}_next", out);
+        }
         if self.registered.contains(signal) {
             format!("{}_next", signal)
         } else {
@@ -184,11 +202,21 @@ impl Scope<'_> {
     }
 }
 
-/// Пустой набор локальных имён — для контекстов вне тела функции (0424).
+/// Пустой набор имён: контекст вне тела функции (0424) и модуль без
+/// двунаправленных портов (0428).
 ///
 /// ⚠️ Статический, а не временный: `&Default::default()` в литерале `Scope`
 /// живёт до конца выражения, и компилятор такую ссылку не выпускает наружу.
 pub(crate) fn no_locals() -> &'static BTreeSet<String> {
     static EMPTY: std::sync::OnceLock<BTreeSet<String>> = std::sync::OnceLock::new();
     EMPTY.get_or_init(BTreeSet::new)
+}
+
+/// Пустой набор двунаправленных портов — тот же статик под своим именем (0428).
+///
+/// Только для тестов: в рабочем пути список приходит из `Fsm`, и своего
+/// «пустого» вызова там нет — под `-D warnings` он был бы мёртвым кодом.
+#[cfg(test)]
+pub(crate) fn no_inouts() -> &'static BTreeSet<String> {
+    no_locals()
 }

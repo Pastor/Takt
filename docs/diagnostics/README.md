@@ -385,7 +385,7 @@
 | `SV-003` | `float` в типе **без** `--float-as-q` | `takt-lang/src/generator/sv/sv_fixed.rs:173` |
 | `SV-004` | Вещественный тип (float) не существует в синтезируемом RTL | `takt-lang/src/generator/sv/sv_type.rs:88` |
 | `SV-005` | `extern fn` в цели `sv`: внешнего кода в синтезируемом RTL нет — вызов выразить нечем | `takt-lang/src/generator/sv/sv_expr.rs:84` |
-| `SV-006` | Порт `inout` в цели `sv`: двунаправленный вывод требует буфера с третьим состоянием, которого модель не описывает | `takt-lang/src/generator/sv/sv_mmio.rs:208` |
+| `SV-006` | Порт `inout` **с адресом** в цели `sv-mmio`: направление принадлежит биту регистрового файла — бит либо пишется шиной, либо читается ею. ⚠️ У цели `sv` порт `inout` **переводится** с фичи 0428 (три сигнала `_i`/`_o`/`_we`); отказ остался только у регистрового интерфейса | `takt-lang/src/generator/sv/sv_mmio.rs` |
 | `SV-007` | порт с именем `clk`, `rst_n`, `is_done`, `state`, `state_next` | `takt-lang/src/generator/sv/sv_module.rs:371` |
 | `SV-008` | неконстантный `enter` стартового состояния | `takt-lang/src/generator/sv/sv_fsm.rs:81` |
 | `SV-009` | Деление/остаток по переменному делителю — в RTL нет аппаратного делителя (предупреждение) | `takt-lang/src/generator/sv/sv_expr.rs:108` |

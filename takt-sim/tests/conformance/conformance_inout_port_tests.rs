@@ -4,7 +4,8 @@
 //!
 //! Замер 2026-08-23 на `inout line: u8 at 0x200;`: эталон исполняет, `st`,
 //! `st-at`, `rust` и `plantuml` переводят и их инструменты принимают, `sv` и
-//! `sv-mmio` отказывают `SV-006` (двунаправленного порта у цели нет), а
+//! `sv-mmio` отказывали `SV-006` (у `sv` снято фичей 0428, у `sv-mmio`
+//! остаётся: там направление принадлежит биту регистрового файла), а
 //! **`c` и `c-hal` рапортовали об успехе с невалидным выводом**:
 //!
 //! ```text
@@ -209,4 +210,217 @@ fn inout_enumerators_differ_by_side() {
     );
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&dir2);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Цель `sv` (фича 0428): три сигнала вместо трёхстабильной шины
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Форму выбрал заказчик 2026-08-23: `line_i` (вход), `line_o` (выход) и строб
+// `line_we`. Это ровно та механика, что у цели `c` — плата держит ячейку,
+// модуль её читает и пишет. Трёхстабильная шина отвергнута: внутри кристалла
+// её нет (yosys: «limited support for tri-state logic»), а сигнал разрешения
+// пришлось бы выводить из модели, которая о нём молчит.
+
+fn tool(bin: &str) -> bool {
+    Command::new(bin)
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn generate_sv(dir: &Path) {
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    takt_lang::compile_to_sv(
+        UNIT,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+}
+
+/// Трасса RTL: ячейку держит тестбенч — как плата и как харнесс цели `c`.
+fn generated_sv_trace(dir: &Path) -> Vec<i128> {
+    generate_sv(dir);
+    let tb = format!(
+        r#"module tb;
+    logic clk = 0, rst_n = 0;
+    logic [7:0] line_i, line_o;
+    logic line_we, is_done;
+    // «Плата»: ячейка, которую модуль читает и пишет. Значение, записанное в
+    // такте N, видно чтению такта N+1 — как у эталона; поэтому чтение идёт
+    // через тот же строб, а не через регистр ячейки (регистр обновится лишь на
+    // следующем фронте, и трасса сдвинулась бы на такт).
+    logic [7:0] mem;
+    always_ff @(posedge clk) begin
+        if (!rst_n) mem <= '0;
+        else if (line_we) mem <= line_o;
+    end
+    assign line_i = line_we ? line_o : mem;
+    {UNIT} dut (.clk(clk), .rst_n(rst_n), .line_i(line_i), .line_o(line_o),
+                .line_we(line_we), .is_done(is_done));
+    always #5 clk = ~clk;
+    initial begin
+        @(posedge clk);
+        rst_n <= 1'b1;
+        for (int i = 0; i < {TICKS}; i++) begin
+            @(posedge clk);
+            #1 $display("TICK %0d", line_we ? line_o : mem);
+        end
+        $finish;
+    end
+endmodule
+"#
+    );
+    std::fs::write(dir.join("tb.sv"), tb).expect("тестбенч");
+    let build = Command::new("verilator")
+        .current_dir(dir)
+        .args([
+            "--binary",
+            "-j",
+            "0",
+            "--timing",
+            "-Wno-fatal",
+            "--top-module",
+            "tb",
+            "tb.sv",
+            &format!("{UNIT}.sv"),
+            "-o",
+            "simtb",
+        ])
+        .output()
+        .expect("запуск verilator");
+    assert!(
+        build.status.success(),
+        "verilator не собрал тестбенч:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("obj_dir").join("simtb"))
+        .current_dir(dir)
+        .output()
+        .expect("запуск симуляции");
+    assert!(run.status.success(), "симуляция RTL упала");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|line| line.strip_prefix("TICK ")?.trim().parse::<i128>().ok())
+        .collect()
+}
+
+/// Значения двунаправленного порта в RTL совпадают с эталоном.
+///
+/// ⚠️ Сверка значений обязательна: перепутанные стороны (`_i` вместо `_o`)
+/// дают валидный, синтезируемый модуль — и другой автомат.
+#[test]
+fn inout_port_values_match_generated_sv() {
+    if !tool("verilator") {
+        eprintln!("[ПРОПУСК] inout_port_values_match_generated_sv: нет verilator");
+        return;
+    }
+    let dir = build_dir("sv_trace");
+    let sim = simulator_trace();
+    let rtl = generated_sv_trace(&dir);
+    assert_eq!(sim, rtl, "трассы эталона и RTL обязаны совпадать");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Строб поднят ТОЛЬКО в такте записи: умолчание — ноль, а не «как есть».
+///
+/// ⚠️ Без этого строб залипает после первой же записи, и плата затирает ячейку
+/// каждый такт — модель, записавшая порт однажды, вела бы линию вечно. На
+/// значениях фикстуры это невидимо (она пишет каждый такт), поэтому проверка
+/// смотрит текст.
+#[test]
+fn inout_strobe_defaults_to_zero() {
+    let dir = build_dir("sv_text");
+    generate_sv(&dir);
+    let sv = std::fs::read_to_string(dir.join(format!("{UNIT}.sv"))).expect("чтение модуля");
+    assert!(
+        sv.contains("line_we_next = 1'b0;"),
+        "умолчание строба обязано быть нулём:\n{sv}"
+    );
+    assert!(
+        sv.contains("line_we_next = 1'b1;"),
+        "запись порта обязана поднимать строб:\n{sv}"
+    );
+    assert!(
+        sv.contains("input  logic [7:0] line_i") && sv.contains("output logic [7:0] line_o"),
+        "порт обязан развернуться в три сигнала:\n{sv}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Стороны НЕ перепутаны: чтение идёт с `_i`, запись — в `_o`.
+///
+/// ⚠️ Проверка смотрит ТЕКСТ, и это названная граница. Различить стороны
+/// значениями можно лишь тогда, когда ячейку меняет кто-то извне: пока её
+/// единственный источник — сам модуль, `line_i` и `line_o` совпадают, и трасса
+/// у перепутанных сторон та же. Мутация подтвердила: сверка значений её
+/// пропускает, ловит только линт (`UNUSEDSIGNAL` на неподключённом входе) —
+/// а линт молчал бы, начни модель читать порт где-то ещё.
+#[test]
+fn inout_sides_are_not_swapped() {
+    let dir = build_dir("sv_sides");
+    generate_sv(&dir);
+    let sv = std::fs::read_to_string(dir.join(format!("{UNIT}.sv"))).expect("чтение модуля");
+    let body = sv.split("always_comb").nth(1).expect("тело always_comb");
+    assert!(
+        body.contains("line_i + "),
+        "чтение порта обязано идти со стороны входа:\n{body}"
+    );
+    assert!(
+        body.contains("line_o_next = "),
+        "запись порта обязана идти в сторону выхода:\n{body}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Порождённый модуль проходит линт ЦЕЛИ и СИНТЕЗИРУЕТСЯ.
+///
+/// ⚠️ Два инструмента обязательны (урок 0045): трёхстабильную форму, которую
+/// эта фича отвергла, verilator принимает молча, а yosys встречает
+/// «limited support for tri-state logic».
+#[test]
+fn inout_port_sv_passes_tools() {
+    if !tool("verilator") {
+        eprintln!("[ПРОПУСК] inout_port_sv_passes_tools: нет verilator");
+        return;
+    }
+    let dir = build_dir("sv_tools");
+    generate_sv(&dir);
+    let lint = Command::new("verilator")
+        .current_dir(&dir)
+        .args([
+            "--lint-only",
+            "-Wall",
+            "--top-module",
+            UNIT,
+            &format!("{UNIT}.sv"),
+        ])
+        .output()
+        .expect("запуск verilator");
+    assert!(
+        lint.status.success(),
+        "линт цели отверг модуль:\n{}",
+        String::from_utf8_lossy(&lint.stderr)
+    );
+    if tool("yosys") {
+        let synth = Command::new("yosys")
+            .current_dir(&dir)
+            .args([
+                "-q",
+                "-p",
+                &format!("read_verilog -sv {UNIT}.sv; synth -top {UNIT}"),
+            ])
+            .output()
+            .expect("запуск yosys");
+        assert!(
+            synth.status.success(),
+            "модуль не синтезируется:\n{}",
+            String::from_utf8_lossy(&synth.stderr)
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

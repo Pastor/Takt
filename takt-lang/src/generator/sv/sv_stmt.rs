@@ -526,6 +526,13 @@ fn print_expression_statement(
                 None => print_expression(value, scope)?,
             };
             p.ident(&format!("{} = {};", lhs, rhs)).nl();
+            // Строб записи двунаправленного порта (фича 0428): плата защёлкивает
+            // сторону `_o` только в такте, где строб поднят, — иначе внешние
+            // изменения ячейки затирались бы каждым тактом (умолчание выхода —
+            // «как есть»).
+            if let Some(we) = inout_strobe(target, scope) {
+                p.ident(&format!("{}_next = 1'b1;", we)).nl();
+            }
             Ok(())
         }
         // Вызов как оператор. В SystemVerilog функция обязана использовать
@@ -572,6 +579,27 @@ fn target_type(target: &ExpressionNode) -> Option<TypeNode> {
         | crate::semantic::VariableNode::Port { ty, .. }
         | crate::semantic::VariableNode::Const { ty, .. } => Some(ty.clone()),
         crate::semantic::VariableNode::Unresolved => None,
+    }
+}
+
+/// Имя строба записи, если цель присваивания — двунаправленный порт (0428).
+///
+/// Разбирается **та же цепочка**, что и в [`print_assign_target`]: запись в
+/// разряд или элемент порта (`line.3 := 1;`) — тоже запись порта, и строб ей
+/// нужен так же, как записи целиком.
+fn inout_strobe(target: &ExpressionNode, scope: &Scope) -> Option<String> {
+    match target {
+        ExpressionNode::Variable(var) => {
+            let name = signal_of_in(var, scope)?;
+            scope
+                .inouts
+                .contains(&name)
+                .then(|| crate::generator::sv::sv_module::inout_we(&name))
+        }
+        ExpressionNode::ArraySubscript(base, _) | ExpressionNode::BitAccess(base, _) => {
+            inout_strobe(base, scope)
+        }
+        _ => None,
     }
 }
 
@@ -637,6 +665,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -668,6 +697,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -697,6 +727,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),

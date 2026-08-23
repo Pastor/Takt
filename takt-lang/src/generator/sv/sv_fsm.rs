@@ -49,13 +49,10 @@ use crate::generator::sv::sv_expr::{Scope, print_condition};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
 use crate::generator::sv::sv_names::{step_enum_name, step_reg_name, step_variant};
-use crate::generator::sv::sv_stmt::{
-    emit_hoisted_locals, has_early_return, hoist_locals, print_statement,
-};
 use crate::generator::sv::sv_time;
 use crate::generator::sv::sv_type::sv_type;
 use crate::semantic::minimap::{Element, Name, StateExtend};
-use crate::semantic::{FunctionDefinitionNode, ModelNode, StateNode, VariableNode};
+use crate::semantic::{ModelNode, StateNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -82,6 +79,12 @@ pub(crate) struct Reg {
     pub(crate) leaves: Vec<(String, String)>,
     /// Объявлять ли сам регистр: у выходного порта он уже объявлен в заголовке.
     pub(crate) declare_reg: bool,
+    /// Умолчание в `always_comb`, если оно НЕ «остаться как есть» (фича 0428).
+    ///
+    /// Такое умолчание есть у строба записи двунаправленного порта: `_we`
+    /// поднят ровно в том такте, где модель писала порт, — «как есть» оставило
+    /// бы его поднятым навсегда, и плата затирала бы ячейку каждый такт.
+    pub(crate) default: Option<String>,
 }
 
 /// Сигналы и отображения модуля, собранные по всем уровням.
@@ -104,13 +107,15 @@ pub(crate) struct Fsm {
     /// Уровни с механизмом времени (фича 0134): перекрытие `_next` в `always_comb`.
     time_levels: Vec<sv_time::TimeLevel>,
     /// Имена регистровых сигналов (ключи для `Scope::registered`).
-    registered: BTreeSet<String>,
+    pub(crate) registered: BTreeSet<String>,
+    /// Имена двунаправленных портов (фича 0428): у них две стороны, `_i` и `_o`.
+    pub(crate) inouts: BTreeSet<String>,
     /// Имя регистра состояния по уникальному имени модели.
     pub(crate) state_reg: BTreeMap<String, String>,
     /// Варианты перечислений модели — для восстановления варианта по значению.
-    enums: BTreeMap<String, Vec<(String, i128)>>,
+    pub(crate) enums: BTreeMap<String, Vec<(String, i128)>>,
     /// Поля структур: `имя → [(поле, тип)]` (фича 0340).
-    structs: BTreeMap<String, Vec<(String, crate::semantic::type_node::TypeNode)>>,
+    pub(crate) structs: BTreeMap<String, Vec<(String, crate::semantic::type_node::TypeNode)>>,
     /// Цепочки `+`: место и число шагов (для эмиссии enum шага, задача
     /// 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
     pub(crate) step_enums: Vec<StepEnum>,
@@ -269,6 +274,7 @@ impl Fsm {
             regs: Vec::new(),
             time_levels: Vec::new(),
             registered: BTreeSet::new(),
+            inouts: BTreeSet::new(),
             state_reg: BTreeMap::new(),
             enums: BTreeMap::new(),
             structs: BTreeMap::new(),
@@ -315,6 +321,7 @@ impl Fsm {
                 reset: start.unique_uppercase_snakecase(),
                 declare_reg: true,
                 leaves: Vec::new(),
+                default: None,
             });
 
             // Переменные модели: свой регистр на каждую, с префиксом уровня.
@@ -373,6 +380,7 @@ impl Fsm {
                     reset,
                     declare_reg: true,
                     leaves,
+                    default: None,
                 });
             }
             drop(model);
@@ -397,6 +405,7 @@ impl Fsm {
                         reset: step_variant(state_name, &chain.path, 0),
                         declare_reg: true,
                         leaves: Vec::new(),
+                        default: None,
                     });
                     fsm.step_enums.push(StepEnum {
                         state: state_name.clone(),
@@ -443,6 +452,46 @@ impl Fsm {
                 )?,
                 declare_reg: false,
                 leaves: Vec::new(),
+                default: None,
+            });
+        }
+
+        // Двунаправленные порты (фича 0428): сторона ЗАПИСИ и строб. Сторона
+        // чтения регистром не становится — это вход модуля, его ведёт плата.
+        for port in &ports.inouts {
+            fsm.inouts.insert(port.name.clone());
+            let out = crate::generator::sv::sv_module::inout_out(&port.name);
+            let we = crate::generator::sv::sv_module::inout_we(&port.name);
+            fsm.registered.insert(out.clone());
+            fsm.registered.insert(we.clone());
+            fsm.regs.push(Reg {
+                name: out,
+                prefix: port.ty.prefix.clone(),
+                suffix: port.ty.suffix.clone(),
+                reset: sv_const::reset_value(
+                    &port.init,
+                    &port.ty_node,
+                    &fsm.enums,
+                    &format!("порта '{}'", port.name),
+                    port.loc,
+                    map.root_model_node().as_ref(),
+                )?,
+                declare_reg: false,
+                leaves: Vec::new(),
+                default: None,
+            });
+            fsm.regs.push(Reg {
+                name: we,
+                prefix: "logic".to_string(),
+                suffix: String::new(),
+                reset: "1'b0".to_string(),
+                declare_reg: false,
+                leaves: Vec::new(),
+                // ⚠️ Умолчание — НОЛЬ, а не «как есть»: строб поднят ровно в
+                // том такте, где модель писала порт. «Как есть» оставило бы
+                // его поднятым навсегда, и плата затирала бы ячейку каждый
+                // такт — модель, которая пишет однажды, вела бы линию вечно.
+                default: Some("1'b0".to_string()),
             });
         }
 
@@ -472,6 +521,7 @@ impl Fsm {
                     reset,
                     declare_reg: true,
                     leaves: Vec::new(),
+                    default: None,
                 });
             }
         }
@@ -482,6 +532,7 @@ impl Fsm {
     pub(crate) fn scope(&self) -> Scope<'_> {
         Scope {
             registered: &self.registered,
+            inouts: &self.inouts,
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -490,156 +541,6 @@ impl Fsm {
             warnings: &self.warnings,
         }
     }
-}
-
-/// Печатает константы модели как `localparam`.
-///
-/// `localparam`, а не `parameter`: значение задано моделью и переопределению
-/// извне не подлежит — `parameter` объявил бы его настройкой модуля, которой
-/// автор не давал.
-/// Печатает функции модели как `function automatic`.
-///
-/// **`automatic` обязателен, а не украшение.** У статической функции SV
-/// переменные разделяются между вызовами, поэтому два вызова в одном
-/// `always_comb` дали бы **гонку** — то есть тихо неверную схему. `function`
-/// без `automatic` — скрытый дефект.
-///
-/// Состояние модели параметрами **не передаётся** — в отличие от цели `rust`
-/// (`rust_needs::FnNeeds`): в уплощённом модуле сигналы видны функции напрямую.
-pub(crate) fn emit_functions(
-    p: &mut Printer,
-    map: &SvMap,
-    fsm: &Fsm,
-    blocks: &[Block],
-) -> Result<(), Diagnostic> {
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    for (_, model_rc) in blocks {
-        let model = model_rc.borrow();
-        for func in model.functions.values() {
-            let FunctionDefinitionNode::Local {
-                name,
-                params,
-                ret,
-                body,
-                loc,
-                ..
-            } = func
-            else {
-                // `External` отвергается в месте вызова (`SV-005`): функция,
-                // которую никто не зовёт, вывод не ломает и запрета не требует.
-                continue;
-            };
-            if !map.usage().functions.contains(name) || !seen.insert(name.clone()) {
-                continue;
-            }
-            check_sv_name(name, *loc)?;
-            let ret_ty = sv_type(ret, &format!("возвращаемый тип функции '{}'", name))?;
-            let mut sig: Vec<String> = Vec::new();
-            // Массив в параметре передаётся ПЛОСКИМ вектором (фича 0369):
-            // распакованную размерность у порта функции yosys не принимает
-            // вовсе («input/output/inout ports cannot have unpacked
-            // dimensions»), тогда как verilator её пропускает — вывод
-            // компилировался и не синтезировался при нулевом коде возврата.
-            let fields_of = |name: &str| fsm.structs.get(name).cloned();
-            let mut unpack: Vec<(
-                String,
-                crate::semantic::type_node::TypeNode,
-                crate::generator::sv::sv_array::FlatParam,
-            )> = Vec::new();
-            for (param, ty) in params {
-                check_sv_name(param, *loc)?;
-                // Раскладка считается ПО ЛИСТЬЯМ (фича 0372): так одна форма
-                // обслуживает массив скаляров, структур, перечислений и
-                // вложенный массив, а вывод для скаляров остаётся прежним.
-                if let Some(flat_param) =
-                    crate::generator::sv::sv_array::flat_param(ty, &fields_of, &fsm.enums)
-                {
-                    let flat = crate::generator::sv::sv_array::flat_param_name(param);
-                    sig.push(format!("input logic [{}:0] {}", flat_param.width - 1, flat));
-                    unpack.push((param.clone(), ty.clone(), flat_param));
-                    continue;
-                }
-                let decl = sv_type(ty, &format!("параметр '{}' функции '{}'", param, name))?;
-                sig.push(format!("input {}", decl.declare(param)));
-            }
-            p.ident(&format!(
-                "function automatic {} {}({});",
-                ret_ty.prefix,
-                name,
-                sig.join(", ")
-            ))
-            .nl();
-            p.up();
-            // Объявления — до операторов: этого требует SystemVerilog, а Takt
-            // разрешает объявить переменную посреди тела.
-            let mut locals = Vec::new();
-            hoist_locals(body, &mut locals);
-            // Поглотитель для локальной, которую тело только пишет (фича 0387).
-            let mut unread = crate::semantic::unused::unread_locals(body);
-            // Переменная цикла читается ЧАСТИЧНО (фича 0425): гасим её разряды
-            // тем же поглотителем, что и вовсе непрочитанную локальную.
-            crate::generator::sv::sv_stmt::loop_variables(body, &mut unread);
-            emit_hoisted_locals(p, &locals, &unread)?;
-            // Пролог распаковки (фичи 0369, 0372) — у носителя раскладки.
-            for (param, ty, flat_param) in &unpack {
-                crate::generator::sv::sv_array::emit_unpack_prologue(
-                    p, param, ty, flat_param, name,
-                )?;
-            }
-            // Возврат печатается присваиванием имени функции и исполнения не
-            // прерывает, поэтому досрочный возврат сменил бы смысл молча.
-            if has_early_return(body) {
-                return Err(sv002(&format!(
-                    "досрочный возврат из функции '{}': возврат в цели 'sv' \
-                     печатается присваиванием имени функции и исполнение не \
-                     прерывает, поэтому допустим только последним оператором \
-                     тела. Ключевое слово 'return' эту задачу решило бы, но его \
-                     не принимает синтезатор yosys. Перепишите функцию так, \
-                     чтобы возврат был один и стоял в конце",
-                    name
-                )));
-            }
-            // Локальные имена функции — параметры и её `var` (фича 0424):
-            // без них локальная переменная, чьё имя совпало с переменной
-            // модели, печаталась бы сигналом модели.
-            let local_names: BTreeSet<String> = params
-                .iter()
-                .map(|(param, _)| param.clone())
-                .chain(locals.iter().map(|(local, _)| (*local).to_string()))
-                .collect();
-            let scope = Scope {
-                registered: &fsm.registered,
-                function: Some(name),
-                function_ret: Some(ret),
-                locals: &local_names,
-                enums: &fsm.enums,
-                structs: &fsm.structs,
-                warnings: &fsm.warnings,
-            };
-            // Тело печатается в буфер: параметру, которым тело не
-            // пользуется, verilator отвечает `UNUSEDSIGNAL`, а гейт цели
-            // считает предупреждение ошибкой (фича 0337). Признак — тот же,
-            // что у целей `c` (0260) и `rust`: вопрос задаётся напечатанному
-            // тексту.
-            let mut body_text = String::new();
-            {
-                let mut buffer = p.fork(&mut body_text);
-                print_statement(&mut buffer, body, &scope)?;
-            }
-            for (param, _) in params {
-                if crate::generator::sv::sv_unused::is_unused(&body_text, param) {
-                    crate::generator::sv::sv_unused::emit_guard(p, param);
-                }
-            }
-            p.print(&body_text);
-            // Поглотитель локальной, которую тело только пишет (фича 0387) —
-            // ПОСЛЕ тела: чтение до записи verilator встречает `ALWCOMBORDER`.
-            crate::generator::sv::sv_stmt::emit_local_sinks(p, &locals, &unread);
-            p.down();
-            p.ident("endfunction").nl().nl();
-        }
-    }
-    Ok(())
 }
 
 /// Печатает объявления регистров и их комбинационных пар.
@@ -698,7 +599,9 @@ pub(crate) fn emit_comb(
         // Массив со структурой внутри — по полям (фича 0367): whole-array
         // умолчание синтезатор считает защёлкой, когда тело пишет поле
         // элемента.
-        if reg.leaves.is_empty() {
+        if let Some(default) = &reg.default {
+            p.ident(&format!("{}_next = {};", reg.name, default)).nl();
+        } else if reg.leaves.is_empty() {
             p.ident(&format!("{}_next = {};", reg.name, reg.name)).nl();
         } else {
             for (suffix, _) in &reg.leaves {
