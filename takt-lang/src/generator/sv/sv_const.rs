@@ -365,6 +365,51 @@ pub(in crate::generator::sv) fn reset_value(
     })
 }
 
+/// Значение поля-массива внутри `struct packed` — конкатенацией (фича 0422).
+///
+/// `None` — поле массивом не является (или это упакованный бит-вектор: он
+/// печатается скаляром, правило 0078).
+#[allow(clippy::too_many_arguments)]
+fn packed_field_array(
+    value: &ExpressionNode,
+    field_ty: &TypeNode,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
+    field: &str,
+    struct_name: &str,
+    loc: Location,
+    scope: Option<&std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>>,
+) -> Result<Option<String>, Diagnostic> {
+    let TypeNode::Array(_, elem) = field_ty else {
+        return Ok(None);
+    };
+    if crate::semantic::bit_vector::is_bit_vector(field_ty).is_some() {
+        return Ok(None);
+    }
+    let (ExpressionNode::Initializer(items) | ExpressionNode::Array(items)) = value else {
+        return Ok(None);
+    };
+    let mut parts = Vec::with_capacity(items.len());
+    for item in items.iter().rev() {
+        let printed = reset_value(
+            item,
+            elem,
+            enums,
+            &format!("элемента поля '{field}' структуры '{struct_name}'"),
+            loc,
+            scope,
+        )?;
+        // Размерная форма обязательна: безразмерное число внутри `{…}` даёт
+        // `WIDTHCONCAT`, а гейт цели считает предупреждение ошибкой.
+        parts.push(match crate::generator::sv::sv_type::scalar_width(elem) {
+            Some(width) if printed.chars().all(|c| c.is_ascii_digit()) => {
+                format!("{width}'d{printed}")
+            }
+            _ => printed,
+        });
+    }
+    Ok(Some(format!("{{{}}}", parts.join(", "))))
+}
+
 /// Значение сброса для агрегата структуры (фича 0293).
 ///
 /// `'{kp: 8'd2, ki: 8'd3}` — именованная форма литерала упакованной структуры.
@@ -449,6 +494,17 @@ fn struct_reset(
     }
     let mut parts = Vec::with_capacity(items.len());
     for ((field, field_ty), value) in def.fields.iter().zip(items) {
+        // Поле-МАССИВ внутри `struct packed` объявлено УПАКОВАННЫМ (фича
+        // 0422), и его значение — конкатенация, а не шаблон `'{…}`:
+        // `verilator` отвечает «Assignment pattern member not underneath a
+        // supported construct: CONCAT». Порядок ОБРАТНЫЙ: у `logic [N-1:0]`
+        // старший разряд слева, то есть первым печатается последний элемент.
+        if let Some(text) = packed_field_array(value, field_ty, enums, field, name, loc, scope)? {
+            // Форма ПОЗИЦИОННАЯ, как и у прочих полей (yosys не принимает
+            // именованную — проба 0293).
+            parts.push(text);
+            continue;
+        }
         let printed = reset_value(
             value,
             field_ty,

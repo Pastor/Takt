@@ -169,13 +169,20 @@ pub(crate) fn emit_structs(
             p.ident("typedef struct packed {").nl();
             p.up();
             for (field, ty) in &def.fields {
+                let name = crate::semantic::naming::normalize_lowercase_snakecase(field.clone());
+                // Поле-МАССИВ печатается УПАКОВАННЫМ (фича 0422): внутри
+                // `struct packed` распакованная размерность запрещена
+                // стандартом (IEEE 1800-2023 7.2.1), и `verilator` отвечает
+                // «Unpacked data type … in packed struct/union» при нулевом
+                // коде возврата `taktc`. Обычная переменная-массив остаётся
+                // распакованной (0365) — там форма выбрана прогоном обоих
+                // инструментов, и менять её незачем.
+                if let Some(decl) = packed_array_field(ty, &name, &def.name, field)? {
+                    p.ident(&decl).nl();
+                    continue;
+                }
                 let sv = sv_type(ty, &format!("поле '{}' структуры '{}'", field, def.name))?;
-                let decl = format!(
-                    "{} {}{};",
-                    sv.prefix.trim(),
-                    crate::semantic::naming::normalize_lowercase_snakecase(field.clone()),
-                    sv.suffix
-                );
+                let decl = format!("{} {}{};", sv.prefix.trim(), name, sv.suffix);
                 p.ident(decl.trim_start()).nl();
             }
             p.down();
@@ -185,6 +192,42 @@ pub(crate) fn emit_structs(
         }
     }
     Ok(())
+}
+
+/// Объявление поля-массива в `struct packed` — упакованной формой (фича 0422).
+///
+/// `None` — поле массивом не является (или это упакованный бит-вектор, правило
+/// 0078: он печатается скаляром).
+fn packed_array_field(
+    ty: &TypeNode,
+    name: &str,
+    struct_name: &str,
+    field: &str,
+) -> Result<Option<String>, Diagnostic> {
+    let TypeNode::Array(size, elem) = ty else {
+        return Ok(None);
+    };
+    if crate::semantic::bit_vector::is_bit_vector(ty).is_some() {
+        return Ok(None);
+    }
+    let inner = sv_type(
+        elem,
+        &format!("элемент поля '{field}' структуры '{struct_name}'"),
+    )?;
+    // ⚠️ Размерность массива идёт ПЕРЕД размерностью элемента:
+    // `logic [N-1:0][W-1:0]` даёт `data[i]` шириной элемента, а обратный
+    // порядок (`logic [W-1:0][N-1:0]`) — шириной **числа элементов**;
+    // `verilator` тогда отвечает `WIDTHEXPAND`, что гейт цели считает ошибкой.
+    // Поймано прогоном, а не рассуждением.
+    let prefix = inner.prefix.trim();
+    let dim = format!("[{}:0]", i64::from(*size) - 1);
+    let decl = match prefix.find('[') {
+        Some(at) => format!("{}{}{}", &prefix[..at], dim, &prefix[at..]),
+        // У элемента-структуры разрядов в префиксе нет — размерность
+        // приписывается к имени типа.
+        None => format!("{prefix} {dim}"),
+    };
+    Ok(Some(format!("{decl} {name};")))
 }
 
 /// Отображает тип Takt в объявление SystemVerilog.
