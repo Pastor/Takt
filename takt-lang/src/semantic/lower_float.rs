@@ -554,6 +554,32 @@ fn lower_cond(cond: &mut ConditionNode, m: u8, n: u8) -> Result<(), Diagnostic> 
 
 // ── Тесты ─────────────────────────────────────────────────────────────────────
 
+/// Применяет трансформацию `float → q(m, n)` (фича 0096), если она включена
+/// для цели опциями генерации.
+///
+/// `embedded_gate` — требуется ли `--float-embedded`: `true` для программных
+/// целей `c`/`rust`/`st` (native по умолчанию, Q — только с флагом), `false`
+/// для `sv` (нативного `float` там нет, `q` подставляется всегда при заданной
+/// точности).
+///
+/// Без `--float-as-q` не делает ничего (корпус неизменен). Мутирует модель на
+/// месте — вызывать **перед** генерацией.
+///
+/// ⚠️ Живёт здесь, а не в `lib.rs`: тот пришпилен реестром размеров, и место
+/// для нового освобождается выносом (фича 0397).
+pub(crate) fn apply_float_lowering(
+    model: &std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
+    options: &crate::generator::GenerateOptions,
+    embedded_gate: bool,
+) -> Result<(), crate::diagnostics::Diagnostic> {
+    if let Some((m, n)) = options.float_as_q
+        && (!embedded_gate || options.float_embedded)
+    {
+        lower_float_to_fixed(std::rc::Rc::clone(model), m, n)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

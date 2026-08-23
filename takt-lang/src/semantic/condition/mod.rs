@@ -29,6 +29,7 @@ use base::{cond_base_is_array, cond_base_label};
 /// проекте нет и быть не должно — прецедент 0203: судья знал только полную
 /// форму, цели — обе, и `ref X: E != End;` отвергался на записи, которую
 /// генератор переводит.
+pub(crate) mod observe;
 pub mod state_of;
 
 use crate::diagnostics::Diagnostic;
@@ -916,6 +917,10 @@ start Entry = Ping | Pong;
 
     /// Скобочные формы `S(Модель) = Состояние` канонизируются в **одну** форму
     /// `Equal(Function(S, …), Unresolved(Variable))` — без обёрток `Parenthesis`.
+    ///
+    /// ⚠️ Форма доезжает до целей `c` и `sv` **как есть** (0245/0267); свёртку
+    /// в общую переменную делают только `st` и `rust` (фича 0397), и делают её
+    /// в своём конвейере — здесь дерево ещё каноничное.
     #[test]
     fn parenthesised_state_of_canonicalizes() {
         for form in [
@@ -930,7 +935,7 @@ start Entry = Ping | Pong;
             assert!(
                 is_canonical_state_of(&cond),
                 "форма `{form}` обязана дать каноничную Equal(Function(S,[Model]), \
-                 Unresolved(Variable \"End\")) без Parenthesis, получено {cond:?}"
+                 Unresolved(Variable \"End\") без Parenthesis, получено {cond:?}"
             );
         }
     }
