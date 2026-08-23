@@ -4,6 +4,18 @@
 //! поэтому печатнику нужен тип источника. Граница модуля — ответственность:
 //! `st_expr` печатает выражение, а здесь отвечают на вопрос «какого типа
 //! операнд».
+//!
+//! # Что здесь СВОЁ, а что общее (фича 0399)
+//!
+//! Цепочку `переменная(.поле | [индекс])*` разбирает общий носитель
+//! `validate::base_type` — тот же, которым живут `SE-061`, `SE-028`/`SE-030` и
+//! печать среза. Своё здесь — ответы, зависящие от **целевого языка**:
+//! разряд у `st` печатается сравнением (значит `BOOL`), а литерал типа не
+//! имеет вовсе (иначе печатник построил бы `INT_TO_…` для числа).
+//!
+//! ⚠️ Именно поэтому носители целей **не сводятся в один**: замер 2026-08-23
+//! показал, что на одном входе они обязаны отвечать по-разному, а общее у них
+//! только ядро.
 
 use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
@@ -16,19 +28,15 @@ use crate::semantic::{ConditionNode, ExpressionNode, ModelNode, VariableNode};
 /// тип поля объявлен. Имя функции преобразования IEC строится из обоих типов,
 /// и без типа источника печатать нечего.
 pub(crate) fn inner_expr_type_in(expr: &ExpressionNode, model: &ModelNode) -> Option<TypeNode> {
-    if let ExpressionNode::BitAccess(inner, Member::Identifier(field)) = expr
-        && let Some(TypeNode::Struct(name)) = inner_expr_type_in(inner, model)
-        && let Some(def) = model.search_struct(&name)
-    {
-        return def
-            .fields
-            .iter()
-            .find(|(f, _)| *f == field.name)
-            .map(|(_, ty)| ty.clone());
+    // Цепочка `переменная(.поле | [индекс])*` разбирается ОБЩИМ носителем
+    // (`validate::base_type`, фича 0399): своё знание о спуске по типу
+    // разошлось бы с тем, которым живут `SE-061`, `SE-028`/`SE-030` и печать
+    // среза — класс 0084/0193/0195, стоивший четырёх правок в 0371.
+    if let Some(found) = crate::semantic::validate::base_type::base_type(expr, model) {
+        return Some(found);
     }
-    if let ExpressionNode::Parenthesis(inner) = expr {
-        return inner_expr_type_in(inner, model);
-    }
+    // Прочее — своё: у цели `st` разряд печатается СРАВНЕНИЕМ, а литерал типа
+    // не имеет вовсе. Общего ответа тут нет и быть не должно (см. шапку).
     inner_expr_type(expr)
 }
 
