@@ -6,6 +6,7 @@ pub(crate) mod local_stub;
 pub(crate) mod mixed_sign;
 mod plantuml;
 mod rust;
+mod shift_width;
 mod site;
 pub(crate) mod slice;
 mod st;

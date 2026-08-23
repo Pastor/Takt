@@ -30,6 +30,7 @@ mod c_diagnostic_code_tests;
 mod c_enum_constants_tests;
 mod c_redundant_break_tests;
 mod c_refusal_position_tests;
+mod c_shift_width_tests;
 mod c_state_ref_tests;
 mod c_stub_tests;
 mod call_return_coercion_tests;
