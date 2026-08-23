@@ -14,6 +14,7 @@ use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_names;
 use crate::generator::sv::sv_type::enum_width;
 use crate::semantic::minimap::Element;
+use std::collections::BTreeSet;
 
 /// Печатает перечисления состояний всех уровней.
 pub(crate) fn emit_state_enums(
@@ -86,6 +87,60 @@ pub(crate) fn emit_step_enums(p: &mut Printer, fsm: &Fsm) -> Result<(), Diagnost
         }
         p.down();
         p.ident(&format!("}} {};", step_enum_name(state))).nl().nl();
+    }
+    Ok(())
+}
+
+/// Печатает ПОЛЬЗОВАТЕЛЬСКИЕ перечисления модели.
+///
+/// Переехало сюда из `sv_fsm` фичей 0423 по границе ответственности: рядом
+/// уже живут перечисления состояний и шагов, а FSM отвечает за автомат.
+pub(crate) fn emit_enums(p: &mut Printer, blocks: &[Block]) -> Result<(), Diagnostic> {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let model = model_rc.borrow();
+        for def in model.enums.values() {
+            if !seen.insert(def.name.clone()) {
+                continue;
+            }
+            // Ширина — по ДИАПАЗОНУ ЗНАЧЕНИЙ (задача 0045-03). Формула ADR (по
+            // числу вариантов) на `Idle = 670` дала бы `logic [0:0]` и
+            // `%Error-ENUMITEMWIDTH`.
+            let (width, signed) =
+                enum_width(&def.variants, &format!("перечисление '{}'", def.name))?;
+            let sign = if signed { "signed " } else { "" };
+            p.ident(&format!("typedef enum logic {}[{}:0] {{", sign, width - 1))
+                .nl();
+            p.up();
+            for (i, (variant, value)) in def.variants.iter().enumerate() {
+                let comma = if i + 1 == def.variants.len() { "" } else { "," };
+                // ⚠️ ОТРИЦАТЕЛЬНОЕ значение печатается `-W'sdN`, а не `W'd-5`
+                // (фича 0423): последнее синтаксически неверно — `verilator`
+                // отвечает «Number is missing value digits», причём при
+                // НУЛЕВОМ коде возврата `taktc`, тогда как эталон и остальные
+                // семь целей вход исполняют. Знак в объявлении был учтён
+                // (`logic signed`), а в значении — нет.
+                let literal = if *value < 0 {
+                    format!("-{width}'sd{}", value.unsigned_abs())
+                } else {
+                    format!("{width}'d{value}")
+                };
+                p.ident(&format!(
+                    "{} = {}{}",
+                    crate::generator::sv::sv_expr::sv_enum_variant_name(&def.name, variant),
+                    literal,
+                    comma
+                ))
+                .nl();
+            }
+            p.down();
+            p.ident(&format!(
+                "}} {};",
+                crate::generator::sv::sv_type::sv_enum_type_name(&def.name)
+            ))
+            .nl()
+            .nl();
+        }
     }
     Ok(())
 }

@@ -259,7 +259,7 @@ fn generate_program(
     // **обоими** инструментами: `typedef` на уровне файла принимают и
     // verilator, и yosys.
     sv_type::emit_structs(&mut p, &blocks)?;
-    sv_fsm::emit_enums(&mut p, &blocks)?;
+    sv_enums::emit_enums(&mut p, &blocks)?;
 
     sv_module::emit_module_header(&mut p, &module, &ports, mmio_map.as_ref(), time_ms_bits);
 

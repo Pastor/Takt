@@ -45,14 +45,14 @@ use crate::generator::indent::Printer;
 use crate::generator::sv::sv_blocks::{emit_model_prelude, emit_named_blocks, emit_state_prelude};
 use crate::generator::sv::sv_const;
 use crate::generator::sv::sv_expr::sv002;
-use crate::generator::sv::sv_expr::{Scope, print_condition, sv_enum_variant_name};
+use crate::generator::sv::sv_expr::{Scope, print_condition};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
 use crate::generator::sv::sv_stmt::{
     emit_hoisted_locals, has_early_return, hoist_locals, print_statement,
 };
 use crate::generator::sv::sv_time;
-use crate::generator::sv::sv_type::{enum_width, sv_enum_type_name, sv_type};
+use crate::generator::sv::sv_type::sv_type;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::{FunctionDefinitionNode, ModelNode, StateNode, VariableNode};
 use std::cell::RefCell;
@@ -495,44 +495,6 @@ impl Fsm {
 /// `localparam`, а не `parameter`: значение задано моделью и переопределению
 /// извне не подлежит — `parameter` объявил бы его настройкой модуля, которой
 /// автор не давал.
-/// Печатает пользовательские перечисления модели.
-pub(crate) fn emit_enums(p: &mut Printer, blocks: &[Block]) -> Result<(), Diagnostic> {
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    for (_, model_rc) in blocks {
-        let model = model_rc.borrow();
-        for def in model.enums.values() {
-            if !seen.insert(def.name.clone()) {
-                continue;
-            }
-            // Ширина — по ДИАПАЗОНУ ЗНАЧЕНИЙ (задача 0045-03). Формула ADR (по
-            // числу вариантов) на `Idle = 670` дала бы `logic [0:0]` и
-            // `%Error-ENUMITEMWIDTH`.
-            let (width, signed) =
-                enum_width(&def.variants, &format!("перечисление '{}'", def.name))?;
-            let sign = if signed { "signed " } else { "" };
-            p.ident(&format!("typedef enum logic {}[{}:0] {{", sign, width - 1))
-                .nl();
-            p.up();
-            for (i, (variant, value)) in def.variants.iter().enumerate() {
-                let comma = if i + 1 == def.variants.len() { "" } else { "," };
-                p.ident(&format!(
-                    "{} = {}'d{}{}",
-                    sv_enum_variant_name(&def.name, variant),
-                    width,
-                    value,
-                    comma
-                ))
-                .nl();
-            }
-            p.down();
-            p.ident(&format!("}} {};", sv_enum_type_name(&def.name)))
-                .nl()
-                .nl();
-        }
-    }
-    Ok(())
-}
-
 /// Печатает функции модели как `function automatic`.
 ///
 /// **`automatic` обязателен, а не украшение.** У статической функции SV
