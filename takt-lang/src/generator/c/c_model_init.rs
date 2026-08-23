@@ -467,7 +467,54 @@ fn generate_parallel_items_init(
                     .ident(&format!("{}.state = {}_INIT;", nested_access, nested_upper))
                     .nl();
             }
-            _ => {}
+            // ВЛОЖЕННАЯ последовательность (фича 0426): инициализируется
+            // ПЕРВЫЙ шаг и состояние цепочки. ⚠️ Остальные шаги не трогаются:
+            // их `_init` зовёт такт по завершении предыдущего — так же, как у
+            // последовательности верхнего уровня, иначе шаг начал бы отсчёт
+            // времени раньше, чем до него дошла очередь.
+            StateExtend::Concatenation(inner) => {
+                let nested_access = format!("{}.concat{}", parent_access, idx);
+                let nested_upper = format!("{}_CONCAT{}", parent_unique_upper, idx);
+                if let Some((first_idx, StateExtend::Model(first, args))) = inner
+                    .iter()
+                    .enumerate()
+                    .find(|(_, item)| matches!(item, StateExtend::Model(..)))
+                {
+                    let access = format!(
+                        "{}.{}{}",
+                        nested_access,
+                        first.local_lowercase_snakecase(),
+                        first_idx
+                    );
+                    printer
+                        .ident(&format!(
+                            "{}_init(&{}{});",
+                            first.unique_camelcase(),
+                            access,
+                            map.root_arg(
+                                first,
+                                append == ", model",
+                                crate::generator::c::c_needs::ModelFn::Init
+                            ),
+                        ))
+                        .nl();
+                    generate_argument_assignments(printer, map, model_element, &access, args)?;
+                    printer
+                        .ident(&format!(
+                            "{}.state = {}_{}{};",
+                            nested_access,
+                            nested_upper,
+                            first.unique_uppercase_snakecase(),
+                            first_idx
+                        ))
+                        .nl();
+                } else {
+                    printer
+                        .ident(&format!("{}.state = {}_END;", nested_access, nested_upper))
+                        .nl();
+                }
+            }
+            StateExtend::None => {}
         }
     }
     Ok(())

@@ -42,6 +42,7 @@ mod rust_assign;
 mod rust_bit;
 mod rust_blocks;
 mod rust_byref;
+mod rust_chain;
 mod rust_coerce;
 mod rust_cond;
 mod rust_ctx;

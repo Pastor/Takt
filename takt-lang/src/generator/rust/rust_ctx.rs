@@ -29,7 +29,7 @@
 
 use crate::generator::rust::rust_decl::PortSet;
 use crate::generator::rust::rust_map::RustMap;
-use crate::generator::rust::rust_model::{ConcatStep, Instance, StateTable};
+use crate::generator::rust::rust_model::{Instance, StateTable};
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ModelNode, StateNode};
@@ -52,7 +52,7 @@ pub(crate) struct ModelEmit<'a> {
     /// Экземпляры под-моделей по состояниям.
     pub instances: &'a [(Name, Vec<Instance>)],
     /// Шаги последовательных композиций по состояниям.
-    pub concats: &'a [(Name, Vec<ConcatStep>)],
+    pub concats: &'a [crate::generator::rust::rust_chain::Chain],
     /// Состояния модели в порядке карты.
     pub states: &'a [Name],
     /// Стартовое состояние.
