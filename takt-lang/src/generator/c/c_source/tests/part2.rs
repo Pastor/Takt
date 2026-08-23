@@ -150,11 +150,11 @@ fn test_init_parallel_generates_init_calls() {
 
     // Оба элемента инициализируются в INIT-блоке
     assert!(
-        code.contains("RootA_init(&model->s.a0, model)"),
+        code.contains("RootA_init(&model->s.a0)"),
         "ожидается RootA_init в INIT:\n{code}"
     );
     assert!(
-        code.contains("RootB_init(&model->s.b1, model)"),
+        code.contains("RootB_init(&model->s.b1)"),
         "ожидается RootB_init в INIT:\n{code}"
     );
     // Состояние параллели выставляется в INIT
@@ -176,9 +176,14 @@ fn test_init_parallel_generates_init_calls() {
 fn test_init_concatenation_generates_first_init_only() {
     let src = "model A { start Start; } model B { start Start; } start S = A + B { next End; } state End;";
     let code = generate_source_str(src);
-    // Первый элемент инициализируется в INIT-блоке
+    // Первый элемент инициализируется в INIT-блоке.
+    //
+    // ⚠️ Указатель на корень печатается ПО НУЖДЕ (фича 0396): модель `A`
+    // состоянием корня не пользуется, и второго аргумента у вызова больше нет.
+    // Предмет теста — **какой** элемент инициализируется, а не состав
+    // аргументов.
     assert!(
-        code.contains("RootA_init(&model->s_a0, model)"),
+        code.contains("RootA_init(&model->s_a0)"),
         "ожидается RootA_init в INIT:\n{code}"
     );
     // Указатель конкатенации выставляется на первый элемент
@@ -188,12 +193,12 @@ fn test_init_concatenation_generates_first_init_only() {
     );
     // Второй элемент инициализируется только в TICK при завершении A
     assert!(
-        code.contains("RootB_init(&model->s_b1, model)"),
+        code.contains("RootB_init(&model->s_b1)"),
         "ожидается RootB_init в TICK (при завершении A):\n{code}"
     );
     // В INIT-блоке B идёт ПОСЛЕ A (тик A и его is_done)
-    let a0_init_pos = code.find("RootA_init(&model->s_a0, model)").unwrap();
-    let b1_init_pos = code.find("RootB_init(&model->s_b1, model)").unwrap();
+    let a0_init_pos = code.find("RootA_init(&model->s_a0)").unwrap();
+    let b1_init_pos = code.find("RootB_init(&model->s_b1)").unwrap();
     assert!(
         a0_init_pos < b1_init_pos,
         "RootA_init должен быть раньше RootB_init в коде:\n{code}"
@@ -207,20 +212,20 @@ fn test_tick_parallel_generates_tick_and_done_check() {
     let code = generate_source_str(src);
     // Тик обоих элементов
     assert!(
-        code.contains("RootA_tick(&model->s.a0, model)"),
+        code.contains("RootA_tick(&model->s.a0)"),
         "ожидается RootA_tick:\n{code}"
     );
     assert!(
-        code.contains("RootB_tick(&model->s.b1, model)"),
+        code.contains("RootB_tick(&model->s.b1)"),
         "ожидается RootB_tick:\n{code}"
     );
     // Проверка is_done обоих
     assert!(
-        code.contains("RootA_is_done(&model->s.a0, model)"),
+        code.contains("RootA_is_done(&model->s.a0)"),
         "ожидается RootA_is_done:\n{code}"
     );
     assert!(
-        code.contains("RootB_is_done(&model->s.b1, model)"),
+        code.contains("RootB_is_done(&model->s.b1)"),
         "ожидается RootB_is_done:\n{code}"
     );
     // Оба условия объединены через &&
@@ -242,12 +247,12 @@ fn test_tick_concatenation_generates_state_chain() {
     );
     // Тик A
     assert!(
-        code.contains("RootA_tick(&model->s_a0, model)"),
+        code.contains("RootA_tick(&model->s_a0)"),
         "ожидается RootA_tick:\n{code}"
     );
     // При завершении A инициализируется B
     assert!(
-        code.contains("RootB_init(&model->s_b1, model)"),
+        code.contains("RootB_init(&model->s_b1)"),
         "ожидается RootB_init при переходе:\n{code}"
     );
     // Проверка по второму элементу
@@ -257,7 +262,7 @@ fn test_tick_concatenation_generates_state_chain() {
     );
     // Тик B
     assert!(
-        code.contains("RootB_tick(&model->s_b1, model)"),
+        code.contains("RootB_tick(&model->s_b1)"),
         "ожидается RootB_tick:\n{code}"
     );
 }
@@ -282,11 +287,11 @@ state End;";
     );
     // Тик B внутри вложенной параллели
     assert!(
-        code.contains("RootB_tick(&model->s_parallel1.b0, model)"),
+        code.contains("RootB_tick(&model->s_parallel1.b0)"),
         "ожидается RootB_tick в параллели:\n{code}"
     );
     assert!(
-        code.contains("RootC_tick(&model->s_parallel1.c1, model)"),
+        code.contains("RootC_tick(&model->s_parallel1.c1)"),
         "ожидается RootC_tick в параллели:\n{code}"
     );
 }

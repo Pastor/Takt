@@ -39,6 +39,25 @@ pub struct CMap {
 }
 
 impl CMap {
+    /// Аргумент-указатель на корень для вызова функций модели `child`
+    /// (фича 0396): `", main"`, `", model"` либо пусто.
+    ///
+    /// `caller_is_main` — печатается ли вызов из тела корневой модели: там
+    /// указатель на корень зовётся `model`, в под-модели — `main`.
+    ///
+    /// ⚠️ Признак спрашивается у **одного** носителя (`c_needs`) и здесь, и в
+    /// сигнатуре: разъехавшись, они дали бы «too many arguments» — отказ `cc`,
+    /// то есть громкий, но всё же отказ.
+    pub(crate) fn root_arg(&self, child: &Name, caller_is_main: bool) -> &'static str {
+        let needed = self
+            .raw_model_at(child.clone())
+            .is_ok_and(|rc| crate::generator::c::c_needs::model_needs_root(&rc));
+        if !needed {
+            return "";
+        }
+        if caller_is_main { ", model" } else { ", main" }
+    }
+
     pub(crate) fn raw_model_at(&self, name: Name) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
         self.map
             .model_at(Some(name.unique().to_string()))

@@ -7,9 +7,8 @@ static void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main);
 static bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *main);
 
 ///Функции моделей
-static PidState PidHeater_pid_compute(const PidHeater *model, PidState p, double sp, double pv);
-static PidState PidHeater_pid_compute(const PidHeater *model, PidState p, double sp, double pv) {
-    (void)model;
+static PidState PidHeater_pid_compute(PidState p, double sp, double pv);
+static PidState PidHeater_pid_compute(PidState p, double sp, double pv) {
     PidState r = p;
     double err = sp - pv;
     double prop = p.kp * err;
@@ -59,7 +58,7 @@ void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main) {
             break;
         }
         case PID_HEATER_HEATER_HEATING: {
-            model->loop_pid = PidHeater_pid_compute(main, model->loop_pid, main->target, main->meas);
+            model->loop_pid = PidHeater_pid_compute(model->loop_pid, main->target, main->meas);
             main->ctrl = model->loop_pid.output;
             model->err = main->target - main->meas;
             main->meas = main->meas + main->gain * main->ctrl - main->loss * (main->meas - main->ambient);

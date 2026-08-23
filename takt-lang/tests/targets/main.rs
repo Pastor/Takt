@@ -28,6 +28,7 @@ mod c_builtin_dropped_tests;
 mod c_default_init_tests;
 mod c_diagnostic_code_tests;
 mod c_enum_constants_tests;
+mod c_param_on_demand_tests;
 mod c_redundant_break_tests;
 mod c_refusal_position_tests;
 mod c_shift_width_tests;
