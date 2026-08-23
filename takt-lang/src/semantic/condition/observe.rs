@@ -322,3 +322,26 @@ fn rewrite_cond(cond: &mut ConditionNode, cells: &BTreeMap<String, Rc<RefCell<Va
         _ => {}
     }
 }
+
+/// Понижения, зависящие от ЦЕЛИ (фичи 0390, 0397).
+///
+/// Оба прохода снимают формы, которые часть целей не переводит, и зовутся не
+/// из общих стадий, а из конвейера конкретной цели: у `st`/`sv` наблюдение
+/// состояния соседа работает напрямую (0245/0267), у `st`/`sv` — и составной
+/// порт (0350), и общий разворот изменил бы их вывод без нужды.
+///
+/// ⚠️ Собрано **одной** точкой входа: `lib.rs` пришпилен реестром размеров, и
+/// шесть пар «комментарий + вызов» в него не помещались.
+pub(crate) fn lower_for_target(
+    model: &std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
+    split_ports: bool,
+    fold_state_observe: bool,
+) -> Result<(), crate::diagnostics::Diagnostic> {
+    if split_ports {
+        super::port_split::split_composite_ports(model)?;
+    }
+    if fold_state_observe {
+        expand_state_observation(model)?;
+    }
+    Ok(())
+}

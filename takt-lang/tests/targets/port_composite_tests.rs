@@ -43,19 +43,34 @@ fn build_dir(tag: &str) -> PathBuf {
     dir
 }
 
-/// Цель `c`: порт составного типа — отказ, а не невалидный вывод.
+/// Цель `c`: порт структурного типа **переводится** — разворотом на скалярные.
+///
+/// ⚠️ Прежде здесь проверялся отказ `CC-015` (колбэк HAL принимает скаляр) —
+/// утверждение, переставшее быть верным (класс 0191): фича 0390 развернула
+/// такой порт в семантике по листам структуры, и цель получает уже скаляры.
+/// Сам отказ **не снят**: он остаётся защитой в глубину, а его недостижимость
+/// держит другая фича (образец 0236, 0291).
 #[test]
-fn c_refuses_composite_port() {
+fn c_translates_composite_port_by_leaves() {
     let dir = build_dir("c");
-    let err = takt_lang::compile_to_c(
+    takt_lang::compile_to_c(
         "cp",
         STRUCT_PORT,
         dir.to_str().expect("путь в UTF-8"),
         &[],
         &takt_lang::generator::GenerateOptions::default(),
     )
-    .expect_err("порт структурного типа цель `c` не переводит");
-    assert_eq!(err.code.as_deref(), Some("CC-015"));
+    .expect("порт структурного типа обязан переводиться развортом");
+    let text = std::fs::read_to_string(dir.join("cp.c")).expect("чтение");
+    let header = std::fs::read_to_string(dir.join("cp.h")).expect("чтение заголовка");
+    assert!(
+        header.contains("PORT_PO_A") && header.contains("PORT_PO_B"),
+        "порт обязан развернуться в порты по полям:\n{header}"
+    );
+    assert!(
+        text.contains("PC_PORT_PO_A") || text.contains("CP_PORT_PO_A"),
+        "запись обязана идти по листам:\n{text}"
+    );
 }
 
 /// Цель `sv`: порт структурного типа переводится, оба инструмента чисты.

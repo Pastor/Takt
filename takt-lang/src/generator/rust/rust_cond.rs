@@ -502,8 +502,22 @@ pub(crate) fn condition_type(cond: &ConditionNode) -> Option<TypeNode> {
         // ⚠️ Без этой ветви цель отвечала `RS-011` («тип не выводится») на
         // готовом булевом выражении: разбор кончается `_ => None`, и компилятор
         // о пропуске не сообщает.
-        | ConditionNode::AfterExpr(_)
-        | ConditionNode::BitAccess(_, _) => Some(TypeNode::Bool),
+        | ConditionNode::AfterExpr(_) => Some(TypeNode::Bool),
+        // ⚠️ Разряд (`x.3`) логичен, а ПОЛЕ структуры (`v.a`) — НЕТ (фича
+        // 0413). Прежде обе формы давали `bool`, и `ref Run: v.a = 1;`
+        // печаталось `if self.v.a` — `E0308` при **нулевом** коде возврата
+        // `taktc`, тогда как эталон и остальные семь целей вход исполняют.
+        //
+        // Тот же класс фича 0341 закрыла у печатника ВЫРАЖЕНИЙ; печатников
+        // два (урок 0359), и правка одного оставила второй.
+        //
+        // Тип поля здесь неизвестен — объявление структуры лежит в модели, а
+        // сюда она не передаётся, — поэтому честный ответ `None`: приведение
+        // не применяется, печать идёт обычным путём.
+        ConditionNode::BitAccess(_, member) => match member {
+            crate::parser::ast::Member::Number(_) => Some(TypeNode::Bool),
+            crate::parser::ast::Member::Identifier(_) => None,
+        },
         // База — выражение (фича 0358): тип берётся у неё рекурсивно.
         ConditionNode::ArraySubscript(base, _) => match condition_type(base) {
             Some(TypeNode::Array(_, elem)) => Some((*elem).clone()),

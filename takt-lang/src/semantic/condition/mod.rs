@@ -30,6 +30,7 @@ use base::{cond_base_is_array, cond_base_label};
 /// форму, цели — обе, и `ref X: E != End;` отвергался на записи, которую
 /// генератор переводит.
 pub(crate) mod observe;
+pub(crate) mod port_split;
 pub mod state_of;
 
 use crate::diagnostics::Diagnostic;

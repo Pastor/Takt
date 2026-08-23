@@ -57,6 +57,7 @@ mod conformance_named_cond_tests;
 mod conformance_param_apply_tests;
 mod conformance_param_modes_tests;
 mod conformance_port_init_tests;
+mod conformance_port_split_tests;
 mod conformance_postfix_index_tests;
 mod conformance_power_tests;
 mod conformance_rust_duration_tests;

@@ -48,6 +48,11 @@ pub fn compile_to_sv_mmio(
         unit.model.borrow_mut().name = Some(stem);
     }
 
+    // Порт составного типа разворачивается в скалярные (фича 0390): у
+    // регистрового файла поле ложится в своё слово, и `SV-002` о «ширине, не
+    // определённой в битах» становится недостижим.
+    crate::semantic::condition::observe::lower_for_target(&unit.model, true, false)?;
+
     // Разрешаем адреса (inline < address < внешняя карта) — тот же слой, что у
     // `c-hal`/`st-at`. `SE-060` (бит вне [0, 63]) → отказ.
     let mut resolution =

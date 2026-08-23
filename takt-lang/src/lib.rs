@@ -192,6 +192,8 @@ pub fn compile_to_c(
         unit.model.borrow_mut().name = Some(stem);
     }
 
+    crate::semantic::condition::observe::lower_for_target(&unit.model, true, false)?;
+
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-as-q` +
     // `--float-embedded` (иначе `float` остаётся нативным `double`).
     apply_float_lowering(&unit.model, options, true)?;
@@ -227,6 +229,8 @@ pub fn compile_to_c_hal(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
+
+    crate::semantic::condition::observe::lower_for_target(&unit.model, true, false)?;
 
     // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
 
@@ -292,8 +296,7 @@ pub fn compile_to_st(
         unit.model.borrow_mut().name = Some(stem);
     }
 
-    // Наблюдение состояния соседа (фича 0397; довод — в шапке `observe`).
-    crate::semantic::condition::observe::expand_state_observation(&unit.model)?;
+    crate::semantic::condition::observe::lower_for_target(&unit.model, false, true)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -360,8 +363,7 @@ pub fn compile_to_rust(
         unit.model.borrow_mut().name = Some(stem);
     }
 
-    // Наблюдение состояния соседа (фича 0397; довод — в шапке `observe`).
-    crate::semantic::condition::observe::expand_state_observation(&unit.model)?;
+    crate::semantic::condition::observe::lower_for_target(&unit.model, true, true)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -462,6 +464,7 @@ pub fn compile_to_st_at(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
+    crate::semantic::condition::observe::lower_for_target(&unit.model, true, true)?;
 
     let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
     if let Some(err) = resolution
@@ -475,9 +478,6 @@ pub fn compile_to_st_at(
     let mut at_options = options.clone();
     at_options.hal = true;
     at_options.address_map = resolution.map;
-
-    // Наблюдение состояния соседа (фича 0397; довод — в шапке `observe`).
-    crate::semantic::condition::observe::expand_state_observation(&unit.model)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
