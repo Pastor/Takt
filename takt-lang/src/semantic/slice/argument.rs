@@ -1,5 +1,11 @@
-//! Срез массива в АРГУМЕНТЕ вызова — разворот во временную переменную
-//! (фича 0400).
+//! Подъём составного значения во ВРЕМЕННУЮ переменную: срез в аргументе
+//! вызова (фича 0400) и результат вызова, возвращающего массив (фича 0431).
+//!
+//! Оба правила — один приём: конструкция, которую цели не выражают на месте,
+//! заменяется парой «объявление + присваивание», и за границей семантики её
+//! не существует. Держать их вместе стоит потому, что механика у них общая
+//! (свежее имя, проверенное на занятость; позиция от оператора; обход тел), а
+//! разъехавшись, два прохода дали бы два разных имени временной в одном теле.
 //!
 //! # Что было
 //!
@@ -336,6 +342,20 @@ fn lift_in_expr(
             lift_in_expr(target, model, owner, ctx, prelude, loc);
             lift_in_expr(value, model, owner, ctx, prelude, loc);
         }
+        // Индексация РЕЗУЛЬТАТА вызова (`pair(k)[1]`, фича 0431): результат
+        // поднимается во временную, и цели видят обычную переменную-массив.
+        //
+        // ⚠️ Форма выбрана прогоном ОБОИХ инструментов SV: `pair(k)[1]`
+        // verilator принимает, а yosys отвечает «syntax error, unexpected '['»;
+        // `iec2c` ту же запись отвергает целиком. Прежде оба порождали
+        // невалидный вывод при нулевом коде возврата `taktc`.
+        ExpressionNode::ArraySubscript(base, index) => {
+            lift_in_expr(base, model, owner, ctx, prelude, loc);
+            lift_in_expr(index, model, owner, ctx, prelude, loc);
+            if let Some(replacement) = lift_call_result(base, model, owner, ctx, prelude, loc) {
+                **base = replacement;
+            }
+        }
         ExpressionNode::Parenthesis(inner) => lift_in_expr(inner, model, owner, ctx, prelude, loc),
         // Прочие формы обходить не нужно: вызов с аргументом-срезом либо стоит
         // здесь, либо внутри вызова, разобранного выше. Пропущенная форма даёт
@@ -390,6 +410,59 @@ fn lift_slice(
         Box::new(ExpressionNode::Assign(
             Box::new(ExpressionNode::Variable(Rc::clone(&cell))),
             Box::new(arg.clone()),
+        )),
+        loc,
+    ));
+    Some(ExpressionNode::Variable(cell))
+}
+
+/// Поднимает результат вызова, возвращающего МАССИВ, во временную переменную.
+///
+/// `None` — база не вызов либо возвращает не массив: пусть отвечает прежний
+/// путь (обычная индексация переменной ничего не меняет).
+///
+/// ⚠️ Бит-вектор (`[bit;N ≤ 64]`) исключён: он **скаляр** (0078), и его
+/// индексация — доступ к разряду, который цели печатают сами.
+fn lift_call_result(
+    base: &ExpressionNode,
+    _model: &ModelNode,
+    owner: &Rc<RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+    prelude: &mut Vec<StatementNode>,
+    loc: Location,
+) -> Option<ExpressionNode> {
+    let ExpressionNode::Function(def, _) = base else {
+        return None;
+    };
+    let ty = match &*def.borrow() {
+        FunctionDefinitionNode::Local { ret, .. }
+        | FunctionDefinitionNode::External { ret, .. } => ret.clone(),
+        FunctionDefinitionNode::Builtin(_, _, ret) => ret.clone(),
+        FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => return None,
+    };
+    if !matches!(ty, TypeNode::Array(_, _))
+        || crate::semantic::bit_vector::is_bit_vector(&ty).is_some()
+    {
+        return None;
+    }
+    let name = ctx.fresh_name();
+    prelude.push(StatementNode::Variable(
+        name.clone(),
+        ty.clone(),
+        None,
+        Location::Implicit,
+    ));
+    let cell = Rc::new(RefCell::new(VariableNode::Simple {
+        upper: Some(Rc::downgrade(owner)),
+        loc: Location::Implicit,
+        name: name.clone(),
+        ty,
+        expr: ExpressionNode::None,
+    }));
+    prelude.push(StatementNode::Expression(
+        Box::new(ExpressionNode::Assign(
+            Box::new(ExpressionNode::Variable(Rc::clone(&cell))),
+            Box::new(base.clone()),
         )),
         loc,
     ));

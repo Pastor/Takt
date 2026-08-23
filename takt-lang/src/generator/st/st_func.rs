@@ -381,7 +381,15 @@ fn emit_function(
     // функции имя префиксовано (`Stacker_travel_time`) и совпасть не может; у
     // `extern` оно голое (`abs`, `concat`…) — вот здесь `ST-014` и сработает.
     check_st_name(&name, def.loc())?;
-    let ret_ty = get_st_type(&return_type_of(def), model)?;
+    // Возврат-МАССИВ печатается ИМЕНОВАННЫМ типом (фича 0431): анонимную форму
+    // MatIEC отвергает в заголовке `FUNCTION`, хотя в объявлении переменной
+    // принимает. Имя строит тот же носитель, что у параметра-массива (0348), —
+    // значит объявление типа и ссылка на него совпадают по построению.
+    let ret_node = return_type_of(def);
+    let ret_ty = match crate::generator::st::st_type::array_form_name(&ret_node, model) {
+        Some(form) => form,
+        None => get_st_type(&ret_node, model)?,
+    };
     p.ident(&format!("FUNCTION {} : {}", name, ret_ty)).nl();
 
     // Параметры. Пустой `VAR_INPUT … END_VAR` недопустим (и роняет iec2c

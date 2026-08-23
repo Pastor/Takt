@@ -89,9 +89,29 @@ pub(crate) fn emit_functions(
                 let decl = sv_type(ty, &format!("параметр '{}' функции '{}'", param, name))?;
                 sig.push(format!("input {}", decl.declare(param)));
             }
+            // Возврат-МАССИВ объявляется через `typedef` (фича 0431).
+            //
+            // ⚠️ Прежде печатался один `prefix`, а распакованная размерность
+            // терялась: тело присваивало массив скалярному результату, и
+            // verilator отвечал «Illegal assignment», yosys — «Insufficient
+            // number of array indices», всё при нулевом коде возврата `taktc`.
+            // Форма выбрана прогоном ОБОИХ инструментов: возврат именованного
+            // типа принимают оба, а безымянная размерность в заголовке
+            // функции — ни один.
+            let ret_text = if ret_ty.suffix.is_empty() {
+                ret_ty.prefix.clone()
+            } else {
+                let alias = format!("{}_ret_t", name.to_lowercase());
+                p.ident(&format!(
+                    "typedef {} {}{};",
+                    ret_ty.prefix, alias, ret_ty.suffix
+                ))
+                .nl();
+                alias
+            };
             p.ident(&format!(
                 "function automatic {} {}({});",
-                ret_ty.prefix,
+                ret_text,
                 name,
                 sig.join(", ")
             ))

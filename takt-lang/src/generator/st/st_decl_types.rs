@@ -186,12 +186,17 @@ fn function_array_forms(
         let mut names: Vec<&String> = model.functions.keys().collect();
         names.sort();
         for key in names {
-            let (FunctionDefinitionNode::Local { params, .. }
-            | FunctionDefinitionNode::External { params, .. }) = &model.functions[key]
+            let (FunctionDefinitionNode::Local { params, ret, .. }
+            | FunctionDefinitionNode::External { params, ret, .. }) = &model.functions[key]
             else {
                 continue;
             };
-            for (_, ty) in params {
+            // Тип ВОЗВРАТА берётся наравне с параметрами (фича 0431):
+            // анонимный `ARRAY […] OF T` в заголовке `FUNCTION` MatIEC
+            // отвергает («invalid return type defined in function
+            // declaration»), а именованный принимает — форма та же, что у
+            // параметра-массива (0348).
+            for ty in params.iter().map(|(_, ty)| ty).chain(std::iter::once(ret)) {
                 let Some(form) = st_type::array_form_name(ty, model) else {
                     continue;
                 };
