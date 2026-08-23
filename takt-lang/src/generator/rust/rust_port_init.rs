@@ -57,6 +57,8 @@ pub(crate) fn port_initial_writes(
         instances: Vec::new(),
         time_profile: map.time_profile(),
         return_type: None,
+        // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
+        power_target: None,
     };
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut out = Vec::new();

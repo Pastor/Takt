@@ -61,6 +61,7 @@ mod conformance_port_split_tests;
 mod conformance_postfix_index_tests;
 mod conformance_power_tests;
 mod conformance_rust_duration_tests;
+mod conformance_rust_power_tests;
 mod conformance_rust_tests;
 mod conformance_self_transition_time_tests;
 mod conformance_shared_const_tests;

@@ -28,7 +28,6 @@ use crate::generator::rust::rust_name::{rust_type_name, rust_value_name};
 use crate::generator::rust::rust_needs::function_needs;
 use crate::generator::rust::rust_port::port_class;
 use crate::generator::rust::rust_shift::Direction;
-use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
     ExpressionNode, FunctionDefinitionNode, ModelNode, PortDirection, VariableNode,
@@ -63,6 +62,7 @@ pub(crate) fn unsupported(what: &str) -> Diagnostic {
 /// под-модель берёт указатель `main`, а в Rust `self.cabin.tick(&mut self)`
 /// заимствовался бы дважды, поэтому общие переменные свёрнуты в `Shared` и идут
 /// одним параметром `&mut Shared` (фича 0059).
+#[derive(Clone)]
 pub(crate) struct Scope<'a> {
     /// Модель, в контексте которой печатается выражение.
     ///
@@ -113,9 +113,30 @@ pub(crate) struct Scope<'a> {
     /// от него зависит: `return 1;` при `-> bit` обязано печататься `true`.
     /// Вне тела функции возврата нет — там `None`.
     pub(crate) return_type: Option<TypeNode>,
+    /// Тип ПРИЁМНИКА для печати степени (фича 0415).
+    ///
+    /// Вывод типов Rust не проходит сквозь вызов метода, поэтому у литеральной
+    /// базы `wrapping_pow` типа нет: `v := 2 ** 8;` давало `(2).wrapping_pow(8)`
+    /// — **`E0689`** при нулевом коде возврата `taktc`.
+    ///
+    /// ⚠️ Поле, а не параметр печати: степень бывает слагаемым
+    /// (`v := (2 ** 2) + x;`), и приёмник обязан доехать до неё сквозь
+    /// арифметику. Перехватывать арифметику своим печатником нельзя — она
+    /// печатается **обёрткой** (`wrapping_add`, правило 0127), и второй
+    /// печатник разошёлся бы с первым.
+    ///
+    /// Образец — `return_type` (фича 0336): та же роль подсказки о приёмнике.
+    pub(crate) power_target: Option<TypeNode>,
 }
 
 impl Scope<'_> {
+    /// Копия контекста с известным типом приёмника степени (фича 0415).
+    pub(crate) fn with_power_target(&self, ty: &TypeNode) -> Scope<'_> {
+        let mut copy = self.clone();
+        copy.power_target = Some(ty.clone());
+        copy
+    }
+
     /// Печатает HAL в позиции **аргумента** (`&mut …`).
     ///
     /// Отличается от [`hal_receiver`](Self::hal_receiver): получателю метода
@@ -541,7 +562,9 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
 
         // `=` в выражении — ПРИСВАИВАНИЕ (ADR 0019/0021), а не сравнение.
         // Запись в порт — не присваивание, а вызов метода HAL.
-        ExpressionNode::Assign(target, value) => assign(target, value, scope),
+        ExpressionNode::Assign(target, value) => {
+            crate::generator::rust::rust_assign::assign(target, value, scope)
+        }
 
         ExpressionNode::ConditionalOperator(cond, then_, else_) => Ok(format!(
             "if {} {{ {} }} else {{ {} }}",
@@ -612,7 +635,9 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         // Целая степень — `wrapping_pow` (фича 0329); довод — в заголовке
         // `rust_shift`.
         ExpressionNode::Power(base, exp) => {
-            crate::generator::rust::rust_shift::power(base, exp, scope)
+            // Тип приёмника здесь неизвестен (фича 0415): его знает только
+            // `rust_coerce`, и оттуда идёт вызов с `Some(ty)`.
+            crate::generator::rust::rust_shift::power(base, exp, scope, scope.power_target.as_ref())
         }
         ExpressionNode::String(_) => Err(unsupported(
             "строковый литерал вне вызова debug: в no_std нет владеющей строки",
@@ -638,113 +663,6 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
     }
 }
 
-/// Печатает присваивание; запись в порт превращает в вызов HAL.
-fn assign(
-    target: &ExpressionNode,
-    value: &ExpressionNode,
-    scope: &Scope,
-) -> Result<String, Diagnostic> {
-    if let ExpressionNode::Variable(var) = target {
-        let borrowed = var.borrow();
-        if let VariableNode::Port {
-            name,
-            ty,
-            direction,
-            loc,
-            ..
-        } = &*borrowed
-        {
-            let printed = coerce_to(value, ty, scope)?;
-            return write_port(name, ty, *direction, unwrap_outer(&printed), scope, *loc);
-        }
-        if let VariableNode::Const { name, loc, .. } = &*borrowed {
-            return Err(Diagnostic::error(
-                *loc,
-                format!("Присваивание в константу '{}' недопустимо", name),
-            )
-            .with_code("RS-019"));
-        }
-    }
-    // Запись одного разряда (фича 0250). Прежде эта ветви не было, и печатник
-    // левой части выдавал ЧТЕНИЕ бита: `(((self.b >> 2) & 1) != 0) = true;` —
-    // `rustc` отвечал E0070, то есть цель рапортовала об успехе и клала на
-    // диск файл, который не собирается.
-    if let ExpressionNode::BitAccess(inner, Member::Number(bit)) = target {
-        return crate::generator::rust::rust_bit::assign_bit(inner, *bit, value, scope);
-    }
-    let target_text = print_expression(target, scope)?;
-    // `x := x + 1` → `x += 1`. Не косметика: clippy считает `x = x + 1` ручной
-    // реализацией составного присваивания (`assign_op_pattern`) и под
-    // `-D warnings` отвергает. Совпадение операнда проверяется по НАПЕЧАТАННОМУ
-    // тексту, а не по узлам: текст — это ровно то, что увидит компилятор.
-    if let Some(compound) = compound_assign(&target_text, value, scope)? {
-        return Ok(compound);
-    }
-    let ty = expression_type(target);
-    let printed = match &ty {
-        Some(ty) => coerce_to(value, ty, scope)?,
-        None => print_expression(value, scope)?,
-    };
-    // Присваиваемое значение — ещё одна позиция, где внешние скобки лишние:
-    // `x = (a - b);` даёт `unnecessary parentheses around assigned value`.
-    Ok(format!("{} = {}", target_text, unwrap_outer(&printed)))
-}
-
-/// Строит составное присваивание (`x += 1`), если значение имеет форму `x op …`.
-fn compound_assign(
-    target_text: &str,
-    value: &ExpressionNode,
-    scope: &Scope,
-) -> Result<Option<String>, Diagnostic> {
-    // Q-арифметика (0061) НЕ сворачивается: `x := x * y` над q — это масштабный
-    // `takt_q`-путь, а не нативное `x *= y` (то дало бы целочисленное умножение
-    // представлений без сдвига на n — молча неверный результат и паника на
-    // переполнении в debug).
-    if rust_fixed::fixed_format_in(value, scope.model).is_some() {
-        return Ok(None);
-    }
-    // Беззнаковая арифметика печатается обёрткой (`wrapping_*`, фича 0127):
-    // свернуть её в `x += 1` нельзя — `+=` в debug паникует на переполнении, а
-    // правило языка требует обёртки mod 2^N.
-    if is_wrapping_arith(value) {
-        return Ok(None);
-    }
-    let (op, lhs, rhs) = match value {
-        ExpressionNode::Add(a, b) => ("+=", a, b),
-        ExpressionNode::Subtract(a, b) => ("-=", a, b),
-        ExpressionNode::Multiply(a, b) => ("*=", a, b),
-        ExpressionNode::Divide(a, b) => ("/=", a, b),
-        ExpressionNode::Modulo(a, b) => ("%=", a, b),
-        ExpressionNode::BitwiseAnd(a, b) => ("&=", a, b),
-        ExpressionNode::BitwiseOr(a, b) => ("|=", a, b),
-        ExpressionNode::BitwiseXor(a, b) => ("^=", a, b),
-        ExpressionNode::ShiftLeft(a, b) => ("<<=", a, b),
-        ExpressionNode::ShiftRight(a, b) => (">>=", a, b),
-        _ => return Ok(None),
-    };
-    if print_expression(lhs, scope)? != target_text {
-        return Ok(None);
-    }
-    let rhs_text = print_expression(rhs, scope)?;
-    Ok(Some(format!(
-        "{} {} {}",
-        target_text,
-        op,
-        unwrap_outer(&rhs_text)
-    )))
-}
-
-/// Печатает арифметику беззнакового целого **обёрткой** (`wrapping_*`).
-///
-/// Правило языка (фича 0127, S1 анализа 0025): переполнение беззнакового целого
-/// — обёртка mod 2^N. В C и SV это поведение получается само (тип фиксированной
-/// ширины), а Rust в debug-профиле **паникует** на `+`: `attempt to add with
-/// overflow`. То есть без обёртки цель `rust` расходилась с эталоном ровно там,
-/// где счётчик доходит до края, — а счётчики есть в каждом примере.
-///
-/// Для **знакового** переполнения обёртка НЕ печатается: по правилу S2 такая
-/// программа ошибочна (в C это UB, симулятор даёт `SIM-003`), и паника debug —
-/// более полезный исход, чем тихий переход через край.
 fn wrapping_or_plain(
     a: &ExpressionNode,
     op: &str,
@@ -769,7 +687,7 @@ fn is_unsigned_int(expr: &ExpressionNode) -> bool {
 }
 
 /// Арифметический узел, который печатается обёрткой (см. [`wrapping_or_plain`]).
-fn is_wrapping_arith(expr: &ExpressionNode) -> bool {
+pub(crate) fn is_wrapping_arith(expr: &ExpressionNode) -> bool {
     match expr {
         ExpressionNode::Add(a, b)
         | ExpressionNode::Subtract(a, b)

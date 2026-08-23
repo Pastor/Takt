@@ -145,6 +145,16 @@ pub(crate) fn coerce_to(
             let name = crate::generator::rust::rust_type::rust_type(target, "приёмник значения")?;
             Ok(format!("({} as {name})", print_expression(value, scope)?))
         }
+        // Целая степень печатается С ОГЛЯДКОЙ НА ПРИЁМНИК (фича 0415): тип
+        // кладётся в контекст, а печать идёт ОБЫЧНЫМ путём — арифметика вокруг
+        // степени сохраняет свою обёртку (`wrapping_add`, правило 0127).
+        //
+        // ⚠️ Ветвь охраняется признаком «в выражении есть степень»: без охраны
+        // подсказка появлялась бы у всех выражений корпуса, а предмет фичи —
+        // только степень.
+        (_, _) if contains_power(value) => {
+            print_expression(value, &scope.with_power_target(target))
+        }
         _ => print_expression(value, scope),
     }
 }
@@ -222,4 +232,21 @@ pub(crate) fn enum_variant_literal(
         rust_type_name(enum_name, def.loc)?,
         rust_type_name(&variant.0, def.loc)?
     ))
+}
+
+/// Есть ли в выражении узел степени (фича 0415).
+///
+/// Обход **намеренно неисчерпывающий**: пропущенная форма даёт прежнюю печать,
+/// а не порчу вывода — как у обхода ссылки вперёд (0246).
+fn contains_power(value: &ExpressionNode) -> bool {
+    match value {
+        ExpressionNode::Power(..) => true,
+        ExpressionNode::Add(l, r)
+        | ExpressionNode::Subtract(l, r)
+        | ExpressionNode::Multiply(l, r)
+        | ExpressionNode::Divide(l, r)
+        | ExpressionNode::Modulo(l, r) => contains_power(l) || contains_power(r),
+        ExpressionNode::Parenthesis(inner) => contains_power(inner),
+        _ => false,
+    }
 }
