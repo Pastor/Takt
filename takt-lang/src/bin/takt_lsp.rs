@@ -11,6 +11,7 @@
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::process;
 
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::notification::{
@@ -24,6 +25,19 @@ use lsp_types::request::{
 use lsp_types::*;
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
+    // Аргументы разбираются ДО открытия stdio (фикс 0011-01): прежде их не
+    // разбирал никто, и `takt-lsp --version` уходил в протокол, отвечая
+    // `ProtocolError("disconnected channel")`. Узнать версию установленного
+    // сервера было нечем, а устаревший сервер выглядит дефектом ЯЗЫКА: замер
+    // 2026-08-23 — сборка от 2026-08-17 отвечала `SE-003` на файл, который
+    // свежий компилятор принимает (класс закрыт фиксом 0346 четырьмя днями
+    // позже).
+    if let Some(code) =
+        takt_lang::version::handle_server_args(&std::env::args().skip(1).collect::<Vec<_>>())
+    {
+        process::exit(code);
+    }
+
     // Инициализируем соединение через stdin/stdout
     let (connection, io_threads) = Connection::stdio();
 

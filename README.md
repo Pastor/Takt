@@ -1996,7 +1996,16 @@ extern fn hal_gpio_set(pin: u8, val: bit);
 ```sh
 scripts/install.sh                                    # ставит и takt-lsp тоже
 cargo build --release --features lsp --bin takt-lsp   # только сборка
+takt-lsp --version                                    # версии сервера и языка
 ```
+
+**Версия установленного сервера сверяется командой** (фикс
+[0011-01](docs/fixes/0011-01-lsp-version-flag.md)). Редактор держит сервер
+запущенным и обновляется независимо от дерева, поэтому устаревший `takt-lsp`
+показывает диагностики, которых свежий компилятор уже не даёт — и выглядит это
+как дефект языка. `takt-lsp --version` печатает версию инструмента и версию
+языка; расхождение с `taktc --version` значит, что сервер надо переустановить
+(`scripts/install.sh`).
 
 Поддерживаемые возможности: диагностика, hover, автодополнение, Go to Declaration,
 форматирование документа (`textDocument/formatting` — то же ядро, что у `taktc fmt`).
@@ -2033,7 +2042,7 @@ cargo build --release --features lsp --bin takt-lsp   # только сборк�
 
 | Среда | Пакет | Подсветка | Статус |
 |-------|-------|-----------|--------|
-| Zed | `extensions/zed-lam` | через `takt-lsp` (semantic tokens) | v0.1.1 |
+| Zed | `extensions/zed-takt` | через `takt-lsp` (semantic tokens) | v0.1.1 |
 | IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-takt` | лексическая (офлайн, Community) + **семантическая** через LSP4IJ + `takt-lsp`; навигация к декларации и по `import`; **Rename** и **ссылка на файл `import`**; **Reformat Code** | фичи [0022](docs/features/0022-intellij-syntax-highlight.md), [0023](docs/features/0023-intellij-navigation-include.md), [0038](docs/features/0038-intellij-semantic-tokens.md), [0039](docs/features/0039-intellij-reformat.md), [0067](docs/features/0067-intellij-rename-psi-import.md) |
 | Любой LSP-клиент | `takt-lsp` | диагностика, hover, автодополнение, semantic tokens, **переход к декларации и к определению (в т.ч. в импортированный файл)**, **поиск использований**, **переименование** | стабильно |
 
