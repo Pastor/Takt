@@ -14,7 +14,7 @@
 //! - **последовательная** (`M1 + M2`): собственный счётчик шагов и вложенный
 //!   `CASE` — форма снята зондом цели `c`, где у конкатенации свой `enum` шагов.
 
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::st::st_map::StMap;
 use crate::generator::st::st_model::{BodyOutput, StateTable};
@@ -27,9 +27,6 @@ use crate::semantic::{ModelNode, StateNode};
 /// Аналог поля `StackerCommandReceiver command_receiver0;` в структуре цели `c`
 /// (Ф6). Числовой суффикс обязателен: одна и та же модель может входить в
 /// композицию **несколько раз** (`elevator.takt:198` включает `Engine` пять раз).
-/// Модель композиции вместе с аргументами её инстанцирования (фича 0185).
-pub(crate) type ModelRef = (Name, Vec<crate::semantic::extend::ParameterArgument>);
-
 #[derive(Debug)]
 pub(crate) struct Instance {
     /// Имя переменной-экземпляра.
@@ -139,14 +136,15 @@ pub(crate) fn emit_composition(
         return emit_concatenation(p, map, steps, state_name, next, table, out, state, model);
     }
 
-    let mut group = Vec::new();
-    collect_models(extend, &mut group)?;
     // Переменные корня под-FB видит через `VAR_IN_OUT`: в ST указателей нет, а
     // `main->lift_request` цели `c` выразить нечем (О1-в, проба П7).
-    let done_terms = [emit_group(p, map, &group, "", out)?];
+    let ctx = ChainCtx {
+        state_name,
+        prefix: "",
+    };
+    let done = emit_branch(p, map, extend, &mut Vec::new(), &ctx, out)?;
 
-    p.ident(&format!("IF {} THEN", done_terms.join(" AND ")))
-        .nl();
+    p.ident(&format!("IF {} THEN", done)).nl();
     p.up();
     emit_state_exit(p, map, state_name, state, model, next, table, out)?;
     p.down();
@@ -205,41 +203,186 @@ fn emit_state_exit(
     Ok(())
 }
 
-/// Печатает шаг: вызовы моделей группы и условие её завершения.
+/// Печатает ВЕТВЬ композиции и возвращает выражение её завершения.
 ///
-/// Возвращает выражение «группа завершена» (конъюнкция `is_done`).
-fn emit_group(
+/// Разбор рекурсивен, потому что рекурсивно само дерево композиции: ветвь —
+/// модель, параллель ветвей либо **цепочка** `+`. Прежде разбор был плоским
+/// (`collect_models` сводил дерево к списку моделей), и цепочка внутри
+/// параллели попадала в него отказом `ST-011`: конструкцию, которую исполняют
+/// эталон, `c` и `rust`, цель не переводила вовсе (фича 0427).
+///
+/// `path` — место ветви в дереве (носитель [`chain_site`]): по нему строится
+/// имя счётчика вложенной цепочки, иначе две цепочки одного состояния делили
+/// бы один счётчик.
+/// Печатает ВЕТВЬ композиции и возвращает выражение её завершения.
+///
+/// Разбор рекурсивен, потому что рекурсивно само дерево композиции: ветвь —
+/// модель, параллель ветвей либо **цепочка** `+`. Прежде разбор был плоским
+/// (`collect_models` сводил дерево к списку моделей), и цепочка внутри
+/// параллели попадала в него отказом `ST-011`: конструкцию, которую исполняют
+/// эталон, `c` и `rust`, цель не переводила вовсе (фича 0427).
+///
+/// `path` — место ветви в дереве (носитель
+/// [`chain_site`](crate::generator::chain_site)): по нему строится имя счётчика
+/// вложенной цепочки, иначе две цепочки одного состояния делили бы один
+/// счётчик.
+///
+/// `prefix` — приставка имени экземпляра под-FB. Внутри цепочки она
+/// `<состояние>_` (форма снята зондом цели `c`), снаружи пуста: менять её у
+/// параллели значило бы переписать вывод всего корпуса ради вложенного случая.
+fn emit_branch(
     p: &mut Printer,
     map: &StMap,
-    group: &[ModelRef],
+    extend: &StateExtend,
+    path: &mut Vec<usize>,
+    ctx: &ChainCtx<'_>,
+    out: &mut BodyOutput,
+) -> Result<String, Diagnostic> {
+    match extend {
+        StateExtend::None => Ok(String::new()),
+        StateExtend::Model(name, args) => emit_instance(p, map, name, args, ctx.prefix, out),
+        StateExtend::Parallel(items) => {
+            let mut done_terms = Vec::new();
+            for (i, item) in items.iter().enumerate() {
+                path.push(i);
+                let done = emit_branch(p, map, item, path, ctx, out)?;
+                path.pop();
+                if !done.is_empty() {
+                    done_terms.push(done);
+                }
+            }
+            Ok(done_terms.join(" AND "))
+        }
+        // ВЛОЖЕННАЯ цепочка: своя машина шагов и своё завершение.
+        //
+        // ⚠️ Завершение — **терминальное значение счётчика**, а не «все шаги
+        // готовы»: шаг, до которого очередь не дошла, свой `is_done` не
+        // выставлял ни разу (урок 0426).
+        StateExtend::Concatenation(items) => {
+            let counter = emit_chain_case(p, map, items, path, ctx, out, &ChainExit::Done)?;
+            Ok(format!("{} = {}", counter, items.len()))
+        }
+    }
+}
+
+/// Контекст печати ветвей одного состояния: имя состояния и приставка имён.
+struct ChainCtx<'a> {
+    state_name: &'a Name,
+    prefix: &'a str,
+}
+
+/// Что делать по завершении последнего шага цепочки.
+enum ChainExit<'a> {
+    /// Цепочка ВЕРХНЕГО уровня: пройдя последний шаг, состояние уходит дальше.
+    Parent {
+        state: &'a StateNode,
+        model: &'a ModelNode,
+        next: &'a Name,
+        table: &'a StateTable,
+    },
+    /// ВЛОЖЕННАЯ цепочка (фича 0427): выхода из состояния у неё нет — её
+    /// завершение читает вмещающая композиция по терминальному значению
+    /// счётчика.
+    Done,
+}
+
+/// Печатает цепочку `+` как `CASE` по собственному счётчику; возвращает его имя.
+///
+/// `exit` — что делать на терминальном значении счётчика: у цепочки **верхнего
+/// уровня** это выход из состояния, у **вложенной** — ничего.
+fn emit_chain_case(
+    p: &mut Printer,
+    map: &StMap,
+    items: &[StateExtend],
+    path: &mut Vec<usize>,
+    ctx: &ChainCtx<'_>,
+    out: &mut BodyOutput,
+    exit: &ChainExit<'_>,
+) -> Result<String, Diagnostic> {
+    let counter = format!(
+        "{}_step{}",
+        ctx.state_name.local_lowercase_snakecase(),
+        crate::generator::chain_site::suffix(path)
+    );
+    out.stmt
+        .hoisted
+        .push(crate::generator::st::st_stmt::Hoisted {
+            name: counter.clone(),
+            ty: TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            },
+        });
+    // Внутри цепочки имена экземпляров несут приставку состояния — форма снята
+    // зондом цели `c` (`extend_complex.h`).
+    let inner_prefix = format!("{}_", ctx.state_name.local_lowercase_snakecase());
+    let inner = ChainCtx {
+        state_name: ctx.state_name,
+        prefix: &inner_prefix,
+    };
+    p.ident(&format!("CASE {} OF", counter)).nl();
+    p.up();
+    for (i, item) in items.iter().enumerate() {
+        p.ident(&format!("{}:", i)).nl();
+        p.up();
+        path.push(i);
+        let done = emit_branch(p, map, item, path, &inner, out)?;
+        path.pop();
+        p.ident(&format!("IF {} THEN", done)).nl();
+        p.up();
+        p.ident(&format!("{} := {};", counter, i + 1)).nl();
+        p.down();
+        p.ident("END_IF;").nl();
+        p.down();
+    }
+    if let ChainExit::Parent {
+        state,
+        model,
+        next,
+        table,
+    } = exit
+    {
+        p.ident(&format!("{}: (* конкатенация завершена *)", items.len()))
+            .nl();
+        p.up();
+        emit_state_exit(p, map, ctx.state_name, state, model, next, table, out)?;
+        p.down();
+    }
+    p.down();
+    p.ident("END_CASE;").nl();
+    Ok(counter)
+}
+
+/// Печатает экземпляр под-FB, его вызов и возвращает выражение `is_done`.
+fn emit_instance(
+    p: &mut Printer,
+    map: &StMap,
+    model_name: &Name,
+    model_args: &[crate::semantic::extend::ParameterArgument],
     prefix: &str,
     out: &mut BodyOutput,
 ) -> Result<String, Diagnostic> {
-    let mut done_terms = Vec::new();
-    for (model_name, model_args) in group {
-        // Числовой суффикс — по образцу цели `c` (`start_a0`, `start_b1`): одна и
-        // та же модель может входить в композицию несколько раз.
-        let index = out.instances.len();
-        let inst = format!(
-            "{}{}{}",
-            prefix,
-            model_name.local_lowercase_snakecase(),
-            index
-        );
-        out.instances.push(Instance {
-            name: inst.clone(),
-            fb_type: model_name.unique_camelcase(),
-            init: instance_initializer(map, model_name, model_args)?,
-        });
-        let args: Vec<String> = map
-            .shared_variables(model_name)
-            .into_iter()
-            .map(|(n, _)| format!("{} := {}", n, n))
-            .collect();
-        p.ident(&format!("{}({});", inst, args.join(", "))).nl();
-        done_terms.push(format!("{}.is_done", inst));
-    }
-    Ok(done_terms.join(" AND "))
+    // Числовой суффикс — по образцу цели `c` (`start_a0`, `start_b1`): одна и
+    // та же модель может входить в композицию несколько раз.
+    let index = out.instances.len();
+    let inst = format!(
+        "{}{}{}",
+        prefix,
+        model_name.local_lowercase_snakecase(),
+        index
+    );
+    out.instances.push(Instance {
+        name: inst.clone(),
+        fb_type: model_name.unique_camelcase(),
+        init: instance_initializer(map, model_name, model_args)?,
+    });
+    let args: Vec<String> = map
+        .shared_variables(model_name)
+        .into_iter()
+        .map(|(n, _)| format!("{} := {}", n, n))
+        .collect();
+    p.ident(&format!("{}({});", inst, args.join(", "))).nl();
+    Ok(format!("{}.is_done", inst))
 }
 
 /// Печатает последовательную композицию (`M1 + M2`) как вложенный `CASE` по
@@ -251,7 +394,8 @@ fn emit_group(
 /// (форма проверена пробой ✅).
 ///
 /// Шаг завершается по `is_done` своей группы; параллельная группа внутри
-/// конкатенации (`A + (C | D) + E`) — по конъюнкции, как обычная параллель.
+/// конкатенации (`A + (C | D) + E`) — по конъюнкции, как обычная параллель, а
+/// **цепочка** внутри шага — по своему счётчику (фича 0427).
 #[allow(clippy::too_many_arguments)]
 fn emit_concatenation(
     p: &mut Printer,
@@ -264,77 +408,16 @@ fn emit_concatenation(
     state: &StateNode,
     model: &ModelNode,
 ) -> Result<(), Diagnostic> {
-    let counter = format!("{}_step", state_name.local_lowercase_snakecase());
-    out.stmt
-        .hoisted
-        .push(crate::generator::st::st_stmt::Hoisted {
-            name: counter.clone(),
-            ty: TypeNode::Integer {
-                bits: 8,
-                signed: false,
-            },
-        });
-    let prefix = format!("{}_", state_name.local_lowercase_snakecase());
-
-    p.ident(&format!("CASE {} OF", counter)).nl();
-    p.up();
-    for (i, step) in steps.iter().enumerate() {
-        let mut group = Vec::new();
-        collect_models(step, &mut group)?;
-        p.ident(&format!("{}:", i)).nl();
-        p.up();
-        let done = emit_group(p, map, &group, &prefix, out)?;
-        p.ident(&format!("IF {} THEN", done)).nl();
-        p.up();
-        p.ident(&format!("{} := {};", counter, i + 1)).nl();
-        p.down();
-        p.ident("END_IF;").nl();
-        p.down();
-    }
-    // Последний шаг: конкатенация пройдена — рёбра состояния, затем `next`.
-    p.ident(&format!("{}: (* конкатенация завершена *)", steps.len()))
-        .nl();
-    p.up();
-    emit_state_exit(p, map, state_name, state, model, next, table, out)?;
-    p.down();
-    p.down();
-    p.ident("END_CASE;").nl();
+    let ctx = ChainCtx {
+        state_name,
+        prefix: "",
+    };
+    let exit = ChainExit::Parent {
+        state,
+        model,
+        next,
+        table,
+    };
+    emit_chain_case(p, map, steps, &mut Vec::new(), &ctx, out, &exit)?;
     Ok(())
-}
-
-/// Собирает модели композиции в порядке объявления.
-///
-/// # Ошибки
-/// `ST-011` — `Concatenation` (`M1 + M2`): последовательная композиция требует
-/// собственного счётчика шагов (в цели `c` — вложенный `enum state`) и
-/// реализуется частью 3.
-fn collect_models(extend: &StateExtend, out: &mut Vec<ModelRef>) -> Result<(), Diagnostic> {
-    match extend {
-        StateExtend::None => Ok(()),
-        // Вместе с именем несём аргументы инстанцирования (фича 0185): они
-        // свойство места, а не модели, и потерять их здесь значило бы молча
-        // выбросить настройку экземпляра.
-        StateExtend::Model(name, args) => {
-            out.push((name.clone(), args.clone()));
-            Ok(())
-        }
-        StateExtend::Parallel(steps) => {
-            for step in steps {
-                collect_models(step, out)?;
-            }
-            Ok(())
-        }
-        // Конкатенацию печатает `emit_concatenation` — у неё свой счётчик шагов.
-        // Сюда она попадает только вложенной в параллель (`(A + B) | C`), а такой
-        // вложенности нужен ещё один уровень счётчика: пока — громкий отказ, а не
-        // печать шагов как параллельных (это молча изменило бы семантику).
-        StateExtend::Concatenation(_) => Err(Diagnostic::error(
-            crate::generator::site::at(Location::Codegen),
-            "Конкатенация внутри параллельной композиции (`(A + B) | C`) требует \
-             вложенного счётчика шагов. Напечатать её шаги как параллельные значило \
-             бы молча изменить семантику модели"
-                .to_string(),
-        )
-        .with_code("ST-011")),
-    }
 }

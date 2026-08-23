@@ -1,4 +1,4 @@
-//! Проверки имён цели `sv`, требующие доступа к семантической модели.
+//! Имена сигналов цели `sv` и проверки имён, требующие доступа к модели.
 //!
 //! # Зачем отдельный модуль
 //!
@@ -43,6 +43,63 @@ pub(crate) fn check_state_names(map: &SvMap, model: &Name) -> Result<(), Diagnos
 use crate::generator::sv::sv_expr::Scope;
 use crate::parser::ast::Member;
 use crate::semantic::VariableNode;
+
+// ── Имена машины шагов цепочки `+` (задача 0057-01, фича 0427) ──────────────
+//
+// Вынесены из `sv_fsm` по границе ответственности: тот модуль отвечает за
+// автомат, а имя сигнала — правило именования, и оно живёт здесь вместе с
+// прочими (`signal_of`, `const_signal`). Повод к выносу — предел размера
+// модуля (`scripts/check-module-size.sh`).
+
+/// Имя регистра шага цепочки `+`, несомой состоянием `state` (задача 0057-01).
+///
+/// Ключ — уникальное имя несущего состояния **и место цепочки в дереве
+/// композиции** (`path`, носитель
+/// [`chain_site`](crate::generator::chain_site)): цепочек в одном состоянии
+/// бывает несколько (`(A + B) | C`, фича 0427), и по одному имени состояния
+/// они делили бы регистр — то есть шли бы одной машиной шагов.
+pub(crate) fn step_reg_name(state: &Name, path: &[usize]) -> String {
+    format!(
+        "{}_step{}",
+        state.unique_lowercase_snakecase(),
+        crate::generator::chain_site::suffix(path)
+    )
+}
+
+/// Имя типа-перечисления шага цепочки `+`.
+pub(crate) fn step_enum_name(state: &Name, path: &[usize]) -> String {
+    format!(
+        "{}_step{}_e",
+        state.unique_lowercase_snakecase(),
+        crate::generator::chain_site::suffix(path)
+    )
+}
+
+/// Имя варианта `STEP_i` шага цепочки `+`.
+pub(crate) fn step_variant(state: &Name, path: &[usize], i: usize) -> String {
+    format!(
+        "{}_STEP{}_{}",
+        state.unique_uppercase_snakecase(),
+        crate::generator::chain_site::suffix(path).to_uppercase(),
+        i
+    )
+}
+
+/// Имя терминального варианта ВЛОЖЕННОЙ цепочки.
+///
+/// У цепочки верхнего уровня его нет: пройдя последний шаг, она уводит
+/// **родительское состояние**, и лишний вариант остался бы недостижимым. У
+/// вложенной выхода из состояния нет — её завершение читает вмещающая
+/// композиция, и читать его надо по собственному состоянию цепочки, а не по
+/// «все шаги готовы»: шаг, до которого очередь не дошла, готовности не
+/// выставлял ни разу (урок 0426).
+pub(crate) fn step_done_variant(state: &Name, path: &[usize]) -> String {
+    format!(
+        "{}_STEP{}_DONE",
+        state.unique_uppercase_snakecase(),
+        crate::generator::chain_site::suffix(path).to_uppercase()
+    )
+}
 
 /// Имя варианта перечисления в SV: `Action`/`Idle` → `ACTION_IDLE`.
 ///

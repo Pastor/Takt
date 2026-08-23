@@ -19,7 +19,8 @@ pub struct Name {
 }
 
 impl Name {
-    fn new(local: String, unique: String) -> Self {
+    /// Конструктор имени (`pub(crate)` — нужен тестам генератора, фича 0427).
+    pub(crate) fn new(local: String, unique: String) -> Self {
         Name { local, unique }
     }
 
