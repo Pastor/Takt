@@ -770,17 +770,22 @@ pub(crate) fn emit_model_body(
 
     p.ident(&format!("unique case ({})", reg)).nl();
     p.up();
+    // Имена напечатанных ветвей — чтобы терминальная не задвоилась (фича
+    // 0412): состояние, названное автором `End`, даёт тот же вариант, что
+    // синтетический терминальный, и `verilator` отвечает `CASEOVERLAP`
+    // («Case conditions overlap») при нулевом коде возврата `taktc`. Цель `c`
+    // на том же входе печатает **одну** ветвь — расходилась одна цель.
+    let terminal = end_variant(model);
+    let mut printed_terminal = false;
     for state_name in &states {
         let Some(element) = map.state_at(state_name.clone()) else {
             continue; // недостижимое состояние — ветви не получает
         };
         let raw = map.raw_state_at(state_name.clone())?;
         let raw = &*raw.borrow();
-        p.ident(&format!(
-            "{}: begin",
-            state_name.unique_uppercase_snakecase()
-        ))
-        .nl();
+        let variant = state_name.unique_uppercase_snakecase();
+        printed_terminal |= variant == terminal;
+        p.ident(&format!("{}: begin", variant)).nl();
         p.up();
         emit_state_prelude(p, map, raw, fsm)?;
         // Периодические блоки `every` (фича 0134-09) — после `always`, как в
@@ -821,7 +826,13 @@ pub(crate) fn emit_model_body(
     }
     // Терминальная ветвь: `unique case` требует покрытия всех значений, иначе
     // Verilator даёт CASEINCOMPLETE.
-    p.ident(&format!("{}: begin end", end_variant(model))).nl();
+    //
+    // ⚠️ Печатается **только если её ещё нет** (фича 0412): состояние с именем
+    // `End` даёт тот же вариант, и вторая ветвь — это `CASEOVERLAP`, то есть
+    // отказ гейта цели при нулевом коде возврата `taktc`.
+    if !printed_terminal {
+        p.ident(&format!("{}: begin end", terminal)).nl();
+    }
     p.down();
     p.ident("endcase").nl();
     Ok(())
