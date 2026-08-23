@@ -204,6 +204,12 @@ pub(crate) fn fold_assignment<'a>(name: &str, stmt: &'a StatementNode) -> Option
                     if reads_expr(name, value) {
                         return None;
                     }
+                    // Срез свернуть нельзя тоже: он печатается ПОЭЛЕМЕНТНО
+                    // (фича 0355), выражения у него нет — свёртка дала бы
+                    // `RS-011` там, где присваивание переводится (фича 0410).
+                    if matches!(&**value, ExpressionNode::ArraySlice(_, _, _)) {
+                        return None;
+                    }
                     Some(Folded::Value(value))
                 }
                 _ => None,
