@@ -28,11 +28,32 @@ use crate::semantic::naming::normalize_lowercase_snakecase;
 ///
 /// Сегмент `PORT_` разводит пространство портов с пространством состояний,
 /// которое печатается как `<МОДЕЛЬ>_<СОСТОЯНИЕ>`.
-pub(in crate::generator::c) fn port_enum_variant(model_name: &Name, port: &str) -> String {
+pub(in crate::generator::c) fn port_enum_variant(
+    model_name: &Name,
+    port: &str,
+    declared: crate::parser::ast::PortDirection,
+    side: crate::parser::ast::PortDirection,
+) -> String {
+    use crate::parser::ast::PortDirection;
+    // ⚠️ ДВУНАПРАВЛЕННЫЙ порт попадает в ОБА перечисления (`_In_…` и `_Out_…`),
+    // а перечислители в C делят одну область видимости — имя обязано их
+    // различать (фича 0421). Замер 2026-08-23: `inout line: u8 at 0x200;`
+    // давал `redefinition of enumerator` у `cc` при НУЛЕВОМ коде возврата
+    // `taktc`; эталон, `st`, `st-at` и `rust` вход исполняют.
+    //
+    // ⚠️ Сегмент печатается ТОЛЬКО двунаправленному порту: имена портов видны
+    // пользователю (сигнатура HAL-колбэка), и смена формы у однонаправленных
+    // была бы ломающей без нужды (урок 0195).
+    let suffix = match declared {
+        PortDirection::InOut if side == PortDirection::In => "_IN",
+        PortDirection::InOut => "_OUT",
+        _ => "",
+    };
     format!(
-        "{}_PORT_{}",
+        "{}_PORT_{}{}",
         model_name.unique_uppercase_snakecase(),
-        normalize_lowercase_snakecase(port.to_string()).to_uppercase()
+        normalize_lowercase_snakecase(port.to_string()).to_uppercase(),
+        suffix
     )
 }
 

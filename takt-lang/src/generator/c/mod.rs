@@ -47,6 +47,7 @@ mod c_model_init;
 mod c_names;
 mod c_needs;
 mod c_params;
+mod c_port_enums;
 mod c_ports;
 mod c_source;
 /// Механизм времени цели `c` (фича 0134).

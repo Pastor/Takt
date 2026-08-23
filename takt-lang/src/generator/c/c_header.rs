@@ -13,7 +13,7 @@ use crate::semantic::{PortDirection, VariableNode};
 use log::warn;
 
 /// Словарь портов: `(класс порта, направление)` → список `(имя модели, имя порта)`.
-type PortMap = std::collections::HashMap<(PortClass, PortDirection), Vec<(Name, String)>>;
+use crate::generator::c::c_port_enums::{collect_ports_by_class, generate_port_enums};
 
 /// Генерирует поля структуры C для extend состояния.
 /// Единичный Model → `{state}`, составной → делегирует в build_concat_item.
@@ -213,102 +213,6 @@ fn build_concat_state_enum(
             state_name.local_lowercase_snakecase()
         ))
         .nl();
-    Ok(())
-}
-
-/// Собирает все порты из всех моделей, сгруппированные по [`PortClass`] и [`PortDirection`].
-///
-/// Возвращает словарь `(PortClass, PortDirection) → Vec<(model_name, port_name)>`.
-/// Порты отсортированы для детерминированной генерации.
-pub(super) fn collect_ports_by_class(map: &CMap) -> Result<PortMap, Diagnostic> {
-    use std::collections::HashMap;
-    let mut all_models = map.using_models();
-    all_models.insert(
-        0,
-        Element::Model {
-            name: map.root_name().clone(),
-            states: map.states().clone(),
-            start: map.start().clone(),
-        },
-    );
-    let mut result: HashMap<(PortClass, PortDirection), Vec<(Name, String)>> = HashMap::new();
-    for element in &all_models {
-        let model_name = element.name();
-        let model = map.raw_model_at(model_name.clone())?;
-        let model_borrowed = model.borrow();
-        crate::generator::c::c_ports::check_port_types(&model_borrowed, &model_name)?;
-        let mut ports: Vec<(Name, String, PortClass, PortDirection)> = model_borrowed
-            .variables
-            .values()
-            .filter_map(|v| {
-                if let VariableNode::Port {
-                    name,
-                    ty,
-                    direction,
-                    ..
-                } = v
-                {
-                    Some((
-                        model_name.clone(),
-                        name.clone(),
-                        PortClass::from_type(ty),
-                        *direction,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        ports.sort_by(|(_, a, _, _), (_, b, _, _)| a.cmp(b));
-        for (mname, pname, cls, dir) in ports {
-            match dir {
-                PortDirection::InOut => {
-                    // двунаправленный порт появляется в обоих enum-ах
-                    result
-                        .entry((cls, PortDirection::In))
-                        .or_default()
-                        .push((mname.clone(), pname.clone()));
-                    result
-                        .entry((cls, PortDirection::Out))
-                        .or_default()
-                        .push((mname, pname));
-                }
-                _ => {
-                    result.entry((cls, dir)).or_default().push((mname, pname));
-                }
-            }
-        }
-    }
-    Ok(result)
-}
-
-/// Генерирует тип-зависимые перечисления портов с разделением по направлению.
-///
-/// Для каждой комбинации `(PortClass, PortDirection)` генерируется отдельный `typedef enum`:
-/// `{Root}_In_BitPort`, `{Root}_Out_BitPort`, `{Root}_In_NumericPort` и т. п.
-/// Варианты именуются `{MODEL_UPPER}_{PORT_UPPER}` с последовательными значениями.
-/// Определения помещаются в заголовочный файл до struct-определений.
-fn generate_port_enums(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
-    let root_camelcase = map.root_name().unique_camelcase();
-    let by_class = collect_ports_by_class(map)?;
-    for cls in [PortClass::Bit, PortClass::Rational, PortClass::Numeric] {
-        for dir in [PortDirection::In, PortDirection::Out] {
-            let Some(ports) = by_class.get(&(cls, dir)) else {
-                continue;
-            };
-            let type_name = cls.qualified_enum_name_with_dir(&root_camelcase, dir);
-            printer.print("typedef enum {").nl();
-            printer.up();
-            for (idx, (model_name, port_name)) in ports.iter().enumerate() {
-                let variant =
-                    crate::generator::c::c_names::port_enum_variant(model_name, port_name);
-                printer.ident(&format!("{} = {},", variant, idx)).nl();
-            }
-            printer.down();
-            printer.print(&format!("}} {};", type_name)).nl();
-            printer.nl();
-        }
-    }
     Ok(())
 }
 
