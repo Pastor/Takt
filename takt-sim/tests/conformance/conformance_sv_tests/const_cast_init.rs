@@ -97,7 +97,10 @@ fn signed_overflow_cast_is_refused() {
     let err = takt_lang::compile_to_sv(
         "castinit",
         &src,
-        std::env::temp_dir().to_str().expect("путь в UTF-8"),
+        std::env::temp_dir()
+            .join(format!("takt_pid{}", std::process::id()))
+            .to_str()
+            .expect("путь в UTF-8"),
         &[],
         &takt_lang::generator::GenerateOptions::default(),
     )

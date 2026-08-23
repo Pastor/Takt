@@ -142,13 +142,15 @@ fn fixed_parameter_values_match_generated_c() {
         eprintln!("[ПРОПУСК] fixed_parameter_values_match_generated_c: нет cc");
         return;
     }
-    let dir = std::env::temp_dir().join(format!(
-        "takt_fixed_param_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_fixed_param_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let c = generated_c_trace(&dir);

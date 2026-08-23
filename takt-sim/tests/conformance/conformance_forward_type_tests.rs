@@ -111,7 +111,9 @@ fn forward_declared_type_traces_match() {
         eprintln!("[ПРОПУСК] forward_declared_type_traces_match: `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt_0352_forward_type");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0352_forward_type");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
 

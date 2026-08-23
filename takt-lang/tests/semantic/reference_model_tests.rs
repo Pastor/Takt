@@ -70,7 +70,9 @@ fn cc_available() -> bool {
 /// как сторож самого перевода, урок фич 0028/0047).
 #[test]
 fn reference_model_compiles_and_translates_state_ref() {
-    let dir = std::env::temp_dir().join("takt_0075_reference");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0075_reference");
     std::fs::create_dir_all(&dir).expect("каталог вывода");
 
     compile_to_c(

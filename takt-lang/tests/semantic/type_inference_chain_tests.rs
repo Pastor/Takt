@@ -132,7 +132,9 @@ type Compile =
 
 /// Порождает код всеми целями; возвращает список отказов.
 fn translate_all(tag: &str, src: &str) -> Vec<String> {
-    let dir = std::env::temp_dir().join(format!("takt_0204_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0204_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     let path = dir.to_str().expect("путь в UTF-8");
@@ -169,7 +171,9 @@ fn inferred_chain_translates_by_every_target() {
 /// (например, шире), и сборка это скрыла бы.
 #[test]
 fn inferred_type_reaches_generated_c_declaration() {
-    let dir = std::env::temp_dir().join("takt_0204_decl");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0204_decl");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     takt_lang::compile_to_c(

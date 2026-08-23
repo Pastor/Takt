@@ -85,7 +85,9 @@ start Entry = ArrConf;
     };
 
     // Порождённый C: собираем харнесс, печатающий data[i] и counter.
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0076_array");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0076_array");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     takt_lang::compile_to_c(
         "arrconf",
@@ -218,7 +220,9 @@ start Entry = NestConf;
     let sim_sum = sim_scalar(&unit, "sum");
     let sim_copied = sim_scalar(&unit, "copied");
 
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0364_nested");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0364_nested");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     takt_lang::compile_to_c(
         "nestconf",
@@ -359,7 +363,9 @@ start Entry = AggElem;
     assert_eq!(sim_whole, 4, "1.5 + 2.5 = 4.0");
     assert_eq!(sim_code, 7, "modes[0] := Work → 7");
 
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0368_aggelem");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0368_aggelem");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     takt_lang::compile_to_c(
         "aggelem",
@@ -473,7 +479,9 @@ start Entry = FieldQ;
     assert_eq!(sim_total, 1024, "1.5 + 2.5 = 4.0 → 1024");
     assert_eq!(sim_picked, 320, "0.25 + 1.0 = 1.25 → 320");
 
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0370_fieldq");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0370_fieldq");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     takt_lang::compile_to_c(
         "fieldq",
@@ -585,7 +593,9 @@ start Entry = CastQ;
     assert_eq!(sim_sum, 4, "1.5 + 2.5 = 4.0");
     assert_eq!(sim_elem, 7, "7.75 as u8 = 7");
 
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0371_castq");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0371_castq");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     takt_lang::compile_to_c(
         "castq",

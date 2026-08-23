@@ -203,13 +203,15 @@ fn st_multidim_trace_matches_reference_tick_by_tick() {
         return;
     }
 
-    let dir = std::env::temp_dir().join(format!(
-        "takt_st_multidim_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("main")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_st_multidim_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("main")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("рабочий каталог");
 
@@ -367,13 +369,15 @@ fn st_nested_aggregate_trace_matches_reference() {
         return;
     }
 
-    let dir = std::env::temp_dir().join(format!(
-        "takt_st_nested_aggregate_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("main")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_st_nested_aggregate_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("main")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("рабочий каталог");
 

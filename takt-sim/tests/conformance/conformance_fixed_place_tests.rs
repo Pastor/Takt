@@ -60,13 +60,15 @@ fn simulator_trace() -> Vec<Vec<i128>> {
 fn temp_dir(tag: &str) -> std::path::PathBuf {
     // Каталог уникален по тесту (инвариант 0190); двоеточие имени потока
     // вычищается — после слияния целей оно есть в каждом имени (0244).
-    let dir = std::env::temp_dir().join(format!(
-        "takt_fixed_place_{tag}_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_fixed_place_{tag}_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     dir

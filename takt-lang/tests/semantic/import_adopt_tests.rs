@@ -48,7 +48,9 @@ start App = Pid | Plant;
 
 /// Готовит каталог с библиотекой и применением, возвращает путь каталога.
 fn fixture_dir(tag: &str, lib: &str, app: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_0184_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0184_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога фикстуры");
     std::fs::write(dir.join("lib.takt"), lib).expect("запись библиотеки");

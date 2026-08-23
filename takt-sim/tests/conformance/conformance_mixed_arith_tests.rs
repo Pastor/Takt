@@ -112,7 +112,9 @@ fn mixed_arith_traces_match() {
         eprintln!("[ПРОПУСК] mixed_arith_traces_match: `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt_0360_arith");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0360_arith");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
 

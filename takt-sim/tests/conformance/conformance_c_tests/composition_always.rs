@@ -35,10 +35,12 @@ fn composition_model_always_matches_generated_c() {
         eprintln!("[ПРОПУСК] composition_model_always: `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join(format!(
-        "takt_0194_conformance_{}",
-        std::thread::current().name().unwrap_or("single")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0194_conformance_{}",
+            std::thread::current().name().unwrap_or("single")
+        ));
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(&dir, FIXTURE, "compalw", "Compalw", "entry", &vars);
     assert_eq!(

@@ -60,7 +60,9 @@ const NARROW: &str = "model M { \
                       } start Root = M;";
 
 fn build_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_0157_{tag}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0157_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     dir

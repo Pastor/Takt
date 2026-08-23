@@ -39,7 +39,9 @@ fn temp_dir(tag: &str) -> PathBuf {
         .name()
         .unwrap_or("stage_order")
         .replace(':', "_");
-    let dir = std::env::temp_dir().join(format!("takt-0296-{tag}-{thread}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt-0296-{tag}-{thread}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание временного каталога");
     dir

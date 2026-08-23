@@ -222,7 +222,7 @@ fn both_modes_and_simulator_agree_tick_by_tick() {
         );
         return;
     }
-    let base = std::env::temp_dir();
+    let base = std::env::temp_dir().join(format!("takt_pid{}", std::process::id()));
     let c_assign = c_trace(&base.join("takt-0185-07-assign"), false, FIELDS_ASSIGN);
     let c_specialize = c_trace(
         &base.join("takt-0185-07-specialize"),
@@ -303,7 +303,9 @@ fn specialized_constants_drive_generated_rust() {
         eprintln!("[ПРОПУСК] specialized_constants_drive_generated_rust: rustc не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt-0185-07-rust");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt-0185-07-rust");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
 
@@ -393,7 +395,9 @@ fn specialized_constants_drive_generated_sv() {
         eprintln!("[ПРОПУСК] specialized_constants_drive_generated_sv: verilator не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt-0185-07-sv");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt-0185-07-sv");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
 

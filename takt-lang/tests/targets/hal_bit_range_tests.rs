@@ -53,7 +53,9 @@ fn bit_model(bit: &str) -> String {
 /// A1: бит 63 валиден, бит 64 → `SE-060` (вне [0, 63], `uint64_t` — предел).
 #[test]
 fn bit_in_range_ok_out_of_range_is_se060() {
-    let dir = std::env::temp_dir().join("takt_0098_se060");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0098_se060");
     std::fs::create_dir_all(&dir).expect("каталог");
 
     // Верхняя граница диапазона — валидна (читается uint64_t).
@@ -75,7 +77,9 @@ fn hal_reads_wide_bit_without_ub() {
         eprintln!("[ПРОПУСК] hal_reads_wide_bit_without_ub: компилятор `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("takt_0098_hal_value");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0098_hal_value");
     std::fs::create_dir_all(&dir).expect("каталог");
 
     // LO — бит 2 (младший байт → доступ 1 байт), HI — бит 33 (→ доступ 8 байт).

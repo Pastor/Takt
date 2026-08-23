@@ -144,13 +144,15 @@ fn fixed_literal_in_body_matches_generated_c() {
         eprintln!("[ПРОПУСК] fixed_literal_in_body_matches_generated_c: нет cc");
         return;
     }
-    let dir = std::env::temp_dir().join(format!(
-        "takt_fixed_literal_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_fixed_literal_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let c = generated_c_trace(&dir);
@@ -164,13 +166,15 @@ fn fixed_literal_in_body_matches_generated_c() {
 /// разрешая имена против модели, — понижение обязано идти туда же.
 #[test]
 fn edge_condition_literal_is_lowered() {
-    let dir = std::env::temp_dir().join(format!(
-        "takt_fixed_literal_edge_{}",
-        std::thread::current()
-            .name()
-            .unwrap_or("single")
-            .replace(':', "_")
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_fixed_literal_edge_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("single")
+                .replace(':', "_")
+        ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");

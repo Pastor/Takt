@@ -51,7 +51,9 @@ fn compile_st(
         .name()
         .unwrap_or("single")
         .replace(':', "_");
-    let dir = std::env::temp_dir().join(format!("takt_0378_{tag}_{thread}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0378_{tag}_{thread}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     takt_lang::compile_to_st(

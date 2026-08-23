@@ -33,7 +33,9 @@ fn unsigned_overflow_wraps_like_generated_c() {
         );
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0127_overflow");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_0127_overflow");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(
         &dir,

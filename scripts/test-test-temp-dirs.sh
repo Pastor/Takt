@@ -1,8 +1,12 @@
 #!/bin/sh
 # Сторож гейта временных каталогов тестов (фикс 0190-01, правило 0315).
 #
-# Проверяет ПРЕДМЕТ гейта: каждый из трёх классов ловится по отдельности, и
+# Проверяет ПРЕДМЕТ гейта: каждый из ЧЕТЫРЁХ классов ловится по отдельности, и
 # здоровое дерево проходит. Работает на КОПИИ дерева (`TD_ROOT`).
+#
+# ⚠️ Каталог процесса (`takt_pid{}`) общий у всех файлов ПО ЗАМЫСЛУ — он и
+# разводит два прогона (фича 0429). Условие 8 сторожит именно это: гейт не
+# вправе объявить пересечением собственное лекарство.
 #
 # POSIX sh.
 set -eu
@@ -30,11 +34,17 @@ tree
 cat > "$TMP/tree/takt-sim/tests/conformance/a_tests.rs" <<'RS'
 fn build_dir(tag: &str) -> std::path::PathBuf {
     let thread = std::thread::current().name().unwrap_or("t").replace(':', "_");
-    std::env::temp_dir().join(format!("takt_a_{tag}_{thread}"))
+    std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_a_{tag}_{thread}"))
 }
 RS
 cat > "$TMP/tree/takt-sim/tests/conformance/b_tests.rs" <<'RS'
-fn dir() -> std::path::PathBuf { std::env::temp_dir().join("takt_b_only") }
+fn dir() -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_b_only")
+}
 RS
 if run; then ok "здоровое дерево принимается"
 else fail "здоровое дерево отвергнуто:$(printf '\n%s' "$(cat "$TMP/out")")"; fi
@@ -42,7 +52,7 @@ else fail "здоровое дерево отвергнуто:$(printf '\n%s' "$
 # --- Условие 2: общий литеральный каталог (D1) ------------------------------
 tree
 for f in a b; do
-    printf 'fn d() -> std::path::PathBuf { std::env::temp_dir().join("takt_same") }\n' \
+    printf 'fn d() -> std::path::PathBuf { std::env::temp_dir().join(format!("takt_pid{}", std::process::id())).join("takt_same") }\n' \
         > "$TMP/tree/takt-sim/tests/conformance/${f}_tests.rs"
 done
 if run; then fail "D1: общий литеральный каталог не пойман"
@@ -51,7 +61,7 @@ else ok "D1: общий литеральный каталог ловится"; f
 # --- Условие 3: общий шаблон без имени потока (D2) --------------------------
 tree
 for f in a b; do
-    printf 'fn d(tag: &str) -> std::path::PathBuf { std::env::temp_dir().join(format!("takt_sv_{tag}")) }\n' \
+    printf 'fn d(tag: &str) -> std::path::PathBuf { std::env::temp_dir().join(format!("takt_pid{}", std::process::id())).join(format!("takt_sv_{tag}")) }\n' \
         > "$TMP/tree/takt-sim/tests/conformance/${f}_tests.rs"
 done
 if run; then fail "D2: общий шаблон не пойман"
@@ -63,7 +73,9 @@ for f in a b; do
     cat > "$TMP/tree/takt-sim/tests/conformance/${f}_tests.rs" <<'RS'
 fn d(tag: &str) -> std::path::PathBuf {
     let thread = std::thread::current().name().unwrap_or("t").replace(':', "_");
-    std::env::temp_dir().join(format!("takt_sv_{tag}_{thread}"))
+    std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_sv_{tag}_{thread}"))
 }
 RS
 done
@@ -73,14 +85,58 @@ else fail "шаблон с именем потока отвергнут:$(printf
 # --- Условие 5: дубль тега в файле без имени потока (D3) --------------------
 tree
 cat > "$TMP/tree/takt-sim/tests/conformance/a_tests.rs" <<'RS'
-fn build_dir(tag: &str) -> std::path::PathBuf { std::env::temp_dir().join(format!("takt_a_{tag}")) }
+fn build_dir(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_a_{tag}"))
+}
 fn one() { let _ = build_dir("trace"); }
 fn two() { let _ = build_dir("trace"); }
 RS
 if run; then fail "D3: дубль тега не пойман"
 else ok "D3: дубль тега без имени потока ловится"; fi
 
-# --- Условие 6: пустое дерево не роняет гейт --------------------------------
+# --- Условие 6: каталог без идентификатора процесса (D4) --------------------
+#
+# Класс воспроизведён 2026-08-23 двумя копиями тестового бинарника: имя потока
+# уникально ВНУТРИ процесса, и второй прогон сносит каталог первого прямо во
+# время сборки verilator.
+tree
+cat > "$TMP/tree/takt-sim/tests/conformance/a_tests.rs" <<'RS'
+fn build_dir(tag: &str) -> std::path::PathBuf {
+    let thread = std::thread::current().name().unwrap_or("t").replace(':', "_");
+    std::env::temp_dir().join(format!("takt_a_{tag}_{thread}"))
+}
+RS
+if run; then fail "D4: каталог без идентификатора процесса не пойман"
+else ok "D4: каталог без идентификатора процесса ловится"; fi
+
+# --- Условие 7: отказ D4 называет класс и показывает лекарство --------------
+if grep -q "D4:" "$TMP/out" && grep -q "takt_pid" "$TMP/out"; then
+    ok "отказ D4 называет класс и форму лекарства"
+else
+    fail "отказ D4 не называет класс либо не показывает форму"
+fi
+
+# --- Условие 8: общий каталог ПРОЦЕССА пересечением не считается ------------
+#
+# Он общий у всех файлов по замыслу: гейт, объявивший его пересечением, запретил
+# бы собственное лекарство.
+tree
+for f in a b; do
+    cat > "$TMP/tree/takt-sim/tests/conformance/${f}_tests.rs" <<RS
+fn d(tag: &str) -> std::path::PathBuf {
+    let thread = std::thread::current().name().unwrap_or("t").replace(':', "_");
+    std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_${f}_{tag}_{thread}"))
+}
+RS
+done
+if run; then ok "общий каталог процесса пересечением не считается"
+else fail "каталог процесса объявлен пересечением:$(printf '\n%s' "$(cat "$TMP/out")")"; fi
+
+# --- Условие 9: пустое дерево не роняет гейт --------------------------------
 tree
 if run; then ok "дерево без тестов пропускается"
 else fail "пустое дерево отвергнуто"; fi

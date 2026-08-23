@@ -35,7 +35,9 @@ fn fixed_wrap_to_width_matches_generated_c() {
         eprintln!("[ПРОПУСК] fixed_wrap_to_width_matches_generated_c: `cc` не найден");
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_fixed_wrap_w12");
+    let dir: PathBuf = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_conformance_fixed_wrap_w12");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(
         &dir,

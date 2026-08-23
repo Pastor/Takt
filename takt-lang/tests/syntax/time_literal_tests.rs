@@ -282,7 +282,9 @@ fn target_c_emits_duration_as_milliseconds() {
     // структуры цели `c` (ловушка, разобранная фичей 0029), и тогда отображение
     // типа не вызывается вовсе — тест зеленел бы впустую.
     let src = model_with("    var left: duration := 0s;\n    always { left := 5s; }");
-    let dir = std::env::temp_dir().join("takt_0183_probe_c");
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join("takt_0183_probe_c");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");
     takt_lang::compile_to_c(

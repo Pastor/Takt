@@ -33,7 +33,9 @@ fn dir_for(tag: &str) -> std::path::PathBuf {
         .name()
         .unwrap_or("single")
         .replace(':', "_");
-    let dir = std::env::temp_dir().join(format!("takt_0355_{tag}_{thread}"));
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!("takt_0355_{tag}_{thread}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("создание каталога");
     dir
