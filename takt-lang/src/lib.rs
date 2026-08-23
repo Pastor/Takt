@@ -125,27 +125,7 @@ pub(crate) use parse_entry::parse_without_depth_limit;
 pub mod pipeline; // общий конвейер: разбор → дерево → диагностики
 pub use pipeline::collect_compile_diagnostics;
 pub(crate) use pipeline::parse_and_construct;
-
-/// Применяет трансформацию `float → q(m, n)` (фича 0096), если она включена для
-/// цели опциями генерации. `embedded_gate` — требуется ли `--float-embedded`:
-/// `true` для программных целей `c`/`rust`/`st` (native по умолчанию, Q — только
-/// с флагом), `false` для `sv` (нативного `float` там нет, `q` подставляется
-/// всегда при заданной точности).
-///
-/// Без `--float-as-q` не делает ничего (корпус неизменен). Мутирует модель на
-/// месте — вызывать **перед** [`generator::generate`].
-pub(crate) fn apply_float_lowering(
-    model: &std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
-    options: &GenerateOptions,
-    embedded_gate: bool,
-) -> Result<(), Diagnostic> {
-    if let Some((m, n)) = options.float_as_q
-        && (!embedded_gate || options.float_embedded)
-    {
-        semantic::lower_float::lower_float_to_fixed(std::rc::Rc::clone(model), m, n)?;
-    }
-    Ok(())
-}
+pub(crate) use semantic::lower_float::apply_float_lowering;
 
 /// Компилирует исходный код Takt в C-код.
 ///
@@ -249,6 +229,7 @@ pub fn compile_to_c_hal(
     }
 
     // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
+
     let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
     if let Some(err) = resolution
         .diagnostics
@@ -310,6 +291,9 @@ pub fn compile_to_st(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
+
+    // Наблюдение состояния соседа (фича 0397; довод — в шапке `observe`).
+    crate::semantic::condition::observe::expand_state_observation(&unit.model)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -375,6 +359,9 @@ pub fn compile_to_rust(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
+
+    // Наблюдение состояния соседа (фича 0397; довод — в шапке `observe`).
+    crate::semantic::condition::observe::expand_state_observation(&unit.model)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -488,6 +475,9 @@ pub fn compile_to_st_at(
     let mut at_options = options.clone();
     at_options.hal = true;
     at_options.address_map = resolution.map;
+
+    // Наблюдение состояния соседа (фича 0397; довод — в шапке `observe`).
+    crate::semantic::condition::observe::expand_state_observation(&unit.model)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
