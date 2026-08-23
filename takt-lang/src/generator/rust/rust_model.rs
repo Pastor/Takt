@@ -22,6 +22,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
+use crate::generator::rust::rust_chain::{Chain, model_concats, seq_enum_name, seq_field_name};
 use crate::generator::rust::rust_ctx::ModelEmit;
 use crate::generator::rust::rust_decl::{PortSet, default_value, model_fields};
 use crate::generator::rust::rust_expr::{Scope, coerce_to};
@@ -157,23 +158,28 @@ pub(crate) fn emit_state_enum(p: &mut Printer, table: &StateTable) -> Result<(),
 /// (`{STATE}_INIT`, `{STATE}_END`), здесь **не эмитятся**: в C они мертвы —
 /// `_init` сразу ставит вариант ПЕРВОГО шага, а `End` не пишется никогда. В C
 /// это молча, в Rust `dead_code` поймал бы (решение R9, вариант (а)).
-fn emit_seq_enums(
-    p: &mut Printer,
-    model: &Name,
-    concats: &[(Name, Vec<ConcatStep>)],
-) -> Result<(), Diagnostic> {
-    for (state, steps) in concats {
+fn emit_seq_enums(p: &mut Printer, model: &Name, concats: &[Chain]) -> Result<(), Diagnostic> {
+    for chain in concats {
         p.ident(&format!(
             "/// Шаг последовательной композиции состояния '{}'.",
-            state.local()
+            chain.state.local()
         ))
         .nl();
         p.ident("#[derive(Debug, Clone, Copy, PartialEq, Eq)]").nl();
-        p.ident(&format!("enum {} {{", seq_enum_name(model, state)?))
-            .nl();
+        p.ident(&format!(
+            "enum {} {{",
+            seq_enum_name(model, &chain.state, chain.suffix.as_deref())?
+        ))
+        .nl();
         p.up();
-        for step in steps {
+        for step in &chain.steps {
             p.ident(&format!("{},", step.variant)).nl();
+        }
+        // ⚠️ У ВЛОЖЕННОЙ цепочки есть терминальный вариант (фича 0426):
+        // параллель обязана знать, что ветвь кончилась, — у цепочки состояния
+        // роль признака играет выход из самого состояния.
+        if chain.suffix.is_some() {
+            p.ident("Done,").nl();
         }
         p.down();
         p.ident("}").nl().nl();
@@ -216,109 +222,6 @@ pub(crate) fn collect_instances(
             Ok(())
         }
     }
-}
-
-/// Один шаг последовательной композиции (`A + B + (C | D) + E`).
-///
-/// Шаг — это либо одна под-модель, либо параллельная группа: внутри шага всё
-/// тикает **одновременно**, а сами шаги идут **по очереди**.
-pub(crate) struct ConcatStep {
-    /// Имя варианта перечисления шага (`A0`, `Group2`).
-    pub(crate) variant: String,
-    /// Экземпляры, принадлежащие шагу (у параллельной группы — все её ветви).
-    pub(crate) instances: Vec<Instance>,
-}
-
-/// Разбирает последовательную композицию на шаги.
-///
-/// Префиксы полей строятся **той же** формулой, что и в [`collect_instances`]:
-/// поля `struct` и цепочка такта обязаны смотреть на одни и те же имена, иначе
-/// порождённый код не соберётся.
-///
-/// # Ошибки
-/// [`RS-021`] на вложенной последовательной композиции внутри шага. Цель `c`
-/// такой случай **молча пропускает** (`_ => {}` в `generate_concat_tick`), то
-/// есть шаг просто не тикает и автомат встаёт. Повторять это нельзя: тихо
-/// вставший автомат — ровно тот дефект, ради отсутствия которого заведена цель.
-pub(crate) fn concat_steps(
-    steps: &[StateExtend],
-    prefix: &str,
-    state: &Name,
-) -> Result<Vec<ConcatStep>, Diagnostic> {
-    let mut out = Vec::new();
-    for (idx, step) in steps.iter().enumerate() {
-        let (variant, sub) = match step {
-            StateExtend::Model(name, _) => (
-                format!(
-                    "{}{}",
-                    rust_type_name(name.local(), Location::Codegen)?,
-                    idx
-                ),
-                format!("{}_{}{}", prefix, name.local_lowercase_snakecase(), idx),
-            ),
-            StateExtend::Parallel(_) => {
-                (format!("Group{}", idx), format!("{}_group{}", prefix, idx))
-            }
-            StateExtend::Concatenation(_) => {
-                return Err(Diagnostic::error(
-                    Location::Codegen,
-                    format!(
-                        "Состояние '{}': последовательная композиция вложена в шаг \
-                         другой последовательной композиции — это не транслируется \
-                         в Rust. Разнесите шаги по отдельным состояниям",
-                        state.local()
-                    ),
-                )
-                .with_code("RS-021"));
-            }
-            StateExtend::None => continue,
-        };
-        let mut instances = Vec::new();
-        collect_instances(step, &sub, &mut instances)?;
-        if instances.is_empty() {
-            continue;
-        }
-        out.push(ConcatStep { variant, instances });
-    }
-    Ok(out)
-}
-
-/// Имя перечисления шага последовательной композиции (`RootStartSeq`).
-pub(crate) fn seq_enum_name(model: &Name, state: &Name) -> Result<String, Diagnostic> {
-    Ok(format!(
-        "{}{}Seq",
-        model.unique_camelcase(),
-        rust_type_name(state.local(), Location::Codegen)?
-    ))
-}
-
-/// Имя поля-счётчика шага (`start_seq`).
-pub(crate) fn seq_field_name(state: &Name) -> Result<String, Diagnostic> {
-    rust_value_name(
-        &format!("{}_seq", state.local_lowercase_snakecase()),
-        Location::Codegen,
-    )
-}
-
-/// Все последовательные композиции модели: состояние → его шаги.
-pub(crate) fn model_concats(
-    map: &RustMap,
-    states: &[Name],
-) -> Result<Vec<(Name, Vec<ConcatStep>)>, Diagnostic> {
-    let mut out = Vec::new();
-    for state in states {
-        let Some(Element::StateExtend { extend, .. }) = map.state_at(state.clone()) else {
-            continue;
-        };
-        let StateExtend::Concatenation(steps) = &extend else {
-            continue;
-        };
-        let parsed = concat_steps(steps, &state.local_lowercase_snakecase(), state)?;
-        if !parsed.is_empty() {
-            out.push((state.clone(), parsed));
-        }
-    }
-    Ok(out)
 }
 
 /// Все экземпляры под-моделей модели — по одному на элемент композиции.
@@ -445,19 +348,18 @@ pub(crate) fn emit_model(
     // упадёт на неиспользуемом поле). Логика в `rust_time`.
     rust_time::emit_struct_fields(p, map, model, &table.enum_name)?;
     crate::generator::rust::rust_every::emit_struct_fields(p, map, model)?;
-    for (state, steps) in &concats {
+    for chain in &concats {
         p.ident(&format!(
             "/// Текущий шаг последовательной композиции состояния '{}'.",
-            state.local()
+            chain.state.local()
         ))
         .nl();
         p.ident(&format!(
             "{}: {},",
-            seq_field_name(state)?,
-            seq_enum_name(name, state)?
+            seq_field_name(&chain.state, chain.suffix.as_deref())?,
+            seq_enum_name(name, &chain.state, chain.suffix.as_deref())?
         ))
         .nl();
-        let _ = steps;
     }
     for (_, list) in &instances {
         for instance in list {
@@ -700,18 +602,18 @@ fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
     crate::generator::rust::rust_every::emit_new_fields(p, model);
     // Счётчик шага стартует с ПЕРВОГО шага, а не с «Init»: так же поступает
     // `_init` цели `c` (её варианты `{STATE}_INIT`/`_END` не пишутся никогда).
-    for (state, steps) in concats {
-        let first = steps.first().ok_or_else(|| {
+    for chain in concats {
+        let first = chain.steps.first().ok_or_else(|| {
             Diagnostic::error(
                 Location::Codegen,
-                format!("Состояние '{}': композиция без шагов", state.local()),
+                format!("Состояние '{}': композиция без шагов", chain.state.local()),
             )
             .with_code("RS-021")
         })?;
         p.ident(&format!(
             "{}: {}::{},",
-            seq_field_name(state)?,
-            seq_enum_name(model_name, state)?,
+            seq_field_name(&chain.state, chain.suffix.as_deref())?,
+            seq_enum_name(model_name, &chain.state, chain.suffix.as_deref())?,
             first.variant
         ))
         .nl();
@@ -857,18 +759,18 @@ fn emit_init(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
     // такта — `init(&mut self)` под-модели HAL не имеет.
     rust_time::emit_init(p, map, model, &table.enum_name);
     crate::generator::rust::rust_every::emit_reset(p, model);
-    for (state, steps) in concats {
-        let first = steps.first().ok_or_else(|| {
+    for chain in concats {
+        let first = chain.steps.first().ok_or_else(|| {
             Diagnostic::error(
                 Location::Codegen,
-                format!("Состояние '{}': композиция без шагов", state.local()),
+                format!("Состояние '{}': композиция без шагов", chain.state.local()),
             )
             .with_code("RS-021")
         })?;
         p.ident(&format!(
             "self.{} = {}::{};",
-            seq_field_name(state)?,
-            seq_enum_name(model_name, state)?,
+            seq_field_name(&chain.state, chain.suffix.as_deref())?,
+            seq_enum_name(model_name, &chain.state, chain.suffix.as_deref())?,
             first.variant
         ))
         .nl();

@@ -57,6 +57,7 @@ mod conformance_local_decl_tests;
 mod conformance_mixed_arith_tests;
 mod conformance_mixed_sign_tests;
 mod conformance_named_cond_tests;
+mod conformance_nested_composition_tests;
 mod conformance_param_apply_tests;
 mod conformance_param_modes_tests;
 mod conformance_port_array_tests;

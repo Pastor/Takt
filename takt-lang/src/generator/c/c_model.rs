@@ -78,65 +78,6 @@ pub(super) fn generate_function_prototypes(
     Ok(())
 }
 
-/// Генерирует вызовы `_tick` для элементов параллельного блока.
-///
-/// Возвращает список C-выражений `{Name}_is_done(...)` для итоговой проверки
-/// готовности всех веток. Вложенные параллели также тикаются рекурсивно.
-fn generate_parallel_items_tick(
-    printer: &mut Printer,
-    map: &CMap,
-    parent_access: &str,
-    parent_unique_upper: &str,
-    items: &[StateExtend],
-    caller_is_main: bool,
-) -> Vec<String> {
-    let mut done_exprs = Vec::new();
-    for (idx, item) in items.iter().enumerate() {
-        match item {
-            StateExtend::Model(name, _) => {
-                let field = format!(
-                    "{}.{}{}",
-                    parent_access,
-                    name.local_lowercase_snakecase(),
-                    idx
-                );
-                let arg = map.root_arg(
-                    name,
-                    caller_is_main,
-                    crate::generator::c::c_needs::ModelFn::Tick,
-                );
-                printer
-                    .ident(&format!(
-                        "{}_tick(&{}{});",
-                        name.unique_camelcase(),
-                        field,
-                        arg,
-                    ))
-                    .nl();
-                // `_is_done` указателя не принимает (фича 0419).
-                done_exprs.push(format!("{}_is_done(&{})", name.unique_camelcase(), field));
-            }
-            StateExtend::Parallel(inner) => {
-                let nested_access = format!("{}.parallel{}", parent_access, idx);
-                let nested_upper = format!("{}_PARALLEL{}", parent_unique_upper, idx);
-                let inner_done = generate_parallel_items_tick(
-                    printer,
-                    map,
-                    &nested_access,
-                    &nested_upper,
-                    inner,
-                    caller_is_main,
-                );
-                if !inner_done.is_empty() {
-                    done_exprs.push(format!("({})", inner_done.join(" && ")));
-                }
-            }
-            _ => {}
-        }
-    }
-    done_exprs
-}
-
 /// Генерирует переходы между состояниями для простого состояния [`Element::State`].
 ///
 /// Для каждой ссылки (`ref`-перехода) формирует:
@@ -427,7 +368,7 @@ fn generate_concat_tick(
             StateExtend::Parallel(inner) => {
                 let parallel_access = format!("model->{}_parallel{}", state_local, idx);
                 let nested_upper = format!("{}_PARALLEL{}", state_unique_upper, idx);
-                let done_exprs = generate_parallel_items_tick(
+                let done_exprs = crate::generator::c::c_compose::generate_parallel_items_tick(
                     printer,
                     map,
                     &parallel_access,
@@ -653,14 +594,15 @@ fn generate_model_tick(
                         let local = state_name.local_lowercase_snakecase();
                         let unique_upper = state_name.unique_uppercase_snakecase();
                         let access = format!("model->{}", local);
-                        let done_exprs = generate_parallel_items_tick(
-                            printer,
-                            map,
-                            &access,
-                            &unique_upper,
-                            &steps,
-                            call_append == ", model",
-                        );
+                        let done_exprs =
+                            crate::generator::c::c_compose::generate_parallel_items_tick(
+                                printer,
+                                map,
+                                &access,
+                                &unique_upper,
+                                &steps,
+                                call_append == ", model",
+                            );
                         if !done_exprs.is_empty() {
                             printer
                                 .ident(&format!("if ({}) {{", done_exprs.join(" && ")))

@@ -161,12 +161,54 @@ fn build_parallel_item(
             printer.down().ident("} state;").nl();
             printer.down().ident(&format!("}} parallel{};", idx)).nl();
         }
+        // ВЛОЖЕННАЯ последовательность внутри параллели (фича 0426).
+        //
+        // ⚠️ Прежде она раскладывалась ПЛОСКО, то есть без собственной машины
+        // шагов: печать тика её пропускала молча (`_ => {}`), и ветвь `A + B`
+        // в прошивке не исполнялась вовсе. Замер 2026-08-23: `cc -Werror`
+        // ловил это лишь косвенно — по `unused-function`.
+        //
+        // Форма — та же группа, что у вложенной параллели: поля элементов плюс
+        // поле `state` с шагами.
         StateExtend::Concatenation(items) => {
+            let nested_prefix = format!("{}_concat{}", unique_prefix, idx);
+            printer.ident("struct {").nl().up();
             for (inner_idx, item) in items.iter().enumerate() {
-                build_parallel_item(printer, item, inner_idx, unique_prefix)?;
+                build_parallel_item(printer, item, inner_idx, &nested_prefix)?;
             }
+            build_step_state_enum(printer, &nested_prefix, items)?;
+            printer.down().ident(&format!("}} concat{};", idx)).nl();
         }
     }
+    Ok(())
+}
+
+/// Перечисление шагов вложенной последовательности (фича 0426).
+///
+/// ⚠️ Варианты именуются по ЭЛЕМЕНТУ, а не по номеру: так же, как у
+/// последовательности верхнего уровня (`build_concat_state_enum`), — иначе
+/// два способа назвать один шаг разошлись бы при первой же правке.
+fn build_step_state_enum(
+    printer: &mut Printer,
+    unique_prefix: &str,
+    items: &[StateExtend],
+) -> Result<(), Diagnostic> {
+    let prefix = unique_prefix.to_uppercase();
+    printer.ident("enum {").up().nl();
+    printer.ident(&format!("{prefix}_INIT,")).nl();
+    for (idx, item) in items.iter().enumerate() {
+        let variant = match item {
+            StateExtend::Model(model, _) => {
+                format!("{}_{}{}", prefix, model.unique_uppercase_snakecase(), idx)
+            }
+            StateExtend::Parallel(_) => format!("{prefix}_PARALLEL{idx}"),
+            StateExtend::Concatenation(_) => format!("{prefix}_CONCAT{idx}"),
+            StateExtend::None => continue,
+        };
+        printer.ident(&format!("{variant},")).nl();
+    }
+    printer.ident(&format!("{prefix}_END")).nl();
+    printer.down().ident("} state;").nl();
     Ok(())
 }
 

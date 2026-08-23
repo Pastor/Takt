@@ -1,0 +1,27 @@
+// Вложенная последовательная композиция внутри параллельной (фича 0426).
+//
+// `(A + B) | C`: A и B идут ПО ОЧЕРЕДИ, C — параллельно им. Значения ветвей
+// различны и меняются по тактам: превращение цепочки в параллель (как делала
+// цель `rust`) или её пропуск (как делала цель `c`) видны трассой.
+model A {
+    var n: u8 := 0;
+    out oa: u8 at 0x100;
+    start Go { always { n := n + 1; oa := n; } ref Fin: n = 2; }
+    state Fin;
+}
+
+model B {
+    var m: u8 := 0;
+    out ob: u8 at 0x104;
+    start Go { always { m := m + 2; ob := m; } ref Fin: m = 4; }
+    state Fin;
+}
+
+model C {
+    var k: u8 := 0;
+    out oc: u8 at 0x108;
+    start Go { always { k := k + 3; oc := k; } ref Fin: k = 9; }
+    state Fin;
+}
+
+start All = (A + B) | C;

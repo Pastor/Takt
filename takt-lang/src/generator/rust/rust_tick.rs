@@ -8,12 +8,11 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::rust::rust_blocks::{emit_model_named_blocks, emit_named_blocks};
+use crate::generator::rust::rust_chain::{seq_enum_name, seq_field_name};
 use crate::generator::rust::rust_ctx::{ModelEmit, StateEmit};
 use crate::generator::rust::rust_expr::{Scope, condition_as_bool, unwrap_outer};
 use crate::generator::rust::rust_map::RustMap;
-use crate::generator::rust::rust_model::{
-    Instance, StateTable, needs_hal, seq_enum_name, seq_field_name, submodel_name,
-};
+use crate::generator::rust::rust_model::{Instance, StateTable, needs_hal, submodel_name};
 use crate::generator::rust::rust_shared::{shared_type_name, shared_variables};
 use crate::generator::rust::rust_stmt::StmtOutput;
 use crate::semantic::minimap::{Element, Name, StateExtend};
@@ -439,8 +438,40 @@ fn emit_extend(
         // `End` вхолостую). Порядок обязан совпадать с C, иначе потактовая
         // сверка разъедется.
         StateExtend::Model(_, _) | StateExtend::Parallel(_) => {
+            // Вложенные цепочки параллели (фича 0426) тикают ПО ШАГАМ, а их
+            // экземпляры из общего списка исключаются: прежде все ветви
+            // тикали разом, и `A + B` внутри `| C` превращалась в параллель
+            // трёх — валидный Rust, другой автомат.
+            let chains: Vec<&crate::generator::rust::rust_chain::Chain> = concats
+                .iter()
+                .filter(|c| c.state.unique() == state_name.unique() && c.suffix.is_some())
+                .collect();
+            let chained: std::collections::BTreeSet<String> = chains
+                .iter()
+                .flat_map(|c| c.steps.iter())
+                .flat_map(|s| s.instances.iter())
+                .map(|i| i.field.clone())
+                .collect();
             let mut done = Vec::new();
+            for chain in &chains {
+                emit_chain_tick(p, ctx, chain, scope)?;
+                done.push(format!(
+                    "self.{} == {}::Done",
+                    crate::generator::rust::rust_chain::seq_field_name(
+                        &chain.state,
+                        chain.suffix.as_deref()
+                    )?,
+                    crate::generator::rust::rust_chain::seq_enum_name(
+                        model_name,
+                        &chain.state,
+                        chain.suffix.as_deref()
+                    )?
+                ));
+            }
             for instance in list {
+                if chained.contains(&instance.field) {
+                    continue;
+                }
                 let args = call_args(map, instance, scope, is_root)?;
                 p.ident(&format!("self.{}.tick({});", instance.field, args))
                     .nl();
@@ -459,14 +490,15 @@ fn emit_extend(
         // Последовательная композиция: шаги идут ПО ОЧЕРЕДИ, внутри шага
         // (параллельная группа) — одновременно.
         StateExtend::Concatenation(_) => {
-            let Some((_, steps)) = concats
+            let Some(chain) = concats
                 .iter()
-                .find(|(n, _)| n.unique() == state_name.unique())
+                .find(|c| c.state.unique() == state_name.unique() && c.suffix.is_none())
             else {
                 return Ok(());
             };
-            let field = seq_field_name(state_name)?;
-            let seq = seq_enum_name(model_name, state_name)?;
+            let steps = &chain.steps;
+            let field = seq_field_name(state_name, None)?;
+            let seq = seq_enum_name(model_name, state_name, None)?;
             for (idx, step) in steps.iter().enumerate() {
                 let head = if idx == 0 { "if" } else { "} else if" };
                 p.ident(&format!(
@@ -582,4 +614,66 @@ fn call_args(
         args.push(scope.hal_argument("вызов такта под-модели")?);
     }
     Ok(args.join(", "))
+}
+
+/// Такт ВЛОЖЕННОЙ цепочки внутри параллели (фича 0426).
+///
+/// Форма — та же машина шагов, что у цепочки состояния: на такте исполняется
+/// один шаг, по его завершении инициализируется следующий. Отличие одно —
+/// терминальный вариант `Done`: параллель обязана узнать, что ветвь кончилась,
+/// а выхода из состояния у вложенной цепочки нет.
+fn emit_chain_tick(
+    p: &mut Printer,
+    ctx: &ModelEmit,
+    chain: &crate::generator::rust::rust_chain::Chain,
+    scope: &Scope,
+) -> Result<(), Diagnostic> {
+    let field =
+        crate::generator::rust::rust_chain::seq_field_name(&chain.state, chain.suffix.as_deref())?;
+    let seq = crate::generator::rust::rust_chain::seq_enum_name(
+        ctx.name,
+        &chain.state,
+        chain.suffix.as_deref(),
+    )?;
+    for (idx, step) in chain.steps.iter().enumerate() {
+        let head = if idx == 0 { "if" } else { "} else if" };
+        p.ident(&format!(
+            "{} self.{} == {}::{} {{",
+            head, field, seq, step.variant
+        ))
+        .nl();
+        p.up();
+        let mut done = Vec::new();
+        for instance in &step.instances {
+            let args = call_args(ctx.map, instance, scope, ctx.is_root)?;
+            p.ident(&format!("self.{}.tick({});", instance.field, args))
+                .nl();
+            done.push(format!("self.{}.is_done()", instance.field));
+        }
+        if done.is_empty() {
+            p.down();
+            continue;
+        }
+        p.ident(&format!("if {} {{", done.join(" && "))).nl();
+        p.up();
+        match chain.steps.get(idx + 1) {
+            Some(next_step) => {
+                for instance in &next_step.instances {
+                    p.ident(&format!("self.{}.init();", instance.field)).nl();
+                }
+                p.ident(&format!("self.{} = {}::{};", field, seq, next_step.variant))
+                    .nl();
+            }
+            None => {
+                p.ident(&format!("self.{} = {}::Done;", field, seq)).nl();
+            }
+        }
+        p.down();
+        p.ident("}").nl();
+        p.down();
+    }
+    if !chain.steps.is_empty() {
+        p.ident("}").nl();
+    }
+    Ok(())
 }
