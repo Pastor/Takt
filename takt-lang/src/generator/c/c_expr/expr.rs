@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::generator::c::c_unsupported::{self, UnsupportedNode};
+use crate::generator::shift_width::{self, Direction};
 
 /// Отказ на конструкции, которую цель `c` не переводит (фича 0212).
 ///
@@ -16,6 +17,52 @@ fn unsupported(node: UnsupportedNode, expr: &ExpressionNode) -> Diagnostic {
     // нет, `ExpressionNode::loc()` выводит её из объявлений операндов, и
     // `res := mem[1:2];` в строке 7 указывал на строку 1, где объявлена `mem`.
     c_unsupported::refuse(node, crate::generator::site::at(expr.loc()))
+}
+
+/// Печать сдвига, величина которого не помещается в **продвинутый** тип C.
+///
+/// Возвращает `true`, если напечатала — тогда вызывающий обычный оператор не
+/// печатает.
+///
+/// # Порог
+///
+/// В C операнды сдвига **продвигаются** до `int` (C11 6.5.7p3), поэтому
+/// `u8 >> 8` определено и совпадает с эталоном, а UB начинается с ширины
+/// продвинутого типа. Отсюда порог `max(32, W)`: у типов уже `int` он равен
+/// самой ширине. Именно из-за порога вывод корпуса не меняется — сдвигов такой
+/// величины в `examples/` нет ни одного.
+///
+/// ⚠️ Порог принадлежит **целевому языку**; сам признак и значение насыщения —
+/// общему носителю `generator::shift_width`, чтобы цели `c` и `rust` не
+/// разошлись на одном входе (класс 0084/0193/0195).
+fn shift_saturated(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    direction: Direction,
+    value: &ExpressionNode,
+    amount: &ExpressionNode,
+) -> Result<bool, Diagnostic> {
+    let Some(bits) = shift_width::width_of(value) else {
+        return Ok(false);
+    };
+    let threshold = bits.max(32);
+    match shift_width::literal_saturation(direction, value, amount, threshold) {
+        shift_width::Saturation::AsIs => Ok(false),
+        shift_width::Saturation::Zero => {
+            printer.print("0");
+            Ok(true)
+        }
+        shift_width::Saturation::SignOnly(by) => {
+            // Скобки обязательны: сдвиг стоит в позиции операнда, и приоритет
+            // соседа может быть выше (`a >> 32 & 1`).
+            printer.print("(");
+            generate_expr(printer, map, owner, params, value, 10, false)?;
+            printer.print(&format!(" >> {by})"));
+            Ok(true)
+        }
+    }
 }
 
 /// Генерирует C-выражение из семантического узла с учётом приоритета операторов.
@@ -225,12 +272,23 @@ pub(in crate::generator::c) fn generate_expr(
         }
 
         // ── Битовые сдвиги ────────────────────────────────────────────────────
+        //
+        // Величина, не меньшая ширины **продвинутого** типа, — UB в C, и
+        // `cc -Werror` такой вывод отвергает (фича 0392). Признак и значение
+        // берутся у общего носителя `generator::shift_width` — того же, каким
+        // живёт цель `rust`.
         ExpressionNode::ShiftLeft(l, r) => {
+            if shift_saturated(printer, map, owner, params.clone(), Direction::Left, l, r)? {
+                return Ok(());
+            }
             generate_expr(printer, map, owner, params.clone(), l, 10, has_model)?;
             printer.print(" << ");
             generate_expr(printer, map, owner, params, r, 11, has_model)?;
         }
         ExpressionNode::ShiftRight(l, r) => {
+            if shift_saturated(printer, map, owner, params.clone(), Direction::Right, l, r)? {
+                return Ok(());
+            }
             generate_expr(printer, map, owner, params.clone(), l, 10, has_model)?;
             printer.print(" >> ");
             generate_expr(printer, map, owner, params, r, 11, has_model)?;

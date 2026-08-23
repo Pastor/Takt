@@ -42,15 +42,11 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::rust::rust_expr::{Scope, print_expression};
+use crate::generator::shift_width::{self, Saturation};
+use crate::semantic::ExpressionNode;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ExpressionNode, VariableNode};
 
-/// Направление сдвига: у них общая природа, но разные насыщения.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Direction {
-    Left,
-    Right,
-}
+pub(crate) use crate::generator::shift_width::Direction;
 
 /// Печать сдвига, если результат может не помещаться в `<<`/`>>` языка Rust.
 ///
@@ -77,23 +73,25 @@ pub(crate) fn guarded(
     amount: &ExpressionNode,
     scope: &Scope,
 ) -> Result<Option<String>, Diagnostic> {
-    let Some(bits) = width_of(value) else {
+    let Some(bits) = shift_width::width_of(value) else {
         return Ok(None);
     };
-    let signed = signed_of(value);
-    if let Some(shift) = literal(amount) {
-        if shift < i128::from(bits) {
-            return Ok(None);
+    // Порог у Rust — ширина самого типа: сдвиг на неё там ошибка компиляции
+    // (литерал) либо паника (переменная). Признак общий с целью `c`, порог
+    // свой — см. шапку `generator/shift_width.rs`.
+    match shift_width::literal_saturation(direction, value, amount, bits) {
+        Saturation::Zero => return Ok(Some(String::from("0"))),
+        Saturation::SignOnly(by) => {
+            let printed = print_expression(value, scope)?;
+            return Ok(Some(format!("({printed} >> {by})")));
         }
-        let printed = print_expression(value, scope)?;
-        return Ok(Some(match (direction, signed) {
-            // Знак остаётся один: сдвиг на `bits − 1` даёт −1 либо 0 — ровно
-            // то, что вычисляет эталон.
-            (Direction::Right, true) => format!("({printed} >> {})", bits - 1),
-            _ => String::from("0"),
-        }));
+        Saturation::AsIs => {}
+    }
+    if shift_width::literal(amount).is_some() {
+        return Ok(None);
     }
 
+    let signed = shift_width::signed_of(value);
     let printed = print_expression(value, scope)?;
     let shift = shift_amount(amount, scope)?;
     Ok(Some(match (direction, signed) {
@@ -113,7 +111,7 @@ pub(crate) fn guarded(
 fn shift_amount(amount: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
     let printed = print_expression(amount, scope)?;
     if matches!(
-        type_of(amount),
+        shift_width::type_of(amount),
         Some(TypeNode::Integer {
             bits: 32,
             signed: false
@@ -122,41 +120,6 @@ fn shift_amount(amount: &ExpressionNode, scope: &Scope) -> Result<String, Diagno
         return Ok(printed);
     }
     Ok(format!("({printed}) as u32"))
-}
-
-/// Ширина типа выражения в битах, если она известна статически.
-fn width_of(expr: &ExpressionNode) -> Option<u8> {
-    match type_of(expr)? {
-        TypeNode::Integer { bits, .. } => Some(bits),
-        _ => None,
-    }
-}
-
-/// Знаковый ли тип выражения.
-fn signed_of(expr: &ExpressionNode) -> bool {
-    matches!(type_of(expr), Some(TypeNode::Integer { signed: true, .. }))
-}
-
-/// Тип выражения — по объявлению переменной либо по явному приведению.
-fn type_of(expr: &ExpressionNode) -> Option<TypeNode> {
-    match expr {
-        ExpressionNode::Variable(var) => match &*var.borrow() {
-            VariableNode::Simple { ty, .. } | VariableNode::Const { ty, .. } => Some(ty.clone()),
-            _ => None,
-        },
-        ExpressionNode::Cast(_, ty) => Some(ty.clone()),
-        ExpressionNode::Parenthesis(inner) => type_of(inner),
-        _ => None,
-    }
-}
-
-/// Целое значение литерала величины сдвига.
-fn literal(expr: &ExpressionNode) -> Option<i128> {
-    match expr {
-        ExpressionNode::Number(v) => Some(*v),
-        ExpressionNode::Parenthesis(inner) => literal(inner),
-        _ => None,
-    }
 }
 
 /// Целая степень — `wrapping_pow` (фича 0329).
@@ -179,7 +142,7 @@ pub(crate) fn power(
     exp: &ExpressionNode,
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
-    if let Some(value) = literal(exp)
+    if let Some(value) = shift_width::literal(exp)
         && value < 0
     {
         return Err(crate::generator::rust::rust_expr::unsupported(

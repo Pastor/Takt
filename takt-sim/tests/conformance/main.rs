@@ -30,6 +30,7 @@ mod conformance_c_bitvec_tests;
 mod conformance_c_duration_tests;
 mod conformance_c_every_tests;
 mod conformance_c_import_tests;
+mod conformance_c_shift_width_tests;
 mod conformance_c_tests;
 mod conformance_c_time_tests;
 mod conformance_c_unconditional_edge_tests;
