@@ -1,5 +1,6 @@
 //! Подъём составного значения во ВРЕМЕННУЮ переменную: срез в аргументе
-//! вызова (фича 0400) и результат вызова, возвращающего массив (фича 0431).
+//! вызова (фича 0400) и результат вызова, возвращающего массив либо структуру
+//! (фичи 0431, 0432).
 //!
 //! Оба правила — один приём: конструкция, которую цели не выражают на месте,
 //! заменяется парой «объявление + присваивание», и за границей семантики её
@@ -342,6 +343,21 @@ fn lift_in_expr(
             lift_in_expr(target, model, owner, ctx, prelude, loc);
             lift_in_expr(value, model, owner, ctx, prelude, loc);
         }
+        // Доступ к ПОЛЮ результата вызова (`make(k).y`, фича 0432) — тот же
+        // приём: `iec2c` такую запись отвергает целиком, а у `sv` verilator
+        // её принимает и отвечает только yosys.
+        ExpressionNode::BitAccess(base, _) => {
+            lift_in_expr(base, model, owner, ctx, prelude, loc);
+            // ⚠️ Здесь поднимается результат ЛЮБОГО типа, не только
+            // составного: разряд результата (`twice(k).0`) yosys тоже не
+            // принимает, а цель `st` на нём отказывает `ST-011` — при том,
+            // что эталон, `c` и `rust` запись исполняют.
+            if let Some(replacement) =
+                lift_call_value(base, owner, ctx, prelude, loc, CallLift::Any)
+            {
+                **base = replacement;
+            }
+        }
         // Индексация РЕЗУЛЬТАТА вызова (`pair(k)[1]`, фича 0431): результат
         // поднимается во временную, и цели видят обычную переменную-массив.
         //
@@ -352,7 +368,9 @@ fn lift_in_expr(
         ExpressionNode::ArraySubscript(base, index) => {
             lift_in_expr(base, model, owner, ctx, prelude, loc);
             lift_in_expr(index, model, owner, ctx, prelude, loc);
-            if let Some(replacement) = lift_call_result(base, model, owner, ctx, prelude, loc) {
+            if let Some(replacement) =
+                lift_call_value(base, owner, ctx, prelude, loc, CallLift::Composite)
+            {
                 **base = replacement;
             }
         }
@@ -416,20 +434,28 @@ fn lift_slice(
     Some(ExpressionNode::Variable(cell))
 }
 
-/// Поднимает результат вызова, возвращающего МАССИВ, во временную переменную.
+/// Что поднимать: только составной результат либо любой.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CallLift {
+    /// Массив и структура (индексация результата, фичи 0431/0432).
+    Composite,
+    /// Любой тип (доступ к полю и к разряду результата, фича 0432).
+    Any,
+}
+
+/// Поднимает результат вызова во временную переменную.
 ///
-/// `None` — база не вызов либо возвращает не массив: пусть отвечает прежний
-/// путь (обычная индексация переменной ничего не меняет).
+/// `None` — база не вызов либо её тип под правило не подпадает: пусть
+/// отвечает прежний путь (обращение к члену переменной ничего не меняет).
 ///
-/// ⚠️ Бит-вектор (`[bit;N ≤ 64]`) исключён: он **скаляр** (0078), и его
-/// индексация — доступ к разряду, который цели печатают сами.
-fn lift_call_result(
+/// ⚠️ Бит-вектор (`[bit;N ≤ 64]`) составным НЕ считается: он скаляр (0078).
+fn lift_call_value(
     base: &ExpressionNode,
-    _model: &ModelNode,
     owner: &Rc<RefCell<ModelNode>>,
     ctx: &mut Ctx<'_>,
     prelude: &mut Vec<StatementNode>,
     loc: Location,
+    what: CallLift,
 ) -> Option<ExpressionNode> {
     let ExpressionNode::Function(def, _) = base else {
         return None;
@@ -440,10 +466,15 @@ fn lift_call_result(
         FunctionDefinitionNode::Builtin(_, _, ret) => ret.clone(),
         FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => return None,
     };
-    if !matches!(ty, TypeNode::Array(_, _))
-        || crate::semantic::bit_vector::is_bit_vector(&ty).is_some()
-    {
+    if matches!(ty, TypeNode::Unit) {
         return None;
+    }
+    if what == CallLift::Composite {
+        let composite = matches!(ty, TypeNode::Array(_, _) | TypeNode::Struct(_))
+            && crate::semantic::bit_vector::is_bit_vector(&ty).is_none();
+        if !composite {
+            return None;
+        }
     }
     let name = ctx.fresh_name();
     prelude.push(StatementNode::Variable(
