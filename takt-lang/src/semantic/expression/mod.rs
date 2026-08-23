@@ -32,6 +32,30 @@ use std::rc::Rc;
 /// Имя переменной, когда оно есть: «Переменная 'flag' не является массивом»
 /// точнее безличного «значение». База-выражение имени не имеет — тогда
 /// называется вид записи.
+/// Значение индекса, известное КОМПИЛЯТОРУ: литерал либо константа.
+///
+/// Значение константы к этому моменту свёрнуто в литерал (фича 0192), поэтому
+/// второго вычислителя здесь не нужно — достаточно прочитать её объявление.
+///
+/// ⚠️ Правило смотрит на **значение**, а не на форму записи: `d[7]` и `d[K]`
+/// при `const K := 7` отличаются лишь тем, как автор его назвал (фича 0434,
+/// запрос заказчика). Переменная под правило не подпадает — её значение
+/// известно только в такте, и там отвечает `SIM-010`.
+fn static_index(expr: &ast::Expression, model: &ModelNode) -> Option<i128> {
+    match expr {
+        ast::Expression::Number(_, n) => Some(*n),
+        ast::Expression::Variable(id) => match model.search_var(&id.name) {
+            Some(VariableNode::Const {
+                expr: ExpressionNode::Number(n),
+                ..
+            }) => Some(n),
+            _ => None,
+        },
+        ast::Expression::Parenthesis(_, inner) => static_index(inner, model),
+        _ => None,
+    }
+}
+
 fn base_label(base: &ExpressionNode) -> String {
     match base {
         ExpressionNode::Variable(var) => format!("Переменная '{}'", var.borrow().name()),
@@ -159,9 +183,11 @@ pub fn construct_expression(
             let base_ty = crate::semantic::validate::base_type::base_type(&base, &model.borrow());
             match base_ty {
                 Some(TypeNode::Array(size, _)) => {
-                    // Статическая проверка границ — только для числового литерала.
-                    if let ast::Expression::Number(_, n) = idx_expr.as_ref()
-                        && (*n < 0 || *n >= i128::from(size))
+                    // Статическая проверка границ смотрит на ЗНАЧЕНИЕ, а не на
+                    // форму записи (фича 0434): у константы оно известно
+                    // компилятору так же, как у литерала.
+                    if let Some(n) = static_index(idx_expr.as_ref(), &model.borrow())
+                        && (n < 0 || n >= i128::from(size))
                     {
                         return Err(Diagnostic::error(
                             loc,

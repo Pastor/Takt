@@ -136,15 +136,43 @@ fn check_member(
     field: &Identifier,
     model: &ModelNode,
 ) -> Result<(), Diagnostic> {
-    if let Some(TypeNode::Struct(name)) = base_type(inner, model)
-        && let Some(s) = model.search_struct(&name)
-        && !s.fields.iter().any(|(f, _)| *f == field.name)
-    {
-        return Err(Diagnostic::error(
-            field.loc,
-            format!("структура '{}' не содержит поля '{}'", name, field.name),
-        )
-        .with_code("SE-061"));
+    match base_type(inner, model) {
+        Some(TypeNode::Struct(name)) => {
+            if let Some(s) = model.search_struct(&name)
+                && !s.fields.iter().any(|(f, _)| *f == field.name)
+            {
+                return Err(Diagnostic::error(
+                    field.loc,
+                    format!("структура '{}' не содержит поля '{}'", name, field.name),
+                )
+                .with_code("SE-061"));
+            }
+        }
+        // Поле у значения, которое структурой НЕ является (фича 0434):
+        // `x.foo` при `x: u8` компилятор принимал молча, а эталон отвечал
+        // `SIM-012` в такте. Тип базы здесь известен, и ответ обязан быть тем
+        // же, что у индексации не массива (`SE-030`).
+        //
+        // ⚠️ Разряд (`x.3`) под правило не подпадает: там член — ЧИСЛО, и его
+        // судит `SE-125`. ⚠️ Тип, который носитель не выводит, молчит
+        // по-прежнему — за пропуском стоит диагностика эталона, за ложным
+        // отказом незаконно отвергнутая программа.
+        Some(ty)
+            if !matches!(
+                ty,
+                TypeNode::Inference | TypeNode::Unsupported | TypeNode::Unit
+            ) =>
+        {
+            return Err(Diagnostic::error(
+                field.loc,
+                format!(
+                    "обращение к полю '{}' возможно только у структуры",
+                    field.name
+                ),
+            )
+            .with_code("SE-030"));
+        }
+        _ => {}
     }
     Ok(())
 }

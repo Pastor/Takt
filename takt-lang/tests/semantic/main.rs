@@ -27,6 +27,7 @@ mod bit_width_contract_tests;
 mod body_judge_position_tests;
 mod call_arity_tests;
 mod const_eval_tests;
+mod const_index_bounds_tests;
 mod const_init_fold_tests;
 mod const_int_ops_shared_tests;
 mod const_power_fold_tests;
