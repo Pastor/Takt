@@ -17,6 +17,7 @@
 //! обязан вычищать из него `:` — после слияния имя потока несёт префикс модуля.
 
 mod import_binding_kind_tests;
+mod imported_symbol_kind_tests;
 mod lsp_definition_tests;
 mod lsp_document_symbol_tests;
 mod lsp_formatting_conformance_tests;
