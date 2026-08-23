@@ -70,7 +70,7 @@ use crate::diagnostics::Location;
 use crate::parser::ast;
 pub use crate::parser::ast::PortDirection;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
-pub use crate::semantic::enum_node::{EnumDefinitionNode, EnumFacts, enum_facts};
+pub use crate::semantic::enum_node::{EnumDefinitionNode, EnumFacts, enum_default, enum_facts};
 pub use crate::semantic::formula::Formula;
 pub use crate::semantic::struct_node::StructDefinitionNode;
 use extend::Extend;

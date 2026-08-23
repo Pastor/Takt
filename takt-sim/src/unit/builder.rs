@@ -117,7 +117,15 @@ pub(crate) fn default_field(ty: &TypeNode, model: &ModelNode) -> Value {
                     .collect(),
             })
             .unwrap_or(Value::Number(0)),
-        // Integer/Enum/Bit/Address/прочее — целочисленный ноль.
+        // Перечисление — ПЕРВЫЙ по тексту вариант (фича 0391, решение
+        // заказчика): ноль может не принадлежать набору, и тогда автомат
+        // стартует со значения, о котором не знает ни один `match`. Носитель
+        // правила один на эталон и три цели — `semantic::enum_default`.
+        TypeNode::Enum(name) => model
+            .search_enum(name)
+            .and_then(|def| takt_lang::semantic::enum_default(&def.variants))
+            .map_or(Value::Number(0), |(_, value)| Value::Number(value)),
+        // Integer/Bit/Address/прочее — целочисленный ноль.
         _ => Value::Number(0),
     }
 }
