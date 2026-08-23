@@ -574,7 +574,10 @@ pub(crate) fn emit_functions(
             let mut locals = Vec::new();
             hoist_locals(body, &mut locals);
             // Поглотитель для локальной, которую тело только пишет (фича 0387).
-            let unread = crate::semantic::unused::unread_locals(body);
+            let mut unread = crate::semantic::unused::unread_locals(body);
+            // Переменная цикла читается ЧАСТИЧНО (фича 0425): гасим её разряды
+            // тем же поглотителем, что и вовсе непрочитанную локальную.
+            crate::generator::sv::sv_stmt::loop_variables(body, &mut unread);
             emit_hoisted_locals(p, &locals, &unread)?;
             // Пролог распаковки (фичи 0369, 0372) — у носителя раскладки.
             for (param, ty, flat_param) in &unpack {
