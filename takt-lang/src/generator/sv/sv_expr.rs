@@ -565,6 +565,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -588,6 +589,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -614,6 +616,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -640,6 +643,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -667,6 +671,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -694,6 +699,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -716,6 +722,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -747,6 +754,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -768,6 +776,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),
@@ -812,6 +821,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),

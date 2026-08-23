@@ -209,6 +209,7 @@ pub(crate) fn push_time_regs(
             reset,
             declare_reg: true,
             leaves: Vec::new(),
+            default: None,
         });
     };
     if dwell {

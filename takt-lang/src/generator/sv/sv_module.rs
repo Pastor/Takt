@@ -345,22 +345,19 @@ const SV_KEYWORDS: &[&str] = &[
     "xor",
 ];
 
-/// Строит диагностику `SV-006` — `inout` невыразим.
-fn sv006(name: &str, loc: Location) -> Diagnostic {
-    Diagnostic::error(
-        loc,
-        format!(
-            "порт '{}': направление 'inout' целью 'sv' не поддерживается. \
-             Двунаправленный порт в SystemVerilog — это трёхстабильная шина, \
-             которой требуется сигнал разрешения выхода 'oe' \
-             (assign pad = oe ? val : 1'bz;). Язык Takt сигнала 'oe' не выражает, \
-             и вывести его из модели нельзя: модель не сообщает, когда порт \
-             ведёт линию, а когда слушает её. Разделите порт на входной и \
-             выходной либо используйте цель 'c'/'st'/'rust'",
-            name
-        ),
-    )
-    .with_code("SV-006")
+/// Имя стороны ЧТЕНИЯ двунаправленного порта (фича 0428).
+pub(crate) fn inout_in(name: &str) -> String {
+    format!("{}_i", name)
+}
+
+/// Имя стороны ЗАПИСИ двунаправленного порта.
+pub(crate) fn inout_out(name: &str) -> String {
+    format!("{}_o", name)
+}
+
+/// Имя строба записи двунаправленного порта.
+pub(crate) fn inout_we(name: &str) -> String {
+    format!("{}_we", name)
 }
 
 /// Строит диагностику `SV-007` — коллизия с именем, которое порождает цель.
@@ -475,6 +472,16 @@ pub(crate) struct SvPorts {
     pub(crate) inputs: Vec<SvPort>,
     /// Выходные порты (`out` → `output logic`).
     pub(crate) outputs: Vec<SvPort>,
+    /// Двунаправленные порты (`inout`, фича 0428).
+    ///
+    /// В шапке модуля каждый разворачивается в **три** сигнала: `<имя>_i`
+    /// (вход), `<имя>_o` (выход) и `<имя>_we` (строб записи). Форму выбрал
+    /// заказчик 2026-08-23: это ровно та механика, что у цели `c` (колбэки
+    /// чтения и записи) и у регистрового интерфейса `sv-mmio` (0214) — плата
+    /// держит ячейку, модуль её читает и пишет. Трёхстабильная шина отвергнута:
+    /// внутри кристалла её нет (yosys: «limited support for tri-state logic»),
+    /// а сигнал разрешения пришлось бы выводить из модели, которая о нём молчит.
+    pub(crate) inouts: Vec<SvPort>,
 }
 
 /// Собирает порты **всех** моделей файла в единый набор.
@@ -491,7 +498,7 @@ pub(crate) struct SvPorts {
 /// моделях (открытый вопрос 7 задачи 0045-04 — решён пробой в пользу фильтра).
 ///
 /// # Ошибки
-/// [`SV-006`](sv006) на `inout`, [`SV-007`](sv007)/[`SV-012`](sv012) на
+/// [`SV-007`](sv007)/[`SV-012`](sv012) на
 /// непригодном имени, `SV-002`…`SV-004` на непереводимом типе.
 pub(crate) fn collect_ports(
     map: &SvMap,
@@ -519,12 +526,6 @@ pub(crate) fn collect_ports(
             // в `sv_mmio`). В режиме `sv` множество пусто → фильтр прозрачен.
             if addressed.contains(name) {
                 continue;
-            }
-            // `inout` проверяется ДО фильтра использования: молча пропустить
-            // невыразимое направление лишь потому, что порт нигде не читается,
-            // значило бы отложить отказ до момента, когда его начнут читать.
-            if matches!(direction, PortDirection::InOut) {
-                return Err(sv006(name, *loc));
             }
             if !map.usage().ports.contains(name) || !seen.insert(name.clone()) {
                 continue;
@@ -559,9 +560,9 @@ pub(crate) fn collect_ports(
             match direction {
                 PortDirection::In => ports.inputs.push(port),
                 PortDirection::Out => ports.outputs.push(port),
-                // Отсечено выше; ветка `_` не заводится намеренно — добавление
-                // направления обязано валить сборку, а не проваливаться молча.
-                PortDirection::InOut => unreachable!("отсечено проверкой выше"),
+                // Двунаправленный порт (фича 0428): три сигнала печатает
+                // заголовок, регистры и строб заводит `sv_fsm`.
+                PortDirection::InOut => ports.inouts.push(port),
             }
         }
     }
@@ -612,6 +613,29 @@ pub(crate) fn emit_module_header(
     for port in &ports.outputs {
         p.ident(&format!("output {},", port.ty.declare(&port.name)))
             .nl();
+    }
+    // Двунаправленный порт — тремя сигналами (фича 0428). Строб `_we` поднят
+    // ровно в тот такт, когда модель записала порт: без него внешние изменения
+    // ячейки затирались бы каждым тактом, ведь умолчание выхода — «как есть».
+    for port in &ports.inouts {
+        p.ident(&format!(
+            "input  {}, // inout '{}': сторона чтения",
+            port.ty.declare(&inout_in(&port.name)),
+            port.name
+        ))
+        .nl();
+        p.ident(&format!(
+            "output {}, // inout '{}': сторона записи",
+            port.ty.declare(&inout_out(&port.name)),
+            port.name
+        ))
+        .nl();
+        p.ident(&format!(
+            "output logic {}, // inout '{}': строб записи (такт, в котором модель писала)",
+            inout_we(&port.name),
+            port.name
+        ))
+        .nl();
     }
     // Последним и без запятой: терминальность модели наблюдаема снаружи.
     p.ident("output logic is_done").nl();
@@ -740,6 +764,7 @@ mod tests {
         let ports = SvPorts {
             inputs: vec![test_port("lift_request", TypeNode::Bit)],
             outputs: vec![test_port("cmd_fork", TypeNode::Bit)],
+            inouts: Vec::new(),
         };
         emit_module_header(&mut p, "stacker", &ports, None, None);
         assert!(
@@ -771,6 +796,7 @@ mod tests {
                 },
             )],
             outputs: Vec::new(),
+            inouts: Vec::new(),
         };
         emit_module_header(&mut p, "stacker", &ports, None, None);
         assert!(
