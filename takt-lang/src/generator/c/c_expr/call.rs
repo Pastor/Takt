@@ -39,7 +39,7 @@ pub(super) fn generate_function_call(
 ) -> Result<(), Diagnostic> {
     match fun_def {
         FunctionDefinitionNode::Local { upper, name, .. } => {
-            let model_rc =
+            let owner_rc =
                 upper
                     .as_ref()
                     .and_then(|w| w.upgrade())
@@ -53,7 +53,7 @@ pub(super) fn generate_function_call(
                             )),
                         )
                     })?;
-            let model_name = Name::from(model_rc);
+            let model_name = Name::from(std::rc::Rc::clone(&owner_rc));
             let func_name = format!("{}_{}", model_name.unique_camelcase(), name);
             let arg_strs = generate_args(map, owner, &params, args, has_model)?;
             // В корневой модели (или вне контекста tick/init) первый аргумент — `model`,
@@ -63,7 +63,16 @@ pub(super) fn generate_function_call(
             } else {
                 "main"
             };
-            let mut all_args = vec![first_arg.to_string()];
+            // Указатель передаётся ПО НУЖДЕ (фича 0396) — тем же признаком, по
+            // которому он попал (или не попал) в сигнатуру: разъехавшись, они
+            // дали бы невалидный C, и это громкий отказ `cc`, а не молчание.
+            let wants_state =
+                crate::generator::c::c_needs::needs_state(fun_def, &owner_rc.borrow())?;
+            let mut all_args = if wants_state {
+                vec![first_arg.to_string()]
+            } else {
+                Vec::new()
+            };
             all_args.extend(arg_strs);
             printer.print(&format!("{}({})", func_name, all_args.join(", ")));
         }

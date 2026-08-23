@@ -30,28 +30,35 @@ pub(super) fn generate_function_prototypes(
                 continue;
             };
             let s = name.unique_camelcase();
+            // Прототип обязан совпасть с определением: признак тот же
+            // (`c_needs`, фича 0396), и второй его копии здесь быть не должно.
+            let root_param = if map
+                .raw_model_at(name.clone())
+                .is_ok_and(|rc| crate::generator::c::c_needs::model_needs_root(&rc))
+            {
+                format!(", {} *main", root_name.unique_camelcase())
+            } else {
+                String::new()
+            };
             printer
                 .print(&format!("/// Model functions '{}'", name))
                 .nl();
             printer
                 .print(&format!(
-                    "static void {0}_init({0} *model, {1} *main);",
-                    s,
-                    root_name.unique_camelcase()
+                    "static void {0}_init({0} *model{1});",
+                    s, root_param
                 ))
                 .nl();
             printer
                 .print(&format!(
-                    "static void {0}_tick({0} *model, {1} *main);",
-                    s,
-                    root_name.unique_camelcase()
+                    "static void {0}_tick({0} *model{1});",
+                    s, root_param
                 ))
                 .nl();
             printer
                 .print(&format!(
-                    "static bool {0}_is_done(const {0} *model, {1} *main);",
-                    s,
-                    root_name.unique_camelcase()
+                    "static bool {0}_is_done(const {0} *model{1});",
+                    s, root_param
                 ))
                 .nl();
         }
@@ -66,10 +73,11 @@ pub(super) fn generate_function_prototypes(
 /// готовности всех веток. Вложенные параллели также тикаются рекурсивно.
 fn generate_parallel_items_tick(
     printer: &mut Printer,
+    map: &CMap,
     parent_access: &str,
     parent_unique_upper: &str,
     items: &[StateExtend],
-    call_append: &str,
+    caller_is_main: bool,
 ) -> Vec<String> {
     let mut done_exprs = Vec::new();
     for (idx, item) in items.iter().enumerate() {
@@ -81,19 +89,20 @@ fn generate_parallel_items_tick(
                     name.local_lowercase_snakecase(),
                     idx
                 );
+                let arg = map.root_arg(name, caller_is_main);
                 printer
                     .ident(&format!(
                         "{}_tick(&{}{});",
                         name.unique_camelcase(),
                         field,
-                        call_append,
+                        arg,
                     ))
                     .nl();
                 done_exprs.push(format!(
                     "{}_is_done(&{}{})",
                     name.unique_camelcase(),
                     field,
-                    call_append,
+                    arg,
                 ));
             }
             StateExtend::Parallel(inner) => {
@@ -101,10 +110,11 @@ fn generate_parallel_items_tick(
                 let nested_upper = format!("{}_PARALLEL{}", parent_unique_upper, idx);
                 let inner_done = generate_parallel_items_tick(
                     printer,
+                    map,
                     &nested_access,
                     &nested_upper,
                     inner,
-                    call_append,
+                    caller_is_main,
                 );
                 if !inner_done.is_empty() {
                     done_exprs.push(format!("({})", inner_done.join(" && ")));
@@ -360,12 +370,13 @@ fn generate_concat_tick(
                     idx
                 );
                 // Тик текущего элемента
+                let arg = map.root_arg(name, call_append == ", model");
                 printer
                     .ident(&format!(
                         "{}_tick(&{}{});",
                         name.unique_camelcase(),
                         field,
-                        call_append
+                        arg
                     ))
                     .nl();
                 // Проверяем завершение
@@ -374,7 +385,7 @@ fn generate_concat_tick(
                         "if ({}_is_done(&{}{})) {{",
                         name.unique_camelcase(),
                         field,
-                        call_append,
+                        arg,
                     ))
                     .up()
                     .nl();
@@ -404,10 +415,11 @@ fn generate_concat_tick(
                 let nested_upper = format!("{}_PARALLEL{}", state_unique_upper, idx);
                 let done_exprs = generate_parallel_items_tick(
                     printer,
+                    map,
                     &parallel_access,
                     &nested_upper,
                     inner,
-                    call_append,
+                    call_append == ", model",
                 );
                 if !done_exprs.is_empty() {
                     printer
@@ -586,13 +598,14 @@ fn generate_model_tick(
                 // не порождало НИЧЕГО, даже комментария — тише заглушки №1.
                 match extend {
                     StateExtend::Model(name, _) => {
+                        let arg = map.root_arg(&name, call_append == ", model");
                         printer
                             .ident(&format!(
                                 "{}_tick(&model->{}",
                                 name.unique_camelcase(),
                                 state_name.local_lowercase_snakecase()
                             ))
-                            .print(call_append)
+                            .print(arg)
                             .print(");")
                             .nl();
                         printer
@@ -601,7 +614,7 @@ fn generate_model_tick(
                                 name.unique_camelcase(),
                                 state_name.local_lowercase_snakecase()
                             ))
-                            .print(call_append)
+                            .print(arg)
                             .print(")) {")
                             .up()
                             .nl();
@@ -625,10 +638,11 @@ fn generate_model_tick(
                         let access = format!("model->{}", local);
                         let done_exprs = generate_parallel_items_tick(
                             printer,
+                            map,
                             &access,
                             &unique_upper,
                             &steps,
-                            call_append,
+                            call_append == ", model",
                         );
                         if !done_exprs.is_empty() {
                             printer
@@ -738,9 +752,14 @@ fn generate_model_tick(
 /// Печатает `(void)main;`, если тело под-модели указателем на корень не
 /// пользуется (фича 0260).
 ///
-/// У корневой модели параметра `main` нет вовсе — там заглушка не нужна.
-fn emit_unused_guard(printer: &mut Printer, body: &str, is_main: bool) {
-    if is_main {
+/// Зовётся, только когда параметр напечатан: у корневой модели его нет вовсе,
+/// у под-модели — по нужде (фича 0396).
+fn emit_unused_guard(printer: &mut Printer, body: &str, has_root_param: bool) {
+    // ⚠️ Вопрос задаётся, только если параметр ЕСТЬ (фича 0396): у корневой
+    // модели его не было никогда, а у под-модели он теперь печатается по
+    // нужде — заглушка над несуществующим именем даёт «use of undeclared
+    // identifier».
+    if !has_root_param {
         return;
     }
     if crate::generator::c::c_params::is_unused(body, "main") {
@@ -769,9 +788,16 @@ pub(super) fn generate_model_functions(
         )
         .with_code("CC-006"));
     };
+    // Указатель на корень печатается ПО НУЖДЕ (фича 0396): прежде он стоял в
+    // сигнатуре всякой под-модели, а тело пользовалось им не везде — 45
+    // заглушек `(void)main;` в корпусе. Признак — общий носитель `c_needs`.
     let mut append = String::new();
     let mut call_append = String::new();
-    if !is_main {
+    let wants_root = !is_main
+        && map
+            .raw_model_at(model.name().clone())
+            .is_ok_and(|rc| crate::generator::c::c_needs::model_needs_root(&rc));
+    if wants_root {
         append.push_str(&format!(", {} *main", map.root_name().unique_camelcase()));
         call_append.push_str(", main");
     }
@@ -801,7 +827,7 @@ pub(super) fn generate_model_functions(
         let mut buffered = printer.fork(&mut init_body);
         generate_model_init(&mut &mut buffered, model, map)?;
     }
-    emit_unused_guard(printer, &init_body, is_main);
+    emit_unused_guard(printer, &init_body, wants_root);
     printer.print(&init_body);
     printer.down();
     printer.print("}").nl().nl();
@@ -820,7 +846,8 @@ pub(super) fn generate_model_functions(
     //NOTICE: tick
     printer.up();
     printer.ident("assert(0 != model);").nl();
-    if !is_main {
+    // Проверка параметра печатается, только если он есть (фича 0396).
+    if wants_root {
         printer.ident("assert(0 != main);").nl();
     }
     let mut tick_body = String::new();
@@ -828,7 +855,7 @@ pub(super) fn generate_model_functions(
         let mut buffered = printer.fork(&mut tick_body);
         generate_model_tick(&mut &mut buffered, model, map)?;
     }
-    emit_unused_guard(printer, &tick_body, is_main);
+    emit_unused_guard(printer, &tick_body, wants_root);
     printer.print(&tick_body);
     printer.down();
     printer.print("}").nl().nl();
@@ -872,7 +899,7 @@ pub(super) fn generate_model_functions(
     printer.up();
     // Тело `_is_done` указателем на корень не пользуется никогда — но параметр
     // требует протокол вызова (фича 0260).
-    emit_unused_guard(printer, &cond, is_main);
+    emit_unused_guard(printer, &cond, wants_root);
     printer
         .ident("return ")
         .print(cond.as_str())

@@ -2,11 +2,10 @@
 #include <assert.h>
 #include <math.h>
 ///Функции моделей
-static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, double pv);
-static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, double kd, double ts, double lo, double hi);
-static PidState PidLaw_pid_reset(const PidLaw *model, PidState p);
-static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, double pv) {
-    (void)model;
+static PidState PidLaw_pid_compute(PidState p, double sp, double pv);
+static PidState PidLaw_pid_init(double kp, double ki, double kd, double ts, double lo, double hi);
+static PidState PidLaw_pid_reset(PidState p);
+static PidState PidLaw_pid_compute(PidState p, double sp, double pv) {
     PidState r = p;
     double err = sp - pv;
     double prop = p.kp * err;
@@ -31,8 +30,7 @@ static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, d
     return r;
 }
 
-static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, double kd, double ts, double lo, double hi) {
-    (void)model;
+static PidState PidLaw_pid_init(double kp, double ki, double kd, double ts, double lo, double hi) {
     PidState p = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     p.kp = kp;
     p.ki = ki;
@@ -43,8 +41,7 @@ static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, doubl
     return p;
 }
 
-static PidState PidLaw_pid_reset(const PidLaw *model, PidState p) {
-    (void)model;
+static PidState PidLaw_pid_reset(PidState p) {
     PidState r = p;
     r.i_acc = 0.0;
     r.err_prev = 0.0;
@@ -67,15 +64,15 @@ void PidLaw_init(PidLaw *model) {
 void PidLaw_tick(PidLaw *model) {
     assert(0 != model);
     if (model->state == PID_LAW_INIT) {
-        model->loop_pid = PidLaw_pid_init(model, 3.0, 0.75, 1.5, 0.1, 0.0, 100.0);
+        model->loop_pid = PidLaw_pid_init(3.0, 0.75, 1.5, 0.1, 0.0, 100.0);
         model->state = PID_LAW_RUN;
     }
     switch (model->state) {
         case PID_LAW_RUN: {
-            model->loop_pid = PidLaw_pid_compute(model, model->loop_pid, model->target, model->meas);
+            model->loop_pid = PidLaw_pid_compute(model->loop_pid, model->target, model->meas);
             model->ctrl = model->loop_pid.output;
             if (model->hold) {
-                model->loop_pid = PidLaw_pid_reset(model, model->loop_pid);
+                model->loop_pid = PidLaw_pid_reset(model->loop_pid);
                 model->ctrl = 0.0;
             }
             model->state = PID_LAW_END;

@@ -582,8 +582,12 @@ fn test_fn_composition_generates_compilable_c() {
     .expect("компиляция в C");
 
     let c = fs::read_to_string(dir.path().join("compose.c")).expect("compose.c");
+    // ⚠️ Указатель на состояние печатается ПО НУЖДЕ (фича 0396): функция
+    // `g` состоянием не пользуется, и `const Compose *model` в её сигнатуре
+    // больше нет. Предмет теста — **наличие форвард-прототипа** до
+    // определений, а не состав параметров.
     assert!(
-        c.contains("static uint8_t Compose_g(const Compose *model, uint8_t x);"),
+        c.contains("static uint8_t Compose_g(uint8_t x);"),
         "должен быть форвард-прототип Compose_g до определений:\n{c}"
     );
 

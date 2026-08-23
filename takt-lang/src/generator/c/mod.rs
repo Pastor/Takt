@@ -45,6 +45,7 @@ mod c_map;
 mod c_model;
 mod c_model_init;
 mod c_names;
+mod c_needs;
 mod c_params;
 mod c_ports;
 mod c_source;

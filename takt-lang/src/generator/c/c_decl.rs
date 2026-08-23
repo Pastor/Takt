@@ -194,28 +194,46 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                             )
                         })
                         .collect::<Result<Vec<String>, Diagnostic>>()?;
-                    tiny_params.insert(
-                        0,
-                        format!("const {} *model", map.root_name().unique_camelcase()),
-                    );
+                    // Указатель на состояние печатается ПО НУЖДЕ (фича 0396):
+                    // прежде он стоял в сигнатуре всегда, а тело пользовалось
+                    // им не везде — 53 заглушки `(void)model;` в корпусе.
+                    // Признак берётся у общего носителя (`c_needs`), который
+                    // спрашивает тот же `rust_needs`, что и цель `rust`.
+                    let wants_state = crate::generator::c::c_needs::needs_state(&fun, model)?;
+                    if wants_state {
+                        tiny_params.insert(
+                            0,
+                            format!("const {} *model", map.root_name().unique_camelcase()),
+                        );
+                    }
                     let ret_type = c_type_or_diagnostic(
                         ret,
                         model,
                         map.float_width(),
                         &format!("возвращаемое значение функции '{}'", fun.name()),
                     )?;
+                    // ⚠️ Пустой список параметров печатается `void`, а не
+                    // пустотой: `f()` в C означает «список НЕИЗВЕСТЕН» (K&R), и
+                    // `cc -Wstrict-prototypes` отвечает «a function
+                    // declaration without a prototype is deprecated». До фичи
+                    // 0396 случай не возникал — указатель стоял всегда.
+                    let param_list = if tiny_params.is_empty() {
+                        "void".to_string()
+                    } else {
+                        tiny_params.join(", ")
+                    };
                     local_protos.push(format!(
                         "static {} {}({});",
                         ret_type.as_str(),
                         get_function_name(&fun),
-                        tiny_params.join(", ")
+                        param_list
                     ));
                     definition.push_str(
                         format!(
                             "static {} {}({}) {{\n",
                             ret_type.as_str(),
                             get_function_name(&fun),
-                            tiny_params.join(", ")
+                            param_list
                         )
                         .as_str(),
                     );
@@ -240,7 +258,15 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                     // 0337): `fn constant(v: u8) -> u8 { return 7; }` давало
                     // `-Wunused-parameter`, то есть отказ гейта под `-Werror`,
                     // при нулевом коде возврата `taktc`.
-                    let mut guards: Vec<String> = vec!["model".to_string()];
+                    // ⚠️ Заглушка `model` осталась защитой в глубину: признак
+                    // считает по семантике, а `is_unused` — по напечатанному
+                    // тексту, и расхождение двух взглядов даст отказ `cc`, а не
+                    // молчание. Когда параметра нет, вопрос не задаётся.
+                    let mut guards: Vec<String> = if wants_state {
+                        vec!["model".to_string()]
+                    } else {
+                        Vec::new()
+                    };
                     guards.extend(params.iter().map(|(name, _)| name.clone()));
                     for guard in guards {
                         if crate::generator::c::c_params::is_unused(&code_block, &guard) {

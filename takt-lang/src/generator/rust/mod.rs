@@ -53,7 +53,10 @@ mod rust_live;
 mod rust_map;
 mod rust_model;
 mod rust_name;
-mod rust_needs;
+// Носитель «что функции нужно сверх параметров» (фича 0050) переиспользует
+// цель `c` (фича 0396): вопрос семантический, и второго знания о нём быть не
+// должно — класс 0084/0193/0195.
+pub(crate) mod rust_needs;
 mod rust_port;
 mod rust_port_init;
 mod rust_shared;
