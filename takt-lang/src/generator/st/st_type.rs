@@ -374,6 +374,32 @@ pub(crate) fn array_form_name(ty: &TypeNode, model: &ModelNode) -> Option<String
     ))
 }
 
+/// Тип ЛОКАЛЬНОГО объявления тела: именованная форма, если она объявлена
+/// (фича 0409).
+///
+/// Локальная переменная-массив попадает в аргумент вызова так же, как
+/// переменная модели, а MatIEC сверяет типы **буквально**: анонимный
+/// `ARRAY […] OF T` против именованного `TAKT_ARR_2_USINT` для него
+/// несовместимы («Data type incompatibility for value passed in position 1»).
+///
+/// ⚠️ Замер 2026-08-23: у переменной **модели** правило действовало с 0348, у
+/// локальной — нет, и `var part: [u8; 2] := {6, 7}; o := first(part);` давал
+/// вывод, отвергаемый `iec2c`, при **нулевом** коде возврата `taktc`.
+///
+/// ⚠️ Список форм спрашивается **тот же**, что у продюсера `TYPE … END_TYPE`
+/// (`function_array_form_names`): разъехавшись, они дали бы ссылку в пустоту
+/// (урок ADR 0195).
+pub(crate) fn local_declaration_type(
+    ty: &TypeNode,
+    model: &ModelNode,
+    array_forms: &[String],
+) -> Result<String, Diagnostic> {
+    match array_form_name(ty, model) {
+        Some(form) if array_forms.contains(&form) => Ok(form),
+        _ => get_st_type(ty, model),
+    }
+}
+
 /// Требует ли тип именованного объявления при передаче через `VAR_IN_OUT`.
 ///
 /// Только настоящий массив: `[bit; N ≤ 64]` — упакованный **скаляр**

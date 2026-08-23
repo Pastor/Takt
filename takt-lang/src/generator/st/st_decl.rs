@@ -180,7 +180,10 @@ pub(crate) fn emit_declarations(
         }
         locals.push(Declaration {
             name: name.clone(),
-            ty: get_st_type(ty, model)?,
+            // Локальный массив, чья форма встречается в параметре функции,
+            // объявляется ТОЙ ЖЕ формой (фича 0409) — иначе `iec2c` отвергает
+            // вызов: типы аргумента и параметра он сверяет буквально.
+            ty: st_type::local_declaration_type(ty, model, &extras.array_forms)?,
             init: None,
         });
     }
