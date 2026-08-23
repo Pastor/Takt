@@ -7,11 +7,9 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
-use crate::generator::sv::sv_fsm::{
-    Block, Fsm, state_enum_name, state_variants, step_enum_name, step_variant,
-};
+use crate::generator::sv::sv_fsm::{Block, Fsm, state_enum_name, state_variants};
 use crate::generator::sv::sv_map::SvMap;
-use crate::generator::sv::sv_names;
+use crate::generator::sv::sv_names::{self, step_enum_name, step_variant};
 use crate::generator::sv::sv_type::enum_width;
 use crate::semantic::minimap::Element;
 use std::collections::BTreeSet;
@@ -67,10 +65,20 @@ pub(crate) fn emit_state_enums(
 /// Значения назначает генератор (0..n-1), поэтому ширина — ⌈log₂(n)⌉, как у
 /// перечислений состояний. Порядок — обхода `Fsm::build` (детерминизм 0048).
 pub(crate) fn emit_step_enums(p: &mut Printer, fsm: &Fsm) -> Result<(), Diagnostic> {
-    for (state, count) in &fsm.step_enums {
-        let numbered: Vec<(String, i128)> = (0..*count)
-            .map(|i| (step_variant(state, i), i as i128))
+    for chain in &fsm.step_enums {
+        let state = &chain.state;
+        let mut numbered: Vec<(String, i128)> = (0..chain.count)
+            .map(|i| (step_variant(state, &chain.path, i), i as i128))
             .collect();
+        // Терминальный вариант — только у ВЛОЖЕННОЙ цепочки (фича 0427): у
+        // цепочки верхнего уровня последний шаг уводит родительское состояние,
+        // и вариант остался бы недостижимым.
+        if chain.done {
+            numbered.push((
+                sv_names::step_done_variant(state, &chain.path),
+                chain.count as i128,
+            ));
+        }
         let (width, _) = enum_width(&numbered, &format!("шаг цепочки '{}'", state))?;
         p.ident(&format!(
             "// Шаг последовательной композиции '{}' (`+`).",
@@ -86,7 +94,9 @@ pub(crate) fn emit_step_enums(p: &mut Printer, fsm: &Fsm) -> Result<(), Diagnost
                 .nl();
         }
         p.down();
-        p.ident(&format!("}} {};", step_enum_name(state))).nl().nl();
+        p.ident(&format!("}} {};", step_enum_name(state, &chain.path)))
+            .nl()
+            .nl();
     }
     Ok(())
 }

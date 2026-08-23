@@ -587,23 +587,35 @@ mod tests {
         );
     }
 
-    /// **0057-03 (R7):** вложенная `+` внутри параллельного шага — **явная**
-    /// диагностика `SV-002`, а НЕ молчаливо стоящий автомат (ср. `RS-021` у C).
+    /// **0427:** вложенная `+` внутри параллельного шага ПЕРЕВОДИТСЯ.
+    ///
+    /// ⚠️ Прежде здесь стоял отказ `SV-002` (задача 0057-03, R7), и тест
+    /// закреплял его как замысел: конструкцию, которую исполняют эталон, `c`
+    /// и `rust`, цель не переводила вовсе. Утверждение перестало быть верным
+    /// вместе с фичей 0427 — класс 0191.
+    ///
+    /// Вложенная цепочка адресуется **местом в дереве** (`_c0`), иначе две
+    /// цепочки одного состояния делили бы регистр шага, и у неё есть
+    /// собственное терминальное состояние: выхода из состояния у вложенной
+    /// цепочки нет, готовность читает вмещающая параллель.
     #[test]
-    fn nested_concatenation_in_parallel_is_diagnosed_not_silent() {
+    fn nested_concatenation_in_parallel_is_translated() {
         let src =
             "model A { start S; } model B { start S; } model C { start S; } start P = (A + B) | C;";
-        let err = generate_program(
-            &make_map(src, "Root"),
-            false,
-            &std::collections::HashMap::new(),
-            None,
-        )
-        .unwrap_err();
-        assert_eq!(
-            err.code.as_deref(),
-            Some("SV-002"),
-            "вложенная `+` внутри `|` обязана дать явную SV-002, а не тишину: {err:?}"
+        let sv = program_of(src, "Root");
+        assert!(
+            sv.contains("unique case (root_p_step_c0)"),
+            "нет case по регистру шага вложенной цепочки:\n{sv}"
+        );
+        assert!(
+            sv.contains("root_p_step_c0_next = ROOT_P_STEP_C0_DONE;"),
+            "последний шаг обязан уводить цепочку в её терминальное состояние:\n{sv}"
+        );
+        assert!(
+            sv.contains(
+                "(root_p_step_c0_next == ROOT_P_STEP_C0_DONE) && (root_c_state_next == ROOT_C_END)"
+            ),
+            "завершение состояния — по цепочке И параллельной ветви:\n{sv}"
         );
     }
 

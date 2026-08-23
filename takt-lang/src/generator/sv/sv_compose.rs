@@ -30,10 +30,9 @@ use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::sv::sv_blocks::emit_named_blocks;
 use crate::generator::sv::sv_expr::sv002;
-use crate::generator::sv::sv_fsm::{
-    Fsm, emit_model_body, end_variant, step_reg_name, step_variant,
-};
+use crate::generator::sv::sv_fsm::{Fsm, emit_model_body, end_variant};
 use crate::generator::sv::sv_map::SvMap;
+use crate::generator::sv::sv_names::{step_done_variant, step_reg_name, step_variant};
 use crate::semantic::StateNode;
 use crate::semantic::minimap::{Name, StateExtend};
 
@@ -54,12 +53,18 @@ pub(crate) fn emit_extend(
         StateExtend::None => Ok(()),
         // Последовательная композиция: шаг-регистр + инлайн активного шага.
         StateExtend::Concatenation(items) => {
-            emit_concatenation(p, map, fsm, state_name, state, model, items, next, states)
+            let exit = ChainExit::Parent {
+                state,
+                model,
+                next,
+                states,
+            };
+            emit_chain(p, map, fsm, state_name, items, &mut Vec::new(), exit)
         }
         // Параллельная композиция (и вырожденный случай одной модели): под-модели
         // работают одновременно, родитель уходит дальше, когда завершились ВСЕ.
         StateExtend::Parallel(_) | StateExtend::Model(_, _) => {
-            let done_exprs = inline_composed(p, map, fsm, extend)?;
+            let done_exprs = inline_composed(p, map, fsm, state_name, extend, &mut Vec::new())?;
             if done_exprs.is_empty() {
                 return Ok(());
             }
@@ -74,29 +79,48 @@ pub(crate) fn emit_extend(
     }
 }
 
+/// Что делать по завершении последнего шага цепочки.
+enum ChainExit<'a> {
+    /// Цепочка ВЕРХНЕГО уровня: последний шаг уводит родительское состояние.
+    Parent {
+        state: &'a StateNode,
+        model: &'a Name,
+        next: &'a Name,
+        states: &'a [Name],
+    },
+    /// ВЛОЖЕННАЯ цепочка (фича 0427): выхода из состояния у неё нет — она
+    /// переходит в собственное терминальное состояние, а его читает вмещающая
+    /// композиция.
+    Done,
+}
+
 /// Печатает цепочку `+`: `unique case (<step>)`, по одному активному шагу.
-#[allow(clippy::too_many_arguments)]
-fn emit_concatenation(
+///
+/// `path` — место цепочки в дереве композиции (носитель
+/// [`chain_site`](crate::generator::chain_site)): по нему адресуются регистр
+/// шага и его перечисление. У цепочки верхнего уровня путь пуст.
+fn emit_chain(
     p: &mut Printer,
     map: &SvMap,
     fsm: &Fsm,
     state_name: &Name,
-    state: &StateNode,
-    model: &Name,
     items: &[StateExtend],
-    next: &Name,
-    states: &[Name],
+    path: &mut Vec<usize>,
+    exit: ChainExit<'_>,
 ) -> Result<(), Diagnostic> {
-    let step = step_reg_name(state_name);
+    let step = step_reg_name(state_name, path);
     // `unique case`: варианты `STEP_0..STEP_{N-1}` покрыты все — ветвь по шагу на
-    // каждый элемент, значит CASEINCOMPLETE не возникает.
+    // каждый элемент, значит CASEINCOMPLETE не возникает. У вложенной цепочки к
+    // ним добавляется терминальный `DONE`, и он тоже обязан иметь ветвь.
     p.ident(&format!("unique case ({})", step)).nl();
     p.up();
     for (i, item) in items.iter().enumerate() {
-        p.ident(&format!("{}: begin", step_variant(state_name, i)))
+        p.ident(&format!("{}: begin", step_variant(state_name, path, i)))
             .nl();
         p.up();
-        let done_exprs = inline_composed(p, map, fsm, item)?;
+        path.push(i);
+        let done_exprs = inline_composed(p, map, fsm, state_name, item, path)?;
+        path.pop();
         // Пустой шаг (`None`) не продвигается — но в цепочке `+` его не бывает.
         let cond = if done_exprs.is_empty() {
             "1'b0".to_string()
@@ -106,15 +130,33 @@ fn emit_concatenation(
         p.ident(&format!("if ({}) begin", cond)).nl();
         p.up();
         if i + 1 == items.len() {
-            // Последний шаг завершён — переход РОДИТЕЛЬСКОГО состояния.
-            emit_parent_transition(p, map, fsm, state, model, next, states)?;
+            match &exit {
+                // Последний шаг завершён — переход РОДИТЕЛЬСКОГО состояния.
+                ChainExit::Parent {
+                    state,
+                    model,
+                    next,
+                    states,
+                } => emit_parent_transition(p, map, fsm, state, model, next, states)?,
+                // ⚠️ Завершение вложенной цепочки — её СОБСТВЕННОЕ состояние, а
+                // не «все шаги готовы»: шаг, до которого очередь не дошла,
+                // готовности не выставлял ни разу (урок 0426).
+                ChainExit::Done => {
+                    p.ident(&format!(
+                        "{}_next = {};",
+                        step,
+                        step_done_variant(state_name, path)
+                    ))
+                    .nl();
+                }
+            }
         } else {
             // Иначе — продвижение шага; следующий тикается на такте после
             // (регистр защёлкивает `_next`), как `break` в C.
             p.ident(&format!(
                 "{}_next = {};",
                 step,
-                step_variant(state_name, i + 1)
+                step_variant(state_name, path, i + 1)
             ))
             .nl();
         }
@@ -123,6 +165,15 @@ fn emit_concatenation(
         p.down();
         p.ident("end").nl();
     }
+    if matches!(exit, ChainExit::Done) {
+        // Ветвь терминала обязательна: `unique case` без неё даёт
+        // CASEINCOMPLETE, а гейт цели считает предупреждение ошибкой.
+        p.ident(&format!(
+            "{}: begin end",
+            step_done_variant(state_name, path)
+        ))
+        .nl();
+    }
     p.down();
     p.ident("endcase").nl();
     Ok(())
@@ -130,15 +181,17 @@ fn emit_concatenation(
 
 /// Инлайнит тело одного шага/ветви и возвращает done-выражения (на `_next`).
 ///
-/// `Model` → инлайн такта под-модели + одно done-выражение; `Parallel` → инлайн
-/// всех ветвей + конъюнкция done (ветвь `Parallel` может вкладываться). Прямая
-/// вложенная `+` внутри шага — **явная диагностика** (R7): цель `c` такой случай
-/// молча пропускает (`RS-021`), тишина здесь запрещена правилом 15.
+/// `Model` → инлайн такта под-модели + одно done-выражение; `Parallel` →
+/// инлайн всех ветвей + конъюнкция done; `Concatenation` → **вложенная
+/// цепочка** со своей машиной шагов (фича 0427), готовность которой читается по
+/// её терминальному состоянию.
 fn inline_composed(
     p: &mut Printer,
     map: &SvMap,
     fsm: &Fsm,
+    state_name: &Name,
     item: &StateExtend,
+    path: &mut Vec<usize>,
 ) -> Result<Vec<String>, Diagnostic> {
     match item {
         StateExtend::Model(sub, _) => {
@@ -155,19 +208,30 @@ fn inline_composed(
         }
         StateExtend::Parallel(inner) => {
             let mut done_exprs = Vec::new();
-            for it in inner {
-                done_exprs.extend(inline_composed(p, map, fsm, it)?);
+            for (i, it) in inner.iter().enumerate() {
+                path.push(i);
+                let done = inline_composed(p, map, fsm, state_name, it, path);
+                path.pop();
+                done_exprs.extend(done?);
             }
             Ok(done_exprs)
         }
-        StateExtend::Concatenation(_) => Err(sv002(
-            "вложенная последовательная композиция (`+`) непосредственно внутри \
-             шага композиции: цель 'sv' её не разворачивает. Оберните вложенную \
-             цепочку в отдельную модель (`model M { start S = B + C; }`) и \
-             используйте M как шаг — тогда она инлайнится штатным механизмом \
-             уровней (регистр состояния под-модели). Это диагностика, а не \
-             тишина: молчаливый пропуск дал бы автомат, стоящий на месте",
-        )),
+        // ВЛОЖЕННАЯ цепочка внутри параллели или внутри шага другой цепочки.
+        //
+        // ⚠️ Прежде здесь стоял отказ `SV-002`, советовавший обернуть цепочку в
+        // отдельную модель: конструкцию, которую исполняют эталон, `c` и `rust`,
+        // цель не переводила вовсе (фича 0427).
+        StateExtend::Concatenation(inner) => {
+            emit_chain(p, map, fsm, state_name, inner, path, ChainExit::Done)?;
+            let step = step_reg_name(state_name, path);
+            // Готовность читается по `_next` — тот же довод, что у под-модели:
+            // регистр отдал бы значение предыдущего такта.
+            Ok(vec![format!(
+                "({}_next == {})",
+                step,
+                step_done_variant(state_name, path)
+            )])
+        }
         StateExtend::None => Ok(Vec::new()),
     }
 }

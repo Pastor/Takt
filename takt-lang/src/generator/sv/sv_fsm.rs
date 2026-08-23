@@ -48,6 +48,7 @@ use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_expr::{Scope, print_condition};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
+use crate::generator::sv::sv_names::{step_enum_name, step_reg_name, step_variant};
 use crate::generator::sv::sv_stmt::{
     emit_hoisted_locals, has_early_return, hoist_locals, print_statement,
 };
@@ -84,6 +85,19 @@ pub(crate) struct Reg {
 }
 
 /// Сигналы и отображения модуля, собранные по всем уровням.
+/// Цепочка `+`, которой нужен свой тип-перечисление шага.
+#[derive(Debug)]
+pub(crate) struct StepEnum {
+    /// Несущее состояние.
+    pub state: Name,
+    /// Место цепочки в дереве композиции (пустое — цепочка верхнего уровня).
+    pub path: Vec<usize>,
+    /// Число шагов.
+    pub count: usize,
+    /// Нужен ли терминальный вариант (есть только у вложенной цепочки).
+    pub done: bool,
+}
+
 pub(crate) struct Fsm {
     /// Регистры: состояния уровней, переменные, выходные порты.
     regs: Vec<Reg>,
@@ -97,9 +111,9 @@ pub(crate) struct Fsm {
     enums: BTreeMap<String, Vec<(String, i128)>>,
     /// Поля структур: `имя → [(поле, тип)]` (фича 0340).
     structs: BTreeMap<String, Vec<(String, crate::semantic::type_node::TypeNode)>>,
-    /// Цепочки `+`: несущее состояние и число шагов (для эмиссии enum шага,
-    /// задача 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
-    pub(crate) step_enums: Vec<(Name, usize)>,
+    /// Цепочки `+`: место и число шагов (для эмиссии enum шага, задача
+    /// 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
+    pub(crate) step_enums: Vec<StepEnum>,
     /// Предупреждения генератора, собранные при печати выражений (фича 0064).
     ///
     /// Ячейка, а не поле-вектор: печать выражения идёт через `&Scope`
@@ -209,25 +223,6 @@ pub(crate) fn state_enum_name(name: &Name) -> String {
 /// Имя варианта терминального состояния модели.
 pub(crate) fn end_variant(name: &Name) -> String {
     format!("{}_END", name.unique_uppercase_snakecase())
-}
-
-/// Имя регистра шага цепочки `+`, несомой состоянием `state` (задача 0057-01).
-///
-/// Ключ — уникальное имя несущего состояния: две цепочки `+` на разных
-/// состояниях (в т.ч. в разных уровнях после уплощения) получают разные
-/// регистры автоматически, как и регистры состояний уровней.
-pub(crate) fn step_reg_name(state: &Name) -> String {
-    format!("{}_step", state.unique_lowercase_snakecase())
-}
-
-/// Имя типа-перечисления шага цепочки `+`.
-pub(crate) fn step_enum_name(state: &Name) -> String {
-    format!("{}_step_e", state.unique_lowercase_snakecase())
-}
-
-/// Имя варианта `STEP_i` шага цепочки `+`.
-pub(crate) fn step_variant(state: &Name, i: usize) -> String {
-    format!("{}_STEP_{}", state.unique_uppercase_snakecase(), i)
 }
 
 /// Имя сигнала переменной модели.
@@ -386,24 +381,30 @@ impl Fsm {
             // состояние вне модели: в `is_done` и в выходные порты не попадает —
             // это отдельный `Reg`, а не порт.
             for state_name in &states {
-                let Some(Element::StateExtend {
-                    extend: StateExtend::Concatenation(items),
-                    ..
-                }) = map.state_at(state_name.clone())
+                let Some(Element::StateExtend { extend, .. }) = map.state_at(state_name.clone())
                 else {
                     continue;
                 };
-                let signal = step_reg_name(state_name);
-                fsm.registered.insert(signal.clone());
-                fsm.regs.push(Reg {
-                    name: signal,
-                    prefix: step_enum_name(state_name),
-                    suffix: String::new(),
-                    reset: step_variant(state_name, 0),
-                    declare_reg: true,
-                    leaves: Vec::new(),
-                });
-                fsm.step_enums.push((state_name.clone(), items.len()));
+                // Цепочек в состоянии бывает НЕСКОЛЬКО (фича 0427): своя машина
+                // шагов нужна и вложенной, иначе она делит регистр с несущей.
+                for chain in crate::generator::chain_site::chains(&extend) {
+                    let signal = step_reg_name(state_name, &chain.path);
+                    fsm.registered.insert(signal.clone());
+                    fsm.regs.push(Reg {
+                        name: signal,
+                        prefix: step_enum_name(state_name, &chain.path),
+                        suffix: String::new(),
+                        reset: step_variant(state_name, &chain.path, 0),
+                        declare_reg: true,
+                        leaves: Vec::new(),
+                    });
+                    fsm.step_enums.push(StepEnum {
+                        state: state_name.clone(),
+                        done: chain.nested(),
+                        path: chain.path,
+                        count: chain.len,
+                    });
+                }
             }
 
             // Регистры механизма времени уровня (фича 0134). Логика — в `sv_time`.
