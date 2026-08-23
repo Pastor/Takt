@@ -2,14 +2,13 @@
 #include <assert.h>
 #include <math.h>
 /// Model functions 'Pid (PidRegulator:Pid)'
-static void PidRegulatorPid_init(PidRegulatorPid *model, PidRegulator *main);
+static void PidRegulatorPid_init(PidRegulatorPid *model);
 static void PidRegulatorPid_tick(PidRegulatorPid *model, PidRegulator *main);
-static bool PidRegulatorPid_is_done(const PidRegulatorPid *model, PidRegulator *main);
+static bool PidRegulatorPid_is_done(const PidRegulatorPid *model);
 
 /// Функция инициализации модели Pid (PidRegulator:Pid)
-void PidRegulatorPid_init(PidRegulatorPid *model, PidRegulator *main) {
+void PidRegulatorPid_init(PidRegulatorPid *model) {
     assert(0 != model);
-    (void)main;
     model->state = PID_REGULATOR_PID_INIT;
     model->ctrl = 0.0;
     model->deriv = 0.0;
@@ -72,13 +71,12 @@ void PidRegulatorPid_tick(PidRegulatorPid *model, PidRegulator *main) {
 }
 
 /// Функция сброса модели Pid (PidRegulator:Pid)
-void PidRegulatorPid_reset(PidRegulatorPid *model, PidRegulator *main) {
-    PidRegulatorPid_init(model, main);
+void PidRegulatorPid_reset(PidRegulatorPid *model) {
+    PidRegulatorPid_init(model);
 }
 
 /// Функция проверки терминального состояния модели Pid (PidRegulator:Pid)
-bool PidRegulatorPid_is_done(const PidRegulatorPid *model, PidRegulator *main) {
-    (void)main;
+bool PidRegulatorPid_is_done(const PidRegulatorPid *model) {
     return model->state == PID_REGULATOR_PID_END;
 }
 
@@ -86,7 +84,7 @@ bool PidRegulatorPid_is_done(const PidRegulatorPid *model, PidRegulator *main) {
 void PidRegulator_init(PidRegulator *model) {
     assert(0 != model);
     model->state = PID_REGULATOR_INIT;
-    PidRegulatorPid_init(&model->main, model);
+    PidRegulatorPid_init(&model->main);
 }
 
 /// Функция обработки модели pid_regulator (PidRegulator)
@@ -98,7 +96,7 @@ void PidRegulator_tick(PidRegulator *model) {
     switch (model->state) {
         case PID_REGULATOR_MAIN: {
             PidRegulatorPid_tick(&model->main, model);
-            if (PidRegulatorPid_is_done(&model->main, model)) {
+            if (PidRegulatorPid_is_done(&model->main)) {
                 model->state = PID_REGULATOR_END;
                 break;
             }

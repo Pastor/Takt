@@ -2,14 +2,13 @@
 #include <assert.h>
 #include <math.h>
 /// Model functions 'Fan (Fan:Fan)'
-static void FanFan_init(FanFan *model, Fan *main);
+static void FanFan_init(FanFan *model);
 static void FanFan_tick(FanFan *model, Fan *main);
-static bool FanFan_is_done(const FanFan *model, Fan *main);
+static bool FanFan_is_done(const FanFan *model);
 
 /// Функция инициализации модели Fan (Fan:Fan)
-void FanFan_init(FanFan *model, Fan *main) {
+void FanFan_init(FanFan *model) {
     assert(0 != model);
-    (void)main;
     model->state = FAN_FAN_INIT;
     model->takt_dwell = 0;
     model->takt_prev_state = (unsigned)FAN_FAN_INIT;
@@ -66,13 +65,12 @@ void FanFan_tick(FanFan *model, Fan *main) {
 }
 
 /// Функция сброса модели Fan (Fan:Fan)
-void FanFan_reset(FanFan *model, Fan *main) {
-    FanFan_init(model, main);
+void FanFan_reset(FanFan *model) {
+    FanFan_init(model);
 }
 
 /// Функция проверки терминального состояния модели Fan (Fan:Fan)
-bool FanFan_is_done(const FanFan *model, Fan *main) {
-    (void)main;
+bool FanFan_is_done(const FanFan *model) {
     return model->state == FAN_FAN_END;
 }
 
@@ -80,7 +78,7 @@ bool FanFan_is_done(const FanFan *model, Fan *main) {
 void Fan_init(Fan *model) {
     assert(0 != model);
     model->state = FAN_INIT;
-    FanFan_init(&model->main, model);
+    FanFan_init(&model->main);
 }
 
 /// Функция обработки модели fan (Fan)
@@ -92,7 +90,7 @@ void Fan_tick(Fan *model) {
     switch (model->state) {
         case FAN_MAIN: {
             FanFan_tick(&model->main, model);
-            if (FanFan_is_done(&model->main, model)) {
+            if (FanFan_is_done(&model->main)) {
                 model->state = FAN_END;
                 break;
             }

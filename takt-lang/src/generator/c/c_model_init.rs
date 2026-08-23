@@ -227,7 +227,11 @@ fn generate_start_state_init(
                 let access = format!("model->{}", state_name.local_lowercase_snakecase());
                 printer
                     .ident(&format!("{}_init(&{}", name.unique_camelcase(), access))
-                    .print(map.root_arg(&name, append == ", model"))
+                    .print(map.root_arg(
+                        &name,
+                        append == ", model",
+                        crate::generator::c::c_needs::ModelFn::Init,
+                    ))
                     .print(");")
                     .nl();
                 generate_argument_assignments(printer, map, model_element, &access, &args)?;
@@ -433,7 +437,11 @@ fn generate_parallel_items_init(
                         "{}_init(&{}{});",
                         name.unique_camelcase(),
                         access,
-                        map.root_arg(name, append == ", model"),
+                        map.root_arg(
+                            name,
+                            append == ", model",
+                            crate::generator::c::c_needs::ModelFn::Init
+                        ),
                     ))
                     .nl();
                 generate_argument_assignments(printer, map, model_element, &access, args)?;
@@ -490,7 +498,11 @@ pub(super) fn generate_concat_item_init(
                     "{}_init(&{}{});",
                     name.unique_camelcase(),
                     access,
-                    map.root_arg(name, append == ", model"),
+                    map.root_arg(
+                        name,
+                        append == ", model",
+                        crate::generator::c::c_needs::ModelFn::Init
+                    ),
                 ))
                 .nl();
             generate_argument_assignments(printer, map, model_element, &access, args)?;

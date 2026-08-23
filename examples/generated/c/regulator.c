@@ -9,14 +9,13 @@ static int64_t takt_q_mul(int64_t a, int64_t b, unsigned n) {
     return takt_q_floordiv(a * b, (int64_t)1 << n);
 }
 /// Model functions 'Regulator (Regulator:Regulator)'
-static void RegulatorRegulator_init(RegulatorRegulator *model, Regulator *main);
+static void RegulatorRegulator_init(RegulatorRegulator *model);
 static void RegulatorRegulator_tick(RegulatorRegulator *model, Regulator *main);
-static bool RegulatorRegulator_is_done(const RegulatorRegulator *model, Regulator *main);
+static bool RegulatorRegulator_is_done(const RegulatorRegulator *model);
 
 /// Функция инициализации модели Regulator (Regulator:Regulator)
-void RegulatorRegulator_init(RegulatorRegulator *model, Regulator *main) {
+void RegulatorRegulator_init(RegulatorRegulator *model) {
     assert(0 != model);
-    (void)main;
     model->state = REGULATOR_REGULATOR_INIT;
     model->half = 128;
     model->near = 2432;
@@ -58,13 +57,12 @@ void RegulatorRegulator_tick(RegulatorRegulator *model, Regulator *main) {
 }
 
 /// Функция сброса модели Regulator (Regulator:Regulator)
-void RegulatorRegulator_reset(RegulatorRegulator *model, Regulator *main) {
-    RegulatorRegulator_init(model, main);
+void RegulatorRegulator_reset(RegulatorRegulator *model) {
+    RegulatorRegulator_init(model);
 }
 
 /// Функция проверки терминального состояния модели Regulator (Regulator:Regulator)
-bool RegulatorRegulator_is_done(const RegulatorRegulator *model, Regulator *main) {
-    (void)main;
+bool RegulatorRegulator_is_done(const RegulatorRegulator *model) {
     return model->state == REGULATOR_REGULATOR_END;
 }
 
@@ -72,7 +70,7 @@ bool RegulatorRegulator_is_done(const RegulatorRegulator *model, Regulator *main
 void Regulator_init(Regulator *model) {
     assert(0 != model);
     model->state = REGULATOR_INIT;
-    RegulatorRegulator_init(&model->main, model);
+    RegulatorRegulator_init(&model->main);
 }
 
 /// Функция обработки модели regulator (Regulator)
@@ -84,7 +82,7 @@ void Regulator_tick(Regulator *model) {
     switch (model->state) {
         case REGULATOR_MAIN: {
             RegulatorRegulator_tick(&model->main, model);
-            if (RegulatorRegulator_is_done(&model->main, model)) {
+            if (RegulatorRegulator_is_done(&model->main)) {
                 model->state = REGULATOR_END;
                 break;
             }
