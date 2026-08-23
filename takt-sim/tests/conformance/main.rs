@@ -69,6 +69,7 @@ mod conformance_rust_tests;
 mod conformance_self_transition_time_tests;
 mod conformance_shared_const_tests;
 mod conformance_shift_tests;
+mod conformance_signed_enum_tests;
 mod conformance_slice_argument_tests;
 mod conformance_slice_tests;
 mod conformance_st_duration_tests;
