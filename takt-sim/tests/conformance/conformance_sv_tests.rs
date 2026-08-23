@@ -194,10 +194,19 @@ endmodule
         .collect()
 }
 
-/// Каталог сборки под конкретный тест (тесты идут однопоточно, но каталоги
-/// разные — чтобы падение одного не путало вывод другого).
+/// Каталог сборки под конкретный тест.
+///
+/// ⚠️ Прежде здесь стояло «тесты идут однопоточно» — утверждение, неверное с
+/// фичи 0190: `--test-threads=1` снят, и тесты идут ПАРАЛЛЕЛЬНО. Ключ
+/// уникальности — имя потока (харнесс Rust называет поток именем теста), иначе
+/// совпадение тега с `conformance_sv_time_tests` (тот же префикс) означало бы
+/// `remove_dir_all` чужого каталога прямо во время сборки (фикс 0190-01).
 fn build_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_conformance_sv_{tag}"));
+    let thread = std::thread::current()
+        .name()
+        .unwrap_or("single")
+        .replace(':', "_");
+    let dir = std::env::temp_dir().join(format!("takt_conformance_sv_{tag}_{thread}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     dir

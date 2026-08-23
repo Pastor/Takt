@@ -39,8 +39,18 @@ fn sim_value(unit: &Unit, name: &str) -> i128 {
     }
 }
 
+/// Каталог сборки под конкретный тест.
+///
+/// ⚠️ Имя потока обязательно (инвариант 0190): тесты идут ПАРАЛЛЕЛЬНО, каждый
+/// помощник начинает с `remove_dir_all`, а префикс `takt_conformance_sv_` тот
+/// же, что у `conformance_sv_tests` — совпади теги, тесты сносили бы каталог
+/// друг у друга (фикс 0190-01).
 fn build_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt_conformance_sv_{tag}"));
+    let thread = std::thread::current()
+        .name()
+        .unwrap_or("single")
+        .replace(':', "_");
+    let dir = std::env::temp_dir().join(format!("takt_conformance_sv_{tag}_{thread}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     dir
