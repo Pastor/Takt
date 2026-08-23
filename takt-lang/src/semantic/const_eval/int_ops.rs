@@ -55,6 +55,12 @@ pub(crate) enum IntOpError {
     /// ⚠️ В Rust такой сдвиг — **паника**, поэтому граница проверяется, а не
     /// обрезается: у автора это всегда опечатка.
     ShiftOutOfRange,
+    /// Показатель степени отрицателен либо шире `u32`.
+    ///
+    /// ⚠️ Отрицательная степень даёт **дробное** значение (у цели `rust` она
+    /// уже отвергается `RS-011`), а `wrapping_pow` принимает `u32`. Обрезать
+    /// показатель нельзя: это молча дало бы другое число.
+    ExponentOutOfRange,
     /// Операции с таким знаком в константном вычислении нет.
     UnsupportedOperator,
 }
@@ -91,6 +97,15 @@ pub(crate) fn int_binary(op: &str, a: i128, b: i128) -> Result<IntOutcome, IntOp
             } else {
                 O::Int(a >> b)
             }
+        }
+        // Целая степень (фича 0328): счёт целыми, обёртка — как у всей
+        // таблицы. `wrapping_pow` даёт **ровно** то, что печатает цель `rust`
+        // и считает хелпер `takt_ipow` цели `c`.
+        "**" => {
+            let Ok(exp) = u32::try_from(b) else {
+                return Err(IntOpError::ExponentOutOfRange);
+            };
+            O::Int(a.wrapping_pow(exp))
         }
         "&" => O::Int(a & b),
         "|" => O::Int(a | b),
@@ -156,6 +171,33 @@ mod tests {
     /// Неизвестный знак — отказ, а не молчаливый ноль.
     #[test]
     fn unknown_operator_is_refused() {
-        assert_eq!(int_binary("**", 2, 3), Err(IntOpError::UnsupportedOperator));
+        assert_eq!(int_binary("@", 2, 3), Err(IntOpError::UnsupportedOperator));
+    }
+
+    /// Целая степень считается таблицей (фича 0407): прежде знак `**` был ей
+    /// неизвестен, и `const SPAN: u16 := 2 ** 8;` терял значение — молча у
+    /// эталона и цели `st`, отказом у `c` и `sv`.
+    #[test]
+    fn integer_power_is_computed() {
+        assert_eq!(int_binary("**", 2, 8), Ok(IntOutcome::Int(256)));
+        assert_eq!(int_binary("**", 3, 0), Ok(IntOutcome::Int(1)));
+        assert_eq!(int_binary("**", -2, 3), Ok(IntOutcome::Int(-8)));
+    }
+
+    /// Показатель вне `u32` — отказ, а не обрезание: обрезав, получили бы
+    /// другое число молча.
+    #[test]
+    fn exponent_out_of_range_is_refused() {
+        assert_eq!(int_binary("**", 2, -1), Err(IntOpError::ExponentOutOfRange));
+        assert_eq!(
+            int_binary("**", 2, i128::from(u32::MAX) + 1),
+            Err(IntOpError::ExponentOutOfRange)
+        );
+    }
+
+    /// Переполнение носителя — обёртка, как у прочей арифметики таблицы.
+    #[test]
+    fn power_overflow_wraps() {
+        assert_eq!(int_binary("**", 2, 127), Ok(IntOutcome::Int(i128::MIN)));
     }
 }

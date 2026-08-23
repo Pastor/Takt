@@ -28,6 +28,7 @@ mod call_arity_tests;
 mod const_eval_tests;
 mod const_init_fold_tests;
 mod const_int_ops_shared_tests;
+mod const_power_fold_tests;
 mod deep_model_tests;
 mod deep_nesting_tests;
 mod diagnostic_code_presence_tests;
