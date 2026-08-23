@@ -1,0 +1,27 @@
+// Обращение к члену РЕЗУЛЬТАТА вызова (фича 0432): поле структуры и разряд.
+//
+// Значения различаются, и оба читаются: потерянный вызов или перепутанный
+// член видны трассой.
+struct Point { x: u8, y: u8 }
+
+fn make(base: u8) -> Point {
+    var r: Point := {base, base + 10};
+    return r;
+}
+
+fn odd(base: u8) -> u8 {
+    return base * 2 + 1;
+}
+
+var k: u8 := 0;
+out field: u8 at 0x100;
+out bit0: u8 at 0x104;
+
+start Run {
+    always {
+        k := k + 1;
+        field := make(k).y;
+        bit0 := odd(k).0;
+    }
+    ref Run;
+}
