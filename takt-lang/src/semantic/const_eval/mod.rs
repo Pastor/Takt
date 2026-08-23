@@ -389,6 +389,10 @@ pub fn eval_in(
         E::Multiply(loc, l, r) => binary("*", l, r, *loc, scope, locals, budget),
         E::Divide(loc, l, r) => binary("/", l, r, *loc, scope, locals, budget),
         E::Modulo(loc, l, r) => binary("%", l, r, *loc, scope, locals, budget),
+        // Целая степень (фича 0407). Прежде она падала в общую ветвь «форма не
+        // вычисляется», и `const SPAN: u16 := 2 ** 8;` доезжал до потребителей
+        // неразвёрнутым узлом — расходились ЗНАЧЕНИЕМ.
+        E::Power(loc, l, r) => binary("**", l, r, *loc, scope, locals, budget),
         E::ShiftLeft(loc, l, r) => binary("<<", l, r, *loc, scope, locals, budget),
         E::ShiftRight(loc, l, r) => binary(">>", l, r, *loc, scope, locals, budget),
         E::BitwiseAnd(loc, l, r) => binary("&", l, r, *loc, scope, locals, budget),
@@ -561,6 +565,12 @@ fn int_op(op: &str, a: i128, b: i128, loc: Location) -> Result<ConstValue, Diagn
         Err(IntOpError::ShiftOutOfRange) => {
             Err(not_constant(loc, "сдвиг определён только на 0..63 бит"))
         }
+        // Показатель степени вне `u32` (фича 0407): значение остаётся
+        // невычисленным — то есть поведение прежнее, а не новый отказ.
+        Err(IntOpError::ExponentOutOfRange) => Err(not_constant(
+            loc,
+            "показатель степени отрицателен либо шире 32 бит",
+        )),
         Err(IntOpError::UnsupportedOperator) => Err(not_constant(
             loc,
             format!("операция '{op}' при компиляции не вычисляется"),

@@ -13,6 +13,7 @@ mod cast_in_initializer_tests;
 mod composition_model_always_tests;
 mod composition_ports_tests;
 mod computed_initializer_norm_tests;
+mod const_power_tests;
 mod diagnostic_notes_tests;
 mod diagnostics_tests;
 mod duration_tests;

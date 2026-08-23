@@ -86,6 +86,13 @@ fn apply_binary(
         Err(IntOpError::ShiftOutOfRange) => {
             Err(not_constant(loc, "сдвиг допустим только на 0..63 бит"))
         }
+        // Степень (фича 0407) до выражения адреса не доходит: форму `Power`
+        // матчер не разбирает вовсе. Ветвь — защита в глубину, как соседняя
+        // `Bool` выше.
+        Err(IntOpError::ExponentOutOfRange) => Err(not_constant(
+            loc,
+            "показатель степени отрицателен либо шире 32 бит",
+        )),
     }
 }
 
