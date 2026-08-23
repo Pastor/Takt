@@ -168,7 +168,17 @@ fn build_impl(
                         ..
                     } = state
                     {
-                        if references.is_empty() && next.is_none() {
+                        // ⚠️ Свёртка допустима, только пока у состояния НЕТ
+                        // собственных блоков (фича 0430): `Parallel` их не
+                        // хранит, и `always`/`exit` состояния-композиции
+                        // терялись молча — замер 2026-08-23 дал `hits = 0`
+                        // против `1`/`2` у прошивки цели `c`. Со своими блоками
+                        // модель строится обычным узлом: там блоки состояния
+                        // живут в `state_executions` и работают механизмом 0181.
+                        if references.is_empty()
+                            && next.is_none()
+                            && state.named_blocks().is_empty()
+                        {
                             Some(implements.clone())
                         } else {
                             None
@@ -426,6 +436,7 @@ fn build_node(
         ticks_in_state: 0,
         state_entered_ns: 0,
         entered_initial: false,
+        exited_terminal: false,
         model_name: model.borrow().name.clone(),
         context: Some(ctx_rc),
         state_transitions,

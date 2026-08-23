@@ -118,11 +118,16 @@ fn state_of_model_supports_not_equal() {
 /// `Done`, — поэтому прогон обязан дойти до конца, а `seen` дорасти до числа
 /// тактов. Заодно проверяется, что паттерн вычисляется **внутри** составного
 /// условия, а не только в его вершине.
+///
+/// ⚠️ Самопереход (`ref Wait;`) обязателен: без него состояние терминально, и
+/// автомат завершается на первом такте — так делает и прошивка цели `c`
+/// (фича 0430). Прежде эталон крутил `always` завершённого состояния дальше, и
+/// тест закреплял это расхождение (класс 0191).
 #[test]
 fn state_of_model_works_in_invariant() {
     let src = watcher(
         "    invariant sane = S(Feeder) = Idle | S(Feeder) = Done;\n\
-         \x20   start Wait { always { seen := seen + 1; } }",
+         \x20   start Wait { always { seen := seen + 1; } ref Wait; }",
     );
     assert_eq!(run_value(&src, 3, "seen"), 3);
 }

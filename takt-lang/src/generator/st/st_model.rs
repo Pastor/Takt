@@ -332,7 +332,7 @@ pub(crate) fn emit_transition(
 }
 
 /// Печатает тело именованного блока (`enter`/`exit`/`always`) состояния.
-fn emit_block(
+pub(crate) fn emit_block(
     p: &mut Printer,
     state: &StateNode,
     kind: &str,

@@ -168,6 +168,45 @@ impl Unit {
         };
 
         if transitions.is_empty() {
+            // Шаг 2а: уход в ТЕРМИНАЛ — тоже выход из состояния (фича 0430).
+            //
+            // Цели `c`, `rust`, `st` и `sv` исполняют здесь `exit`, а эталон не
+            // исполнял его вовсе: замер 2026-08-23 дал `hits = 1` против `11` у
+            // всех четырёх, а на состоянии-композиции — `0` против `1`.
+            // Флаг держит «ровно один раз»: терминальный узел тикается и
+            // дальше, а выходят из состояния однажды — как `state = END` в C.
+            let already = matches!(
+                &self.0,
+                UnitKind::Node {
+                    exited_terminal: true,
+                    ..
+                }
+            );
+            if !already {
+                if let UnitKind::Node {
+                    exited_terminal, ..
+                } = &mut self.0
+                {
+                    *exited_terminal = true;
+                }
+                let exit_fns: Vec<Execution> = if let UnitKind::Node {
+                    state_executions, ..
+                } = &self.0
+                {
+                    state_executions
+                        .get(&state_name)
+                        .and_then(|m| m.get("exit"))
+                        .cloned()
+                        .unwrap_or_default()
+                } else {
+                    unreachable!()
+                };
+                for f in &exit_fns {
+                    if let Err(diagnostic) = f(self) {
+                        return TickResult::Failed(describe(&diagnostic));
+                    }
+                }
+            }
             return TickResult::Terminated;
         }
 

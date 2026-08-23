@@ -1,0 +1,25 @@
+// Блоки состояния-КОМПОЗИЦИИ: `always` каждый такт, `exit` — один раз при
+// завершении (фича 0430).
+//
+// Значения различаются шагом (1 против 10), поэтому трасса отличает пропуск
+// блока от двойного исполнения: `always` даёт 1, 2, 3…, а `exit` добавляет 10
+// ровно однажды.
+model A {
+    var n: u8 := 0;
+    start Go { always { n := n + 1; } ref Fin: n = 2; }
+    state Fin;
+}
+
+model B {
+    var m: u8 := 0;
+    start Go { always { m := m + 1; } ref Fin: m = 3; }
+    state Fin;
+}
+
+var hits: u8 := 0;
+out probe: u8 at 0x100;
+
+start All = A | B {
+    always { hits := hits + 1; probe := hits; }
+    exit { hits := hits + 10; probe := hits; }
+}
