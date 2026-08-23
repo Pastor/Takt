@@ -155,38 +155,74 @@ fn generated_rust_passes_clippy_gate() {
     );
 }
 
-/// **T5.** Названная граница: степень с литеральной базой там, где приёмника
-/// нет, отвергается С ПРИЧИНОЙ.
+/// **T5.** ПОЗИЦИИ приёмника перечислены, и каждая даёт базе тип (фича 0418).
 ///
-/// ⚠️ Громкий отказ дешевле молчания: печать дала бы `E0689` на чужом
-/// инструменте при нулевом коде возврата `taktc` (класс 0262).
+/// ⚠️ Прежде здесь стояла названная граница 0415 — «в аргументе встроенной
+/// функции приёмник неизвестен, и запись отвергается `RS-011`». Замер
+/// 2026-08-23 показал, что позиций осталось две, и обе закрываются: у
+/// `min`/`max`/`abs`/`clamp` тип аргумента совпадает с типом результата, а у
+/// ВНЕШНЕЙ функции параметры объявлены — комментарий цели утверждал обратное
+/// (класс 0292).
+///
+/// ⚠️ Тест падает **списком**: позиция, переставшая давать тип, называется по
+/// имени. Отказ `RS-011` для литеральной базы после этого — защита в глубину:
+/// из корректной программы он недостижим, и недостижимость держат ровно эти
+/// пять позиций.
 #[test]
-fn literal_base_without_target_is_refused_with_reason() {
-    let dir = build_dir("pow_nowhere");
-    // Позиция без приёмника: аргумент встроенной функции, чей тип цели
-    // неизвестен.
-    let src = "var v: u32 := 0;\n\
-               out probe: u32 at 0x100;\n\
-               start Run {\n\
-                   always {\n\
-                       v := min(2 ** 3, 5);\n\
-                       probe := v;\n\
-                   }\n\
-                   ref Run;\n\
-               }\n";
-    let result = takt_lang::compile_to_rust(
-        "pow_nowhere",
-        src,
-        dir.to_str().expect("путь в UTF-8"),
-        &[],
-        &GenerateOptions::default(),
-    );
-    let diag = result.expect_err("степень без известного приёмника обязана отвергаться");
-    assert_eq!(diag.code.as_deref(), Some("RS-011"), "отказ несёт код");
+fn every_receiver_position_gives_the_base_a_type() {
+    let cases: [(&str, &str); 5] = [
+        (
+            "присваивание",
+            "var v: u32 := 0;\nout probe: u32 at 0x100;\n\
+             start Run { always { v := 2 ** 3; probe := v; } ref Run; }\n",
+        ),
+        (
+            "аргумент встроенной функции",
+            "var v: u32 := 0;\nout probe: u32 at 0x100;\n\
+             start Run { always { v := min(2 ** 3, 5); probe := v; } ref Run; }\n",
+        ),
+        (
+            "аргумент локальной функции",
+            "fn twice(x: u32) -> u32 { return x + x; }\n\
+             var v: u32 := 0;\nout probe: u32 at 0x100;\n\
+             start Run { always { v := twice(2 ** 3); probe := v; } ref Run; }\n",
+        ),
+        (
+            "аргумент внешней функции",
+            "extern fn sink(x: u32) -> u32;\n\
+             var v: u32 := 0;\nout probe: u32 at 0x100;\n\
+             start Run { always { v := sink(2 ** 3); probe := v; } ref Run; }\n",
+        ),
+        (
+            "возврат функции",
+            "fn eight() -> u32 { return 2 ** 3; }\n\
+             var v: u32 := 0;\nout probe: u32 at 0x100;\n\
+             start Run { always { v := eight(); probe := v; } ref Run; }\n",
+        ),
+    ];
+    let mut broken = Vec::new();
+    for (position, src) in cases {
+        let dir = build_dir(&format!("pos_{}", position.replace(' ', "_")));
+        match takt_lang::compile_to_rust(
+            "pos",
+            src,
+            dir.to_str().expect("путь в UTF-8"),
+            &[],
+            &GenerateOptions::default(),
+        ) {
+            Err(diag) => broken.push(format!("{position}: отказ {:?}", diag.code)),
+            Ok(_) => {
+                let text =
+                    std::fs::read_to_string(dir.join("pos.rs")).expect("чтение порождённого Rust");
+                if !text.contains("(2u32).wrapping_pow(3)") {
+                    broken.push(format!("{position}: база без типа приёмника"));
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     assert!(
-        diag.message.contains("E0689"),
-        "отказ называет причину чужого инструмента: {}",
-        diag.message
+        broken.is_empty(),
+        "позиции приёмника, потерявшие тип базы: {broken:?}"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }

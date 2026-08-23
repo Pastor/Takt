@@ -247,6 +247,20 @@ fn contains_power(value: &ExpressionNode) -> bool {
         | ExpressionNode::Divide(l, r)
         | ExpressionNode::Modulo(l, r) => contains_power(l) || contains_power(r),
         ExpressionNode::Parenthesis(inner) => contains_power(inner),
+        // Аргумент ВСТРОЕННОЙ функции (фича 0418): у `min`/`max`/`abs`/`clamp`
+        // тип аргумента совпадает с типом результата, то есть с приёмником, —
+        // и подсказка верна. У ПОЛЬЗОВАТЕЛЬСКОЙ функции тип берётся из
+        // объявления параметра (`call` зовёт `coerce_to` сам), поэтому сюда
+        // она не входит: приёмник вызова и тип параметра — разные вещи.
+        ExpressionNode::Function(def, args) => {
+            matches!(
+                &*def.borrow(),
+                crate::semantic::FunctionDefinitionNode::Builtin(
+                    "min" | "max" | "abs" | "clamp",
+                    ..
+                )
+            ) && args.iter().any(contains_power)
+        }
         _ => false,
     }
 }
