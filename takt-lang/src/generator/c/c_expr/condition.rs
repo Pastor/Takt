@@ -294,7 +294,11 @@ pub(in crate::generator::c) fn generate_condition_expr(
                     if let ConditionNode::Variable(var_rc, _) = inner.as_ref() {
                         let var = var_rc.borrow();
                         if let VariableNode::Port {
-                            name, ty, upper, ..
+                            direction,
+                            name,
+                            ty,
+                            upper,
+                            ..
                         } = &*var
                         {
                             let model_name =
@@ -312,8 +316,12 @@ pub(in crate::generator::c) fn generate_condition_expr(
                                 ));
                                 };
                             let cls = PortClass::from_type(ty);
-                            let variant =
-                                crate::generator::c::c_names::port_enum_variant(&model_name, name);
+                            let variant = crate::generator::c::c_names::port_enum_variant(
+                                &model_name,
+                                name,
+                                *direction,
+                                crate::parser::ast::PortDirection::In,
+                            );
                             // В условиях всегда has_model=true; ptr зависит от owner
                             let ptr = if owner.name().eq(&map.root_name()) {
                                 "model"

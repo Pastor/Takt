@@ -151,7 +151,12 @@ fn generate_port_initial_values(
         if matches!(init, ExpressionNode::None) || *direction == PortDirection::In {
             continue;
         }
-        let variant = crate::generator::c::c_names::port_enum_variant(model_name, port_name);
+        let variant = crate::generator::c::c_names::port_enum_variant(
+            model_name,
+            port_name,
+            *direction,
+            crate::parser::ast::PortDirection::Out,
+        );
         let write = match PortClass::from_type(ty) {
             PortClass::Bit => FUNCTION_PORT_WRITE_BIT,
             PortClass::Rational => FUNCTION_PORT_WRITE_FLOAT,

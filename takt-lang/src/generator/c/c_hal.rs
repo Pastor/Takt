@@ -17,8 +17,8 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c;
-use crate::generator::c::c_header::collect_ports_by_class;
 use crate::generator::c::c_map::CMap;
+use crate::generator::c::c_port_enums::collect_ports_by_class;
 use crate::generator::c::{
     FUNCTION_PORT_READ_BIT, FUNCTION_PORT_READ_FLOAT, FUNCTION_PORT_READ_NUMERIC,
     FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC, PortClass,
@@ -121,9 +121,10 @@ pub(super) fn generate_hal(
                 ))
                 .nl();
             printer.up();
-            for (model_name, port_name) in ports {
-                let variant =
-                    crate::generator::c::c_names::port_enum_variant(model_name, port_name);
+            for (model_name, port_name, declared) in ports {
+                let variant = crate::generator::c::c_names::port_enum_variant(
+                    model_name, port_name, *declared, dir,
+                );
                 // Фича 0084: карта ключуется квалифицированно (модель+порт) —
                 // строим тот же ключ хелвером, что и продюсер `resolve_model`.
                 // `model_name.unique()` == `unique_model_name(ModelNode)` (обе

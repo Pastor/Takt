@@ -207,7 +207,11 @@ pub(in crate::generator::c) fn resolve_variable_c_expr(
             }
         }
         VariableNode::Port {
-            name, ty, upper, ..
+            direction,
+            name,
+            ty,
+            upper,
+            ..
         } => {
             let model_name = if let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                 Name::from(model_rc)
@@ -218,7 +222,12 @@ pub(in crate::generator::c) fn resolve_variable_c_expr(
                 ));
             };
             let cls = PortClass::from_type(ty);
-            let variant = crate::generator::c::c_names::port_enum_variant(&model_name, name);
+            let variant = crate::generator::c::c_names::port_enum_variant(
+                &model_name,
+                name,
+                *direction,
+                crate::parser::ast::PortDirection::In,
+            );
             // В локальных функциях (has_model=false) первый параметр — `const Root *model`.
             // В tick/init корневой модели — тоже `model`. В tick/init подмодели — `main`.
             let ptr = if has_model && !owner.name().eq(&map.root_name()) {

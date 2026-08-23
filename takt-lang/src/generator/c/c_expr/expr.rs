@@ -480,7 +480,11 @@ pub(in crate::generator::c) fn generate_expr(
             if let ExpressionNode::Variable(var_rc) = l.as_ref() {
                 let var = var_rc.borrow();
                 if let VariableNode::Port {
-                    name, ty, upper, ..
+                    direction,
+                    name,
+                    ty,
+                    upper,
+                    ..
                 } = &*var
                 {
                     let model_name = if let Some(model_rc) =
@@ -494,8 +498,12 @@ pub(in crate::generator::c) fn generate_expr(
                         ));
                     };
                     let cls = PortClass::from_type(ty);
-                    let variant =
-                        crate::generator::c::c_names::port_enum_variant(&model_name, name);
+                    let variant = crate::generator::c::c_names::port_enum_variant(
+                        &model_name,
+                        name,
+                        *direction,
+                        crate::parser::ast::PortDirection::Out,
+                    );
                     let mut rhs_str = String::new();
                     {
                         let mut tmp = Printer::new(4, &mut rhs_str);
@@ -535,7 +543,11 @@ pub(in crate::generator::c) fn generate_expr(
                 if let ExpressionNode::Variable(var_rc) = inner_expr.as_ref() {
                     let var = var_rc.borrow();
                     if let VariableNode::Port {
-                        name, ty, upper, ..
+                        direction,
+                        name,
+                        ty,
+                        upper,
+                        ..
                     } = &*var
                     {
                         let model_name = if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade())
@@ -557,8 +569,12 @@ pub(in crate::generator::c) fn generate_expr(
                             )
                             .with_code("CC-001"));
                         }
-                        let variant =
-                            crate::generator::c::c_names::port_enum_variant(&model_name, name);
+                        let variant = crate::generator::c::c_names::port_enum_variant(
+                            &model_name,
+                            name,
+                            *direction,
+                            crate::parser::ast::PortDirection::Out,
+                        );
                         let mut rhs_str = String::new();
                         {
                             let mut tmp = Printer::new(4, &mut rhs_str);
@@ -800,7 +816,11 @@ pub(in crate::generator::c) fn generate_expr(
                     if let ExpressionNode::Variable(var_rc) = inner.as_ref() {
                         let var = var_rc.borrow();
                         if let VariableNode::Port {
-                            name, ty, upper, ..
+                            direction,
+                            name,
+                            ty,
+                            upper,
+                            ..
                         } = &*var
                         {
                             let model_name =
@@ -815,8 +835,12 @@ pub(in crate::generator::c) fn generate_expr(
                                 ));
                                 };
                             let cls = PortClass::from_type(ty);
-                            let variant =
-                                crate::generator::c::c_names::port_enum_variant(&model_name, name);
+                            let variant = crate::generator::c::c_names::port_enum_variant(
+                                &model_name,
+                                name,
+                                *direction,
+                                crate::parser::ast::PortDirection::In,
+                            );
                             let ptr = if has_model && !owner.name().eq(&map.root_name()) {
                                 "main"
                             } else {
