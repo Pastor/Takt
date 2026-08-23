@@ -198,6 +198,12 @@ fn emit_state_exit(
     } else {
         table.number_of_local(next.local()).unwrap_or(table.end)
     };
+    // Блок `exit` состояния-композиции (фича 0430). Прежде он терялся: у
+    // простого терминального состояния цель его печатает (`st_model`), а у
+    // композиции — нет, и один вход давал `hits = 0` против `1` у целей `c` и
+    // `rust`. Порядок тот же, что у обычного перехода: `exit` источника, затем
+    // смена состояния.
+    crate::generator::st::st_model::emit_block(p, state, "exit", model, &mut out.stmt)?;
     p.ident(&format!("state := {}; (* {} *)", target, next.local()))
         .nl();
     Ok(())

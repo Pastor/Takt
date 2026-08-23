@@ -108,6 +108,12 @@ fn two_instances_accumulate_at_different_rates() {
 }
 
 /// «Локальная копия» (A6): экземпляр меняет свой параметр — сосед не видит.
+///
+/// ⚠️ У состояния есть САМОПЕРЕХОД (`ref Count;`), и это не украшение: без него
+/// состояние терминально, автомат завершается на первом же такте, и накопление
+/// прекращается — так делает прошивка цели `c` (замер 2026-08-23: `20 20 20`).
+/// Прежде эталон в этом случае продолжал крутить `always` завершённого
+/// состояния, и тест закреплял именно то расхождение (класс 0191, фича 0430).
 #[test]
 fn changing_a_parameter_in_one_instance_is_invisible_to_the_other() {
     let src = "model Tuner {\n\
@@ -119,6 +125,7 @@ fn changing_a_parameter_in_one_instance_is_invisible_to_the_other() {
                \x20           acc := acc + gain;\n\
                \x20           if first = 1 { gain := gain + 1; first := 0; }\n\
                \x20       }\n\
+               \x20       ref Count;\n\
                \x20   }\n\
                }\n\
                \n\

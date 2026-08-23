@@ -120,7 +120,6 @@ module pid_regulator (
                 endcase
                 if ((pid_regulator_pid_state_next == PID_REGULATOR_PID_END)) begin
                     state_next = PID_REGULATOR_END;
-                    state_next = PID_REGULATOR_END;
                 end
             end
             PID_REGULATOR_END: begin end

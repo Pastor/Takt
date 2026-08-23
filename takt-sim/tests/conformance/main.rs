@@ -37,6 +37,7 @@ mod conformance_c_unconditional_edge_tests;
 mod conformance_c_variable_shift_tests;
 mod conformance_call_coercion_tests;
 mod conformance_composite_param_tests;
+mod conformance_composition_blocks_tests;
 mod conformance_composition_edge_tests;
 mod conformance_const_param_tests;
 mod conformance_default_init_tests;

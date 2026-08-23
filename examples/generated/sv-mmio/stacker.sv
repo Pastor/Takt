@@ -384,7 +384,6 @@ module stacker (
                 endcase
                 if ((stacker_command_receiver_state_next == STACKER_COMMAND_RECEIVER_END) && (stacker_movement_controller_state_next == STACKER_MOVEMENT_CONTROLLER_END) && (stacker_lift_controller_state_next == STACKER_LIFT_CONTROLLER_END)) begin
                     state_next = STACKER_END;
-                    state_next = STACKER_END;
                 end
             end
             STACKER_END: begin end

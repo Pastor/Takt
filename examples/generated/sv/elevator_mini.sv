@@ -286,7 +286,6 @@ module elevator_mini (
                 endcase
                 if ((elevator_mini_cabin_state_next == ELEVATOR_MINI_CABIN_END) && (elevator_mini_motor_state_next == ELEVATOR_MINI_MOTOR_END)) begin
                     state_next = ELEVATOR_MINI_END;
-                    state_next = ELEVATOR_MINI_END;
                 end
             end
             ELEVATOR_MINI_END: begin end

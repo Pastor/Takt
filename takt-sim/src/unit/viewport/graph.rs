@@ -558,6 +558,7 @@ mod tests {
             state_entered_ns: 0,
             model_name: None,
             entered_initial: false,
+            exited_terminal: false,
             context: None,
             executions: HashMap::new(),
             state: None,

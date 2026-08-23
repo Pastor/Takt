@@ -784,6 +784,12 @@ pub(crate) fn emit_transitions(
         }
     }
     // Терминальное состояние: переходов нет — уходим в END, как это делает C.
+    //
+    // ⚠️ Возврат здесь `true`: переход НАПЕЧАТАН (фича 0430). Прежде ветвь
+    // отдавала `false`, и вызывающий из `sv_compose` печатал `exit` и `END`
+    // ВТОРОЙ раз — блок `exit` состояния-композиции исполнялся дважды за такт
+    // (замер: `hits` рос на 2 против 1 у целей `c` и `rust`), а RTL был валиден
+    // и синтезировался.
     if state.is_terminated() {
         emit_named_blocks(p, state, fsm, "exit")?;
         let reg = fsm
@@ -792,6 +798,7 @@ pub(crate) fn emit_transitions(
             .ok_or_else(|| sv002(&format!("регистр состояния модели '{}'", model)))?;
         p.ident(&format!("{}_next = {};", reg, end_variant(model)))
             .nl();
+        return Ok(true);
     }
     Ok(false)
 }
