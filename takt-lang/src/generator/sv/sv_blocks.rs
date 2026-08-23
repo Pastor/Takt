@@ -67,7 +67,9 @@ fn emit_block_body(
     // Локальные, значение которых нигде не читается, получают поглотитель
     // (фича 0387): иначе `verilator -Wall` отвечает `UNUSEDSIGNAL`, а гейт цели
     // считает предупреждение ошибкой.
-    let unread = crate::semantic::unused::unread_locals(stmt);
+    let mut unread = crate::semantic::unused::unread_locals(stmt);
+    // Переменная цикла читается ЧАСТИЧНО (фича 0425) — тот же поглотитель.
+    crate::generator::sv::sv_stmt::loop_variables(stmt, &mut unread);
     crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &inline, &unread)?;
     print_statement(p, stmt, &scope)?;
     // ⚠️ Присваивание поглотителя идёт ПОСЛЕ тела: `always_comb`, читающий

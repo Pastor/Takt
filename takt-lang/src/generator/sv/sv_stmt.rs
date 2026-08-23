@@ -349,6 +349,50 @@ fn emit_sink_declaration(p: &mut Printer, name: &str, unread: &[String]) {
     }
 }
 
+/// Имена переменных ЦИКЛОВ в теле (фича 0425).
+///
+/// ⚠️ Переменная цикла читается **частично**: индекс сужается до ширины
+/// массива (0365), и `verilator` отвечает `UNUSEDSIGNAL` на старшие разряды
+/// («Bits of signal are not used: 'i'[7:2]»), а гейт цели считает
+/// предупреждение ошибкой — при нулевом коде возврата `taktc`.
+///
+/// ⚠️ Тип переменной менять нельзя: его задал автор, и он определяет
+/// семантику переполнения (правило 0127). Поэтому гасятся разряды, а не
+/// сужается объявление.
+pub(crate) fn loop_variables(stmt: &StatementNode, out: &mut Vec<String>) {
+    match stmt {
+        StatementNode::For { init, body, .. } => {
+            if let Some(init) = init
+                && let StatementNode::Variable(name, ..) = &**init
+                && !out.contains(name)
+            {
+                out.push(name.clone());
+            }
+            loop_variables(body, out);
+        }
+        StatementNode::Block(items) => {
+            for item in items {
+                loop_variables(item, out);
+            }
+        }
+        StatementNode::If { then_, else_, .. } => {
+            loop_variables(then_, out);
+            if let Some(alt) = else_ {
+                loop_variables(alt, out);
+            }
+        }
+        StatementNode::Loop { body, .. } => loop_variables(body, out),
+        StatementNode::Match { arms, .. } => {
+            for arm in arms.iter() {
+                loop_variables(&arm.body, out);
+            }
+        }
+        // Обход намеренно НЕ исчерпывающий: пропущенная форма даёт прежний
+        // отказ инструмента, а не порчу вывода (приём 0246).
+        _ => {}
+    }
+}
+
 /// Присваивание поглотителя — печатается после объявлений (фича 0387).
 pub(crate) fn emit_local_sinks(p: &mut Printer, locals: &[(&str, &TypeNode)], unread: &[String]) {
     for (name, _) in locals {
