@@ -61,6 +61,7 @@ mod rust_enum_compare_tests;
 mod rust_index_cast_tests;
 mod rust_live_tests;
 mod rust_non_ascii_name_tests;
+mod rust_power_operands_tests;
 mod rust_printers_tests;
 mod rust_shift_width_tests;
 mod same_type_cast_tests;

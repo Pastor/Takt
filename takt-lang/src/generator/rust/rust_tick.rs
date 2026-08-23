@@ -102,6 +102,8 @@ pub(crate) fn emit_tick(
             .collect(),
         time_profile: map.time_profile(),
         return_type: None,
+        // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
+        power_target: None,
     };
 
     p.ident("/// Один такт автомата.").nl();

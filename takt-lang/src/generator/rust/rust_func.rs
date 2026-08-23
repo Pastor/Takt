@@ -159,6 +159,8 @@ pub(crate) fn emit_functions(
                 // Тело функции — единственное место, где `return` имеет тип
                 // приёмника (фича 0336).
                 return_type: Some(ret.clone()),
+                // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
+                power_target: None,
             };
 
             p.ident(&format!("/// Функция '{}' модели.", name)).nl();

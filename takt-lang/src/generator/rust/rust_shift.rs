@@ -122,7 +122,7 @@ fn shift_amount(amount: &ExpressionNode, scope: &Scope) -> Result<String, Diagno
     Ok(format!("({printed}) as u32"))
 }
 
-/// Целая степень — `wrapping_pow` (фича 0329).
+/// Целая степень — `wrapping_pow` (фича 0329, печать операндов — 0415).
 ///
 /// # Почему `wrapping_pow`
 ///
@@ -133,14 +133,24 @@ fn shift_amount(amount: &ExpressionNode, scope: &Scope) -> Result<String, Diagno
 /// Прежде цель отказывала (`RS-011`) с текстом про `f64::powf` — вещественную
 /// степень, которой в этой позиции нет вовсе.
 ///
+/// # Операнды
+///
+/// `target` — тип ПРИЁМНИКА, если он известен (`rust_coerce`). Он нужен базе:
+/// вывод типов Rust не идёт снаружи внутрь через вызов метода, и у литерала в
+/// этой позиции типа нет — `(2).wrapping_pow(8)` есть **`E0689`**.
+///
 /// # Ошибки
 ///
-/// `RS-011` — показатель отрицателен: у целой степени его быть не может, а
-/// `wrapping_pow` принимает `u32`.
+/// - `RS-011` — показатель отрицателен: у целой степени его быть не может, а
+///   `wrapping_pow` принимает `u32`.
+/// - `RS-011` — база-литерал в позиции БЕЗ известного приёмника: печать дала бы
+///   `E0689`, то есть невалидный вывод при нулевом коде возврата `taktc`.
+///   Громкий отказ здесь дешевле молчания (класс 0262).
 pub(crate) fn power(
     base: &ExpressionNode,
     exp: &ExpressionNode,
     scope: &Scope,
+    target: Option<&TypeNode>,
 ) -> Result<String, Diagnostic> {
     if let Some(value) = shift_width::literal(exp)
         && value < 0
@@ -151,8 +161,65 @@ pub(crate) fn power(
         ));
     }
     Ok(format!(
-        "({}).wrapping_pow(({}) as u32)",
-        print_expression(base, scope)?,
-        print_expression(exp, scope)?
+        "({}).wrapping_pow({})",
+        power_base(base, scope, target)?,
+        power_exponent(exp, scope)?
     ))
+}
+
+/// База степени: литералу приписывается тип ПРИЁМНИКА суффиксом.
+///
+/// ⚠️ Суффикс, а не приведение: `2 as u32` — это `clippy::unnecessary_cast`,
+/// то есть отказ сборки под `-D warnings` (класс 0263). Скобки вокруг базы
+/// ставит вызывающий — без них унарный минус применился бы ПОСЛЕ метода
+/// (`-2i32.wrapping_pow(2)` = −4 вместо 4).
+fn power_base(
+    base: &ExpressionNode,
+    scope: &Scope,
+    target: Option<&TypeNode>,
+) -> Result<String, Diagnostic> {
+    let printed = print_expression(base, scope)?;
+    // У базы уже есть свой тип — приписывать нечего.
+    if shift_width::type_of(base).is_some() {
+        return Ok(printed);
+    }
+    let Some(literal) = shift_width::literal(base) else {
+        // Не литерал и без своего типа — выражение, чей тип печатнику
+        // неизвестен; Rust выведет его из места вызова сам.
+        return Ok(printed);
+    };
+    match target {
+        Some(ty @ TypeNode::Integer { .. }) => {
+            let name = crate::generator::rust::rust_type::rust_type(ty, "приёмник степени")?;
+            Ok(format!("{literal}{name}"))
+        }
+        _ => Err(crate::generator::rust::rust_expr::unsupported(
+            "степень с ЛИТЕРАЛЬНОЙ базой в позиции, где тип приёмника \
+             неизвестен: в Rust вывод типа не проходит сквозь вызов метода, и \
+             такая запись не компилируется (E0689)",
+        )),
+    }
+}
+
+/// Показатель как `u32` — приведение печатается ПО НУЖДЕ.
+///
+/// ⚠️ Три формы, и две из них приведения не терпят: у литерала тип выводится
+/// сам (`x.wrapping_pow(8)`), а `u32 as u32` — это `clippy::unnecessary_cast`
+/// (классы 0263 и 0361). Прежде `as u32` печаталось безусловно, и вывод цели
+/// не собирался под её же гейтом.
+fn power_exponent(exp: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
+    let printed = print_expression(exp, scope)?;
+    if shift_width::literal(exp).is_some() {
+        return Ok(printed);
+    }
+    if matches!(
+        shift_width::type_of(exp),
+        Some(TypeNode::Integer {
+            bits: 32,
+            signed: false
+        })
+    ) {
+        return Ok(printed);
+    }
+    Ok(format!("({printed}) as u32"))
 }

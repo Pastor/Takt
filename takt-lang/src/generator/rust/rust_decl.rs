@@ -406,6 +406,8 @@ pub(crate) fn emit_constants(
             instances: Vec::new(),
             time_profile: map.time_profile(),
             return_type: None,
+            // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
+            power_target: None,
         };
         for var in model.variables.values() {
             let VariableNode::Const {
