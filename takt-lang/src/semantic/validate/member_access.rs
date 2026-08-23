@@ -1,4 +1,5 @@
-//! Проверка доступа к полю структуры (фича 0080, дефект 3, `SE-061`).
+//! Проверка доступа к члену: поле структуры (`SE-061`, фича 0080) и **разряд
+//! за объявленной шириной** (`SE-125`, фича 0394).
 //!
 //! Доступ `p.field` к несуществующему полю структуры прежде **не проверялся**
 //! семантикой: генератор C печатал `model->p.NOSUCHFIELD` молча, и ошибку ловил
@@ -10,6 +11,28 @@
 //! разрешается в **структурный** тип, а поля в нём нет. Неразрешимую базу
 //! (напр. элемент массива структур) пропускаем — ложное срабатывание хуже
 //! пропуска, а `cc`/симулятор остаются страховкой.
+//!
+//! # Разряд за объявленной шириной (`SE-125`)
+//!
+//! Оба доступа — по имени и по номеру — суть один вид узла (`BitAccess`),
+//! поэтому проверяет их **один** обход (правило «одно правило — один обход»,
+//! урок 0203).
+//!
+//! Замер 2026-08-22 на `var w: [bit;96]; w.100 := 1;`: эталон пишет,
+//! `c`/`c-hal` и `rust` печатают и их инструменты принимают, `st` отказывает
+//! (широких векторов не переводит), а **`verilator` вывод `sv` ОТВЕРГАЕТ**
+//! (`SELRANGE: Selection index out of range: 100:100 outside 95:0`) при
+//! **нулевом** коде возврата `taktc`: цель печатает регистр шириной по
+//! объявлению.
+//!
+//! Решение заказчика 2026-08-23: объявленная ширина — **контракт**, и разряд
+//! за ней есть ошибка. Раскладка по словам (`[bit;96]` занимает два слова,
+//! правило 0078) — деталь представления, о которой автор знать не обязан.
+//!
+//! ⚠️ **Граница — выражение, чей тип не выводится** (результат вызова и т. п.):
+//! проверка консервативна, и там остаётся `SIM-011` эталона. Заявленной в ADR
+//! границы «переменный индекс» в языке **нет вовсе**: `w.idx` разбирается как
+//! доступ к полю с именем `idx` — показал замер 2026-08-23.
 
 use super::*;
 use crate::parser::ast::{Identifier, Member};
@@ -68,6 +91,45 @@ fn var_initializer(var: &VariableNode) -> Option<&ExpressionNode> {
     }
 }
 
+/// Если `x.N` выходит за **объявленную** ширину — диагностика `SE-125`.
+///
+/// Ширина берётся у типа базы: у бит-вектора — объявленное число разрядов
+/// (носитель `bit_vector::is_bit_vector`), у целого — его биты. Прочие типы
+/// пропускаются: у них разряд судит `SIM-011`/`SE-030`, и второе правило здесь
+/// разошлось бы с первым.
+///
+/// ⚠️ Отрицательный номер разряда грамматика не строит: `.` принимает `number`,
+/// а переменного номера в языке нет вовсе (`x.i` — доступ к полю `i`).
+fn check_bit_index(
+    inner: &ExpressionNode,
+    index: i128,
+    loc: crate::diagnostics::Location,
+    model: &ModelNode,
+) -> Result<(), Diagnostic> {
+    let Some(ty) = base_type(inner, model) else {
+        return Ok(());
+    };
+    let width = match crate::semantic::bit_vector::is_bit_vector(&ty) {
+        Some(bits) => i128::from(bits),
+        None => match ty {
+            TypeNode::Integer { bits, .. } => i128::from(bits),
+            _ => return Ok(()),
+        },
+    };
+    if index < width {
+        return Ok(());
+    }
+    Err(Diagnostic::error(
+        loc,
+        format!(
+            "разряд {index} за объявленной шириной значения ({width} бит): \
+             обращаться можно к разрядам 0..{}",
+            width - 1
+        ),
+    )
+    .with_code("SE-125"))
+}
+
 /// Если `x.field` обращается к структуре без такого поля — диагностика `SE-061`.
 fn check_member(
     inner: &ExpressionNode,
@@ -93,12 +155,19 @@ fn check_expr(expr: &ExpressionNode, model: &ModelNode) -> Result<(), Diagnostic
             check_member(inner, field, model)?;
             check_expr(inner, model)?;
         }
+        // Разряд за объявленной шириной (`SE-125`, фича 0394). Позиция — у
+        // самой базы: у номера разряда своей координаты в АСД нет.
+        ExpressionNode::BitAccess(inner, Member::Number(index)) => {
+            check_bit_index(inner, *index, inner.loc(), model)?;
+            check_expr(inner, model)?;
+        }
         ExpressionNode::Not(e)
         | ExpressionNode::BitwiseNot(e)
         | ExpressionNode::UnaryPlus(e)
         | ExpressionNode::Negate(e)
         | ExpressionNode::Parenthesis(e)
-        | ExpressionNode::BitAccess(e, _)
+        // `BitAccess` разобран выше — обе формы члена (имя и номер) имеют свои
+        // ветви, и общей здесь больше не нужно.
         | ExpressionNode::CodeBlock(e, _)
         | ExpressionNode::NamedFunctionBox(e, _)
         | ExpressionNode::Cast(e, _) => check_expr(e, model)?,
@@ -144,6 +213,34 @@ fn check_expr(expr: &ExpressionNode, model: &ModelNode) -> Result<(), Diagnostic
 
 fn check_cond(cond: &ConditionNode, model: &ModelNode) -> Result<(), Diagnostic> {
     match cond {
+        // Разряд за объявленной шириной — и в условии тоже: печатников у
+        // условий и выражений два (урок 0359), значит и проверка обязана
+        // стоять в обоих обходах.
+        ConditionNode::BitAccess(inner, Member::Number(index)) => {
+            if let Some(base) = cond_base_type(inner, model) {
+                let width = match crate::semantic::bit_vector::is_bit_vector(&base) {
+                    Some(bits) => Some(i128::from(bits)),
+                    None => match base {
+                        TypeNode::Integer { bits, .. } => Some(i128::from(bits)),
+                        _ => None,
+                    },
+                };
+                if let Some(width) = width
+                    && *index >= width
+                {
+                    return Err(Diagnostic::error(
+                        crate::diagnostics::Location::Codegen,
+                        format!(
+                            "разряд {index} за объявленной шириной значения ({width} бит): \
+                             обращаться можно к разрядам 0..{}",
+                            width - 1
+                        ),
+                    )
+                    .with_code("SE-125"));
+                }
+            }
+            check_cond(inner, model)?;
+        }
         ConditionNode::BitAccess(inner, Member::Identifier(field)) => {
             // База условия — выражение; для проверки поля переиспользуем
             // разбор выражений через мостовую конвертацию не нужен: доступ к полю
@@ -151,9 +248,8 @@ fn check_cond(cond: &ConditionNode, model: &ModelNode) -> Result<(), Diagnostic>
             check_cond_member(inner, field, model)?;
             check_cond(inner, model)?;
         }
-        ConditionNode::Not(c) | ConditionNode::Parenthesis(c) | ConditionNode::BitAccess(c, _) => {
-            check_cond(c, model)?
-        }
+        // `BitAccess` разобран выше обеими формами члена.
+        ConditionNode::Not(c) | ConditionNode::Parenthesis(c) => check_cond(c, model)?,
         ConditionNode::And(l, r)
         | ConditionNode::Or(l, r)
         | ConditionNode::Equal(l, r)
