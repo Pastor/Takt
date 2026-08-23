@@ -13,8 +13,7 @@
 mod condition_node;
 mod expression_node;
 pub mod time_ast;
-pub use condition_node::ConditionNode;
-pub use expression_node::ExpressionNode;
+pub use {condition_node::ConditionNode, expression_node::ExpressionNode};
 
 pub mod anon_collect;
 pub mod anon_port;
@@ -50,6 +49,7 @@ pub(crate) mod naming;
 pub(crate) mod parameter_const;
 mod reference;
 pub use reference::ReferenceNode;
+pub(crate) mod slice;
 pub(crate) mod specialize;
 pub(crate) mod stages;
 mod statement;

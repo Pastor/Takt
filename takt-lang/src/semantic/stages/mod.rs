@@ -130,5 +130,10 @@ pub(crate) fn construct_stages_within(
     // печатала `model->gain = 2.0;` — значение 2 вместо 512 в представлении
     // q(8, 8), а условие ребра давало ДРУГОЙ автомат.
     crate::semantic::type_node::fixed_body::lower_fixed_literals(&model).map_err(one)?;
+    // Срез в АРГУМЕНТЕ вызова (фича 0400) разворачивается во временную
+    // переменную — ПОСЛЕ разрешения тел: до него аргументов вызова в дереве
+    // нет. За этой границей формы не существует, и печатники целей о ней не
+    // знают (приём 0143/0192/0199).
+    crate::semantic::slice::argument::expand_slice_arguments(&model).map_err(one)?;
     Ok(model)
 }

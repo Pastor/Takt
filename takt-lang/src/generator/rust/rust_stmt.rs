@@ -228,6 +228,30 @@ fn emit_folded_declaration(
     Ok(())
 }
 
+/// Нужно ли отложенному объявлению умолчание (фича 0411).
+///
+/// Агрегат — массив или структура — в Rust обязан быть инициализирован
+/// **целиком** до записи по индексу либо в поле: `let part: [u8; 2]; part[0] =
+/// …;` даёт `E0381` («used binding `part` isn't initialized»), тогда как
+/// эталон, `c`, `st` и `sv` тот же вход исполняют.
+///
+/// ⚠️ Скаляру умолчание не нужно и **вредно**: там отложенная форма законна, а
+/// лишнее значение дало бы `unused_assignments` — отказ гейта под
+/// `-D warnings` (тот самый класс, ради которого заведена 0216).
+///
+/// ⚠️ Бит-вектор `[bit; N ≤ 64]` — упакованный **скаляр** (0078), и умолчания
+/// ему не нужно; при `N > 64` он массив слов, и нужно.
+fn needs_deferred_default(ty: &crate::semantic::type_node::TypeNode) -> bool {
+    use crate::semantic::type_node::TypeNode;
+    match ty {
+        TypeNode::Array(..) => {
+            crate::semantic::bit_vector::is_bit_vector(ty).is_none_or(|bits| bits > 64)
+        }
+        TypeNode::Struct(_) => true,
+        _ => false,
+    }
+}
+
 /// Присваивают ли переменной в этом операторе (для решения о `mut`).
 fn assigns_later(name: &str, stmt: &StatementNode) -> bool {
     let mut assigned = BTreeSet::new();
@@ -604,8 +628,25 @@ pub(crate) fn print_statement_ctx(
                             return Ok(1);
                         }
                         None => {
-                            p.ident(&format!("let {}{}: {};", deferred_mut, ident, ty_name))
-                                .nl();
+                            // АГРЕГАТ обязан получить умолчание (фича 0411):
+                            // Rust требует инициализировать массив (и
+                            // структуру) целиком **до** записи по индексу или
+                            // в поле — иначе `E0381` «used binding isn't
+                            // initialized» при нулевом коде возврата `taktc`.
+                            // Скаляру умолчание не нужно и вредно: там
+                            // отложенная форма законна, а лишнее значение дало
+                            // бы `unused_assignments` (урок 0216).
+                            if needs_deferred_default(ty) {
+                                let value = crate::generator::rust::rust_decl::default_value(
+                                    ty,
+                                    scope.model,
+                                )?;
+                                p.ident(&format!("let mut {}: {} = {};", ident, ty_name, value))
+                                    .nl();
+                            } else {
+                                p.ident(&format!("let {}{}: {};", deferred_mut, ident, ty_name))
+                                    .nl();
+                            }
                         }
                     }
                 }

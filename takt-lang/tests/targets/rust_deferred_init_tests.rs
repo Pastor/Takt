@@ -131,3 +131,50 @@ fn generated_rust_passes_the_gate_tools() {
         );
     }
 }
+
+/// Отложенный **агрегат** получает умолчание (фича 0411).
+///
+/// ⚠️ Rust требует инициализировать массив целиком **до** записи по индексу:
+/// `let part: [u8; 2]; part[0] = …;` даёт `E0381` при нулевом коде возврата
+/// `taktc`, тогда как эталон, `c`, `st` и `sv` вход исполняют.
+#[test]
+fn deferred_aggregate_gets_a_default() {
+    let src = "var src: [u8; 4] := {5, 6, 7, 8};\nvar o: u8 := 0;\nout probe: u8 at 0;\n\
+         start Run {\n    always {\n        var part: [u8; 2];\n\
+         \x20       part := src[1:3];\n        o := part[0];\n        probe := o;\n    }\n\
+         \x20   ref Run;\n}\n";
+    let (dir, text) = generate("rs0411", src);
+    assert!(
+        text.contains("let mut part: [u8; 2] = [0; 2];"),
+        "отложенный массив обязан получить умолчание:\n{text}"
+    );
+    if !tool("rustc") {
+        eprintln!("[ПРОПУСК] `rustc` не найден; текст вывода уже проверен");
+        return;
+    }
+    let out = std::process::Command::new("rustc")
+        .args(["--edition", "2021", "--crate-type", "lib", "-D", "warnings"])
+        .arg(dir.join("rs0411.rs"))
+        .arg("--out-dir")
+        .arg(&dir)
+        .output()
+        .expect("запуск rustc");
+    assert!(
+        out.status.success(),
+        "rustc обязан принять вывод:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// **Контроль:** скаляру умолчание не печатается.
+///
+/// Без него правка читалась бы как «умолчание всегда», а лишнее значение —
+/// это `unused_assignments`, отказ гейта (урок 0216).
+#[test]
+fn deferred_scalar_gets_no_default() {
+    let (_, text) = generate("rs0411c", SRC);
+    assert!(
+        !text.contains("let mut t: u8 = 0;"),
+        "скаляру умолчание не нужно — там законна отложенная форма:\n{text}"
+    );
+}
