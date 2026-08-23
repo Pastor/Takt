@@ -325,6 +325,27 @@ const TAKT_IPOW: &str = "static int64_t takt_ipow(int64_t base, int64_t exp) {\n
     for (int64_t i = 0; i < exp; i++) {\n        acc = acc * b;\n    }\n    \
     return (int64_t)acc;\n}\n";
 
+/// `takt_shl`/`takt_shr_u`/`takt_shr_i` — сдвиг на ПЕРЕМЕННУЮ величину (фича 0416).
+///
+/// ⚠️ Хелпер, а не тернарный оператор на месте: `(n >= 32 ? 0 : (v >> n))`
+/// печатает величину **дважды**, а вычисление операнда в языке Takt бывает с
+/// эффектом (вызов функции пишет в переменные модели) — тот же довод, по
+/// которому цель `rust` выражает знаковый сдвиг через `min`, а не `unwrap_or`.
+///
+/// ⚠️ Насыщение знакового вправо даёт знак, и он берётся **сравнением**, а не
+/// сдвигом на `w - 1`: `>>` отрицательного в C implementation-defined (тот же
+/// довод, что у floor-хелпера 0061), а `v < 0` определено стандартом.
+const TAKT_SHL: &str = "static uint64_t takt_shl(uint64_t v, uint64_t n, unsigned w) {\n    \
+    return (n >= w) ? 0 : (v << n);\n}\n";
+
+/// Сдвиг вправо беззнакового: за шириной — ноль.
+const TAKT_SHR_U: &str = "static uint64_t takt_shr_u(uint64_t v, uint64_t n, unsigned w) {\n    \
+    return (n >= w) ? 0 : (v >> n);\n}\n";
+
+/// Сдвиг вправо знакового: за шириной — знак (−1 либо 0).
+const TAKT_SHR_I: &str = "static int64_t takt_shr_i(int64_t v, uint64_t n, unsigned w) {\n    \
+    return (n >= w) ? ((v < 0) ? -1 : 0) : (v >> n);\n}\n";
+
 /// Вставляет определения Q-хелперов (0061), фактически вызванных в `source`,
 /// сразу после `#include`. Эмитятся ровно нужные (без `-Wunused-function`);
 /// корпус без `q` остаётся байт-в-байт прежним (T14). `takt_q_mul` тянет
@@ -339,10 +360,32 @@ pub(in crate::generator::c) fn insert_fixed_helpers(source: String) -> String {
     // Целая степень (фича 0328) едет тем же путём: хелпер эмитится по факту
     // вызова, и корпус без `**` остаётся байт-в-байт прежним.
     let uses_ipow = source.contains("takt_ipow(");
-    if !uses_floordiv && !uses_div && !uses_wrap && !uses_sat && !uses_ipow {
+    // Сдвиг на переменную величину (фича 0416) — тем же путём: хелпер эмитится
+    // по факту вызова, и корпус без таких сдвигов остаётся байт-в-байт прежним.
+    let uses_shl = source.contains("takt_shl(");
+    let uses_shr_u = source.contains("takt_shr_u(");
+    let uses_shr_i = source.contains("takt_shr_i(");
+    if !uses_floordiv
+        && !uses_div
+        && !uses_wrap
+        && !uses_sat
+        && !uses_ipow
+        && !uses_shl
+        && !uses_shr_u
+        && !uses_shr_i
+    {
         return source;
     }
     let mut helpers = String::new();
+    if uses_shl {
+        helpers.push_str(TAKT_SHL);
+    }
+    if uses_shr_u {
+        helpers.push_str(TAKT_SHR_U);
+    }
+    if uses_shr_i {
+        helpers.push_str(TAKT_SHR_I);
+    }
     if uses_ipow {
         helpers.push_str(TAKT_IPOW);
     }
