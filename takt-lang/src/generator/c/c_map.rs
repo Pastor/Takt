@@ -45,13 +45,26 @@ impl CMap {
     /// `caller_is_main` — печатается ли вызов из тела корневой модели: там
     /// указатель на корень зовётся `model`, в под-модели — `main`.
     ///
+    /// `which` — какая функция ребёнка вызывается (фича 0419): нужда считается
+    /// на функцию, и `X_init` может обойтись без указателя там, где `X_tick`
+    /// без него не может.
+    ///
     /// ⚠️ Признак спрашивается у **одного** носителя (`c_needs`) и здесь, и в
     /// сигнатуре: разъехавшись, они дали бы «too many arguments» — отказ `cc`,
     /// то есть громкий, но всё же отказ.
-    pub(crate) fn root_arg(&self, child: &Name, caller_is_main: bool) -> &'static str {
-        let needed = self
-            .raw_model_at(child.clone())
-            .is_ok_and(|rc| crate::generator::c::c_needs::model_needs_root(&rc));
+    pub(crate) fn root_arg(
+        &self,
+        child: &Name,
+        caller_is_main: bool,
+        which: crate::generator::c::c_needs::ModelFn,
+    ) -> &'static str {
+        let needed = self.raw_model_at(child.clone()).is_ok_and(|rc| {
+            crate::generator::c::c_needs::model_fn_needs_root(
+                &rc,
+                which,
+                crate::generator::c::c_time::is_clock_profile(self),
+            )
+        });
         if !needed {
             return "";
         }

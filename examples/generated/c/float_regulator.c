@@ -2,14 +2,13 @@
 #include <assert.h>
 #include <math.h>
 /// Model functions 'FloatRegulator (FloatRegulator:FloatRegulator)'
-static void FloatRegulatorFloatRegulator_init(FloatRegulatorFloatRegulator *model, FloatRegulator *main);
+static void FloatRegulatorFloatRegulator_init(FloatRegulatorFloatRegulator *model);
 static void FloatRegulatorFloatRegulator_tick(FloatRegulatorFloatRegulator *model, FloatRegulator *main);
-static bool FloatRegulatorFloatRegulator_is_done(const FloatRegulatorFloatRegulator *model, FloatRegulator *main);
+static bool FloatRegulatorFloatRegulator_is_done(const FloatRegulatorFloatRegulator *model);
 
 /// Функция инициализации модели FloatRegulator (FloatRegulator:FloatRegulator)
-void FloatRegulatorFloatRegulator_init(FloatRegulatorFloatRegulator *model, FloatRegulator *main) {
+void FloatRegulatorFloatRegulator_init(FloatRegulatorFloatRegulator *model) {
     assert(0 != model);
-    (void)main;
     model->state = FLOAT_REGULATOR_FLOAT_REGULATOR_INIT;
     model->half = 0.5;
     model->near = 9.5;
@@ -51,13 +50,12 @@ void FloatRegulatorFloatRegulator_tick(FloatRegulatorFloatRegulator *model, Floa
 }
 
 /// Функция сброса модели FloatRegulator (FloatRegulator:FloatRegulator)
-void FloatRegulatorFloatRegulator_reset(FloatRegulatorFloatRegulator *model, FloatRegulator *main) {
-    FloatRegulatorFloatRegulator_init(model, main);
+void FloatRegulatorFloatRegulator_reset(FloatRegulatorFloatRegulator *model) {
+    FloatRegulatorFloatRegulator_init(model);
 }
 
 /// Функция проверки терминального состояния модели FloatRegulator (FloatRegulator:FloatRegulator)
-bool FloatRegulatorFloatRegulator_is_done(const FloatRegulatorFloatRegulator *model, FloatRegulator *main) {
-    (void)main;
+bool FloatRegulatorFloatRegulator_is_done(const FloatRegulatorFloatRegulator *model) {
     return model->state == FLOAT_REGULATOR_FLOAT_REGULATOR_END;
 }
 
@@ -65,7 +63,7 @@ bool FloatRegulatorFloatRegulator_is_done(const FloatRegulatorFloatRegulator *mo
 void FloatRegulator_init(FloatRegulator *model) {
     assert(0 != model);
     model->state = FLOAT_REGULATOR_INIT;
-    FloatRegulatorFloatRegulator_init(&model->main, model);
+    FloatRegulatorFloatRegulator_init(&model->main);
 }
 
 /// Функция обработки модели float_regulator (FloatRegulator)
@@ -77,7 +75,7 @@ void FloatRegulator_tick(FloatRegulator *model) {
     switch (model->state) {
         case FLOAT_REGULATOR_MAIN: {
             FloatRegulatorFloatRegulator_tick(&model->main, model);
-            if (FloatRegulatorFloatRegulator_is_done(&model->main, model)) {
+            if (FloatRegulatorFloatRegulator_is_done(&model->main)) {
                 model->state = FLOAT_REGULATOR_END;
                 break;
             }

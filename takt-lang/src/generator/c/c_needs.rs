@@ -65,9 +65,96 @@ pub(in crate::generator::c) fn needs_state(
 /// ⚠️ Ошибка признака **громкая**: сказав «не нужен» там, где тело `main`
 /// упоминает, получим отказ `cc` («undeclared identifier»), а не молчание.
 /// Гейт корпуса гоняет `cc` по всем примерам и такой промах поймает.
-pub(in crate::generator::c) fn model_needs_root(model: &Rc<RefCell<ModelNode>>) -> bool {
-    let mut seen = HashSet::new();
-    needs_root_inner(model, &mut seen)
+/// Функция модели, для которой считается нужда в указателе (фича 0419).
+///
+/// ⚠️ Признак считается НА ФУНКЦИЮ, а не на модель: у `_init` и `_tick` тела
+/// разные (инициализаторы против блоков такта), а `_is_done` сравнивает
+/// состояние и указателем не пользуется никогда. Замер 2026-08-23 по корпусу:
+/// из 30 оставшихся заглушек `(void)main;` — **16 в `_is_done` и 14 в
+/// `_init`**, в `_tick` ни одной.
+///
+/// Сигнатуры четырёх функций одной модели после этого расходятся, и это
+/// законно: `X_init(X *model)` рядом с `X_tick(X *model, Root *main)`.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum ModelFn {
+    /// `_init` и `_reset` (второй зовёт первый).
+    Init,
+    /// `_tick`.
+    Tick,
+}
+
+// ⚠️ Варианта для `_is_done` здесь НЕТ намеренно: её тело —
+// `model->state == X_END`, обращаться выше по дереву нечему, и указатель ей не
+// печатается вовсе (фича 0419). Вариант, который всегда отвечал бы `false`,
+// был бы мёртвым кодом — а мёртвое в этом проекте удаляют (урок 0278).
+
+/// Нужен ли указатель на корень КОНКРЕТНОЙ функции под-модели (фича 0419).
+pub(crate) fn model_fn_needs_root(
+    model: &Rc<RefCell<ModelNode>>,
+    which: ModelFn,
+    clock_profile: bool,
+) -> bool {
+    match which {
+        ModelFn::Tick => {
+            let mut seen = HashSet::new();
+            needs_root_inner(model, &mut seen)
+        }
+        ModelFn::Init => {
+            let mut seen = HashSet::new();
+            init_needs_root_inner(model, clock_profile, &mut seen)
+        }
+    }
+}
+
+/// Обращается ли ИНИЦИАЛИЗАТОР переменных к объявлению вне модели.
+///
+/// ⚠️ Рекурсия идёт по `_init` детей: родитель зовёт `Child_init(…, main)`
+/// ровно тогда, когда `main` нужен ребёнку, — иначе сигнатура и вызов
+/// разъедутся, а это отказ `cc` («too many arguments»).
+fn init_needs_root_inner(
+    model: &Rc<RefCell<ModelNode>>,
+    clock_profile: bool,
+    seen: &mut HashSet<*const RefCell<ModelNode>>,
+) -> bool {
+    if !seen.insert(Rc::as_ptr(model)) {
+        return false;
+    }
+    let b = model.borrow();
+    // ⚠️ Тело `_init` обращается к корню ТРЕМЯ путями, и все три обязаны быть
+    // здесь — иначе вывод не соберётся («use of undeclared identifier 'main'»).
+    // Две первые редакции признака знали только про инициализаторы, и оба
+    // пропуска поймали ЧУЖИЕ сторожа сверок, а не свои тесты:
+    //   1) инициализатор переменной обращается к внешнему объявлению;
+    //   2) профиль «часы» + выдержка — латчится метка `main->now_ms(…)` (0134);
+    //   3) выходной порт с начальным значением — запись идёт через HAL корня
+    //      (0187) и печатается в `_init`.
+    let mut needed = clock_profile && crate::generator::c::c_time::uses_duration_time(&b);
+    needed |= b.variables.values().any(|var| {
+        matches!(
+            var,
+            VariableNode::Port { init, direction, .. }
+                if !matches!(init, ExpressionNode::None)
+                    && *direction != crate::parser::ast::PortDirection::In
+        )
+    });
+    for var in b.variables.values() {
+        // Инициализатор есть только у переменной и константы; у порта поле
+        // `init` — это АДРЕС (правило 0176), и обращением к внешнему он не
+        // является.
+        let init = match var {
+            VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => Some(expr),
+            _ => None,
+        };
+        if let Some(expr) = init {
+            needed |= expr_touches_outside(expr, model);
+        }
+    }
+    let nested: Vec<Rc<RefCell<ModelNode>>> = b.models.values().cloned().collect();
+    drop(b);
+    for child in &nested {
+        needed |= init_needs_root_inner(child, clock_profile, seen);
+    }
+    needed
 }
 
 fn needs_root_inner(

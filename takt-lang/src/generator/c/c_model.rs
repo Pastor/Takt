@@ -32,33 +32,44 @@ pub(super) fn generate_function_prototypes(
             let s = name.unique_camelcase();
             // Прототип обязан совпасть с определением: признак тот же
             // (`c_needs`, фича 0396), и второй его копии здесь быть не должно.
-            let root_param = if map
-                .raw_model_at(name.clone())
-                .is_ok_and(|rc| crate::generator::c::c_needs::model_needs_root(&rc))
-            {
-                format!(", {} *main", root_name.unique_camelcase())
-            } else {
-                String::new()
+            // Прототип обязан совпасть с определением, а нужда считается НА
+            // ФУНКЦИЮ (фича 0419): сигнатуры четырёх функций одной модели
+            // законно расходятся.
+            let param_for = |which| {
+                if map.raw_model_at(name.clone()).is_ok_and(|rc| {
+                    crate::generator::c::c_needs::model_fn_needs_root(
+                        &rc,
+                        which,
+                        crate::generator::c::c_time::is_clock_profile(map),
+                    )
+                }) {
+                    format!(", {} *main", root_name.unique_camelcase())
+                } else {
+                    String::new()
+                }
             };
+            let init_param = param_for(crate::generator::c::c_needs::ModelFn::Init);
+            let tick_param = param_for(crate::generator::c::c_needs::ModelFn::Tick);
             printer
                 .print(&format!("/// Model functions '{}'", name))
                 .nl();
             printer
                 .print(&format!(
                     "static void {0}_init({0} *model{1});",
-                    s, root_param
+                    s, init_param
                 ))
                 .nl();
             printer
                 .print(&format!(
                     "static void {0}_tick({0} *model{1});",
-                    s, root_param
+                    s, tick_param
                 ))
                 .nl();
             printer
                 .print(&format!(
-                    "static bool {0}_is_done(const {0} *model{1});",
-                    s, root_param
+                    // `_is_done` указателя не получает никогда (фича 0419).
+                    "static bool {0}_is_done(const {0} *model);",
+                    s
                 ))
                 .nl();
         }
@@ -89,7 +100,11 @@ fn generate_parallel_items_tick(
                     name.local_lowercase_snakecase(),
                     idx
                 );
-                let arg = map.root_arg(name, caller_is_main);
+                let arg = map.root_arg(
+                    name,
+                    caller_is_main,
+                    crate::generator::c::c_needs::ModelFn::Tick,
+                );
                 printer
                     .ident(&format!(
                         "{}_tick(&{}{});",
@@ -98,12 +113,8 @@ fn generate_parallel_items_tick(
                         arg,
                     ))
                     .nl();
-                done_exprs.push(format!(
-                    "{}_is_done(&{}{})",
-                    name.unique_camelcase(),
-                    field,
-                    arg,
-                ));
+                // `_is_done` указателя не принимает (фича 0419).
+                done_exprs.push(format!("{}_is_done(&{})", name.unique_camelcase(), field));
             }
             StateExtend::Parallel(inner) => {
                 let nested_access = format!("{}.parallel{}", parent_access, idx);
@@ -370,7 +381,11 @@ fn generate_concat_tick(
                     idx
                 );
                 // Тик текущего элемента
-                let arg = map.root_arg(name, call_append == ", model");
+                let arg = map.root_arg(
+                    name,
+                    call_append == ", model",
+                    crate::generator::c::c_needs::ModelFn::Tick,
+                );
                 printer
                     .ident(&format!(
                         "{}_tick(&{}{});",
@@ -382,10 +397,9 @@ fn generate_concat_tick(
                 // Проверяем завершение
                 printer
                     .ident(&format!(
-                        "if ({}_is_done(&{}{})) {{",
+                        "if ({}_is_done(&{})) {{",
                         name.unique_camelcase(),
                         field,
-                        arg,
                     ))
                     .up()
                     .nl();
@@ -598,7 +612,11 @@ fn generate_model_tick(
                 // не порождало НИЧЕГО, даже комментария — тише заглушки №1.
                 match extend {
                     StateExtend::Model(name, _) => {
-                        let arg = map.root_arg(&name, call_append == ", model");
+                        let arg = map.root_arg(
+                            &name,
+                            call_append == ", model",
+                            crate::generator::c::c_needs::ModelFn::Tick,
+                        );
                         printer
                             .ident(&format!(
                                 "{}_tick(&model->{}",
@@ -614,7 +632,6 @@ fn generate_model_tick(
                                 name.unique_camelcase(),
                                 state_name.local_lowercase_snakecase()
                             ))
-                            .print(arg)
                             .print(")) {")
                             .up()
                             .nl();
@@ -791,16 +808,35 @@ pub(super) fn generate_model_functions(
     // Указатель на корень печатается ПО НУЖДЕ (фича 0396): прежде он стоял в
     // сигнатуре всякой под-модели, а тело пользовалось им не везде — 45
     // заглушек `(void)main;` в корпусе. Признак — общий носитель `c_needs`.
-    let mut append = String::new();
-    let mut call_append = String::new();
-    let wants_root = !is_main
-        && map
-            .raw_model_at(model.name().clone())
-            .is_ok_and(|rc| crate::generator::c::c_needs::model_needs_root(&rc));
-    if wants_root {
-        append.push_str(&format!(", {} *main", map.root_name().unique_camelcase()));
-        call_append.push_str(", main");
-    }
+    // Нужда считается НА ФУНКЦИЮ (фича 0419): у `_init` и `_tick` тела разные,
+    // а `_is_done` указателем не пользуется никогда. Замер 2026-08-23: из 30
+    // заглушек `(void)main;` — 16 в `_is_done` и 14 в `_init`.
+    let needs = |which| {
+        !is_main
+            && map.raw_model_at(model.name().clone()).is_ok_and(|rc| {
+                crate::generator::c::c_needs::model_fn_needs_root(
+                    &rc,
+                    which,
+                    crate::generator::c::c_time::is_clock_profile(map),
+                )
+            })
+    };
+    let root_param = |wanted: bool| {
+        if wanted {
+            format!(", {} *main", map.root_name().unique_camelcase())
+        } else {
+            String::new()
+        }
+    };
+    let wants_init = needs(crate::generator::c::c_needs::ModelFn::Init);
+    let wants_tick = needs(crate::generator::c::c_needs::ModelFn::Tick);
+    let init_append = root_param(wants_init);
+    let tick_append = root_param(wants_tick);
+    let init_call_append = if wants_init {
+        String::from(", main")
+    } else {
+        String::new()
+    };
     let struct_name = name.unique_camelcase();
     printer
         .print(&format!(
@@ -814,7 +850,7 @@ pub(super) fn generate_model_functions(
         .print("_init(")
         .print(&struct_name)
         .print(" *model")
-        .print(&append)
+        .print(&init_append)
         .print(") {")
         .nl();
     //NOTICE: init
@@ -827,7 +863,7 @@ pub(super) fn generate_model_functions(
         let mut buffered = printer.fork(&mut init_body);
         generate_model_init(&mut &mut buffered, model, map)?;
     }
-    emit_unused_guard(printer, &init_body, wants_root);
+    emit_unused_guard(printer, &init_body, wants_init);
     printer.print(&init_body);
     printer.down();
     printer.print("}").nl().nl();
@@ -840,14 +876,14 @@ pub(super) fn generate_model_functions(
         .print("_tick(")
         .print(&struct_name)
         .print(" *model")
-        .print(&append)
+        .print(&tick_append)
         .print(") {")
         .nl();
     //NOTICE: tick
     printer.up();
     printer.ident("assert(0 != model);").nl();
     // Проверка параметра печатается, только если он есть (фича 0396).
-    if wants_root {
+    if wants_tick {
         printer.ident("assert(0 != main);").nl();
     }
     let mut tick_body = String::new();
@@ -855,7 +891,7 @@ pub(super) fn generate_model_functions(
         let mut buffered = printer.fork(&mut tick_body);
         generate_model_tick(&mut &mut buffered, model, map)?;
     }
-    emit_unused_guard(printer, &tick_body, wants_root);
+    emit_unused_guard(printer, &tick_body, wants_tick);
     printer.print(&tick_body);
     printer.down();
     printer.print("}").nl().nl();
@@ -868,13 +904,13 @@ pub(super) fn generate_model_functions(
         .print("_reset(")
         .print(&struct_name)
         .print(" *model")
-        .print(&append)
+        .print(&init_append)
         .print(") {")
         .nl();
     printer
         .up()
         .ident(format!("{}_init(model", struct_name).as_str())
-        .print(&call_append)
+        .print(&init_call_append)
         .print(");")
         .down()
         .nl();
@@ -891,15 +927,13 @@ pub(super) fn generate_model_functions(
         .print("_is_done(const ")
         .print(&struct_name)
         .print(" *model")
-        .print(&append)
         .print(") {")
         .nl();
     // Единственное терминальное состояние модели — всегда END
     let cond = format!("model->state == {}_END", name.unique_uppercase_snakecase());
     printer.up();
-    // Тело `_is_done` указателем на корень не пользуется никогда — но параметр
-    // требует протокол вызова (фича 0260).
-    emit_unused_guard(printer, &cond, wants_root);
+    // Тело `_is_done` указателем на корень не пользуется никогда, и с фичи
+    // 0419 он туда не печатается вовсе — заглушка не нужна.
     printer
         .ident("return ")
         .print(cond.as_str())

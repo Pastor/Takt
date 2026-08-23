@@ -2,22 +2,21 @@
 #include <assert.h>
 #include <math.h>
 /// Model functions 'Dose (BatchCycle:Dose)'
-static void BatchCycleDose_init(BatchCycleDose *model, BatchCycle *main);
+static void BatchCycleDose_init(BatchCycleDose *model);
 static void BatchCycleDose_tick(BatchCycleDose *model, BatchCycle *main);
-static bool BatchCycleDose_is_done(const BatchCycleDose *model, BatchCycle *main);
+static bool BatchCycleDose_is_done(const BatchCycleDose *model);
 /// Model functions 'Drain (BatchCycle:Drain)'
-static void BatchCycleDrain_init(BatchCycleDrain *model, BatchCycle *main);
+static void BatchCycleDrain_init(BatchCycleDrain *model);
 static void BatchCycleDrain_tick(BatchCycleDrain *model, BatchCycle *main);
-static bool BatchCycleDrain_is_done(const BatchCycleDrain *model, BatchCycle *main);
+static bool BatchCycleDrain_is_done(const BatchCycleDrain *model);
 /// Model functions 'Mix (BatchCycle:Mix)'
-static void BatchCycleMix_init(BatchCycleMix *model, BatchCycle *main);
+static void BatchCycleMix_init(BatchCycleMix *model);
 static void BatchCycleMix_tick(BatchCycleMix *model, BatchCycle *main);
-static bool BatchCycleMix_is_done(const BatchCycleMix *model, BatchCycle *main);
+static bool BatchCycleMix_is_done(const BatchCycleMix *model);
 
 /// Функция инициализации модели Dose (BatchCycle:Dose)
-void BatchCycleDose_init(BatchCycleDose *model, BatchCycle *main) {
+void BatchCycleDose_init(BatchCycleDose *model) {
     assert(0 != model);
-    (void)main;
     model->state = BATCH_CYCLE_DOSE_INIT;
     model->dosed = 0;
 }
@@ -51,20 +50,18 @@ void BatchCycleDose_tick(BatchCycleDose *model, BatchCycle *main) {
 }
 
 /// Функция сброса модели Dose (BatchCycle:Dose)
-void BatchCycleDose_reset(BatchCycleDose *model, BatchCycle *main) {
-    BatchCycleDose_init(model, main);
+void BatchCycleDose_reset(BatchCycleDose *model) {
+    BatchCycleDose_init(model);
 }
 
 /// Функция проверки терминального состояния модели Dose (BatchCycle:Dose)
-bool BatchCycleDose_is_done(const BatchCycleDose *model, BatchCycle *main) {
-    (void)main;
+bool BatchCycleDose_is_done(const BatchCycleDose *model) {
     return model->state == BATCH_CYCLE_DOSE_END;
 }
 
 /// Функция инициализации модели Drain (BatchCycle:Drain)
-void BatchCycleDrain_init(BatchCycleDrain *model, BatchCycle *main) {
+void BatchCycleDrain_init(BatchCycleDrain *model) {
     assert(0 != model);
-    (void)main;
     model->state = BATCH_CYCLE_DRAIN_INIT;
     model->drained = 0;
 }
@@ -98,20 +95,18 @@ void BatchCycleDrain_tick(BatchCycleDrain *model, BatchCycle *main) {
 }
 
 /// Функция сброса модели Drain (BatchCycle:Drain)
-void BatchCycleDrain_reset(BatchCycleDrain *model, BatchCycle *main) {
-    BatchCycleDrain_init(model, main);
+void BatchCycleDrain_reset(BatchCycleDrain *model) {
+    BatchCycleDrain_init(model);
 }
 
 /// Функция проверки терминального состояния модели Drain (BatchCycle:Drain)
-bool BatchCycleDrain_is_done(const BatchCycleDrain *model, BatchCycle *main) {
-    (void)main;
+bool BatchCycleDrain_is_done(const BatchCycleDrain *model) {
     return model->state == BATCH_CYCLE_DRAIN_END;
 }
 
 /// Функция инициализации модели Mix (BatchCycle:Mix)
-void BatchCycleMix_init(BatchCycleMix *model, BatchCycle *main) {
+void BatchCycleMix_init(BatchCycleMix *model) {
     assert(0 != model);
-    (void)main;
     model->state = BATCH_CYCLE_MIX_INIT;
     model->stirred = 0;
 }
@@ -145,13 +140,12 @@ void BatchCycleMix_tick(BatchCycleMix *model, BatchCycle *main) {
 }
 
 /// Функция сброса модели Mix (BatchCycle:Mix)
-void BatchCycleMix_reset(BatchCycleMix *model, BatchCycle *main) {
-    BatchCycleMix_init(model, main);
+void BatchCycleMix_reset(BatchCycleMix *model) {
+    BatchCycleMix_init(model);
 }
 
 /// Функция проверки терминального состояния модели Mix (BatchCycle:Mix)
-bool BatchCycleMix_is_done(const BatchCycleMix *model, BatchCycle *main) {
-    (void)main;
+bool BatchCycleMix_is_done(const BatchCycleMix *model) {
     return model->state == BATCH_CYCLE_MIX_END;
 }
 
@@ -159,7 +153,7 @@ bool BatchCycleMix_is_done(const BatchCycleMix *model, BatchCycle *main) {
 void BatchCycle_init(BatchCycle *model) {
     assert(0 != model);
     model->state = BATCH_CYCLE_INIT;
-    BatchCycleDose_init(&model->cycle_dose0, model);
+    BatchCycleDose_init(&model->cycle_dose0);
     model->cycle_state = BATCH_CYCLE_CYCLE_DOSE0;
     model->stage = 0;
 }
@@ -174,21 +168,21 @@ void BatchCycle_tick(BatchCycle *model) {
         case BATCH_CYCLE_CYCLE: {
             if (model->cycle_state == BATCH_CYCLE_CYCLE_DOSE0) {
                 BatchCycleDose_tick(&model->cycle_dose0, model);
-                if (BatchCycleDose_is_done(&model->cycle_dose0, model)) {
-                    BatchCycleMix_init(&model->cycle_mix1, model);
+                if (BatchCycleDose_is_done(&model->cycle_dose0)) {
+                    BatchCycleMix_init(&model->cycle_mix1);
                     model->cycle_state = BATCH_CYCLE_CYCLE_MIX1;
                     break;
                 }
             } else if (model->cycle_state == BATCH_CYCLE_CYCLE_MIX1) {
                 BatchCycleMix_tick(&model->cycle_mix1, model);
-                if (BatchCycleMix_is_done(&model->cycle_mix1, model)) {
-                    BatchCycleDrain_init(&model->cycle_drain2, model);
+                if (BatchCycleMix_is_done(&model->cycle_mix1)) {
+                    BatchCycleDrain_init(&model->cycle_drain2);
                     model->cycle_state = BATCH_CYCLE_CYCLE_DRAIN2;
                     break;
                 }
             } else if (model->cycle_state == BATCH_CYCLE_CYCLE_DRAIN2) {
                 BatchCycleDrain_tick(&model->cycle_drain2, model);
-                if (BatchCycleDrain_is_done(&model->cycle_drain2, model)) {
+                if (BatchCycleDrain_is_done(&model->cycle_drain2)) {
                     model->state = BATCH_CYCLE_DONE;
                     break;
                 }

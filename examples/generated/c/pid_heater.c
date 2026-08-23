@@ -4,7 +4,7 @@
 /// Model functions 'Heater (PidHeater:Heater)'
 static void PidHeaterHeater_init(PidHeaterHeater *model, PidHeater *main);
 static void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main);
-static bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *main);
+static bool PidHeaterHeater_is_done(const PidHeaterHeater *model);
 
 ///Функции моделей
 static PidState PidHeater_pid_compute(PidState p, double sp, double pv);
@@ -92,8 +92,7 @@ void PidHeaterHeater_reset(PidHeaterHeater *model, PidHeater *main) {
 }
 
 /// Функция проверки терминального состояния модели Heater (PidHeater:Heater)
-bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *main) {
-    (void)main;
+bool PidHeaterHeater_is_done(const PidHeaterHeater *model) {
     return model->state == PID_HEATER_HEATER_END;
 }
 
@@ -125,7 +124,7 @@ void PidHeater_tick(PidHeater *model) {
         case PID_HEATER_PID_HEATER: {
             if (model->pid_heater_state == PID_HEATER_PID_HEATER_HEATER0) {
                 PidHeaterHeater_tick(&model->pid_heater_heater0, model);
-                if (PidHeaterHeater_is_done(&model->pid_heater_heater0, model)) {
+                if (PidHeaterHeater_is_done(&model->pid_heater_heater0)) {
                     PidHeaterHeater_init(&model->pid_heater_heater1, model);
                     model->pid_heater_heater1.setpoint = 55.0;
                     model->pid_heater_heater1.release = 52.0;
@@ -134,7 +133,7 @@ void PidHeater_tick(PidHeater *model) {
                 }
             } else if (model->pid_heater_state == PID_HEATER_PID_HEATER_HEATER1) {
                 PidHeaterHeater_tick(&model->pid_heater_heater1, model);
-                if (PidHeaterHeater_is_done(&model->pid_heater_heater1, model)) {
+                if (PidHeaterHeater_is_done(&model->pid_heater_heater1)) {
                     model->state = PID_HEATER_FINISHED;
                     break;
                 }

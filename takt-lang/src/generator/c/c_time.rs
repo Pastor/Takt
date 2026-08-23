@@ -19,7 +19,7 @@ use crate::semantic::time_ast::{
 };
 
 /// Профиль модели — «часы» (внешний источник времени)?
-fn is_clock_profile(map: &CMap) -> bool {
+pub(in crate::generator::c) fn is_clock_profile(map: &CMap) -> bool {
     matches!(
         map.time_profile(),
         crate::semantic::duration::TimeProfile::Clock
@@ -30,7 +30,7 @@ fn is_clock_profile(map: &CMap) -> bool {
 /// блок `every Nms` (фича 0134-09). Оба меряются длительностью, поэтому требуют
 /// одну инфраструктуру времени: счётчик тактов (профиль «такты») либо метку входа
 /// + `now_ms` (профиль «часы»). Тактовая `after Nt` идёт отдельным путём.
-fn uses_duration_time(model: &ModelNode) -> bool {
+pub(in crate::generator::c) fn uses_duration_time(model: &ModelNode) -> bool {
     model_uses_duration_after(model) || model_uses_every(model)
 }
 
