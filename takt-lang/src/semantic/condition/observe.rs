@@ -334,12 +334,10 @@ fn rewrite_cond(cond: &mut ConditionNode, cells: &BTreeMap<String, Rc<RefCell<Va
 /// шесть пар «комментарий + вызов» в него не помещались.
 pub(crate) fn lower_for_target(
     model: &std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
-    split_ports: bool,
+    split_ports: super::port_split::PortSplit,
     fold_state_observe: bool,
 ) -> Result<(), crate::diagnostics::Diagnostic> {
-    if split_ports {
-        super::port_split::split_composite_ports(model)?;
-    }
+    super::port_split::split_composite_ports(model, split_ports)?;
     if fold_state_observe {
         expand_state_observation(model)?;
     }

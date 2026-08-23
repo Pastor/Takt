@@ -337,18 +337,44 @@ fn compile_invalid_at(name: &str, map: Option<&str>) -> Vec<String> {
     }
 }
 
-/// **A5 (контрпример).** Порт-массив в `st-at` → `ST-004`, а не тихое размещение.
+/// Порт-массив в `st-at` РАЗВОРАЧИВАЕТСЯ по элементам (фича 0417).
 ///
-/// Локация IEC адресует **скаляр**; у массива размера локации нет. Молча
-/// разместить его по адресу скаляра значило бы дать неверный адрес на стенде —
-/// то есть дефект, который проявится только на железе.
+/// ⚠️ Прежде тест закреплял `ST-004` («локация IEC адресует скаляр»), и это
+/// было **дефектом, закреплённым тестом** (класс 0191): довод верен для
+/// массива целиком, но не для порта — по элементам он раскладывается в
+/// скалярные, и каждый получает свою локацию. Замер 2026-08-23: ту же запись
+/// эталон исполняет, а вывод цели `st` (без `at`) отвергал `iec2c` при нулевом
+/// коде возврата.
 #[test]
-fn test_array_port_has_no_location_st004() {
-    let diags = compile_invalid_at("port_array_at", None);
+fn test_array_port_is_split_into_elements() {
+    let dir = std::env::temp_dir().join(format!(
+        "takt_0417_stat_{}_{}",
+        std::process::id(),
+        std::thread::current()
+            .name()
+            .unwrap_or("t")
+            .replace(':', "_")
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let source = std::fs::read_to_string("tests/data/st/valid/port_array_at.takt")
+        .expect("фикстура читается");
+    takt_lang::compile_to_st_at(
+        "port_array_at",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &[],
+        &takt_lang::address_map::AddressEnv::default(),
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порт-массив разворачивается и размещается");
+    let text = std::fs::read_to_string(dir.join("port_array_at.st")).expect("чтение вывода");
     assert!(
-        diags.iter().any(|c| c == "ST-004"),
-        "ожидался ST-004, получено: {diags:?}"
+        text.contains("arr_0 AT %IB768"),
+        "элемент обязан получить свою локацию по базовому адресу:\n{text}"
     );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// **A5 (контрпример).** Используемый порт без адреса в `st-at` → `SE-052`.
