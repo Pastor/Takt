@@ -323,6 +323,10 @@ pub(crate) fn emit_functions(
     models: &[(crate::semantic::minimap::Name, Rc<RefCell<ModelNode>>)],
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     let mut warnings = Vec::new();
+    // Формы массивов из параметров — тот же список, что у продюсера
+    // `TYPE … END_TYPE` (фича 0409): по нему локальные объявления выбирают
+    // именованный тип.
+    let array_forms = crate::generator::st::st_decl_types::function_array_form_names(models);
     // POU именуются с префиксом модели-владельца (`pou_name`), поэтому одноимённые
     // **локальные** функции разных моделей больше НЕ склеиваются: их итоговые
     // имена различны ([фикс 0041-01](../../../../docs/fixes/0041-01-st-fn-dedup-silent.md),
@@ -352,7 +356,7 @@ pub(crate) fn emit_functions(
                 continue;
             }
             emitted.push(name);
-            emit_function(p, def, model, &mut warnings)?;
+            emit_function(p, def, model, &mut warnings, &array_forms)?;
         }
     }
     Ok(warnings)
@@ -364,6 +368,7 @@ fn emit_function(
     def: &FunctionDefinitionNode,
     model: &ModelNode,
     warnings: &mut Vec<Diagnostic>,
+    array_forms: &[String],
 ) -> Result<(), Diagnostic> {
     let Some(name) = pou_name(def) else {
         return Ok(());
@@ -463,7 +468,7 @@ fn emit_function(
     for h in &hoisted {
         check_st_name(&h.name, def.loc())?;
     }
-    emit_hoisted_var(p, &hoisted, model)?;
+    emit_hoisted_var(p, &hoisted, model, array_forms)?;
 
     // Константы модели дублируются внутрь функции.
     let consts = const_params(def, model);
@@ -559,6 +564,7 @@ fn emit_hoisted_var(
     p: &mut Printer,
     hoisted: &[Hoisted],
     model: &ModelNode,
+    array_forms: &[String],
 ) -> Result<(), Diagnostic> {
     if hoisted.is_empty() {
         return Ok(());
@@ -571,7 +577,10 @@ fn emit_hoisted_var(
             continue;
         }
         seen.push(&h.name);
-        let ty = get_st_type(&h.ty, model)?;
+        // Локальный массив, чья форма встречается в параметре функции,
+        // объявляется ТОЙ ЖЕ формой (фича 0409): типы аргумента и параметра
+        // MatIEC сверяет буквально.
+        let ty = crate::generator::st::st_type::local_declaration_type(&h.ty, model, array_forms)?;
         p.ident(&format!("{} : {};", h.name, ty)).nl();
     }
     p.down();
