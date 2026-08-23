@@ -8,7 +8,9 @@ mod plantuml;
 mod rust;
 mod shift_width;
 mod site;
-pub(crate) mod slice;
+// Границы среза живут в семантике (фича 0400): это свойство языка, и
+// разворот среза в аргументе вызова спрашивает те же значения.
+pub(crate) use crate::semantic::slice;
 mod st;
 mod struct_order;
 mod sv;

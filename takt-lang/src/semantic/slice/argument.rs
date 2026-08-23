@@ -1,0 +1,397 @@
+//! Срез массива в АРГУМЕНТЕ вызова — разворот во временную переменную
+//! (фича 0400).
+//!
+//! # Что было
+//!
+//! `first(src[1:3])` при `fn first(a: [u8; 2])` — запись, которую эталон
+//! исполняет (`o = 6`), а **ни одна цель не переводит**: замер 2026-08-23
+//! (`scripts/probe.sh`) дал `CC-022`, `ST-011`, `RS-011`, `SV-002`. То есть
+//! язык имел конструкцию, поведение которой существует только в прогоне.
+//!
+//! # Правило
+//!
+//! Проход заводит перед оператором временное объявление и присваивание, а
+//! аргумент заменяет ссылкой на него:
+//!
+//! ```text
+//! o := first(src[1:3]);
+//! ⇓
+//! var <tmp>: [u8; 2];
+//! <tmp> := src[1:3];
+//! o := first(<tmp>);
+//! ```
+//!
+//! За границей семантики среза в аргументе не существует — печатники целей не
+//! трогаются вовсе (приём 0143/0185/0192/0199).
+//!
+//! ⚠️ **Форма разворота выбрана ЗАМЕРОМ, а не рассуждением.** ADR предлагала
+//! объявление **с инициализатором** (`var t: [T; N] := src[a:b];`) — но срез в
+//! инициализаторе локального объявления не переводит ни одна цель, и обход,
+//! названный там «дешёвым и известным», сам не работал. Работает пара
+//! «объявление + присваивание»: присваивание среза цели переводят с 0355.
+//!
+//! ⚠️ Разворот стал возможен только после трёх смежных починок, каждая из
+//! которых нашлась прогоном инструментов целей: 0409 (локальный массив в
+//! аргументе у `st`), 0410 (лишний `mut` и `needless_late_init` у `rust`),
+//! 0411 (`E0381` на отложенном массиве у `rust`).
+//!
+//! # Имя временной переменной
+//!
+//! `takt_slice_<n>` — и оно **проверяется на занятость**: имя обязано быть
+//! допустимым идентификатором **целевых** языков (первая редакция брала `#…`,
+//! и `cc` отвечал «expected identifier», а `iec2c` — «invalid variable(s)
+//! declaration»), а значит написать такое же может и автор. Занятые имена
+//! собираются со всей модели — объявления и локальные переменные тел —
+//! **до** обхода; молчаливое затенение чужого имени здесь было бы тем же
+//! классом, что `SE-086` у специализации.
+//!
+//! ⚠️ Позиция — `Location::Implicit`: имени в тексте нет, и ложная координата
+//! хуже отсутствующей (класс 0264).
+
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::Rc;
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{
+    ExpressionNode, FunctionDefinitionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode,
+    StatementNode, VariableNode,
+};
+
+/// Префикс имени временной переменной. Обязан быть допустимым идентификатором
+/// **целевых** языков — C, IEC, Rust, SystemVerilog.
+const PREFIX: &str = "takt_slice_";
+
+/// Разворачивает срезы в аргументах вызовов по всему дереву.
+pub(crate) fn expand_slice_arguments(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let mut visited = HashSet::new();
+    let mut taken = HashSet::new();
+    collect_names(model, &mut HashSet::new(), &mut taken);
+    let mut counter = 0usize;
+    let mut ctx = Ctx {
+        counter: &mut counter,
+        taken: &taken,
+    };
+    expand_model(model, &mut visited, &mut ctx)
+}
+
+/// Состояние обхода: счётчик имён и множество занятых.
+struct Ctx<'a> {
+    counter: &'a mut usize,
+    taken: &'a HashSet<String>,
+}
+
+impl Ctx<'_> {
+    /// Свободное имя временной переменной.
+    fn fresh_name(&mut self) -> String {
+        loop {
+            *self.counter += 1;
+            let name = format!("{PREFIX}{}", self.counter);
+            if !self.taken.contains(&name) {
+                return name;
+            }
+        }
+    }
+}
+
+/// Собирает имена, занятые автором: объявления модели и локальные тел.
+fn collect_names(
+    model: &Rc<RefCell<ModelNode>>,
+    visited: &mut HashSet<*const RefCell<ModelNode>>,
+    out: &mut HashSet<String>,
+) {
+    if !visited.insert(Rc::as_ptr(model)) {
+        return;
+    }
+    let b = model.borrow();
+    out.extend(b.variables.keys().cloned());
+    for func in b.functions.values() {
+        if let FunctionDefinitionNode::Local { body, .. } = func {
+            collect_locals(body, out);
+        }
+    }
+    for blk in &b.named_blocks {
+        collect_block_locals(blk, out);
+    }
+    for st in b.states.values() {
+        if let StateNode::Simple { named_blocks, .. } | StateNode::Implement { named_blocks, .. } =
+            st
+        {
+            for blk in named_blocks {
+                collect_block_locals(blk, out);
+            }
+        }
+    }
+    let nested: Vec<Rc<RefCell<ModelNode>>> = b.models.values().cloned().collect();
+    drop(b);
+    for child in &nested {
+        collect_names(child, visited, out);
+    }
+}
+
+fn collect_block_locals(blk: &NamedCodeBlockDefinitionNode, out: &mut HashSet<String>) {
+    match blk {
+        NamedCodeBlockDefinitionNode::Enter { body, .. }
+        | NamedCodeBlockDefinitionNode::Exit { body, .. }
+        | NamedCodeBlockDefinitionNode::Always { body, .. }
+        | NamedCodeBlockDefinitionNode::Unknown { body, .. }
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => collect_locals(body, out),
+        NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {}
+    }
+}
+
+/// Имена локальных объявлений тела.
+///
+/// ⚠️ Обход **не** исчерпывающий: пропущенная форма даёт лишь риск столкнуться
+/// с чужим именем, а не порчу вывода, — и обе стороны здесь безопасны.
+fn collect_locals(stmt: &StatementNode, out: &mut HashSet<String>) {
+    match stmt {
+        StatementNode::Variable(name, _, _, _) => {
+            out.insert(name.clone());
+        }
+        StatementNode::Block(items) => items.iter().for_each(|s| collect_locals(s, out)),
+        StatementNode::If { then_, else_, .. } => {
+            collect_locals(then_, out);
+            if let Some(alt) = else_ {
+                collect_locals(alt, out);
+            }
+        }
+        StatementNode::Loop { body, .. } => collect_locals(body, out),
+        StatementNode::For { init, body, .. } => {
+            if let Some(i) = init {
+                collect_locals(i, out);
+            }
+            collect_locals(body, out);
+        }
+        StatementNode::Match { arms, .. } => arms.iter().for_each(|a| collect_locals(&a.body, out)),
+        _ => {}
+    }
+}
+
+fn expand_model(
+    model: &Rc<RefCell<ModelNode>>,
+    visited: &mut HashSet<*const RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+) -> Result<(), Diagnostic> {
+    if !visited.insert(Rc::as_ptr(model)) {
+        return Ok(()); // разделяемая под-модель уже обойдена
+    }
+    let nested: Vec<Rc<RefCell<ModelNode>>> = model.borrow().models.values().cloned().collect();
+    expand_bodies(model, ctx)?;
+    for child in &nested {
+        expand_model(child, visited, ctx)?;
+    }
+    Ok(())
+}
+
+/// Обходит тела ОДНОЙ модели.
+///
+/// ⚠️ Тела **изымаются** на время обхода (`mem::take`) и возвращаются на
+/// место: тип базы читает `ModelNode`, и изменяемое заимствование модели этого
+/// не допускает (тот же приём, что в `type_node::fixed_body`).
+fn expand_bodies(model: &Rc<RefCell<ModelNode>>, ctx: &mut Ctx<'_>) -> Result<(), Diagnostic> {
+    let (mut functions, mut named_blocks, mut states) = {
+        let mut b = model.borrow_mut();
+        (
+            std::mem::take(&mut b.functions),
+            std::mem::take(&mut b.named_blocks),
+            std::mem::take(&mut b.states),
+        )
+    };
+    {
+        let borrowed = model.borrow();
+        for func in functions.values_mut() {
+            if let FunctionDefinitionNode::Local { body, .. } = func {
+                expand_stmt(body, &borrowed, model, ctx);
+            }
+        }
+        for blk in named_blocks.iter_mut() {
+            expand_block(blk, &borrowed, model, ctx);
+        }
+        for st in states.values_mut() {
+            match st {
+                StateNode::Simple { named_blocks, .. }
+                | StateNode::Implement { named_blocks, .. } => {
+                    for blk in named_blocks.iter_mut() {
+                        expand_block(blk, &borrowed, model, ctx);
+                    }
+                }
+                StateNode::Unresolved => {}
+            }
+        }
+    }
+    let mut b = model.borrow_mut();
+    b.functions = functions;
+    b.named_blocks = named_blocks;
+    b.states = states;
+    Ok(())
+}
+
+fn expand_block(
+    blk: &mut NamedCodeBlockDefinitionNode,
+    model: &ModelNode,
+    owner: &Rc<RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+) {
+    match blk {
+        NamedCodeBlockDefinitionNode::Enter { body, .. }
+        | NamedCodeBlockDefinitionNode::Exit { body, .. }
+        | NamedCodeBlockDefinitionNode::Always { body, .. }
+        | NamedCodeBlockDefinitionNode::Unknown { body, .. }
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => expand_stmt(body, model, owner, ctx),
+        NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {}
+    }
+}
+
+/// Обходит оператор; развернуть срез можно **только внутри блока** — там есть
+/// куда вставить объявление и присваивание.
+fn expand_stmt(
+    stmt: &mut StatementNode,
+    model: &ModelNode,
+    owner: &Rc<RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+) {
+    match stmt {
+        StatementNode::Block(items) => {
+            let mut out: Vec<StatementNode> = Vec::with_capacity(items.len());
+            for mut item in std::mem::take(items) {
+                expand_stmt(&mut item, model, owner, ctx);
+                let mut prelude = Vec::new();
+                lift_in_statement(&mut item, model, owner, ctx, &mut prelude);
+                out.extend(prelude);
+                out.push(item);
+            }
+            *items = out;
+        }
+        StatementNode::If { then_, else_, .. } => {
+            expand_stmt(then_, model, owner, ctx);
+            if let Some(alt) = else_ {
+                expand_stmt(alt, model, owner, ctx);
+            }
+        }
+        StatementNode::Loop { body, .. } => expand_stmt(body, model, owner, ctx),
+        StatementNode::For { init, body, .. } => {
+            if let Some(i) = init {
+                expand_stmt(i, model, owner, ctx);
+            }
+            expand_stmt(body, model, owner, ctx);
+        }
+        StatementNode::Match { arms, .. } => {
+            for arm in arms.iter_mut() {
+                expand_stmt(&mut arm.body, model, owner, ctx);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Выносит срезы-аргументы одного оператора в `prelude`.
+fn lift_in_statement(
+    stmt: &mut StatementNode,
+    model: &ModelNode,
+    owner: &Rc<RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+    prelude: &mut Vec<StatementNode>,
+) {
+    match stmt {
+        // Позиция берётся у САМОГО оператора (0264): у выражения её нет, и
+        // синтетическое присваивание обязано указывать туда же, куда исходное.
+        StatementNode::Expression(expr, loc) => {
+            let at = *loc;
+            lift_in_expr(expr, model, owner, ctx, prelude, at)
+        }
+        StatementNode::Return(Some(expr)) => {
+            lift_in_expr(expr, model, owner, ctx, prelude, Location::Implicit)
+        }
+        StatementNode::Variable(_, _, Some(init), loc) => {
+            let at = *loc;
+            lift_in_expr(init, model, owner, ctx, prelude, at)
+        }
+        _ => {}
+    }
+}
+
+/// Спускается по выражению и заменяет срез-аргумент ссылкой на временную.
+fn lift_in_expr(
+    expr: &mut ExpressionNode,
+    model: &ModelNode,
+    owner: &Rc<RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+    prelude: &mut Vec<StatementNode>,
+    loc: Location,
+) {
+    match expr {
+        ExpressionNode::Function(_, args) => {
+            for arg in args.iter_mut() {
+                // Сперва вложенные вызовы: `outer(inner(src[0:2]))`.
+                lift_in_expr(arg, model, owner, ctx, prelude, loc);
+                let Some(replacement) = lift_slice(arg, model, owner, ctx, prelude, loc) else {
+                    continue;
+                };
+                *arg = replacement;
+            }
+        }
+        ExpressionNode::Assign(target, value) => {
+            lift_in_expr(target, model, owner, ctx, prelude, loc);
+            lift_in_expr(value, model, owner, ctx, prelude, loc);
+        }
+        ExpressionNode::Parenthesis(inner) => lift_in_expr(inner, model, owner, ctx, prelude, loc),
+        // Прочие формы обходить не нужно: вызов с аргументом-срезом либо стоит
+        // здесь, либо внутри вызова, разобранного выше. Пропущенная форма даёт
+        // ПРЕЖНЕЕ поведение (отказ цели), а не порчу вывода.
+        _ => {}
+    }
+}
+
+/// Строит временную переменную для среза, если это он.
+///
+/// `None` — аргумент срезом не является либо срез поэлементно невыразим
+/// (бит-вектор, 0078): пусть отвечает прежний путь.
+fn lift_slice(
+    arg: &ExpressionNode,
+    model: &ModelNode,
+    owner: &Rc<RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+    prelude: &mut Vec<StatementNode>,
+    loc: Location,
+) -> Option<ExpressionNode> {
+    let ExpressionNode::ArraySlice(base, from, to) = arg else {
+        return None;
+    };
+    // Длина источника и тип элемента — у общего носителя (0355/0358): второго
+    // знания о срезе не заводится.
+    let src_ty = crate::semantic::validate::base_type::base_type(base, model)?;
+    let src_len = super::elementwise_len(&src_ty)?;
+    let TypeNode::Array(_, elem) = &src_ty else {
+        return None;
+    };
+    let (_, len) = super::bounds(*from, *to, src_len);
+    let ty = TypeNode::Array(len, elem.clone());
+
+    let name = ctx.fresh_name();
+    // Объявление БЕЗ инициализатора: срез в инициализаторе локального
+    // объявления не переводит ни одна цель, а присваивание — переводят все
+    // (0355). Форма выбрана замером.
+    prelude.push(StatementNode::Variable(
+        name.clone(),
+        ty.clone(),
+        None,
+        Location::Implicit,
+    ));
+    let cell = Rc::new(RefCell::new(VariableNode::Simple {
+        upper: Some(Rc::downgrade(owner)),
+        loc: Location::Implicit,
+        name: name.clone(),
+        ty,
+        expr: ExpressionNode::None,
+    }));
+    prelude.push(StatementNode::Expression(
+        Box::new(ExpressionNode::Assign(
+            Box::new(ExpressionNode::Variable(Rc::clone(&cell))),
+            Box::new(arg.clone()),
+        )),
+        loc,
+    ));
+    Some(ExpressionNode::Variable(cell))
+}
