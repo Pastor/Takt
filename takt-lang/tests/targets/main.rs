@@ -54,6 +54,7 @@ mod port_composite_tests;
 mod port_initial_value_hdl_tests;
 mod rust_default_impl_tests;
 mod rust_default_value_tests;
+mod rust_deferred_init_tests;
 mod rust_enum_compare_tests;
 mod rust_index_cast_tests;
 mod rust_live_tests;

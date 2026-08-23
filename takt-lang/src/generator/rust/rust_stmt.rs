@@ -570,10 +570,44 @@ pub(crate) fn print_statement_ctx(
                     ))
                     .nl();
                 }
-                // Без инициализатора: `let mut x: T;` законно, пока до первого
-                // чтения будет запись — это проверит компилятор Rust, а не мы.
+                // Без инициализатора: первое присваивание — это ИНИЦИАЛИЗАЦИЯ,
+                // а не изменение, и `mut` ей не нужен (фича 0410). Прежде он
+                // печатался безусловно, и `rustc -D warnings` отвечал
+                // «variable does not need to be mutable» при **нулевом** коде
+                // возврата `taktc` — на записи, которую исполняют эталон и
+                // остальные семь целей.
+                //
+                // Признак — тот же `deferred_needs_mut` (0216), которым уже
+                // живёт соседняя ветвь мёртвого инициализатора: второе знание
+                // о том, «что считать изменением», разошлось бы с первым.
                 None => {
-                    p.ident(&format!("let mut {}: {};", ident, ty_name)).nl();
+                    let deferred_mut = if deferred_needs_mut(name, rest) {
+                        "mut "
+                    } else {
+                        ""
+                    };
+                    // Свёртка в `let x: T = …` — та же, что у ветви мёртвого
+                    // инициализатора: отложенное объявление clippy не
+                    // принимает (`needless_late_init`), и это **отказ** гейта
+                    // цели под `-D warnings`.
+                    match rest.first().and_then(|next| fold_assignment(name, next)) {
+                        Some(folded) => {
+                            let value = print_folded(&folded, ty, scope)?;
+                            p.ident(&format!(
+                                "let {}{}: {} = {};",
+                                deferred_mut, ident, ty_name, value
+                            ))
+                            .nl();
+                            scope.locals.push(name.clone());
+                            // Присваивание поглощено — печатать его второй раз
+                            // значило бы присвоить дважды.
+                            return Ok(1);
+                        }
+                        None => {
+                            p.ident(&format!("let {}{}: {};", deferred_mut, ident, ty_name))
+                                .nl();
+                        }
+                    }
                 }
             }
             // Имя объявлено в ТЕЛЕ и полем модели не является. Без этой записи
