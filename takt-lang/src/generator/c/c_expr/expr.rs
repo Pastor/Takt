@@ -49,6 +49,19 @@ fn shift_saturated(
     };
     let threshold = bits.max(32);
     match shift_width::literal_saturation(direction, value, amount, threshold) {
+        // Величина не литерал — насыщение считает ХЕЛПЕР (фича 0416): при
+        // компиляции она неизвестна, а `v >> n` при `n >= ширины` в C есть UB.
+        // Замер 2026-08-23 (`u32`, значение `0xFFFFFFFF`): при `n = 32`
+        // прошивка давала **4294967295**, при `n = 48` — **65535** (сдвиг по
+        // модулю 32), тогда как эталон, `rust`, `st` и `sv` дают 0; `cc -Wall
+        // -Wextra -Werror` при этом молчит, а результат одинаков на `-O0` и
+        // `-O2`. То есть расхождение ЗНАЧЕНИЙ, невидимое инструментам.
+        shift_width::Saturation::AsIs if shift_width::literal(amount).is_none() => {
+            variable_shift(
+                printer, map, owner, params, direction, value, amount, threshold,
+            )?;
+            Ok(true)
+        }
         shift_width::Saturation::AsIs => Ok(false),
         shift_width::Saturation::Zero => {
             printer.print("0");
@@ -63,6 +76,41 @@ fn shift_saturated(
             Ok(true)
         }
     }
+}
+
+/// Сдвиг на ПЕРЕМЕННУЮ величину — через хелпер (фича 0416).
+///
+/// ⚠️ Тернарным оператором на месте это не выразить: `(n >= 32 ? 0 : (v >> n))`
+/// печатает величину **дважды**, а вычисление операнда в языке Takt бывает с
+/// эффектом (вызов функции пишет в переменные модели). Тот же довод, по
+/// которому цель `rust` выражает знаковый сдвиг через `min` (0334).
+///
+/// ⚠️ Порог — ширина **продвинутого** типа (`max(32, W)`, C11 6.5.7p3), как у
+/// литеральной величины (0392): на узких типах продвижение до `int` уже даёт
+/// ответ эталона, и хелпер там менял бы вывод корпуса без нужды.
+#[allow(clippy::too_many_arguments)]
+fn variable_shift(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    direction: Direction,
+    value: &ExpressionNode,
+    amount: &ExpressionNode,
+    threshold: u8,
+) -> Result<(), Diagnostic> {
+    let signed = shift_width::signed_of(value);
+    let (name, cast) = match (direction, signed) {
+        (Direction::Left, _) => ("takt_shl", "(uint64_t)"),
+        (Direction::Right, false) => ("takt_shr_u", "(uint64_t)"),
+        (Direction::Right, true) => ("takt_shr_i", "(int64_t)"),
+    };
+    printer.print(&format!("{name}({cast}("));
+    generate_expr(printer, map, owner, params.clone(), value, 0, false)?;
+    printer.print("), (uint64_t)(");
+    generate_expr(printer, map, owner, params, amount, 0, false)?;
+    printer.print(&format!("), {threshold})"));
+    Ok(())
 }
 
 /// Генерирует C-выражение из семантического узла с учётом приоритета операторов.
