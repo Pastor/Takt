@@ -78,6 +78,7 @@ mod conformance_st_per_tick_tests;
 mod conformance_st_tests;
 mod conformance_state_observe_tests;
 mod conformance_state_of_model_tests;
+mod conformance_struct_array_field_tests;
 mod conformance_struct_assign_tests;
 mod conformance_struct_tests;
 mod conformance_sv_array_tests;

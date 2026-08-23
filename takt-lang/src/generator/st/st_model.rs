@@ -415,6 +415,30 @@ fn emit_deferred_inits(p: &mut Printer, model: &ModelNode) -> Result<(), Diagnos
         let VariableNode::Simple { ty, expr, .. } = var else {
             continue;
         };
+        // Поле-МАССИВ внутри структуры (фича 0422): агрегат объявления его не
+        // принимает, значение кладётся здесь — до входа в стартовое состояние.
+        if let TypeNode::Struct(struct_name) = ty
+            && let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = expr
+            && let Some(def) = model.search_struct(struct_name)
+        {
+            for ((field, field_ty), value) in def.fields.iter().zip(items) {
+                if !crate::generator::st::st_decl::field_is_deferred(field_ty) {
+                    continue;
+                }
+                let (ExpressionNode::Initializer(inner) | ExpressionNode::Array(inner)) = value
+                else {
+                    continue;
+                };
+                let TypeNode::Array(_, elem_ty) = field_ty else {
+                    continue;
+                };
+                for (index, item) in inner.iter().enumerate() {
+                    let text = crate::generator::st::st_expr::coerce_to(item, elem_ty, model)?;
+                    p.ident(&format!("{name}.{field}[{index}] := {text};")).nl();
+                }
+            }
+            continue;
+        }
         let TypeNode::Array(_, elem) = ty else {
             continue;
         };

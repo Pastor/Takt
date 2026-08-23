@@ -487,10 +487,30 @@ fn struct_init(items: &[ExpressionNode], name: &str, model: &ModelNode) -> Optio
     }
     let mut parts = Vec::with_capacity(items.len());
     for ((field, field_ty), value) in def.fields.iter().zip(items) {
+        // Поле-МАССИВ из агрегата исключается (фича 0422): `iec2c` не
+        // принимает `(data := [1, 2, 3], n := 0)` — «Initialization element
+        // identifier (data) is not declared in referenced structure/FB scope».
+        // Значение такого поля кладут операторы первого скана, как у массива
+        // структур (0343). Частичный инициализатор законен — проверено пробой.
+        if field_is_deferred(field_ty) {
+            continue;
+        }
         let printed = literal_init(value, field_ty, Some(model))?;
         parts.push(format!("{field} := {printed}"));
     }
+    // Все поля отложены — инициализатора у объявления нет вовсе.
+    if parts.is_empty() {
+        return None;
+    }
     Some(format!("({})", parts.join(", ")))
+}
+
+/// Поле структуры, которое объявление IEC выразить не может (фича 0422).
+///
+/// ⚠️ `[bit;N≤64]` сюда НЕ входит: по правилу 0078 это упакованный скаляр, и
+/// печатается он числом — признак берётся из того же слоя, что и печать типа.
+pub(crate) fn field_is_deferred(ty: &TypeNode) -> bool {
+    matches!(ty, TypeNode::Array(..)) && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
 }
 
 /// Возвращает инициализатор, если выражение — литерал, а тип — скалярный.
