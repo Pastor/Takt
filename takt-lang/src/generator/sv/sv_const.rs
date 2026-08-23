@@ -301,10 +301,18 @@ pub(in crate::generator::sv) fn reset_value(
             // нулём — тем же, что даёт эталон переменной без инициализатора;
             // меняется только форма записи.
             if let TypeNode::Enum(enum_name) = ty {
-                return Ok(enum_literal(ty, 0, enums).unwrap_or_else(|| {
-                    // Варианта со значением 0 нет — печатается приведение:
-                    // мнемоники для нуля не существует, а подстановка первого
-                    // варианта изменила бы ЗНАЧЕНИЕ (у эталона там ноль).
+                // ⚠️ Умолчание перечисления — ПЕРВЫЙ по тексту вариант (фича
+                // 0391, решение заказчика): ноль может не принадлежать набору,
+                // и тогда регистр стартует со значения, о котором не знает ни
+                // один `case`. Правило одно на эталон и три цели — носитель
+                // `semantic::enum_default`.
+                let default = enums
+                    .get(enum_name)
+                    .and_then(|variants| crate::semantic::enum_default(variants))
+                    .map(|(variant, _)| sv_enum_variant_name(enum_name, &variant));
+                return Ok(default.unwrap_or_else(|| {
+                    // Перечисления без вариантов не бывает (`SE-105`, 0172) —
+                    // ветвь защитная, приведение здесь прежнее поведение.
                     format!(
                         "{}'(0)",
                         crate::generator::sv::sv_type::sv_enum_type_name(enum_name)

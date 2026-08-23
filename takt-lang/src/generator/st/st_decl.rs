@@ -555,6 +555,17 @@ pub(crate) fn literal_init(
     if !packed_bits && matches!(ty, TypeNode::Array(_, _) | TypeNode::Struct(_)) {
         return None;
     }
+    // Переменная перечислимого типа БЕЗ инициализатора получает ПЕРВЫЙ по
+    // тексту вариант (фича 0391, решение заказчика). Прежде она объявлялась
+    // без значения, то есть нулём по правилу холодного старта ПЛК, — а ноль
+    // может не принадлежать набору (`enum Mode { Idle = 5, Work = 7 }`).
+    // Правило одно на эталон и три цели: носитель `semantic::enum_default`.
+    if let (TypeNode::Enum(enum_name), ExpressionNode::None, Some(owner)) = (ty, expr, model)
+        && let Some(def) = owner.search_enum(enum_name)
+        && let Some((_, value)) = crate::semantic::enum_default(&def.variants)
+    {
+        return Some(value.to_string());
+    }
     match expr {
         // `bit`/`bool` в IEC — `BOOL`: числовой литерал 0/1 ему не присвоить,
         // нужны `FALSE`/`TRUE`.
