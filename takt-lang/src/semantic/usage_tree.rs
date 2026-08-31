@@ -12,11 +12,12 @@
 //! одно — обход тот же, меняется лишь объём дерева.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
-use crate::semantic::ModelNode;
+use crate::parser::ast::Member;
 use crate::semantic::unused::{UsageSet, collect_model_usage, compute_usage};
+use crate::semantic::{ExpressionNode, ModelNode, StatementNode};
 
 /// Имена, которые модель и её дети по вызову **читают** (фича 0452).
 ///
@@ -76,4 +77,66 @@ pub fn usage_with_implementations(model: &Rc<RefCell<ModelNode>>) -> UsageSet {
         ));
     }
     set
+}
+
+/// Поля структурного порта, которые модель и её дети по вызову **читают**
+/// (фича 0453).
+///
+/// # Зачем
+///
+/// Структурный порт цель `sv` печатает **одним** сигналом (решение 0390), и
+/// `verilator` под `-Wall` считает непрочитанные биты ошибкой
+/// (`UNUSEDSIGNAL`) — то есть вывод отвергает гейт самой цели, хотя модель
+/// вправе читать часть полей. Признак нужен цели, чтобы погасить остаток
+/// поглотителем.
+///
+/// ⚠️ Считаются **чтения**: запись поля местом чтения не является (правило
+/// 0387), а у входного порта записи и не бывает (`SE-026`).
+pub fn read_port_fields(model: &Rc<RefCell<ModelNode>>, port: &str) -> BTreeSet<String> {
+    let mut fields = BTreeSet::new();
+    let mut queue = vec![Rc::clone(model)];
+    let mut seen: HashSet<*const RefCell<ModelNode>> = HashSet::new();
+    while let Some(current) = queue.pop() {
+        if !seen.insert(Rc::as_ptr(&current)) {
+            continue;
+        }
+        {
+            let b = current.borrow();
+            for block in &b.named_blocks {
+                collect_fields(block.statement(), port, &mut fields);
+            }
+            for state in b.states.values() {
+                for block in state.named_blocks() {
+                    collect_fields(block.statement(), port, &mut fields);
+                }
+            }
+            for func in b.functions.values() {
+                if let crate::semantic::FunctionDefinitionNode::Local { body, .. } = func {
+                    collect_fields(Some(body), port, &mut fields);
+                }
+            }
+            queue.extend(b.models.values().cloned());
+        }
+        let children = crate::semantic::extend::implementation_children(&current.borrow());
+        queue.extend(children);
+    }
+    fields
+}
+
+/// Собирает поля порта, читаемые оператором.
+fn collect_fields(stmt: Option<&StatementNode>, port: &str, out: &mut BTreeSet<String>) {
+    let Some(stmt) = stmt else {
+        return;
+    };
+    crate::semantic::walk::walk_stmt_exprs(stmt, &mut |expr| {
+        let ExpressionNode::BitAccess(base, Member::Identifier(field)) = expr else {
+            return;
+        };
+        let ExpressionNode::Variable(cell) = &**base else {
+            return;
+        };
+        if cell.borrow().name() == port {
+            out.insert(field.name.clone());
+        }
+    });
 }

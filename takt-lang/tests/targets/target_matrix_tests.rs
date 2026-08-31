@@ -55,6 +55,7 @@ pub(crate) fn refusal(target: &str, touch: Touch, kind: Kind) -> Option<&'static
             Touch::PortWrite
             | Touch::PortInit
             | Touch::PortRead
+            | Touch::PortReadPartial
             | Touch::InoutRead
             | Touch::InoutWrite,
             Kind::Enum,
@@ -64,6 +65,7 @@ pub(crate) fn refusal(target: &str, touch: Touch, kind: Kind) -> Option<&'static
             Touch::PortWrite
             | Touch::PortInit
             | Touch::PortRead
+            | Touch::PortReadPartial
             | Touch::InoutRead
             | Touch::InoutWrite,
             Kind::Enum,
