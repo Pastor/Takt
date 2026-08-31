@@ -178,6 +178,12 @@ pub(crate) enum Touch {
     ImportNestedModel,
     /// ТРАНЗИТИВНЫЙ импорт: подключённый файл сам подключает третий.
     ImportTransitive,
+    /// Модель с ПАРАМЕТРОМ, взятая с настройкой по умолчанию (фича 0185).
+    ParameterDefault,
+    /// То же с аргументом в месте инстанцирования: `M(portion := 7)`.
+    ParameterArgument,
+    /// Аргумент — константное ВЫРАЖЕНИЕ: `M(portion := BASE + 2)`.
+    ParameterExpression,
     /// ЧАСТИЧНОЕ чтение входного порта: у составного значения читается одна
     /// часть (фича 0453).
     ///
@@ -188,7 +194,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 22] = [
+pub(crate) const TOUCHES: [Touch; 25] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -211,6 +217,9 @@ pub(crate) const TOUCHES: [Touch; 22] = [
     Touch::ImportModel,
     Touch::ImportNestedModel,
     Touch::ImportTransitive,
+    Touch::ParameterDefault,
+    Touch::ParameterArgument,
+    Touch::ParameterExpression,
 ];
 
 impl Touch {
@@ -238,6 +247,9 @@ impl Touch {
             Touch::ImportModel => "import_model",
             Touch::ImportNestedModel => "import_nested_model",
             Touch::ImportTransitive => "import_transitive",
+            Touch::ParameterDefault => "parameter_default",
+            Touch::ParameterArgument => "parameter_argument",
+            Touch::ParameterExpression => "parameter_expression",
         }
     }
 
@@ -308,7 +320,11 @@ impl Touch {
             | Touch::ImportSelective
             | Touch::ImportModel
             | Touch::ImportNestedModel
-            | Touch::ImportTransitive => String::new(),
+            | Touch::ImportTransitive
+            // Виды с параметром строят свой исходник целиком (см. `source`).
+            | Touch::ParameterDefault
+            | Touch::ParameterArgument
+            | Touch::ParameterExpression => String::new(),
         }
     }
 
@@ -471,6 +487,19 @@ pub(crate) fn library_files(touch: Touch) -> Vec<ProbeFile> {
     }
 }
 
+/// Аргумент инстанцирования для видов с параметром; `None` — вид не про них.
+///
+/// ⚠️ Форма реализации (`Shape`) к этим видам не применяется: модель-донор
+/// **сама** и есть реализация состояния обёртки.
+fn parameter_argument(touch: Touch) -> Option<&'static str> {
+    match touch {
+        Touch::ParameterDefault => Some(""),
+        Touch::ParameterArgument => Some("(portion := 7)"),
+        Touch::ParameterExpression => Some("(portion := BASE + 2)"),
+        _ => None,
+    }
+}
+
 /// Строка подключения для вида обращения.
 fn import_line(touch: Touch) -> &'static str {
     match touch {
@@ -490,6 +519,18 @@ pub(crate) fn source(shape: Shape, touch: Touch, kind: Kind) -> String {
     text.push_str(import_line(touch));
     text.push_str(kind.type_declaration());
     text.push_str(&touch.root_declarations(kind));
+    // Модель с параметром: донор объявляет `parameter`, обёртка берёт его
+    // реализацией — с настройкой по умолчанию либо с аргументом (фича 0185).
+    if let Some(argument) = parameter_argument(touch) {
+        text.push_str("const BASE: u8 := 4;\n\n");
+        text.push_str(
+            "model Feeder {\n    parameter portion: u8 := 3;\n    var k: u8 := 0;\n    out led: u8 at 0x40000100;\n    start Go {\n        always {\n            k := k + portion;\n            led := k;\n        }\n        next Done;\n    }\n    state Done;\n}\n\n",
+        );
+        text.push_str(&format!(
+            "model Wrap {{\n    start Only = Feeder{argument};\n}}\n\nstart Main = Wrap;\n"
+        ));
+        return text;
+    }
     // Модель подключённого файла реализует состояние обёртки — формы
     // реализации к ней не применяются: она сама и есть реализация.
     if matches!(touch, Touch::ImportModel | Touch::ImportNestedModel) {

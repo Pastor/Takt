@@ -52,6 +52,11 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         // Реализация подключённой моделью: обёртка своих обращений не имеет.
         | Touch::ImportModel
         | Touch::ImportNestedModel => (false, false),
+        // Донор с параметром пишет свой порт — указатель нужен ему и обёртке,
+        // которая его тикает (замер 0457).
+        Touch::ParameterDefault | Touch::ParameterArgument | Touch::ParameterExpression => {
+            (false, true)
+        }
         // Порт читается и пишется в ТАКТЕ — через HAL корня; у входного и
         // двунаправленного это так же, как у выходного (замер 0452).
         Touch::PortWrite
