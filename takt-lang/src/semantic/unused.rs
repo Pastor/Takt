@@ -109,6 +109,69 @@ pub fn compute_usage(model: Rc<RefCell<ModelNode>>) -> UsageSet {
     set
 }
 
+/// Использование имён моделью **и её детьми по вызову** (фича 0450).
+///
+/// Дети по вызову — это не только вложенные модели (их обходит
+/// [`compute_usage`]), но и те, которыми **реализованы состояния** (`= M`,
+/// `A | B`, `A + B`): их тик зовёт эта же модель и передаёт им своё
+/// окружение.
+///
+/// ⚠️ Носитель общий у двух целей. `rust` спрашивает его о параметре
+/// `&mut Shared`, `st` — о секции `VAR_IN_OUT`; до фичи 0450 каждая считала
+/// сама через `compute_usage`, реализаций не видела, и обе печатали вывод,
+/// который отвергают их инструменты при НУЛЕВОМ коде возврата `taktc`:
+/// `rustc` — «cannot find value `shared` in this scope», `iec2c` —
+/// «Ambiguous enumerate value or Variable not declared in this scope».
+pub fn usage_with_implementations(model: &Rc<RefCell<ModelNode>>) -> UsageSet {
+    let mut set = compute_usage(Rc::clone(model));
+    let mut queue = crate::semantic::extend::implementation_children(&model.borrow());
+    let mut seen: HashSet<*const RefCell<ModelNode>> = HashSet::new();
+    while let Some(child) = queue.pop() {
+        if !seen.insert(Rc::as_ptr(&child)) {
+            continue;
+        }
+        let child_usage = compute_usage(Rc::clone(&child));
+        set.variables.extend(child_usage.variables);
+        set.constants.extend(child_usage.constants);
+        set.ports.extend(child_usage.ports);
+        set.functions.extend(child_usage.functions);
+        queue.extend(crate::semantic::extend::implementation_children(
+            &child.borrow(),
+        ));
+    }
+    set
+}
+
+/// Использование имён в ТЕЛАХ модели — без инициализаторов объявлений.
+///
+/// # Зачем отдельно от [`compute_usage`]
+///
+/// Порождённый код делит работу модели надвое: инициализация (начальные
+/// значения, запись выходного порта с `:=`) и такт (блоки состояний, условия
+/// рёбер, вызовы). Признаки целей задаются **на функцию**, а не на модель
+/// (у `c` — фича 0419, у `rust` — 0450): параметр, нужный только `init`, в
+/// `tick` даёт `unused variable` под `-D warnings`, то есть отказ гейта цели.
+///
+/// ⚠️ Обход тот же, что у [`compute_usage`], но без объявлений — второго
+/// правила «что считать упоминанием» здесь не заводится.
+pub(crate) fn body_usage(model: &Rc<RefCell<ModelNode>>) -> UsageSet {
+    let mut set = UsageSet::default();
+    let b = model.borrow();
+    for block in &b.named_blocks {
+        usage_from_named_block(block, &mut set);
+    }
+    for state in b.states.values() {
+        usage_from_state(state, &mut set);
+    }
+    for cond in b.conditions.values() {
+        usage_from_condition_node(cond, &mut set);
+    }
+    for func in b.functions.values() {
+        usage_from_func(func, &mut set);
+    }
+    set
+}
+
 /// Рекурсивный обход модели для сбора множества используемых имён.
 fn collect_model_usage(model: Rc<RefCell<ModelNode>>, set: &mut UsageSet) {
     let borrowed = model.borrow();

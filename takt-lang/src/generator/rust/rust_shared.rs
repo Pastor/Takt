@@ -34,7 +34,12 @@ pub(crate) fn shared_variables(map: &RustMap, sub: &Name) -> Vec<(String, TypeNo
     let Ok(sub_model) = map.raw_model_at(sub.clone()) else {
         return Vec::new();
     };
-    let usage = crate::semantic::unused::compute_usage(std::rc::Rc::clone(&sub_model));
+    // Использование считает общий носитель: он видит и вложенные модели, и те,
+    // которыми РЕАЛИЗОВАНЫ состояния (фича 0450). Прежде обёртка, чья
+    // реализация читает переменную корня, печаталась без параметра, а её тело
+    // звало `self.only.tick(shared)` — `rustc` отвечал «cannot find value
+    // `shared` in this scope» при нулевом коде возврата `taktc`.
+    let usage = crate::semantic::unused::usage_with_implementations(&sub_model);
     let own: Vec<String> = sub_model.borrow().variables.keys().cloned().collect();
     let root_ref = root.borrow();
 

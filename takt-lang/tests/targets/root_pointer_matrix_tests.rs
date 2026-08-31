@@ -27,179 +27,19 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Вид обращения к корню — то, ради чего указатель и печатается.
-#[derive(Clone, Copy, PartialEq)]
-enum Touch {
-    /// Обращений нет вовсе.
-    None,
-    /// Запись выходного порта: она идёт через HAL корня.
-    PortWrite,
-    /// Чтение переменной, объявленной в корне.
-    SharedRead,
-    /// Выходной порт с начальным значением: запись печатается в `_init`.
-    PortInit,
-    /// Инициализатор переменной читает объявление корня.
-    VarInit,
-    /// Порт пишет ФУНКЦИЯ модели — признак обязан быть транзитивным.
-    Transitive,
-    /// Профиль «часы» и выдержка `after Nms`: метка сравнивается с
-    /// `main->now_ms(…)` и в такте, и при входе.
-    ClockAfter,
-    /// Вызов `extern fn`: печатается свободной функцией — контроль, что
-    /// признак не срабатывает «на всякий случай».
-    ExternCall,
-}
+use super::matrix_probes::{SHAPES, TOUCHES, Touch, source};
 
-impl Touch {
-    fn name(self) -> &'static str {
-        match self {
-            Touch::None => "none",
-            Touch::PortWrite => "port_write",
-            Touch::SharedRead => "shared_read",
-            Touch::PortInit => "port_init",
-            Touch::VarInit => "var_init",
-            Touch::Transitive => "transitive",
-            Touch::ClockAfter => "clock_after",
-            Touch::ExternCall => "extern_call",
-        }
+/// Ожидание: печатается ли `main` функциям `(_init, _tick)`.
+///
+/// ⚠️ Снято прогоном 2026-08-31, а не выведено из кода признака: сторож,
+/// повторяющий реализацию, доказывает лишь сам себя.
+fn expects(touch: Touch) -> (bool, bool) {
+    match touch {
+        Touch::None | Touch::ExternCall => (false, false),
+        Touch::PortWrite | Touch::SharedRead | Touch::Transitive => (false, true),
+        Touch::PortInit | Touch::VarInit => (true, false),
+        Touch::ClockAfter => (true, true),
     }
-
-    /// Объявления файла (корня), нужные этому виду.
-    fn root_declarations(self) -> &'static str {
-        match self {
-            Touch::SharedRead | Touch::VarInit => "var shared: u8 := 3;\n\n",
-            _ => "",
-        }
-    }
-
-    /// Объявления модели, делающей обращение.
-    fn declarations(self) -> &'static str {
-        match self {
-            Touch::PortWrite | Touch::Transitive => "    out a: u8;\n",
-            Touch::PortInit => "    out a: u8 := 7;\n",
-            Touch::VarInit => "    var seed: u8 := shared;\n",
-            Touch::ExternCall => "    extern fn probe_value() -> u8;\n",
-            _ => "",
-        }
-    }
-
-    /// Функции модели, делающей обращение.
-    fn functions(self) -> &'static str {
-        match self {
-            Touch::Transitive => {
-                "    fn bump(v: u8) -> u8 {\n        a := v;\n        return v + 1;\n    }\n"
-            }
-            _ => "",
-        }
-    }
-
-    /// Тело блока `always`.
-    fn body(self) -> &'static str {
-        match self {
-            Touch::PortWrite => "            k := k + 1;\n            a := k;\n",
-            Touch::SharedRead => "            k := k + shared;\n",
-            Touch::VarInit => "            k := k + seed;\n",
-            Touch::Transitive => "            k := bump(k);\n",
-            Touch::ExternCall => "            k := probe_value();\n",
-            _ => "            k := k + 1;\n",
-        }
-    }
-
-    /// Переход из стартового состояния.
-    fn transition(self) -> &'static str {
-        match self {
-            // Выдержка — единственный вид, которому нужен ход времени.
-            Touch::ClockAfter => "        ref Done: after 5ms;\n",
-            _ => "        next Done;\n",
-        }
-    }
-
-    /// Ожидание: печатается ли `main` функциям `(_init, _tick)`.
-    ///
-    /// ⚠️ Снято прогоном 2026-08-31, а не выведено из кода признака.
-    fn expects(self) -> (bool, bool) {
-        match self {
-            Touch::None | Touch::ExternCall => (false, false),
-            Touch::PortWrite | Touch::SharedRead | Touch::Transitive => (false, true),
-            Touch::PortInit | Touch::VarInit => (true, false),
-            Touch::ClockAfter => (true, true),
-        }
-    }
-}
-
-/// Форма, которой состояние обёртки реализовано.
-#[derive(Clone, Copy, PartialEq)]
-enum Shape {
-    /// Обычное состояние: обращение делает сама обёртка.
-    Plain,
-    /// `= First` — одна модель.
-    Single,
-    /// `= First | Second` — параллель.
-    Parallel,
-    /// `= First + Second` — цепочка.
-    Chain,
-    /// `= (First + Second) | Third` — вложенная композиция.
-    Nested,
-}
-
-impl Shape {
-    fn name(self) -> &'static str {
-        match self {
-            Shape::Plain => "plain",
-            Shape::Single => "single",
-            Shape::Parallel => "parallel",
-            Shape::Chain => "chain",
-            Shape::Nested => "nested",
-        }
-    }
-
-    fn implementation(self) -> &'static str {
-        match self {
-            Shape::Plain => "",
-            Shape::Single => "First",
-            Shape::Parallel => "First | Second",
-            Shape::Chain => "First + Second",
-            Shape::Nested => "(First + Second) | Third",
-        }
-    }
-}
-
-/// Модель-спутник без единого обращения к корню.
-fn plain_child(name: &str) -> String {
-    format!(
-        "model {name} {{\n    var k: u8 := 0;\n    start Go {{\n        always {{\n            k := k + 1;\n        }}\n        next Done;\n    }}\n    state Done;\n}}\n\n"
-    )
-}
-
-/// Модель, делающая обращение вида `touch`.
-fn touching_model(name: &str, touch: Touch) -> String {
-    format!(
-        "model {name} {{\n    var k: u8 := 0;\n{decl}{funcs}    start Go {{\n        always {{\n{body}        }}\n{transition}    }}\n    state Done;\n}}\n\n",
-        decl = touch.declarations(),
-        funcs = touch.functions(),
-        body = touch.body(),
-        transition = touch.transition(),
-    )
-}
-
-/// Собирает исходник: обращение живёт в `First` (либо в самой обёртке).
-fn source(shape: Shape, touch: Touch) -> String {
-    let mut text = String::new();
-    text.push_str(touch.root_declarations());
-    if shape == Shape::Plain {
-        // Обращение делает сама обёртка: спутники не нужны.
-        text.push_str(&touching_model("Wrap", touch));
-    } else {
-        text.push_str(&touching_model("First", touch));
-        text.push_str(&plain_child("Second"));
-        text.push_str(&plain_child("Third"));
-        text.push_str(&format!(
-            "model Wrap {{\n    start Only = {};\n}}\n\n",
-            shape.implementation()
-        ));
-    }
-    text.push_str("start Main = Wrap;\n");
-    text
 }
 
 /// Уникальный по тесту каталог (инвариант 0190/0429).
@@ -288,24 +128,6 @@ fn root_pointer_is_exact_for_every_shape_and_touch() {
         eprintln!("cc недоступен — сплошной сторож пропущен");
         return;
     }
-    const TOUCHES: [Touch; 8] = [
-        Touch::None,
-        Touch::PortWrite,
-        Touch::SharedRead,
-        Touch::PortInit,
-        Touch::VarInit,
-        Touch::Transitive,
-        Touch::ClockAfter,
-        Touch::ExternCall,
-    ];
-    const SHAPES: [Shape; 5] = [
-        Shape::Plain,
-        Shape::Single,
-        Shape::Parallel,
-        Shape::Chain,
-        Shape::Nested,
-    ];
-
     let mut failures: Vec<String> = Vec::new();
     for shape in SHAPES {
         for touch in TOUCHES {
@@ -316,7 +138,7 @@ fn root_pointer_is_exact_for_every_shape_and_touch() {
                 failures.push(format!("{tag}: cc отверг вывод:\n{err}"));
                 continue;
             }
-            let (init_expected, tick_expected) = touch.expects();
+            let (init_expected, tick_expected) = expects(touch);
             let init_actual = has_root_parameter(&text, "ProbeWrap_init");
             let tick_actual = has_root_parameter(&text, "ProbeWrap_tick");
             if init_actual != init_expected {
