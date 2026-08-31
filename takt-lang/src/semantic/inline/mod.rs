@@ -60,6 +60,7 @@ use crate::semantic::{
     StatementNode, VariableNode,
 };
 
+mod early;
 mod rename;
 
 /// Префикс имён подстановки. Обязан быть допустимым идентификатором **целевых**
@@ -383,18 +384,41 @@ fn expand_call(
     if !wanted(raw, body, &name, ctx) {
         return None;
     }
-    let (head, tail) = split_tail_return(body)?;
-
     let index = ctx.fresh.next_index();
+    let ret_name = fresh_local(ctx, index, "ret");
+    // Форма подстановки: хвостовой возврат подставляется прямо, ранний — через
+    // признак выхода (фича 0446). Обе формы строит один носитель, и он же
+    // отвечает судье атрибута (`SE-128`).
+    let body_stmts = match split_tail_return(body) {
+        Some((head, value)) => tail_form(&head, value, &ret_name, ret, loc),
+        None => {
+            let borrowed = owner.borrow();
+            // ⚠️ Препятствие спрашивается ЗДЕСЬ, а не только у судьи атрибута:
+            // под эвристикой отказа быть не должно, а подставить такое тело
+            // нельзя. Прежде `return` из цикла доезжал до тела состояния —
+            // цель `c` печатала `return` посреди `tick`, то есть **выход из
+            // такта** (замер 2026-08-31, найдено прогоном).
+            if early::obstacle(body, ret, &borrowed).is_some() {
+                return None;
+            }
+            let done_name = fresh_local(ctx, index, "done");
+            early::lower(body, &ret_name, ret, &done_name, owner, &borrowed)?.stmts
+        }
+    };
+
     let mut map = HashMap::new();
     for (param, _) in params {
         map.insert(param.clone(), fresh_local(ctx, index, param));
     }
     let mut locals = HashSet::new();
-    for stmt in &head {
+    for stmt in &body_stmts {
         crate::semantic::fresh::collect_locals(stmt, &mut locals);
     }
+    // ⚠️ Имена самой подстановки переименовывать не надо: они уже свежие.
     for local in locals {
+        if local.starts_with(PREFIX) {
+            continue;
+        }
         let renamed = fresh_local(ctx, index, &local);
         map.insert(local, renamed);
     }
@@ -407,20 +431,10 @@ fn expand_call(
             Location::Implicit,
         ));
     }
-    for stmt in head {
-        let mut copy = stmt.clone();
-        rename::rename_stmt(&mut copy, &map, owner);
-        prelude.push(copy);
+    for mut stmt in body_stmts {
+        rename::rename_stmt(&mut stmt, &map, owner);
+        prelude.push(stmt);
     }
-    let mut value = tail;
-    rename::rename_expr(&mut value, &map, owner);
-    let ret_name = fresh_local(ctx, index, "ret");
-    prelude.push(StatementNode::Variable(
-        ret_name.clone(),
-        ret.clone(),
-        Some(Box::new(value)),
-        loc_or_implicit(loc),
-    ));
     Some(ExpressionNode::Variable(Rc::new(RefCell::new(
         VariableNode::Simple {
             upper: Some(Rc::downgrade(owner)),
@@ -430,6 +444,29 @@ fn expand_call(
             expr: ExpressionNode::None,
         },
     ))))
+}
+
+/// Форма подстановки для тела с ХВОСТОВЫМ возвратом: операторы тела, затем
+/// объявление результата с инициализатором.
+///
+/// ⚠️ Объявление именно **с инициализатором**: отложенная инициализация даёт у
+/// цели `rust` `clippy::needless_late_init`, а лишний `mut` — «variable does
+/// not need to be mutable» (уроки 0410).
+fn tail_form(
+    head: &[StatementNode],
+    value: ExpressionNode,
+    ret_name: &str,
+    ret: &TypeNode,
+    loc: Location,
+) -> Vec<StatementNode> {
+    let mut out = head.to_vec();
+    out.push(StatementNode::Variable(
+        ret_name.to_string(),
+        ret.clone(),
+        Some(Box::new(value)),
+        loc_or_implicit(loc),
+    ));
+    out
 }
 
 /// Позиция синтетического объявления: место вызова, если оно известно.
@@ -526,15 +563,29 @@ pub(crate) fn has_return(stmt: &StatementNode) -> bool {
     }
 }
 
+/// Препятствие подстановке, если оно есть.
+///
+/// Хвостовой возврат подставляется прямо, ранний — через признак выхода (фича
+/// 0446); отказ остаётся лишь там, где формы нет вовсе.
+pub(crate) fn inline_obstacle(
+    body: &StatementNode,
+    ret: &TypeNode,
+    model: &ModelNode,
+) -> Option<early::Obstacle> {
+    if split_tail_return(body).is_some() {
+        return None;
+    }
+    early::obstacle(body, ret, model)
+}
+
 /// Отказ `SE-128`: `[inline]` на функции, тело которой подстановкой не
-/// выражается.
-pub(crate) fn early_return_refusal(loc: Location, name: &str) -> Diagnostic {
+/// выражается. Причина **называется** — по ней автор понимает, что менять.
+pub(crate) fn inline_refusal(loc: Location, name: &str, why: early::Obstacle) -> Diagnostic {
     Diagnostic::error(
         loc,
         format!(
-            "функция '{name}' помечена атрибутом 'inline', но её тело не сводится к подстановке: \
-             возврат обязан быть единственным и последним оператором (обход — свести ветвления к \
-             одному 'return' в конце либо снять атрибут)"
+            "функция '{name}' помечена атрибутом 'inline', но её тело не сводится к подстановке: {}",
+            why.text()
         ),
     )
     .with_code("SE-128")

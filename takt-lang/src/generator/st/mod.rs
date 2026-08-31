@@ -219,7 +219,7 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
     // в IEC 61131-3 тип обязан быть известен к моменту использования.
     st_decl_types::emit_struct_types(&mut p, &blocks, &shared_arrays)?;
     // Функции — тоже раньше: опережающие ссылки в ST нестандартны (`iec2c -p`).
-    let mut warnings = st_func::emit_functions(&mut p, &blocks)?;
+    let mut warnings = st_func::emit_functions(&mut p, &blocks, map.usage())?;
 
     // Формы массивов из параметров функций (фича 0348) считаются один раз:
     // список общий у продюсера типов и у каждого объявления.

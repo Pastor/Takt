@@ -205,9 +205,10 @@ start Main = Worker;
     );
 }
 
+/// Ранний возврат ПОДСТАВЛЯЕТСЯ — через признак выхода (фича 0446).
 #[test]
-fn early_return_under_inline_is_refused() {
-    let dir = work_dir("se128");
+fn early_return_is_inlined_through_a_flag() {
+    let dir = work_dir("early");
     let source = "\
 model Worker {
     var n: u8 := 0;
@@ -216,26 +217,122 @@ model Worker {
         if v > 3 {
             return 1;
         }
-        return v;
+        return v * 10;
     }
     start Run {
-        always { led := pick(n); }
+        always { n := n + 1; led := pick(n); }
         ref Run: n < 3;
     }
 }
 start Main = Worker;
 ";
-    let (ok, stderr, _) = compile(&dir, source, "c", "c", &[]);
-    assert!(!ok, "нехвостовой возврат под 'inline' принят молча");
+    let (ok, stderr, text) = compile(&dir, source, "c", "c", &[]);
+    assert!(ok, "ранний возврат под 'inline' отвергнут: {stderr}");
     assert!(
-        stderr.contains("SE-128"),
-        "отказ пришёл не тем кодом: {stderr}"
+        !text.contains("ProbeWorker_pick("),
+        "вызов остался — подстановки не произошло:\n{text}"
     );
-    // Контроль: без атрибута та же функция законна — правило судит атрибут, а
-    // не форму тела вообще.
-    let dir = work_dir("se128_control");
-    let (ok, stderr, _) = compile(&dir, &source.replace("[inline] ", ""), "c", "c", &[]);
-    assert!(ok, "функция с ранним возвратом стала незаконной: {stderr}");
+    // Результат объявляется С НАЧАЛЬНЫМ значением: без него `rustc` отвечает
+    // `E0381` (замер 0446).
+    assert!(
+        text.contains("uint8_t takt_inline_1_ret = 0;"),
+        "результат объявлен без начального значения:\n{text}"
+    );
+    assert!(
+        text.contains("takt_inline_1_done = 0;") && text.contains("if (!takt_inline_1_done)"),
+        "признак выхода не заведён:\n{text}"
+    );
+    // Последний выход признак НЕ взводит: мёртвая запись даёт у `rust`
+    // «value assigned is never read» под `-D warnings`.
+    assert_eq!(
+        text.matches("takt_inline_1_done = 1;").count(),
+        1,
+        "признак взводится не один раз — мёртвая запись:\n{text}"
+    );
+}
+
+/// Ветвление, где возвращают ОБЕ ветви: признак не нужен вовсе.
+#[test]
+fn both_branches_return_without_a_flag() {
+    let dir = work_dir("branches");
+    let source = "\
+model Worker {
+    var n: u8 := 0;
+    out led: u8 at 0x40000100;
+    [inline] fn parity(v: u8) -> u8 {
+        if v % 2 = 0 {
+            return 2;
+        } else {
+            return 3;
+        }
+    }
+    start Run {
+        always { n := n + 1; led := parity(n); }
+        ref Run: n < 3;
+    }
+}
+start Main = Worker;
+";
+    let (ok, stderr, text) = compile(&dir, source, "c", "c", &[]);
+    assert!(ok, "компиляция: {stderr}");
+    assert!(
+        !text.contains("takt_inline_1_done"),
+        "признак заведён там, где его никто не читает:\n{text}"
+    );
+}
+
+/// Возврат ВНУТРИ ЦИКЛА — названная граница: под атрибутом отказ, под
+/// эвристикой вызов остаётся вызовом.
+#[test]
+fn return_inside_a_loop_is_refused() {
+    let source = "\
+model Worker {
+    var n: u8 := 0;
+    out led: u8 at 0x40000100;
+    [inline] fn scan(v: u8) -> u8 {
+        for var i: u8 := 0; i < 4; i := i + 1 {
+            if i > v {
+                return i;
+            }
+        }
+        return 0;
+    }
+    start Run {
+        always { n := n + 1; led := scan(n); }
+        ref Run: n < 3;
+    }
+}
+start Main = Worker;
+";
+    let dir = work_dir("se128_loop");
+    let (ok, stderr, _) = compile(&dir, source, "c", "c", &[]);
+    assert!(!ok, "возврат из цикла под 'inline' принят молча");
+    assert!(
+        stderr.contains("SE-128") && stderr.contains("цикл"),
+        "отказ не называет ни кода, ни причины: {stderr}"
+    );
+    // ⚠️ Под ЭВРИСТИКОЙ отказа быть не должно, а подставить такое тело нельзя:
+    // вызов остаётся вызовом. Прежде `return` из цикла доезжал до тела
+    // состояния, и цель `c` печатала `return` посреди `tick` — выход из такта.
+    let dir = work_dir("loop_auto");
+    let plain = source.replace("[inline] ", "");
+    let (ok, stderr, text) = compile(&dir, &plain, "c", "c", &["--inline=auto"]);
+    assert!(ok, "компиляция с эвристикой: {stderr}");
+    assert!(
+        text.contains("ProbeWorker_scan("),
+        "вызов подставлен, хотя тело этого не допускает:\n{text}"
+    );
+    let body = text
+        .split("PROBE_WORKER_RUN: {")
+        .nth(1)
+        .unwrap_or_default()
+        .split("case ")
+        .next()
+        .unwrap_or_default();
+    assert!(
+        !body.contains("return "),
+        "в теле такта появился return — это выход из такта:\n{body}"
+    );
 }
 
 /// Вывод с подстановкой принимают инструменты целей — теми же флагами, что у
