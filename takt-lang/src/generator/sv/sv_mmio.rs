@@ -136,6 +136,14 @@ pub(crate) struct MmioPort {
     width: u32,
     /// Направление: `in` — пишется шиной; `out` — читается шиной.
     direction: PortDirection,
+    /// Значение сброса регистра `in`-порта.
+    ///
+    /// ⚠️ У перечислимого типа это **первый по тексту вариант** (правило 0391),
+    /// а не `'0`: ноль может не принадлежать набору, и `verilator` отвечает
+    /// `ENUMVALUE` (фича 0452 — тот же класс, что 0379, но в регистровом файле).
+    /// Считается при постройке: набор вариантов известен здесь, а печать его
+    /// уже не видит.
+    reset: String,
 }
 
 /// Регистровый файл: адресованные порты и ширины шин.
@@ -254,6 +262,7 @@ impl Mmio {
                 bit,
                 width,
                 direction: resolved.direction,
+                reset: reset_literal(&resolved.ty, &enums),
             });
         }
         // Анонимные ячейки (фича 0189): у них нет объявления, но в регистровом
@@ -281,6 +290,7 @@ impl Mmio {
                 bit: cell.bit,
                 width,
                 direction: PortDirection::Out,
+                reset: reset_literal(&cell.ty, &enums),
             });
         }
 
@@ -390,6 +400,26 @@ fn bit_width(
     }
 }
 
+/// Значение сброса регистра: у перечисления — первый по тексту вариант.
+///
+/// ⚠️ `'0` перечислимому сигналу не годится: ноль может не принадлежать набору
+/// (правило 0391), и `verilator` отвечает `ENUMVALUE`. Тот же класс, что фича
+/// 0379, только там он жил в регистрах автомата, а здесь — в регистровом файле.
+fn reset_literal(ty: &TypeNode, enums: &BTreeMap<String, Vec<(String, i128)>>) -> String {
+    match ty {
+        TypeNode::Enum(name) => enums
+            .get(name)
+            .and_then(|variants| crate::semantic::enum_default(variants))
+            .map(|(variant, _)| {
+                crate::generator::sv::sv_names::sv_enum_variant_name(name, &variant)
+            })
+            // Перечисления без вариантов не бывает (`SE-105`, 0172) — ветвь
+            // защитная.
+            .unwrap_or_else(|| "'0".to_string()),
+        _ => "'0".to_string(),
+    }
+}
+
 /// Число бит, нужное для представления адреса `max_addr` (минимум 1).
 fn address_bits(max_addr: i64) -> u32 {
     let m = max_addr.max(0) as u64;
@@ -479,7 +509,11 @@ pub(crate) fn emit_register_file(p: &mut Printer, mmio: &Mmio) {
         p.ident("if (!rst_n) begin").nl();
         p.up();
         for port in &inputs {
-            p.ident(&format!("{} <= '0;", port.name)).nl();
+            // ⚠️ Перечислимый сигнал сбрасывается СВОИМ умолчанием — первым по
+            // тексту вариантом (правило 0391): `'0` может не принадлежать
+            // набору, и `verilator` отвечает `ENUMVALUE` (тот же класс, что
+            // фича 0379, но в регистровом файле — замер 0452).
+            p.ident(&format!("{} <= {};", port.name, port.reset)).nl();
         }
         p.down();
         p.ident("end else if (reg_wen) begin").nl();
@@ -496,11 +530,22 @@ pub(crate) fn emit_register_file(p: &mut Printer, mmio: &Mmio) {
             p.ident(&format!("{}: begin", addr_literal(*addr, aw))).nl();
             p.up();
             for port in group {
-                p.ident(&format!(
-                    "{} <= reg_wdata[{} +: {}];",
-                    port.name, port.bit, port.width
-                ))
-                .nl();
+                // ⚠️ Перечислимому сигналу СЫРЫЕ БИТЫ не присваиваются:
+                // перечисления в SV строго типизированы, и `verilator`
+                // отвечает `ENUMVALUE` — «Implicit conversion to enum from
+                // 'bit'» (замер 0452). Приведение печатается только ему: у
+                // прочих типов оно было бы шумом.
+                let slice = format!("reg_wdata[{} +: {}]", port.bit, port.width);
+                let value = match &port.ty {
+                    TypeNode::Enum(name) => {
+                        format!(
+                            "{}'({slice})",
+                            crate::generator::sv::sv_type::sv_enum_type_name(name)
+                        )
+                    }
+                    _ => slice,
+                };
+                p.ident(&format!("{} <= {value};", port.name)).nl();
             }
             p.down();
             p.ident("end").nl();

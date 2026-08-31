@@ -463,6 +463,13 @@ pub(crate) struct SvPort {
     pub(crate) init: ExpressionNode,
     /// Позиция объявления — для диагностики о непечатаемом значении сброса.
     pub(crate) loc: Location,
+    /// Читает ли модель этот порт (фича 0452).
+    ///
+    /// ⚠️ Значим только у **двунаправленного**: его сторона `_i` есть вход
+    /// модуля, и если модель порт лишь пишет, `verilator` под `-Wall` отвечает
+    /// `UNUSEDSIGNAL`. У `in` порт по определению читается, у `out` — не
+    /// читается вовсе (`SE-027`).
+    pub(crate) is_read: bool,
 }
 
 /// Порты модуля, разложенные по направлениям.
@@ -507,6 +514,16 @@ pub(crate) fn collect_ports(
 ) -> Result<SvPorts, Diagnostic> {
     let mut ports = SvPorts::default();
     let mut seen: BTreeSet<String> = BTreeSet::new();
+    // Чтения — по всему дереву модели: порт объявлен в одной модели, а читать
+    // его может её ребёнок по вызову (носитель `semantic::unused`, 0450/0452).
+    let mut reads = crate::semantic::unused::UsageSet {
+        reads_only: true,
+        ..Default::default()
+    };
+    for (_, model_rc) in blocks {
+        let of_model = crate::semantic::usage_tree::reads_with_implementations(model_rc);
+        reads.ports.extend(of_model.ports);
+    }
     for (_, model_rc) in blocks {
         let model = model_rc.borrow();
         for var in model.variables.values() {
@@ -556,6 +573,10 @@ pub(crate) fn collect_ports(
                 ty_node: ty.clone(),
                 init: init.clone(),
                 loc: *loc,
+                // Читается ли порт — признак нужен ТОЛЬКО двунаправленному
+                // (фича 0452): его сторона `_i` есть вход модуля, и без чтения
+                // `verilator` под `-Wall` отвечает `UNUSEDSIGNAL`.
+                is_read: reads.ports.contains(name),
             };
             match direction {
                 PortDirection::In => ports.inputs.push(port),
@@ -618,12 +639,18 @@ pub(crate) fn emit_module_header(
     // ровно в тот такт, когда модель записала порт: без него внешние изменения
     // ячейки затирались бы каждым тактом, ведь умолчание выхода — «как есть».
     for port in &ports.inouts {
-        p.ident(&format!(
-            "input  {}, // inout '{}': сторона чтения",
-            port.ty.declare(&inout_in(&port.name)),
-            port.name
-        ))
-        .nl();
+        // ⚠️ Сторона чтения печатается ПО ФАКТУ (фича 0452): у порта, который
+        // модель только пишет, вход модуля никем не используется, и
+        // `verilator` под `-Wall` отвечает `UNUSEDSIGNAL` — то есть вывод
+        // отвергает гейт самой цели.
+        if port.is_read {
+            p.ident(&format!(
+                "input  {}, // inout '{}': сторона чтения",
+                port.ty.declare(&inout_in(&port.name)),
+                port.name
+            ))
+            .nl();
+        }
         p.ident(&format!(
             "output {}, // inout '{}': сторона записи",
             port.ty.declare(&inout_out(&port.name)),
@@ -659,6 +686,9 @@ mod tests {
             ty_node: ty,
             init: ExpressionNode::None,
             loc: loc(),
+            // Порт теста считается читаемым: проверки заголовка смотрят на
+            // форму объявления, а не на признак чтения (он предмет 0452).
+            is_read: true,
         }
     }
 

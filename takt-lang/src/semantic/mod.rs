@@ -1,10 +1,9 @@
 //! Семантические узлы языка Takt.
 //!
-//! Структуры данных, представляющие результат семантического анализа:
-//! [`ModelNode`] — модель (КА или компоновка) со словарями состояний,
-//! переменных, условий, функций и вложенных моделей; [`StateNode`] — состояние
-//! автомата; [`ReferenceNode`] — переход и [`ConditionNode`] — его условие;
-//! [`VariableNode`] — переменная, порт или константа; [`Extend`] — реализация.
+//! Структуры данных результата семантического анализа: [`ModelNode`] — модель
+//! (КА или компоновка) со словарями состояний, переменных, условий, функций и
+//! вложенных моделей; [`StateNode`] — состояние; [`ReferenceNode`] — переход,
+//! [`ConditionNode`] — условие, [`VariableNode`] — переменная, [`Extend`] — реализация.
 
 pub mod bounds_guard;
 mod condition_node;
@@ -60,6 +59,7 @@ pub(crate) mod type_inference;
 pub mod type_node;
 pub(crate) mod type_registry;
 pub mod unused;
+pub mod usage_tree;
 pub mod usages;
 pub(crate) mod validate;
 mod variable;

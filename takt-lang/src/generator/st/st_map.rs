@@ -203,7 +203,7 @@ impl StMap {
         // получал `VAR_IN_OUT`, а его тело звало `only_first0(shared := shared)`
         // — `iec2c` отвечал «Variable not declared in this scope» при нулевом
         // коде возврата `taktc`.
-        let usage = crate::semantic::unused::usage_with_implementations(&sub_model);
+        let usage = crate::semantic::usage_tree::usage_with_implementations(&sub_model);
         let own: Vec<String> = sub_model.borrow().variables.keys().cloned().collect();
         let root_ref = root.borrow();
 

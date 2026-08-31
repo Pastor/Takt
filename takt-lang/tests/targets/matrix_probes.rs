@@ -89,7 +89,12 @@ impl Kind {
         match self {
             Kind::Scalar => format!("            k := k + {name};\n"),
             Kind::Array => format!("            k := k + {name}[1];\n"),
-            Kind::Struct => format!("            k := k + {name}.hi;\n"),
+            // ⚠️ Читаются ОБА поля: у цели `sv` структурный порт остаётся
+            // одним сигналом (0390), и `verilator` под `-Wall` считает
+            // непрочитанные биты ошибкой. Проба проверяет транспорт значения,
+            // а не частичное использование (замер 0452 — тот класс вынесен
+            // кандидатом).
+            Kind::Struct => format!("            k := k + {name}.hi + {name}.lo;\n"),
             // У перечисления арифметики нет: читается СРАВНЕНИЕМ.
             Kind::Enum => {
                 format!(
@@ -131,10 +136,17 @@ pub(crate) enum Touch {
     /// Вызов `extern fn`: печатается свободной функцией — контроль, что
     /// признак не срабатывает «на всякий случай».
     ExternCall,
+    /// Чтение ВХОДНОГО порта: значение приходит извне через HAL корня.
+    PortRead,
+    /// Чтение ДВУНАПРАВЛЕННОГО порта: у цели `sv` это отдельный сигнал `_i`
+    /// (фича 0428).
+    InoutRead,
+    /// Запись двунаправленного порта: сигналы `_o` и строб `_we`.
+    InoutWrite,
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 8] = [
+pub(crate) const TOUCHES: [Touch; 11] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -143,6 +155,9 @@ pub(crate) const TOUCHES: [Touch; 8] = [
     Touch::Transitive,
     Touch::ClockAfter,
     Touch::ExternCall,
+    Touch::PortRead,
+    Touch::InoutRead,
+    Touch::InoutWrite,
 ];
 
 impl Touch {
@@ -156,6 +171,9 @@ impl Touch {
             Touch::Transitive => "transitive",
             Touch::ClockAfter => "clock_after",
             Touch::ExternCall => "extern_call",
+            Touch::PortRead => "port_read",
+            Touch::InoutRead => "inout_read",
+            Touch::InoutWrite => "inout_write",
         }
     }
 
@@ -167,7 +185,13 @@ impl Touch {
     pub(crate) fn varies_by_kind(self) -> bool {
         matches!(
             self,
-            Touch::PortWrite | Touch::SharedRead | Touch::PortInit | Touch::VarInit
+            Touch::PortWrite
+                | Touch::SharedRead
+                | Touch::PortInit
+                | Touch::VarInit
+                | Touch::PortRead
+                | Touch::InoutRead
+                | Touch::InoutWrite
         )
     }
 
@@ -195,8 +219,12 @@ impl Touch {
                 kind.literal()
             ),
             Touch::VarInit => format!("    var seed: {} := shared;\n", kind.type_name()),
+            Touch::PortRead => format!("    in a: {} at 0x40000100;\n", kind.type_name()),
+            Touch::InoutRead | Touch::InoutWrite => {
+                format!("    inout a: {} at 0x40000100;\n", kind.type_name())
+            }
             Touch::ExternCall => "    extern fn probe_value() -> u8;\n".to_string(),
-            _ => String::new(),
+            Touch::None | Touch::SharedRead | Touch::ClockAfter => String::new(),
         }
     }
 
@@ -220,6 +248,8 @@ impl Touch {
             Touch::SharedRead => kind.read_statement("shared"),
             Touch::VarInit => kind.read_statement("seed"),
             Touch::Transitive => "            k := bump(k);\n".to_string(),
+            Touch::PortRead | Touch::InoutRead => kind.read_statement("a"),
+            Touch::InoutWrite => format!("            k := k + 1;\n{}", kind.write_statement("a")),
             Touch::ExternCall => "            k := probe_value();\n".to_string(),
             _ => "            k := k + 1;\n".to_string(),
         }

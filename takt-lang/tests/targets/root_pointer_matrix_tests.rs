@@ -37,7 +37,14 @@ use super::target_matrix_tests::refusal;
 fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
     match touch {
         Touch::None | Touch::ExternCall => (false, false),
-        Touch::PortWrite | Touch::SharedRead | Touch::Transitive => (false, true),
+        // Порт читается и пишется в ТАКТЕ — через HAL корня; у входного и
+        // двунаправленного это так же, как у выходного (замер 0452).
+        Touch::PortWrite
+        | Touch::SharedRead
+        | Touch::Transitive
+        | Touch::PortRead
+        | Touch::InoutRead
+        | Touch::InoutWrite => (false, true),
         Touch::PortInit | Touch::VarInit => (true, false),
         Touch::ClockAfter => (true, true),
     }
