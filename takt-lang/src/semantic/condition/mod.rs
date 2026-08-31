@@ -211,7 +211,11 @@ pub fn resolve_condition(
             let function = model.borrow().search_func(&name);
             let function = match function {
                 Some(f) => f,
-                None => Rc::new(RefCell::new(builtin_function(&id.name)?.clone())),
+                None => Rc::new(RefCell::new(
+                    builtin_function(&id.name)
+                        .map_err(|d| d.at_if_unset(id.loc))?
+                        .clone(),
+                )),
             };
             // Канонизация `S((Модель))` (фича 0074): скобки вокруг модели
             // прозрачны, но обёртка `Parenthesis` ломает распознавание паттерна

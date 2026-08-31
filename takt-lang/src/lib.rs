@@ -234,12 +234,9 @@ pub fn compile_to_c_hal(
     // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
 
     let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
-    if let Some(err) = resolution
-        .diagnostics
-        .iter()
-        .find(|d| d.level == diagnostics::Level::Error)
-    {
-        return Err(err.clone());
+    // Путь ставит ТИП, а не вызов (0212, 0467): иначе `SE-052` без координаты.
+    if let Some(err) = pipeline::first_error(&resolution.diagnostics) {
+        return Err(unit.stamp(err));
     }
 
     let mut hal_options = options.clone();
@@ -465,12 +462,9 @@ pub fn compile_to_st_at(
     lower_for_target(&unit.model, PortSplit::All, true)?;
 
     let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
-    if let Some(err) = resolution
-        .diagnostics
-        .iter()
-        .find(|d| d.level == diagnostics::Level::Error)
-    {
-        return Err(err.clone());
+    // Путь ставит ТИП, а не вызов (0212, 0467): иначе `SE-052` без координаты.
+    if let Some(err) = pipeline::first_error(&resolution.diagnostics) {
+        return Err(unit.stamp(err));
     }
 
     let mut at_options = options.clone();
