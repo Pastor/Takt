@@ -7,11 +7,15 @@
         Takt (Typed, Automata, Known Timing) language support for IntelliJ IDEA:
         <code>.takt</code> file type, syntax highlighting, go to declaration and
         <code>import</code> navigation.<br/>
+        Takt is an educational language: its main purpose is to demonstrate the
+        principles of the automata-based approach to development.<br/>
         <br/>
         Поддержка языка <b>Takt</b> (Typed, Automata, Known Timing) в IntelliJ IDEA:
         распознавание файлов <code>.takt</code>, подсветка синтаксиса, переход к
         декларации и навигация по директивам <code>import</code>. Базовая
-        подсветка лексическая (работает офлайн, в т.ч. в Community).
+        подсветка лексическая (работает офлайн, в т.ч. в Community).<br/>
+        Язык сделан <b>в учебных целях</b>: его основная задача — показать принципы
+        <b>автоматного подхода к разработке</b>.
     ]]></description>
 
     <!-- Диапазон совместимости IDE (sinceBuild/untilBuild) патчится Gradle-плагином

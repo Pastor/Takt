@@ -3,7 +3,7 @@ name = "Takt"
 version = "0.2.0"
 schema_version = 1
 authors = ["khlebnikov.a"]
-description = "Takt FSM language support for Zed: syntax highlighting and code navigation for .takt files"
+description = "Takt FSM language support for Zed: syntax highlighting and code navigation for .takt files. Takt is an educational language: its purpose is to demonstrate the principles of the automata-based approach to development"
 repository = "https://github.com/Pastor/Takt"
 
 languages = ["languages/takt"]
