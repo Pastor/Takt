@@ -12,7 +12,9 @@ pub(crate) fn expression(expr: &ast::Expression) -> Result<String, FormatError> 
     use ast::Expression as E;
     Ok(match expr {
         // ── Литералы и имена ─────────────────────────────────────────────────
-        E::Number(_, n) => n.to_string(),
+        // Число печатается КАК НАПИСАНО (фича 0463): `0xF0` не превращается в
+        // `240`. Тот же принцип, что у литерала длительности ниже.
+        E::Number(loc, n) => super::literal::number(*loc, *n),
         // Литерал длительности печатается как написан (фича 0134): `1m30s` не
         // канонизируется в `90s` — АСД хранит выбор автора.
         E::Duration(_, _, text) => text.clone(),
@@ -146,7 +148,7 @@ fn anon_address(addr: i128, bit: Option<i64>) -> String {
 pub(crate) fn condition(cond: &ast::Condition) -> Result<String, FormatError> {
     use ast::Condition as C;
     Ok(match cond {
-        C::Number(_, n) => n.to_string(),
+        C::Number(loc, n) => super::literal::number(*loc, *n),
         C::Duration(_, _, text) => text.clone(),
         C::After(_, _, text) | C::AfterTicks(_, _, text) => format!("after {text}"),
         // Константная выдержка (фича 0143): печатается вложенное условие как

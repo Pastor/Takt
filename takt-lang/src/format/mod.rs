@@ -26,6 +26,7 @@ mod comments;
 mod expr;
 /// Печать блока `formula` — своего языка внутри Takt (фича 0405).
 mod formula;
+mod literal;
 mod stmt;
 
 use crate::parser::ast;
@@ -367,18 +368,26 @@ pub fn format_source_with_warnings(
 ) -> Result<(String, Vec<crate::diagnostics::Diagnostic>), FormatError> {
     let (model, items) = crate::parse(source, 0).map_err(FormatError::Parse)?;
     let warnings = crate::style::naming_warnings(&model);
-    let mut out = Out::new(source, &items);
-    print_model_body(&mut out, &model)?;
-    // Хвост файла: комментарии после последнего узла.
-    for c in out.comments.rest() {
-        out.line(&c);
-    }
-    // Страховка R2: ни один комментарий не должен остаться непогашенным.
-    debug_assert!(
-        out.comments.is_exhausted(),
-        "комментарий потерян при печати — нарушено требование R2"
-    );
-    Ok((out.finish(), warnings))
+    // Форма записи чисел берётся из исходника (фича 0463): носитель потоковый,
+    // и сбросить его обязаны ВСЕ пути выхода — включая ранний возврат ошибки,
+    // оттого печать вынесена в замыкание.
+    literal::set(source);
+    let printed = (|| {
+        let mut out = Out::new(source, &items);
+        print_model_body(&mut out, &model)?;
+        // Хвост файла: комментарии после последнего узла.
+        for c in out.comments.rest() {
+            out.line(&c);
+        }
+        // Страховка R2: ни один комментарий не должен остаться непогашенным.
+        debug_assert!(
+            out.comments.is_exhausted(),
+            "комментарий потерян при печати — нарушено требование R2"
+        );
+        Ok::<String, FormatError>(out.finish())
+    })();
+    literal::reset();
+    Ok((printed?, warnings))
 }
 
 /// Позиция элемента модели.

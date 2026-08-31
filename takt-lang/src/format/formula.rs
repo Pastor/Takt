@@ -100,7 +100,9 @@ fn expression(node: &ast::FormulaExpression) -> Result<String, FormatError> {
     use ast::FormulaExpression as F;
     Ok(match node {
         F::Bool(_, value, ty) => format!("{value}{}", annotation(ty)),
-        F::Number(_, value, ty) => format!("{value}{}", annotation(ty)),
+        F::Number(loc, value, ty) => {
+            format!("{}{}", super::literal::number(*loc, *value), annotation(ty))
+        }
         F::String(literal, ty) => {
             format!("{}{}", super::expr::one_string(literal), annotation(ty))
         }
