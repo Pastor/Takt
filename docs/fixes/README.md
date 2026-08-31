@@ -62,3 +62,4 @@
 | 0011-01 | 0011 | Сервер не умеет назвать свою версию | [0011-01-lsp-version-flag.md](0011-01-lsp-version-flag.md) |
 | 0190-01 | 0190 | Временные каталоги тестов могут пересекаться | [0190-01-test-temp-dir-collision.md](0190-01-test-temp-dir-collision.md) |
 | 0446-01 | 0446 | collapsible_if на обёртке выхода | [0446-01-inline-early-return.md](0446-01-inline-early-return.md) |
+| 0429-01 | 0429 | Сборка verilator падала при параллельном прогоне | [0429-01-sv-conformance-flake.md](0429-01-sv-conformance-flake.md) |

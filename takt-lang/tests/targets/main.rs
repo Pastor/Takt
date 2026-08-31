@@ -94,5 +94,6 @@ mod sv_tick_read_tests;
 mod target_matrix_tests;
 mod unused_local_tests;
 mod unused_param_targets_tests;
+mod verification_matrix_tests;
 mod wide_bit_vector_tests;
 mod wide_literal_tests;
