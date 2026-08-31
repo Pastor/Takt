@@ -28,7 +28,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::matrix_probes::{Kind, Touch, case_name, cases, library_files, source};
+use super::matrix_probes::{Kind, Shape, Touch, case_name, cases, library_files, source};
 
 /// Ожидание для тройки «цель × вид обращения × форма объявления»: перевод либо
 /// отказ **названным** кодом.
@@ -122,7 +122,7 @@ enum Emitted {
 }
 
 /// Компилирует случай заданной целью.
-fn emit(dir: &Path, target: &str, text: &str, touch: Touch) -> Emitted {
+fn emit(dir: &Path, target: &str, text: &str, touch: Touch, mode: &str) -> Emitted {
     let input = dir.join("probe.takt");
     std::fs::write(&input, text).expect("запись пробы");
     // Подключаемые файлы кладутся РЯДОМ: импорт ищется в каталоге импортёра
@@ -134,6 +134,9 @@ fn emit(dir: &Path, target: &str, text: &str, touch: Touch) -> Emitted {
     let out = Command::new(env!("CARGO_BIN_EXE_taktc"))
         .arg("compile")
         .args(["-t", target])
+        // Режим параметров — часть случая (фича 0457): дефект дубля сигнала у
+        // `sv-mmio` жил только в `specialize`.
+        .arg(format!("--parameters={mode}"))
         .arg(&input)
         .arg("-o")
         .arg(&out_dir)
@@ -151,16 +154,39 @@ fn emit(dir: &Path, target: &str, text: &str, touch: Touch) -> Emitted {
     Emitted::Refused(code)
 }
 
+/// Случаи вместе с режимом `--parameters` (фича 0457).
+///
+/// ⚠️ Второй режим гоняется **только** у видов с параметром: у прочих он вывода
+/// не меняет, и удвоение перебора было бы платой ни за что.
+fn cases_with_modes() -> Vec<(Shape, Touch, Kind, &'static str)> {
+    let mut out = Vec::new();
+    for (shape, touch, kind) in cases() {
+        out.push((shape, touch, kind, "assign"));
+        if matches!(
+            touch,
+            Touch::ParameterDefault | Touch::ParameterArgument | Touch::ParameterExpression
+        ) {
+            out.push((shape, touch, kind, "specialize"));
+        }
+    }
+    out
+}
+
 /// Прогоняет матрицу через одну цель; `check` судит порождённый каталог.
 fn sweep(target: &str, check: &dyn Fn(&Path, &Path, Touch) -> Result<(), String>) -> Vec<String> {
     let mut failures = Vec::new();
-    for (shape, touch, kind) in cases() {
+    for (shape, touch, kind, mode) in cases_with_modes() {
         let name = case_name(shape, touch, kind);
+        let name = if mode == "specialize" {
+            format!("{name}_specialize")
+        } else {
+            name
+        };
         let tag = format!("{target}_{name}");
         let dir = work_dir(&tag);
         let text = source(shape, touch, kind);
         match (
-            emit(&dir, target, &text, touch),
+            emit(&dir, target, &text, touch, mode),
             refusal(target, touch, kind),
         ) {
             (Emitted::Ok(out), None) => {
@@ -189,7 +215,7 @@ fn verdict(target: &str, failures: Vec<String>) {
         failures.is_empty(),
         "цель `{target}`: {} случаев из {} разошлись с ожиданием:\n{}",
         failures.len(),
-        cases().len(),
+        cases_with_modes().len(),
         failures.join("\n")
     );
 }

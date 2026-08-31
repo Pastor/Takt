@@ -249,6 +249,14 @@ impl Mmio {
                 )
                 .with_code("SV-006"));
             }
+            // ⚠️ Имя порта в модуле уникально (то же правило, что у
+            // `collect_ports` цели `sv`): под `--parameters=specialize` копии
+            // модели дают ОДИН порт по одному адресу дважды, и `verilator`
+            // отвечал «Duplicate declaration of signal» при нулевом коде
+            // возврата `taktc` (замер 0457).
+            if ports.iter().any(|p| p.name == *name) {
+                continue;
+            }
             let (init, loc) = inits
                 .get(name)
                 .cloned()
