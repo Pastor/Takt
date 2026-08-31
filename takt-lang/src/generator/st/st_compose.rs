@@ -144,6 +144,14 @@ pub(crate) fn emit_composition(
     };
     let done = emit_branch(p, map, extend, &mut Vec::new(), &ctx, out)?;
 
+    // Табличная форма (фича 0440): выход из состояния печатает таблица, а здесь
+    // остаётся только защёлка готовности — она берётся ПОСЛЕ тика ветвей, ровно
+    // там, где форма `CASE` печатает `IF <готовность> THEN`.
+    if map.fsm_table() {
+        crate::generator::st::st_table::emit_ready_latch(p, state_name, &done, out);
+        return Ok(());
+    }
+
     p.ident(&format!("IF {} THEN", done)).nl();
     p.up();
     emit_state_exit(p, map, state_name, state, model, next, table, out)?;
@@ -181,8 +189,7 @@ fn emit_state_exit(
     if crate::generator::st::st_edges::emit_edges(
         p,
         map,
-        state_name,
-        state,
+        (state_name, state),
         model,
         table,
         out,
@@ -326,6 +333,22 @@ fn emit_chain_case(
         state_name: ctx.state_name,
         prefix: &inner_prefix,
     };
+    // Табличная форма (фича 0440): готовность цепочки защёлкивается ДО машины
+    // шагов — форма `CASE` уходит наружу из ветви `<число шагов>`, то есть на
+    // скане ПОСЛЕ завершения последнего шага. Защёлка повторяет этот момент.
+    // Табличная форма (фича 0440): готовность цепочки защёлкивается ДО машины
+    // шагов — форма `CASE` уходит наружу из ветви `<число шагов>`, то есть на
+    // скане ПОСЛЕ завершения последнего шага. Защёлка повторяет этот момент.
+    if map.fsm_table()
+        && let ChainExit::Parent { .. } = exit
+    {
+        crate::generator::st::st_table::emit_ready_latch(
+            p,
+            ctx.state_name,
+            &format!("{} = {}", counter, items.len()),
+            out,
+        );
+    }
     p.ident(&format!("CASE {} OF", counter)).nl();
     p.up();
     for (i, item) in items.iter().enumerate() {
@@ -347,6 +370,7 @@ fn emit_chain_case(
         next,
         table,
     } = exit
+        && !map.fsm_table()
     {
         p.ident(&format!("{}: (* конкатенация завершена *)", items.len()))
             .nl();

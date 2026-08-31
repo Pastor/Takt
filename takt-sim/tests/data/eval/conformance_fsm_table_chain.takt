@@ -11,7 +11,7 @@ model First {
     start Work {
         always {
             n := n + 1;
-            first_probe := 10 + n;
+            first_probe := n + 10;
         }
         ref Done: n = 2;
     }
@@ -26,7 +26,7 @@ model Second {
     start Work {
         always {
             m := m + 1;
-            second_probe := 20 + m;
+            second_probe := m + 20;
         }
         ref Done: m = 2;
     }
@@ -50,7 +50,7 @@ model Line {
     state Tail {
         always {
             k := k + 1;
-            line_probe := 90 + k;
+            line_probe := k + 90;
         }
         ref Chain: k = 2;
     }

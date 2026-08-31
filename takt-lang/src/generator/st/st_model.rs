@@ -93,7 +93,7 @@ impl StateTable {
     }
 
     /// Номер состояния по имени.
-    fn number_of(&self, name: &str) -> Option<usize> {
+    pub(crate) fn number_of(&self, name: &str) -> Option<usize> {
         self.numbers.get(name).copied()
     }
 }
@@ -168,7 +168,25 @@ pub(crate) fn emit_body(
         let state = raw_state(model, name)?;
         p.ident(&format!("{}: (* {} *)", number, name.local())).nl();
         p.up();
-        emit_state(p, map, name, &state, model, table, &mut out)?;
+        if map.fsm_table() {
+            // Табличная форма (фича 0440): переходы ушли в таблицу, и тело
+            // ветви может остаться пустым — а пустая ветвь `CASE` в IEC
+            // недопустима («invalid statement in case element»). Заполняется
+            // тем же само-присваиванием, что и терминальная ветвь.
+            let mut body = String::new();
+            {
+                let mut buffered = p.fork(&mut body);
+                emit_state(&mut buffered, map, name, &state, model, table, &mut out)?;
+            }
+            if body.trim().is_empty() {
+                p.ident(&format!("state := {}; (* тело ветви пусто *)", number))
+                    .nl();
+            } else {
+                p.print(&body);
+            }
+        } else {
+            emit_state(p, map, name, &state, model, table, &mut out)?;
+        }
         p.down();
     }
 
@@ -182,6 +200,13 @@ pub(crate) fn emit_body(
 
     p.down();
     p.ident("END_CASE;").nl();
+
+    // Табличная форма (фича 0440): переходы просматривает диспетчер — ПОСЛЕ тел
+    // состояний и ДО обновления счётчика сканов, ровно там, где стоял переход
+    // внутри ветви `CASE`.
+    if map.fsm_table() {
+        super::st_table::emit_dispatcher(p, map, element, model, table, &mut out)?;
+    }
 
     // Обновление счётчика сканов (фича 0134, профиль «такты»/выдержка `after Nt`):
     // вход в состояние (state <> prev) сбрасывает счётчик в 1, иначе он растёт —
@@ -295,6 +320,14 @@ fn emit_state(
         StateNode::Unresolved => Vec::new(),
     };
 
+    // Табличная форма (фича 0440): переходы печатает таблица, а в ветви остаётся
+    // только тело такта. Таймеры выдержки — часть тела: их взводит каждый скан
+    // тот же носитель, чьи имена читает страж строки.
+    if map.fsm_table() {
+        super::st_edges::emit_edge_timers(p, map, name, &references, out);
+        return Ok(());
+    }
+
     if references.is_empty() {
         // Состояние без исходящих переходов терминально: исполняет `exit` и
         // уходит в `END` — как `case B` в зонде `exit_probe` (Ф8).
@@ -303,7 +336,7 @@ fn emit_state(
         return Ok(());
     }
 
-    super::st_edges::emit_edges(p, map, name, state, model, table, out, &references)?;
+    super::st_edges::emit_edges(p, map, (name, state), model, table, out, &references)?;
     Ok(())
 }
 

@@ -32,36 +32,15 @@
 //! выход **наружу**. Отказ `CC-025`, которым фича 0435 называла границу,
 //! выведен: входа, который таблицей не выражается, не осталось.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
-use crate::semantic::StateNode;
 use crate::semantic::minimap::{Element, Name, StateExtend};
+
+use crate::generator::table::{self, Row, RowTarget};
 
 use super::c_blocks::generate_named_blocks;
 use super::c_expr::generate_condition_expr;
 use super::c_map::CMap;
-
-/// Строка таблицы переходов до печати.
-struct Row {
-    /// Состояние-источник — константа перечисления.
-    from: String,
-    /// Предикат завершения реализации состояния (`M_is_done(&model->x)`).
-    ///
-    /// `None` у простого состояния: завершать в нём нечего.
-    done: Option<String>,
-    /// Условие ребра, напечатанное в C. `None` — безусловное ребро.
-    cond: Option<String>,
-    /// Состояние-источник: его блоки `exit` исполняются при переходе.
-    exit_state: Rc<RefCell<StateNode>>,
-    /// Состояние-приёмник: его блоки `enter` исполняются при переходе.
-    /// `None` у перехода в `END` — у синтетического состояния блоков нет.
-    enter_state: Option<Rc<RefCell<StateNode>>>,
-    /// Состояние-приёмник — константа перечисления.
-    to: String,
-}
 
 /// Печатает таблицу переходов модели, стражи, действия и диспетчер.
 ///
@@ -73,7 +52,9 @@ pub(super) fn emit_transition_table(
     map: &CMap,
     wants_root: bool,
 ) -> Result<(), Diagnostic> {
-    let collected = rows(model, map)?;
+    // Строки собирает ОБЩИЙ носитель (фича 0440): порядок задан правилами
+    // языка, и цели по нему расходиться нечем. Цели остаётся печать.
+    let collected = expressible_rows(model, map)?;
     let struct_name = model.name().unique_camelcase();
     let table_name = format!("{}_TRANSITIONS", model.name().unique_uppercase_snakecase());
     // Указатель на корень печатается по той же нужде, что у `_tick` (фича
@@ -107,9 +88,14 @@ pub(super) fn emit_transition_table(
 
     let mut cells = Vec::new();
     for (index, row) in collected.iter().enumerate() {
-        let guard = emit_guard(printer, row, &struct_name, &params, index)?;
-        let action = emit_action(printer, row, map, model, &struct_name, &params, index)?;
-        cells.push((row.from.clone(), guard, action, row.to.clone()));
+        let guard = emit_guard(printer, row, map, model, (&struct_name, &params), index)?;
+        let action = emit_action(printer, row, map, model, (&struct_name, &params), index)?;
+        cells.push((
+            row.from.unique_uppercase_snakecase(),
+            guard,
+            action,
+            target_variant(model, row),
+        ));
     }
 
     if cells.is_empty() {
@@ -241,164 +227,36 @@ fn signature(struct_name: &str, map: &CMap, wants_root: bool) -> String {
     }
 }
 
-/// Собирает строки таблицы переходов модели.
+/// Строки таблицы, выразимые целью `c`.
 ///
-/// Порядок — тот же, что у печати `switch` (`c_model::generate_model_tick`):
-/// состояния в порядке `states`, внутри состояния — `ref` в порядке
-/// объявления, затем `next`/`END`.
-fn rows(model: &Element, map: &CMap) -> Result<Vec<Row>, Diagnostic> {
-    let Element::Model {
-        states,
-        name: model_name,
-        ..
-    } = model
-    else {
-        return Err(Diagnostic::error(
-            Location::Codegen,
-            "Элемент не является моделью".to_string(),
-        )
-        .with_code("CC-006"));
-    };
+/// Носитель строк не знает языка цели, поэтому фильтр «завершение реализации
+/// выразимо» живёт здесь: состояние, чью реализацию печать такта не ведёт
+/// (вложенная цепочка шагом), строк не даёт — ровно как в форме `switch`, где
+/// переход ему не печатается вовсе.
+fn expressible_rows(model: &Element, map: &CMap) -> Result<Vec<Row>, Diagnostic> {
     let is_main = model.name().eq(&map.root_name());
-    let mut collected = Vec::new();
-    for state_name in states.iter() {
-        let raw_rc = map.raw_state_at(state_name.clone())?;
-        let Some(element) = map.state_at(state_name.clone()) else {
-            continue; // недостижимое состояние — как и в форме `switch`
+    let mut kept = Vec::new();
+    for row in table::rows(model, map)? {
+        let expressible = match &row.done {
+            None => true,
+            Some((state, extend)) => matches!(
+                done_predicate(extend, state, map, is_main)?,
+                Done::Predicate(_)
+            ),
         };
-        let from = state_name.unique_uppercase_snakecase();
-        // Предикат завершения есть только у состояния с реализацией.
-        let (done, next) = match &element {
-            Element::State { .. } => (None, None),
-            Element::StateExtend { extend, next, .. } => {
-                match done_predicate(extend, state_name, map, is_main)? {
-                    Done::Predicate(text) => (Some(text), Some(next.clone())),
-                    // Реализация, у которой завершения нет вовсе: в форме
-                    // `switch` цель тоже не печатает перехода — состояние
-                    // остаётся в себе. Строк у него нет, и это не отказ.
-                    Done::NoTransition => continue,
-                }
-            }
-            Element::Model { .. } => {
-                unreachable!("CMap::state_at отдаёт только State/StateExtend (фильтр is_state)")
-            }
-        };
-        let closed =
-            push_reference_rows(&mut collected, &raw_rc, &from, &done, states, map, model)?;
-        if closed {
-            // Всё, что за безусловным ребром, недостижимо (фича 0213).
-            continue;
-        }
-        let has_references = !raw_rc.borrow().references().is_empty();
-        match next {
-            Some(next) if !next.local().is_empty() => {
-                let target = map.raw_state_at(next.clone())?;
-                collected.push(Row {
-                    from: from.clone(),
-                    done: done.clone(),
-                    cond: None,
-                    exit_state: Rc::clone(&raw_rc),
-                    enter_state: Some(target),
-                    to: next.unique_uppercase_snakecase(),
-                });
-            }
-            // `END` подставляется только состоянию БЕЗ переходов (правило
-            // 0303): состояние с рёбрами, ни одно из которых не сработало,
-            // остаётся на месте.
-            Some(_) if has_references => {}
-            Some(_) => collected.push(end_row(&from, &done, &raw_rc, model_name)),
-            None => {
-                let terminated = raw_rc.borrow().is_terminated();
-                if terminated && !state_name.local().to_uppercase().eq("END") {
-                    collected.push(end_row(&from, &done, &raw_rc, model_name));
-                }
-            }
+        if expressible {
+            kept.push(row);
         }
     }
-    Ok(collected)
+    Ok(kept)
 }
 
-/// Строка «в терминальное состояние модели»: `exit` источника, затем `END`.
-fn end_row(
-    from: &str,
-    done: &Option<String>,
-    raw_state: &Rc<RefCell<StateNode>>,
-    model_name: &Name,
-) -> Row {
-    Row {
-        from: from.to_string(),
-        done: done.clone(),
-        cond: None,
-        exit_state: Rc::clone(raw_state),
-        enter_state: None,
-        to: format!("{}_END", model_name.unique_uppercase_snakecase()),
+/// Перечислитель состояния-приёмника строки.
+fn target_variant(model: &Element, row: &Row) -> String {
+    match &row.to {
+        RowTarget::State(name) => name.unique_uppercase_snakecase(),
+        RowTarget::End => format!("{}_END", model.name().unique_uppercase_snakecase()),
     }
-}
-
-/// Строки по рёбрам `ref` состояния.
-///
-/// Возвращает `true`, если цепочка закрыта безусловным ребром простого
-/// состояния: дальше строк у него не будет (правило 0213).
-fn push_reference_rows(
-    out: &mut Vec<Row>,
-    raw_state: &Rc<RefCell<StateNode>>,
-    from: &str,
-    done: &Option<String>,
-    states: &[Name],
-    map: &CMap,
-    model: &Element,
-) -> Result<bool, Diagnostic> {
-    let references = raw_state.borrow().references().to_vec();
-    for reference in references {
-        let Some(target) = states.iter().find(|n| n.local() == reference.name).cloned() else {
-            continue; // целевое состояние недостижимо — как и в форме `switch`
-        };
-        let target_raw = map.raw_state_at(target.clone())?;
-        let unconditional = reference.cond.is_unconditional();
-        let cond = if unconditional {
-            None
-        } else {
-            // Отказ печатника доезжает до автора обёрткой `CC-018` — тем же
-            // способом, что в форме `switch` (фича 0236): позиция ребра,
-            // причина заметкой.
-            match generate_condition_expr(&reference.cond, map, model) {
-                Ok(text) => Some(text),
-                Err(di) => {
-                    return Err(Diagnostic::error_with_note(
-                        reference.location,
-                        format!(
-                            "условный переход в состояние '{}' не переводится в C: {}",
-                            target.local(),
-                            di.message
-                        ),
-                        di.loc,
-                        match &di.code {
-                            Some(code) => format!("причина [{}]: {}", code, di.message),
-                            None => format!("причина: {}", di.message),
-                        },
-                    )
-                    .with_code("CC-018"));
-                }
-            }
-        };
-        out.push(Row {
-            from: from.to_string(),
-            done: done.clone(),
-            cond,
-            exit_state: Rc::clone(raw_state),
-            enter_state: Some(target_raw),
-            to: target.unique_uppercase_snakecase(),
-        });
-        // ⚠️ У состояния С РЕАЛИЗАЦИЕЙ безусловное ребро цепочку не закрывает:
-        // его строка всё равно сторожится предикатом завершения, и следующая
-        // строка (`next`/`END`) остаётся достижимой ровно так же, как в форме
-        // `switch` — там `generate_state_transitions` печатает их внутри
-        // `if (is_done)`.
-        if unconditional && done.is_none() {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 /// Ответ о завершении реализации состояния.
@@ -475,14 +333,30 @@ fn done_predicate(
 fn emit_guard(
     printer: &mut Printer,
     row: &Row,
-    struct_name: &str,
-    params: &str,
+    map: &CMap,
+    model: &Element,
+    (struct_name, params): (&str, &str),
     index: usize,
 ) -> Result<Option<String>, Diagnostic> {
-    let text = match (&row.done, &row.cond) {
+    let is_main = model.name().eq(&map.root_name());
+    // Предикат завершения реализации печатает ЦЕЛЬ: носитель строк отдаёт
+    // реализацию как есть, а форма у каждой цели своя (фича 0440).
+    let done = match &row.done {
+        None => None,
+        Some((state, extend)) => match done_predicate(extend, state, map, is_main)? {
+            Done::Predicate(text) => Some(text),
+            // Строки такого состояния отфильтрованы в `expressible_rows`.
+            Done::NoTransition => return Ok(None),
+        },
+    };
+    let cond = match &row.cond {
+        None => None,
+        Some((cond, loc)) => Some(condition_text(cond, *loc, row, map, model)?),
+    };
+    let text = match (done, cond) {
         (None, None) => return Ok(None),
-        (Some(done), None) => done.clone(),
-        (None, Some(cond)) => cond.clone(),
+        (Some(done), None) => done,
+        (None, Some(cond)) => cond,
         (Some(done), Some(cond)) => format!("{done} && ({cond})"),
     };
     let name = format!("{struct_name}_guard_{index}");
@@ -497,6 +371,39 @@ fn emit_guard(
     Ok(Some(name))
 }
 
+/// Печатает условие ребра, оборачивая отказ печатника в `CC-018`.
+///
+/// ⚠️ Позиция — **ребро**, а не место в генераторе: иначе автору негде искать
+/// причину (правило 0264). Причина прикладывается заметкой, как в форме
+/// `switch` (фича 0236).
+fn condition_text(
+    cond: &crate::semantic::ConditionNode,
+    loc: crate::diagnostics::Location,
+    row: &Row,
+    map: &CMap,
+    model: &Element,
+) -> Result<String, Diagnostic> {
+    generate_condition_expr(cond, map, model).map_err(|di| {
+        let target = row
+            .target_name()
+            .map(|n| n.local().to_string())
+            .unwrap_or_else(|| "END".to_string());
+        Diagnostic::error_with_note(
+            loc,
+            format!(
+                "условный переход в состояние '{target}' не переводится в C: {}",
+                di.message
+            ),
+            di.loc,
+            match &di.code {
+                Some(code) => format!("причина [{}]: {}", code, di.message),
+                None => format!("причина: {}", di.message),
+            },
+        )
+        .with_code("CC-018")
+    })
+}
+
 /// Печатает функцию-действие строки (`exit` источника + `enter` приёмника);
 /// `None` — блоков нет, и печатать нечего.
 fn emit_action(
@@ -504,8 +411,7 @@ fn emit_action(
     row: &Row,
     map: &CMap,
     model: &Element,
-    struct_name: &str,
-    params: &str,
+    (struct_name, params): (&str, &str),
     index: usize,
 ) -> Result<Option<String>, Diagnostic> {
     // Тело печатается в буфер: по нему решается, нужна ли функция вообще и

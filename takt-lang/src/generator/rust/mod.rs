@@ -65,6 +65,7 @@ mod rust_shared;
 mod rust_shift;
 mod rust_stmt;
 mod rust_struct;
+mod rust_table;
 mod rust_tick;
 mod rust_time;
 mod rust_type;
@@ -109,7 +110,8 @@ impl AsGenerator for Generator {
             model,
             options.guard_enable,
         )?
-        .with_time_profile(profile);
+        .with_time_profile(profile)
+        .with_fsm(options.fsm);
         let (program, warnings) = generate_program(&map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));

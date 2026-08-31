@@ -563,10 +563,13 @@ pub fn run_compile(args: &[String]) -> i32 {
     // таблицу и получил `switch` (класс 0184 — рапорт об успехе на входе,
     // который не исполнен).
     if options.fsm == crate::generator::FsmForm::Table
-        && !matches!(options.target.as_str(), "c" | "c-hal")
+        && !matches!(
+            options.target.as_str(),
+            "c" | "c-hal" | "rust" | "st" | "st-at"
+        )
     {
         eprintln!(
-            "Ошибка: --fsm=table не поддерживается целью '{}'. Табличную форму автомата печатают цели: c, c-hal",
+            "Ошибка: --fsm=table не поддерживается целью '{}'. Табличную форму автомата печатают цели: c, c-hal, rust, st, st-at",
             options.target
         );
         return 1;

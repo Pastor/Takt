@@ -15,6 +15,7 @@ pub(crate) use crate::semantic::slice;
 mod st;
 mod struct_order;
 mod sv;
+pub(crate) mod table;
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::ModelNode;

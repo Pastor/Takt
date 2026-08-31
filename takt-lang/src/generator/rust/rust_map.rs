@@ -24,6 +24,8 @@ pub(crate) struct RustMap {
     usage: UsageSet,
     /// Эмитить ли guard-проверки (`assert!`) — флаг `--guard-disable` наоборот.
     guard_enable: bool,
+    /// Форма печати автомата (фича 0440): `match` либо таблица переходов.
+    fsm: crate::generator::FsmForm,
     /// Профиль времени (фича 0134): «часы» либо «такты». Разрешается общим слоем
     /// (`resolve_profile`) в `generate` и кладётся сюда — по образцу `CMap`.
     time_profile: TimeProfile,
@@ -46,6 +48,7 @@ impl RustMap {
             map: Map::create(model_rc)?,
             usage,
             guard_enable,
+            fsm: crate::generator::FsmForm::default(),
             time_profile: TimeProfile::default(),
         })
     }
@@ -78,6 +81,17 @@ impl RustMap {
     }
 
     /// Эмитить ли guard-проверки.
+    /// Задаёт форму печати автомата (фича 0440).
+    pub(crate) fn with_fsm(mut self, fsm: crate::generator::FsmForm) -> Self {
+        self.fsm = fsm;
+        self
+    }
+
+    /// Печатается ли автомат таблицей переходов (`--fsm=table`).
+    pub(crate) fn fsm_table(&self) -> bool {
+        self.fsm == crate::generator::FsmForm::Table
+    }
+
     pub(crate) fn guard_enable(&self) -> bool {
         self.guard_enable
     }
@@ -149,5 +163,17 @@ impl RustMap {
                 )
                 .with_code("RS-013")
             })
+    }
+}
+
+/// Карта цели `rust` — источник состояний для общего носителя строк таблицы
+/// (фича 0440).
+impl crate::generator::table::StateSource for RustMap {
+    fn state_element(&self, name: Name) -> Option<Element> {
+        self.state_at(name)
+    }
+
+    fn state_node(&self, name: Name) -> Result<Rc<RefCell<StateNode>>, Diagnostic> {
+        self.raw_state_at(name)
     }
 }

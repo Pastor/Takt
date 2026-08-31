@@ -463,7 +463,7 @@ fn print_usage() {
     eprintln!("                         Флаги --verbose и --quiet взаимоисключающие");
     eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
-    eprintln!("  --fsm=switch|table     Форма автомата в порождённом коде (цели c, c-hal):");
+    eprintln!("  --fsm=switch|table     Форма автомата (цели c, c-hal, rust, st, st-at):");
     eprintln!(
         "                         switch — по умолчанию; table — переходы данными (таблица + диспетчер)"
     );

@@ -187,6 +187,9 @@ pub(crate) fn emit_tick(
         )?;
 
         match &state {
+            // Табличная форма (фича 0440): переходы простого состояния — строки
+            // таблицы, и в теле ветви `match` их не печатается вовсе.
+            Element::State { .. } if map.fsm_table() => {}
             Element::State { .. } => {
                 let emitted = emit_transitions(p, raw, map, table, states, &mut scope, &mut out)?;
                 // Терминальное состояние: переходов нет — уходим в End. Состояние,
@@ -228,12 +231,26 @@ pub(crate) fn emit_tick(
     p.down();
     p.ident("}").nl();
 
+    // Табличная форма (фича 0440): переходы просматривает диспетчер — ПОСЛЕ тел
+    // состояний и ДО обновления счётчика выдержки, ровно там, где стоял переход
+    // внутри ветви `match`.
+    if map.fsm_table() {
+        crate::generator::rust::rust_table::emit_dispatch_call(p, ctx)?;
+    }
+
     // Обновление счётчика/метки времени в КОНЦЕ такта (фича 0134): одним
     // сравнением с `takt_prev_state`, как `c_time::emit_state_time_update`.
     crate::generator::rust::rust_time::emit_tick_update(p, map, model, hal_access)?;
 
     p.down();
     p.ident("}").nl().nl();
+
+    // Табличная форма (фича 0440): стражи, действия и диспетчер печатаются в том
+    // же `impl` сразу за тактом — им нужен ТОТ ЖЕ контекст печати (`scope`), что
+    // и телу такта, и второго его построения быть не должно.
+    if map.fsm_table() {
+        crate::generator::rust::rust_table::emit_methods(p, ctx, &mut scope, warnings)?;
+    }
 
     let _ = (name, element);
     warnings.append(&mut out.warnings);
@@ -480,6 +497,11 @@ fn emit_extend(
             if done.is_empty() {
                 return Ok(());
             }
+            // Табличная форма (фича 0440): внешний переход печатает таблица —
+            // здесь остаётся только тик ветвей.
+            if map.fsm_table() {
+                return Ok(());
+            }
             p.ident(&format!("if {} {{", done.join(" && "))).nl();
             p.up();
             emit_extend_transition(p, ctx, raw, next, scope, out)?;
@@ -530,6 +552,8 @@ fn emit_extend(
                             .nl();
                     }
                     // Последний шаг завершён — уходим из составного состояния.
+                    // В табличной форме этот переход печатает таблица (0440).
+                    None if map.fsm_table() => {}
                     None => emit_extend_transition(p, ctx, raw, next, scope, out)?,
                 }
                 p.down();
