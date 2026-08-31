@@ -164,6 +164,20 @@ pub(crate) enum Touch {
     /// Темпоральное свойство `: [LTL] φ;` — до целей оно не доезжает вовсе
     /// (предмет верификации), и это тоже часть таблицы.
     LtlFormula,
+    /// Вызов функции из ПОДКЛЮЧЁННОГО файла (`import "…";`).
+    ImportFunction,
+    /// То же выборочным импортом: `import { twice } from "…";`.
+    ImportSelective,
+    /// Тип (структура) из подключённого файла.
+    ImportType,
+    /// Модель подключённого файла реализует состояние обёртки — выборочным
+    /// импортом, потому что полный вносит только контейнер файла.
+    ImportModel,
+    /// Полный импорт + попытка взять ВЛОЖЕННУЮ модель: законный отказ
+    /// (`SE-106`), и он часть таблицы.
+    ImportNestedModel,
+    /// ТРАНЗИТИВНЫЙ импорт: подключённый файл сам подключает третий.
+    ImportTransitive,
     /// ЧАСТИЧНОЕ чтение входного порта: у составного значения читается одна
     /// часть (фича 0453).
     ///
@@ -174,7 +188,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 16] = [
+pub(crate) const TOUCHES: [Touch; 22] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -191,6 +205,12 @@ pub(crate) const TOUCHES: [Touch; 16] = [
     Touch::InvariantState,
     Touch::GuardFormula,
     Touch::LtlFormula,
+    Touch::ImportFunction,
+    Touch::ImportSelective,
+    Touch::ImportType,
+    Touch::ImportModel,
+    Touch::ImportNestedModel,
+    Touch::ImportTransitive,
 ];
 
 impl Touch {
@@ -212,6 +232,12 @@ impl Touch {
             Touch::InvariantState => "invariant_state",
             Touch::GuardFormula => "guard_formula",
             Touch::LtlFormula => "ltl_formula",
+            Touch::ImportFunction => "import_function",
+            Touch::ImportSelective => "import_selective",
+            Touch::ImportType => "import_type",
+            Touch::ImportModel => "import_model",
+            Touch::ImportNestedModel => "import_nested_model",
+            Touch::ImportTransitive => "import_transitive",
         }
     }
 
@@ -272,9 +298,17 @@ impl Touch {
             // Темпоральное свойство опирается на ИМЕНОВАННОЕ условие: атом
             // формулы обязан иметь имя (правило 0049).
             Touch::LtlFormula => "    cond Low = k < 200;\n    : [LTL] G Low;\n".to_string(),
-            Touch::None | Touch::SharedRead | Touch::ClockAfter | Touch::InvariantState => {
-                String::new()
-            }
+            // Тип из подключённого файла — объявление обёртки.
+            Touch::ImportType => "    var p: Pair := {1, 2};\n".to_string(),
+            Touch::None
+            | Touch::SharedRead
+            | Touch::ClockAfter
+            | Touch::InvariantState
+            | Touch::ImportFunction
+            | Touch::ImportSelective
+            | Touch::ImportModel
+            | Touch::ImportNestedModel
+            | Touch::ImportTransitive => String::new(),
         }
     }
 
@@ -302,6 +336,11 @@ impl Touch {
             // Читается ОДНА часть значения: у скаляра и перечисления это то же
             // самое, что полное чтение, а у массива и структуры — нет.
             Touch::PortReadPartial => kind.partial_read_statement("a"),
+            Touch::ImportFunction | Touch::ImportSelective => {
+                "            k := twice(k) + 1;\n".to_string()
+            }
+            Touch::ImportType => "            k := k + p.hi;\n".to_string(),
+            Touch::ImportTransitive => "            k := mid_value();\n".to_string(),
             Touch::InoutWrite => format!("            k := k + 1;\n{}", kind.write_statement("a")),
             Touch::ExternCall => "            k := probe_value();\n".to_string(),
             _ => "            k := k + 1;\n".to_string(),
@@ -389,11 +428,84 @@ fn touching_model(name: &str, touch: Touch, kind: Kind) -> String {
     )
 }
 
+/// Файл пробы: имя (без каталога) и содержимое.
+pub(crate) struct ProbeFile {
+    /// Имя файла — им же зовётся модель-контейнер (правило «имя корневой
+    /// модели берётся из имени файла»).
+    pub(crate) name: &'static str,
+    /// Содержимое.
+    pub(crate) text: String,
+}
+
+/// Подключаемые файлы случая: пусто у всех видов, кроме импортов (фича 0456).
+///
+/// ⚠️ Имена библиотек — `helper.takt` и `base.takt`: имя файла становится
+/// именем модели-контейнера, и совпадение с именем пробы (`probe`) дало бы
+/// столкновение, а не проверку импорта.
+pub(crate) fn library_files(touch: Touch) -> Vec<ProbeFile> {
+    let helper = |extra: &str| ProbeFile {
+        name: "helper.takt",
+        text: format!(
+            "struct Pair {{\n    lo: u8,\n    hi: u8\n}}\n\nconst CAP: u8 := 9;\n\nfn twice(v: u8) -> u8 {{\n    return v * 2;\n}}\n\nmodel Engine {{\n    var h: u8 := 0;\n    start Work {{\n        always {{\n            h := h + 1;\n        }}\n        next Done;\n    }}\n    state Done;\n}}\n{extra}"
+        ),
+    };
+    match touch {
+        Touch::ImportFunction
+        | Touch::ImportSelective
+        | Touch::ImportType
+        | Touch::ImportModel
+        | Touch::ImportNestedModel => vec![helper("")],
+        // Транзитивный импорт: подключённый файл сам подключает третий.
+        Touch::ImportTransitive => vec![
+            ProbeFile {
+                name: "base.takt",
+                text: "fn base_value() -> u8 {\n    return 3;\n}\n".to_string(),
+            },
+            ProbeFile {
+                name: "mid.takt",
+                text: "import \"base.takt\";\n\nfn mid_value() -> u8 {\n    return base_value() + 1;\n}\n"
+                    .to_string(),
+            },
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// Строка подключения для вида обращения.
+fn import_line(touch: Touch) -> &'static str {
+    match touch {
+        Touch::ImportFunction | Touch::ImportType | Touch::ImportNestedModel => {
+            "import \"helper.takt\";\n\n"
+        }
+        Touch::ImportSelective => "import { twice } from \"helper.takt\";\n\n",
+        Touch::ImportModel => "import { Engine } from \"helper.takt\";\n\n",
+        Touch::ImportTransitive => "import \"mid.takt\";\n\n",
+        _ => "",
+    }
+}
+
 /// Исходник случая: обращение живёт в `First` (либо в самой обёртке).
 pub(crate) fn source(shape: Shape, touch: Touch, kind: Kind) -> String {
     let mut text = String::new();
+    text.push_str(import_line(touch));
     text.push_str(kind.type_declaration());
     text.push_str(&touch.root_declarations(kind));
+    // Модель подключённого файла реализует состояние обёртки — формы
+    // реализации к ней не применяются: она сама и есть реализация.
+    if matches!(touch, Touch::ImportModel | Touch::ImportNestedModel) {
+        let implementation = if touch == Touch::ImportModel {
+            "Engine"
+        } else {
+            // Полный импорт вносит только контейнер файла; вложенная модель
+            // снаружи не видна — законный отказ, часть таблицы.
+            "Helper"
+        };
+        text.push_str(&format!(
+            "model Wrap {{\n    start Only = {implementation};\n}}\n\n"
+        ));
+        text.push_str("start Main = Wrap;\n");
+        return text;
+    }
     if shape == Shape::Plain {
         // Обращение делает сама обёртка: спутники не нужны.
         text.push_str(&touching_model("Wrap", touch, kind));

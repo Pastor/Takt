@@ -40,7 +40,7 @@ use crate::semantic::{
     NamedCodeBlockDefinitionNode, StateNode, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::rc::Rc;
 
 /// Контекст усыновления: чьи ячейки перепривязываем, к кому и под какими именами.
@@ -56,6 +56,15 @@ struct Adoption {
     missing: BTreeMap<String, Location>,
     /// Уже обойдённые модели (композиция разделяет под-модели по `Rc`).
     visited: HashSet<*const RefCell<ModelNode>>,
+    /// Имена, ЛОКАЛЬНЫЕ для обходимой функции: параметры и объявления её тела
+    /// (фича 0456).
+    ///
+    /// ⚠️ Их ячейки созданы при разрешении в контексте библиотеки и выглядят её
+    /// объявлениями, хотя объявлениями не являются: без этого списка обход тела
+    /// перенесённой функции докладывает о них как о «неимпортированных
+    /// объявлениях» (`SE-074`) — и требует импортировать то, чего библиотека не
+    /// объявляет вовсе.
+    locals: BTreeSet<String>,
     /// Заменять ячейку новой, а не править её на месте (фича 0395).
     ///
     /// ⚠️ У импорта правка на месте верна: ячейка принадлежит библиотеке,
@@ -93,6 +102,7 @@ pub(in crate::semantic) fn adopt_selected_model(
         renames: renames.clone(),
         missing: BTreeMap::new(),
         visited: HashSet::new(),
+        locals: BTreeSet::new(),
         fresh_cells: false,
     };
     // Выбранная модель вносится в дерево импортёра — значит её владелец теперь
@@ -151,6 +161,7 @@ pub(in crate::semantic) fn adopt_specialized_copy(
         renames,
         missing: BTreeMap::new(),
         visited: HashSet::new(),
+        locals: BTreeSet::new(),
         fresh_cells: true,
     };
     adopt_subtree(&mut ctx, copy);
@@ -254,6 +265,7 @@ pub(in crate::semantic) fn adopt_whole_file(
         // сообщения (урок 0195).
         imp.type_locs.extend(type_locs);
     }
+    let mut moved: Vec<String> = Vec::new();
     for (fn_name, mut f) in fns {
         if importer.borrow().functions.contains_key(&fn_name) {
             return Err(Diagnostic::declaration_error(
@@ -269,6 +281,7 @@ pub(in crate::semantic) fn adopt_whole_file(
         if let FunctionDefinitionNode::Local { upper, .. } = &mut f {
             *upper = Some(Rc::downgrade(importer));
         }
+        moved.push(fn_name.clone());
         importer.borrow_mut().functions.insert(fn_name, f);
     }
     library.borrow_mut().functions.clear();
@@ -279,8 +292,24 @@ pub(in crate::semantic) fn adopt_whole_file(
         renames,
         missing: BTreeMap::new(),
         visited: HashSet::new(),
+        locals: BTreeSet::new(),
         fresh_cells: false,
     };
+    // ⚠️ Тела ПЕРЕНЕСЁННЫХ функций обходятся отдельно: к этому моменту они уже
+    // изъяты из библиотеки (`functions.clear()`), и обход её поддерева их не
+    // видит. Без этого ячейки вызовов внутри них оставались привязанными к
+    // прежнему владельцу, и при ТРАНЗИТИВНОМ импорте цели `c` и `st` печатали
+    // определение и вызов с разными префиксами — «call to undeclared function»
+    // при нулевом коде возврата `taktc` (фича 0456).
+    for name in &moved {
+        let mut taken = importer.borrow_mut().functions.remove(name);
+        if let Some(f) = taken.as_mut() {
+            adopt_function(&mut ctx, f);
+        }
+        if let Some(f) = taken {
+            importer.borrow_mut().functions.insert(name.clone(), f);
+        }
+    }
     // Обход начинается с самого корня библиотеки: его состояния и блоки тоже
     // ссылаются на перенесённые объявления.
     adopt_subtree(&mut ctx, library);
@@ -301,6 +330,9 @@ impl Adoption {
     /// под которым объявление живёт у импортёра, — иначе генератор напечатает
     /// доступ к несуществующему полю.
     fn adopt_var_cell(&mut self, cell: &mut Rc<RefCell<VariableNode>>) {
+        if self.locals.contains(cell.borrow().name()) {
+            return; // параметр либо локальная тела — не объявление библиотеки
+        }
         let (owned, name, loc) = {
             let b = cell.borrow();
             (self.is_library_owned(&b), b.name().to_string(), b.loc())
@@ -429,9 +461,45 @@ fn adopt_subtree(ctx: &mut Adoption, model: &Rc<RefCell<ModelNode>>) {
     }
 }
 
+/// Перепривязывает ячейку ВЫЗОВА функции, если её владелец — библиотека.
+///
+/// ⚠️ Ячейка **заменяется**, а не правится на месте: `Rc` разделяется с другими
+/// употреблениями, и правка задела бы их все (тот же приём, что у копии-
+/// специализации, 0395).
+fn adopt_function_cell(ctx: &mut Adoption, cell: &mut Rc<RefCell<FunctionDefinitionNode>>) {
+    let owned = match &*cell.borrow() {
+        FunctionDefinitionNode::Local { upper, .. }
+        | FunctionDefinitionNode::External { upper, .. } => upper
+            .as_ref()
+            .and_then(|w| w.upgrade())
+            .is_some_and(|owner| Rc::ptr_eq(&owner, &ctx.library)),
+        _ => false,
+    };
+    if !owned {
+        return;
+    }
+    let mut copy = cell.borrow().clone();
+    match &mut copy {
+        FunctionDefinitionNode::Local { upper, .. }
+        | FunctionDefinitionNode::External { upper, .. } => {
+            *upper = Some(Rc::downgrade(&ctx.importer));
+        }
+        _ => {}
+    }
+    *cell = Rc::new(RefCell::new(copy));
+}
+
 fn adopt_function(ctx: &mut Adoption, f: &mut FunctionDefinitionNode) {
-    if let FunctionDefinitionNode::Local { body, .. } = f {
+    if let FunctionDefinitionNode::Local { body, params, .. } = f {
+        // Локальные имена функции: параметры плюс объявления тела. Список
+        // собирает общий носитель — второй обход разошёлся бы с первым.
+        let mut locals: BTreeSet<String> = params.iter().map(|(name, _)| name.clone()).collect();
+        let mut declared = std::collections::HashSet::new();
+        crate::semantic::fresh::collect_locals(body, &mut declared);
+        locals.extend(declared);
+        let outer = std::mem::replace(&mut ctx.locals, locals);
         adopt_stmt(ctx, body);
+        ctx.locals = outer;
     }
 }
 
@@ -621,9 +689,19 @@ fn adopt_expr(ctx: &mut Adoption, expr: &mut ExpressionNode) {
             adopt_expr(ctx, e);
             adopt_stmt(ctx, stmt);
         }
-        ExpressionNode::Function(_, args)
-        | ExpressionNode::Array(args)
-        | ExpressionNode::Initializer(args) => {
+        ExpressionNode::Function(def, args) => {
+            // ⚠️ Ячейка ВЫЗОВА перепривязывается наравне с объявлением (фича
+            // 0456). Объявление усыновляет импортёр (`upper = importer`), а в
+            // теле стоит своя `Rc` со старым владельцем — при ТРАНЗИТИВНОМ
+            // импорте цели `c` и `st` печатали определение `Probe_base_value`,
+            // а вызов `ProbeMid_base_value`: `cc` отвечал «call to undeclared
+            // function» при НУЛЕВОМ коде возврата `taktc`.
+            adopt_function_cell(ctx, def);
+            for a in args.iter_mut() {
+                adopt_expr(ctx, a);
+            }
+        }
+        ExpressionNode::Array(args) | ExpressionNode::Initializer(args) => {
             for a in args.iter_mut() {
                 adopt_expr(ctx, a);
             }
