@@ -4,8 +4,7 @@
 //! [`ModelNode`] — модель (КА или компоновка) со словарями состояний,
 //! переменных, условий, функций и вложенных моделей; [`StateNode`] — состояние
 //! автомата; [`ReferenceNode`] — переход и [`ConditionNode`] — его условие;
-//! [`VariableNode`] — переменная, порт или константа с разрешённым типом;
-//! [`Extend`] — реализация модели (ссылка, компоновка).
+//! [`VariableNode`] — переменная, порт или константа; [`Extend`] — реализация.
 
 pub mod bounds_guard;
 mod condition_node;
@@ -38,6 +37,7 @@ pub(crate) mod import; // правила поиска файла нужны и �
 pub mod index;
 pub mod inline;
 pub(crate) mod internal;
+pub mod loop_bounds;
 pub mod lower_float;
 pub mod ltl_check;
 /// Снимок достижимых состояний и моделей — плоская карта [`Map`](minimap::Map).

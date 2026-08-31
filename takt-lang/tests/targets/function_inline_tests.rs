@@ -281,19 +281,63 @@ start Main = Worker;
     );
 }
 
-/// Возврат ВНУТРИ ЦИКЛА — названная граница: под атрибутом отказ, под
-/// эвристикой вызов остаётся вызовом.
+/// Возврат внутри цикла со СТАТИЧЕСКИМИ границами подставляется (фича 0447).
 #[test]
-fn return_inside_a_loop_is_refused() {
+fn return_inside_a_counted_loop_is_inlined() {
+    let source = "\
+model Worker {
+    var n: u8 := 0;
+    out led: u8 at 0x40000100;
+    [inline] fn first_over(v: u8) -> u8 {
+        for var i: u8 := 1; i < 5; i := i + 1 {
+            if i * 3 > v {
+                return i * 10;
+            }
+        }
+        return 99;
+    }
+    start Run {
+        always { n := n + 1; led := first_over(n); }
+        ref Run: n < 3;
+    }
+}
+start Main = Worker;
+";
+    let dir = work_dir("counted_loop");
+    let (ok, stderr, text) = compile(&dir, source, "c", "c", &[]);
+    assert!(ok, "возврат из счётного цикла отвергнут: {stderr}");
+    assert!(
+        !text.contains("ProbeWorker_first_over("),
+        "вызов остался — подстановки не произошло:\n{text}"
+    );
+    // Тело цикла целиком уходит под признак выхода: итерации после возврата
+    // прокручиваются вхолостую, а завершает цикл его собственный счётчик.
+    assert!(
+        text.contains("if (!takt_inline_1_done && ") && text.contains("for ("),
+        "тело цикла не погашено признаком выхода:\n{text}"
+    );
+    // ⚠️ Условие цикла НЕ трогается: конъюнкция с признаком ломает разворот у
+    // цели `sv` (замер 0447 — SV-002 «границы известны на этапе синтеза»).
+    assert!(
+        text.contains("takt_inline_1_i < 5;"),
+        "условие цикла изменено — цель sv перестанет его разворачивать:\n{text}"
+    );
+}
+
+/// Возврат внутри цикла, чьё завершение зависит от ТЕЛА, — названная граница.
+#[test]
+fn return_inside_an_open_loop_is_refused() {
     let source = "\
 model Worker {
     var n: u8 := 0;
     out led: u8 at 0x40000100;
     [inline] fn scan(v: u8) -> u8 {
-        for var i: u8 := 0; i < 4; i := i + 1 {
+        var i: u8 := 0;
+        loop i < 4 {
             if i > v {
                 return i;
             }
+            i := i + 1;
         }
         return 0;
     }
@@ -306,9 +350,9 @@ start Main = Worker;
 ";
     let dir = work_dir("se128_loop");
     let (ok, stderr, _) = compile(&dir, source, "c", "c", &[]);
-    assert!(!ok, "возврат из цикла под 'inline' принят молча");
+    assert!(!ok, "возврат из цикла с открытым концом принят молча");
     assert!(
-        stderr.contains("SE-128") && stderr.contains("цикл"),
+        stderr.contains("SE-128") && stderr.contains("бесконечным"),
         "отказ не называет ни кода, ни причины: {stderr}"
     );
     // ⚠️ Под ЭВРИСТИКОЙ отказа быть не должно, а подставить такое тело нельзя:
@@ -334,6 +378,46 @@ start Main = Worker;
         "в теле такта появился return — это выход из такта:\n{body}"
     );
 }
+
+/// Проба с РАННИМ возвратом и возвратом из цикла — для прогона инструментов.
+///
+/// ⚠️ Отдельная проба нужна потому, что дефект 0446-01 (`clippy::collapsible_if`
+/// на обёртке «выхода ещё не было») жил ровно здесь: основная проба раннего
+/// возврата не содержит, и прогон инструментов его не видел.
+const EARLY_PROBE: &str = "\
+model Worker {
+    var n: u8 := 0;
+    out led: u8 at 0x40000100;
+
+    [inline] fn grade(v: u8) -> u8 {
+        if v > 6 {
+            return 90;
+        }
+        if v > 3 {
+            return 50;
+        }
+        return v;
+    }
+
+    [inline] fn first_over(v: u8) -> u8 {
+        for var i: u8 := 1; i < 5; i := i + 1 {
+            if i * 3 > v {
+                return i * 10;
+            }
+        }
+        return 99;
+    }
+
+    start Run {
+        always {
+            n := n + 1;
+            led := grade(n) + first_over(n);
+        }
+        ref Run: n < 20;
+    }
+}
+start Main = Worker;
+";
 
 /// Вывод с подстановкой принимают инструменты целей — теми же флагами, что у
 /// гейтов предкоммита.
@@ -366,24 +450,28 @@ fn inlined_output_is_accepted_by_target_tools() {
         );
     }
     if tool("clippy-driver") {
-        let dir = work_dir("clippy");
-        let (ok, stderr, _) = compile(&dir, PROBE, "rust", "rs", &[]);
-        assert!(ok, "компиляция: {stderr}");
-        let out = Command::new("clippy-driver")
-            .current_dir(&dir)
-            .args(["--edition", "2021", "--crate-type", "lib", "-D", "warnings"])
-            .arg(dir.join("out").join("probe.rs"))
-            .output()
-            .expect("запуск clippy-driver");
-        assert!(
-            out.status.success(),
-            "clippy отверг вывод с подстановкой:\n{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+        // ⚠️ Обе пробы: обёртка «выхода ещё не было» есть только у второй, и
+        // именно на ней `clippy` отвечал `collapsible_if` (фикс 0446-01).
+        for (tag, source) in [("clippy", PROBE), ("clippy_early", EARLY_PROBE)] {
+            let dir = work_dir(tag);
+            let (ok, stderr, _) = compile(&dir, source, "rust", "rs", &[]);
+            assert!(ok, "компиляция: {stderr}");
+            let out = Command::new("clippy-driver")
+                .current_dir(&dir)
+                .args(["--edition", "2021", "--crate-type", "lib", "-D", "warnings"])
+                .arg(dir.join("out").join("probe.rs"))
+                .output()
+                .expect("запуск clippy-driver");
+            assert!(
+                out.status.success(),
+                "clippy отверг вывод с подстановкой ({tag}):\n{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
     }
     if tool("verilator") {
         let dir = work_dir("verilator");
-        let (ok, stderr, _) = compile(&dir, PROBE, "sv", "sv", &[]);
+        let (ok, stderr, _) = compile(&dir, EARLY_PROBE, "sv", "sv", &[]);
         assert!(ok, "компиляция: {stderr}");
         let out = Command::new("verilator")
             .args(["--lint-only", "-Wall"])

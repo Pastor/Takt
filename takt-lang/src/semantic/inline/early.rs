@@ -49,8 +49,8 @@ use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
 pub(crate) enum Obstacle {
     /// Возврата в теле нет вовсе, а значение функция обязана дать.
     NoReturn,
-    /// Возврат стоит внутри цикла.
-    ReturnInLoop,
+    /// Возврат стоит внутри цикла, чьё завершение зависит от тела.
+    ReturnInOpenLoop,
     /// У типа результата нет представимого начального значения.
     NoDefaultValue,
 }
@@ -60,8 +60,10 @@ impl Obstacle {
     pub(crate) fn text(self) -> &'static str {
         match self {
             Obstacle::NoReturn => "в теле нет ни одного 'return', и значение брать неоткуда",
-            Obstacle::ReturnInLoop => {
-                "'return' стоит внутри цикла: выход из цикла подстановкой не выражается"
+            Obstacle::ReturnInOpenLoop => {
+                "'return' стоит внутри цикла, число итераций которого неизвестно заранее: \
+                 подстановка гасит тело признаком выхода, и такой цикл стал бы бесконечным \
+                 (у 'for' со счётчиком от литерала до литерала возврат подставляется)"
             }
             Obstacle::NoDefaultValue => {
                 "у типа результата нет начального значения, с которым объявляется временная \
@@ -80,8 +82,8 @@ pub(crate) fn obstacle(
     if !super::has_return(body) {
         return Some(Obstacle::NoReturn);
     }
-    if return_in_loop(body) {
-        return Some(Obstacle::ReturnInLoop);
+    if return_in_open_loop(body) {
+        return Some(Obstacle::ReturnInOpenLoop);
     }
     if default_value(ret, model).is_none() {
         return Some(Obstacle::NoDefaultValue);
@@ -89,18 +91,51 @@ pub(crate) fn obstacle(
     None
 }
 
-/// Есть ли `return` внутри цикла.
-fn return_in_loop(stmt: &StatementNode) -> bool {
+/// Предел счёта итераций при проверке границ цикла.
+///
+/// Принадлежит **этому** правилу, а не языку: цикл длиннее просто не признаётся
+/// статическим, и возврат из него остаётся вызовом. У цели `sv` свой предел —
+/// размер схемы (`sv_unroll::MAX_ITERATIONS`).
+const MAX_STATIC_ITERATIONS: usize = 4096;
+
+/// Есть ли `return` внутри цикла, чьё завершение зависит от тела.
+///
+/// ⚠️ Цикл со **статически известным** числом итераций сюда не входит: он
+/// завершится сам, даже когда его тело погашено признаком выхода. Признак
+/// «границы известны» берётся у общего носителя
+/// [`semantic::loop_bounds`](crate::semantic::loop_bounds) — того же, которым
+/// цель `sv` разворачивает цикл в схему.
+fn return_in_open_loop(stmt: &StatementNode) -> bool {
     match stmt {
+        // `loop`/`while`: условие продолжения считает тело, а подстановка его
+        // гасит — цикл стал бы бесконечным.
         StatementNode::Loop { body, .. } => super::has_return(body),
-        StatementNode::For { init, body, .. } => {
-            init.as_ref().is_some_and(|s| super::has_return(s)) || super::has_return(body)
+        StatementNode::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            if init.as_ref().is_some_and(|s| super::has_return(s)) {
+                return true;
+            }
+            if !super::has_return(body) {
+                return return_in_open_loop(body);
+            }
+            crate::semantic::loop_bounds::bounds(
+                init.as_deref(),
+                cond.as_deref(),
+                step.as_deref(),
+                MAX_STATIC_ITERATIONS,
+            )
+            .is_none()
+                || return_in_open_loop(body)
         }
-        StatementNode::Block(items) => items.iter().any(return_in_loop),
+        StatementNode::Block(items) => items.iter().any(return_in_open_loop),
         StatementNode::If { then_, else_, .. } => {
-            return_in_loop(then_) || else_.as_ref().is_some_and(|s| return_in_loop(s))
+            return_in_open_loop(then_) || else_.as_ref().is_some_and(|s| return_in_open_loop(s))
         }
-        StatementNode::Match { arms, .. } => arms.iter().any(|a| return_in_loop(&a.body)),
+        StatementNode::Match { arms, .. } => arms.iter().any(|a| return_in_open_loop(&a.body)),
         _ => false,
     }
 }
@@ -202,12 +237,7 @@ impl Lowering {
             let last = tail && index + 1 == items.len();
             let lowered = self.statement(item, last);
             if guarded {
-                self.done_read = true;
-                out.push(StatementNode::If {
-                    cond: Box::new(ExpressionNode::Not(Box::new(self.done_ref()))),
-                    then_: Box::new(StatementNode::Block(vec![lowered])),
-                    else_: None,
-                });
+                out.push(self.guarded(lowered));
             } else {
                 out.push(lowered);
             }
@@ -252,9 +282,64 @@ impl Lowering {
                     })
                     .collect(),
             },
-            // Циклы сюда не доходят: тело с возвратом внутри цикла отсекает
-            // `obstacle` до начала подстановки.
+            // Цикл со СТАТИЧЕСКИМИ границами (фича 0447): тело понижается и
+            // целиком уходит под признак выхода — итерации после возврата
+            // прокручиваются вхолостую, а завершает цикл его собственный
+            // счётчик. Цикл, завершение которого зависит от тела, сюда не
+            // доходит: его отсекает `obstacle`.
+            //
+            // ⚠️ Возврат внутри цикла НИКОГДА не хвостовой: после него будут
+            // следующие итерации, и признак обязан взводиться.
+            StatementNode::For {
+                init,
+                cond,
+                step,
+                body,
+            } if super::has_return(body) => {
+                let lowered = self.statement(body, false);
+                StatementNode::For {
+                    init: init.clone(),
+                    cond: cond.clone(),
+                    step: step.clone(),
+                    body: Box::new(self.guarded(lowered)),
+                }
+            }
             other => other.clone(),
+        }
+    }
+
+    /// Ставит оператор под условие «выхода ещё не было».
+    ///
+    /// ⚠️ Условное ветвление **сливается** с обёрткой (`if !done && cond`), а не
+    /// вкладывается в неё: вложенная форма валидна у семи потребителей, а
+    /// `clippy` под `-D warnings` отвечает `collapsible_if` — «this `if`
+    /// statement can be collapsed» (замер 2026-08-31, фикс 0446-01).
+    fn guarded(&mut self, lowered: StatementNode) -> StatementNode {
+        self.done_read = true;
+        let not_done = ExpressionNode::Not(Box::new(self.done_ref()));
+        // Блок из одного оператора — это тот же оператор: снятие обёртки
+        // открывает слияние условий ниже (тело цикла приходит блоком).
+        let lowered = match lowered {
+            StatementNode::Block(items) if items.len() == 1 => {
+                items.into_iter().next().unwrap_or(StatementNode::None)
+            }
+            other => other,
+        };
+        match lowered {
+            StatementNode::If {
+                cond,
+                then_,
+                else_: None,
+            } => StatementNode::If {
+                cond: Box::new(ExpressionNode::And(Box::new(not_done), cond)),
+                then_,
+                else_: None,
+            },
+            other => StatementNode::If {
+                cond: Box::new(not_done),
+                then_: Box::new(StatementNode::Block(vec![other])),
+                else_: None,
+            },
         }
     }
 
