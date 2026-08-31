@@ -19,7 +19,12 @@
 //!   неразличимы), самопереход;
 //! - `conformance_fsm_table_parallel.takt` — параллельная композиция: страж
 //!   строки есть конъюнкция готовностей ветвей, и берётся она у того же
-//!   носителя, что печатает их тик.
+//!   носителя, что печатает их тик;
+//! - `conformance_fsm_table_chain.takt` — последовательная композиция (фича
+//!   0438): машина шагов остаётся в теле такта, а наружу состояние уходит при
+//!   условии «цепочка на последнем шаге, и он завершён». Фаза каждого шага
+//!   наблюдаема своим портом, поэтому пропуск шага, лишний такт и ранний выход
+//!   дают разные трассы.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -35,6 +40,12 @@ const SIMPLE_TICKS: usize = 8;
 const PARALLEL_FIXTURE: &str = "tests/data/eval/conformance_fsm_table_parallel.takt";
 const PARALLEL_UNIT: &str = "conformance_fsm_table_parallel";
 const PARALLEL_TICKS: usize = 6;
+
+const CHAIN_FIXTURE: &str = "tests/data/eval/conformance_fsm_table_chain.takt";
+const CHAIN_UNIT: &str = "conformance_fsm_table_chain";
+const CHAIN_TICKS: usize = 9;
+/// Порты фикстуры цепочки: фаза каждого шага наблюдается своим портом.
+const CHAIN_PORTS: [&str; 3] = ["first_probe", "second_probe", "line_probe"];
 
 fn tool(bin: &str) -> bool {
     Command::new(bin)
@@ -240,5 +251,134 @@ fn table_form_matches_switch_on_parallel_composition() {
     assert!(
         expected.first() != expected.last(),
         "трасса постоянна и сверкой ничего не доказывает: {expected:?}"
+    );
+}
+
+/// Трасса эталона на цепочке: тройка портов по тактам.
+fn chain_simulator_trace() -> Vec<[i128; 3]> {
+    let (ast, _) = takt_lang::parse(&source(CHAIN_FIXTURE), 0).expect("разбор фикстуры");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение Unit");
+    let mut trace = Vec::new();
+    let mut reg = [0i128; 3];
+    for _ in 0..CHAIN_TICKS {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "эталон не обрывает прогон: {result:?}"
+        );
+        for (slot, port) in reg.iter_mut().zip(CHAIN_PORTS) {
+            if let Some(Value::Number(v)) = unit.variable(port) {
+                *slot = v;
+            }
+        }
+        trace.push(reg);
+    }
+    trace
+}
+
+/// Трасса прошивки на цепочке: те же три порта, те же такты.
+fn chain_c_trace(dir: &Path, fsm: FsmForm) -> Vec<[i128; 3]> {
+    let mut options = GenerateOptions::default();
+    options.fsm = fsm;
+    takt_lang::compile_to_c(
+        CHAIN_UNIT,
+        &source(CHAIN_FIXTURE),
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &options,
+    )
+    .expect("порождение C");
+    let camel = camel(CHAIN_UNIT);
+    let upper = CHAIN_UNIT.to_uppercase();
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "{CHAIN_UNIT}.h"
+static long long first, second, line;
+static void on_num({camel}_Out_NumericPort port, int64_t value, void *userdata) {{
+    (void)userdata;
+    if (port == {upper}_FIRST_PORT_FIRST_PROBE) {{ first = (long long)value; }}
+    else if (port == {upper}_SECOND_PORT_SECOND_PROBE) {{ second = (long long)value; }}
+    else {{ line = (long long)value; }}
+}}
+int main(void) {{
+    {camel} m;
+    {camel}_init(&m);
+    m.write_numeric = on_num;
+    m.userdata = 0;
+    for (int i = 0; i < {CHAIN_TICKS}; i++) {{
+        {camel}_tick(&m);
+        printf("%lld %lld %lld\n", first, second, line);
+    }}
+    return 0;
+}}
+"#
+    );
+    std::fs::write(dir.join("harness.c"), harness).expect("харнесс");
+    let bin = dir.join("bin");
+    let compile = Command::new("cc")
+        .args([
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Wno-unused-parameter",
+            "-Werror",
+            "-o",
+        ])
+        .arg(&bin)
+        .arg(dir.join("harness.c"))
+        .arg(dir.join(format!("{CHAIN_UNIT}.c")))
+        .arg("-I")
+        .arg(dir)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "cc не собрал харнесс флагами гейта цели:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск харнесса");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut it = line.split_whitespace();
+            Some([
+                it.next()?.parse().ok()?,
+                it.next()?.parse().ok()?,
+                it.next()?.parse().ok()?,
+            ])
+        })
+        .collect()
+}
+
+/// Последовательная композиция (фича 0438): машина шагов в теле, выход —
+/// строкой таблицы.
+#[test]
+fn table_form_matches_switch_on_chain_composition() {
+    if !tool("cc") {
+        eprintln!("cc недоступен — сверка пропущена");
+        return;
+    }
+    let expected = chain_simulator_trace();
+    let switch = chain_c_trace(&build_dir("chain_switch"), FsmForm::Switch);
+    let table = chain_c_trace(&build_dir("chain_table"), FsmForm::Table);
+    assert_eq!(switch, expected, "форма switch разошлась с эталоном");
+    assert_eq!(table, expected, "форма table разошлась с эталоном");
+    // Контроль: в трассе видно ОБА шага и жизнь после цепочки. Иначе ранний
+    // выход из состояния-цепочки (страж без проверки последнего шага) прошёл
+    // бы незамеченным.
+    assert!(
+        expected.iter().any(|r| r[0] == 12) && expected.iter().any(|r| r[1] == 22),
+        "трасса не наблюдает оба шага цепочки: {expected:?}"
+    );
+    assert!(
+        expected.iter().any(|r| r[2] == 91),
+        "трасса не доходит до состояния после цепочки: {expected:?}"
+    );
+    // Контроль второго прохода: автомат возвращается в цепочку, и на этом такте
+    // счётчик состояния-хвоста не растёт — значит, повторный вход наблюдаем.
+    assert!(
+        expected.windows(2).any(|pair| pair[0] == pair[1]),
+        "трасса не наблюдает повторный вход в цепочку: {expected:?}"
     );
 }

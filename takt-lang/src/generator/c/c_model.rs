@@ -278,20 +278,15 @@ fn generate_concat_tick(
     next: &Name,
     states: &[Name],
 ) -> Result<(), Diagnostic> {
-    let state_field = format!("model->{}_state", state_local);
+    // Имена машины шагов — у общего носителя (фича 0438): их знают печать
+    // такта, инициализация шага и страж строки табличной формы, и копий у
+    // одного правила быть не должно (класс 0084/0193/0195).
+    let state_field = c::c_chain::step_field(state_local);
     for (idx, item) in items.iter().enumerate() {
-        // Вычисляем имя варианта enum для текущего элемента
-        let current_variant = match item {
-            StateExtend::Model(name, _) => format!(
-                "{}_{}{}",
-                state_unique_upper,
-                name.local_lowercase_snakecase().to_uppercase(),
-                idx,
-            ),
-            StateExtend::Parallel(_) | StateExtend::Concatenation(_) => {
-                format!("{}_PARALLEL{}", state_unique_upper, idx)
-            }
-            _ => continue,
+        // Имя варианта enum для текущего элемента; `None` — шаг такой формы
+        // печать такта не ведёт.
+        let Some(current_variant) = c::c_chain::step_variant(state_unique_upper, item, idx) else {
+            continue;
         };
 
         // Открываем if / else if
@@ -315,12 +310,7 @@ fn generate_concat_tick(
 
         match item {
             StateExtend::Model(name, _) => {
-                let field = format!(
-                    "model->{}_{}{}",
-                    state_local,
-                    name.local_lowercase_snakecase(),
-                    idx
-                );
+                let field = c::c_chain::model_access(state_local, name, idx);
                 // Тик текущего элемента
                 let arg = map.root_arg(
                     name,
@@ -335,6 +325,12 @@ fn generate_concat_tick(
                         arg
                     ))
                     .nl();
+                // Внешний переход последнего шага в табличной форме печатает
+                // таблица (фича 0438): здесь остаётся только машина шагов —
+                // она ведёт переходы ВНУТРИ состояния.
+                if is_last && map.fsm_table() {
+                    continue;
+                }
                 // Проверяем завершение
                 printer
                     .ident(&format!(
@@ -366,8 +362,8 @@ fn generate_concat_tick(
                 printer.down().ident("}").nl();
             }
             StateExtend::Parallel(inner) => {
-                let parallel_access = format!("model->{}_parallel{}", state_local, idx);
-                let nested_upper = format!("{}_PARALLEL{}", state_unique_upper, idx);
+                let parallel_access = c::c_chain::parallel_access(state_local, idx);
+                let nested_upper = c::c_chain::parallel_upper(state_unique_upper, idx);
                 let done_exprs = crate::generator::c::c_compose::generate_parallel_items_tick(
                     printer,
                     map,
@@ -376,6 +372,10 @@ fn generate_concat_tick(
                     inner,
                     call_append == ", model",
                 );
+                if is_last && map.fsm_table() {
+                    // Внешний переход печатает таблица (фича 0438).
+                    continue;
+                }
                 if !done_exprs.is_empty() {
                     printer
                         .ident(&format!("if ({}) {{", done_exprs.join(" && ")))
@@ -613,7 +613,10 @@ fn generate_model_tick(
                                 &steps,
                                 call_append == ", model",
                             );
-                        if !done_exprs.is_empty() {
+                        // Внешний переход состояния-параллели в табличной форме
+                        // печатает таблица (фичи 0435 и 0438): здесь остаётся
+                        // только тик ветвей.
+                        if !done_exprs.is_empty() && !map.fsm_table() {
                             printer
                                 .ident(&format!("if ({}) {{", done_exprs.join(" && ")))
                                 .up()

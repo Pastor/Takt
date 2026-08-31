@@ -55,6 +55,7 @@ mod nested_struct_targets_tests;
 mod operand_type_carrier_tests;
 mod port_composite_tests;
 mod port_initial_value_hdl_tests;
+mod root_pointer_implementations_tests;
 mod rust_default_impl_tests;
 mod rust_default_value_tests;
 mod rust_deferred_init_tests;

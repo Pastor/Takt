@@ -11,9 +11,11 @@
 //!    указатели на функции, заглушки неиспользуемых параметров и приведение
 //!    `int` ↔ перечисление — те места, где `cc` возражает молча у автора и
 //!    громко в гейте.
-//! 4. **Граница названа отказом `CC-025`**, а не молчаливым `switch`:
-//!    последовательная композиция таблицей не выражается. Отказ несёт позицию
-//!    состояния и причину заметкой.
+//! 4. **Композиция выражается таблицей** — и параллельная, и последовательная
+//!    (фича 0438): страж строки состояния-цепочки есть условие «цепочка на
+//!    последнем шаге, и он завершён», то есть ровно то, под которым переход
+//!    печатает форма `switch`. Машина шагов при этом остаётся в теле такта: она
+//!    ведёт переходы ВНУТРИ состояния.
 //! 5. **Флаг у чужой цели — ошибка CLI**: `--fsm=table` с целью `st`
 //!    отвергается с перечислением поддерживающих целей. Молчаливо
 //!    проигнорированный флаг означал бы «форма как получится» (класс 0184).
@@ -57,8 +59,8 @@ model Counter {
 start Main = Counter;
 ";
 
-/// Последовательная композиция: её завершение ведёт машина шагов — граница
-/// табличной формы.
+/// Последовательная композиция: машина шагов остаётся в теле, выход из
+/// состояния — строка таблицы (фича 0438).
 const CHAIN: &str = "\
 model First {
     out a: u8;
@@ -86,6 +88,50 @@ model Both {
     start Chain = First + Second;
 }
 start Main = Both;
+";
+
+/// Параллельная композиция: выход из состояния — тоже строка таблицы, а не
+/// переход в теле.
+const PARALLEL: &str = "\
+model Ping {
+    out ping: u8;
+    start Go {
+        always {
+            ping := 1;
+        }
+        next Fin;
+    }
+    state Fin;
+}
+
+model Pong {
+    out pong: u8;
+    start Go {
+        always {
+            pong := 2;
+        }
+        next Fin;
+    }
+    state Fin;
+}
+
+model Pair {
+    var k: u8 := 0;
+    out probe: u8;
+
+    start Both = Ping | Pong {
+        next Tail;
+    }
+
+    state Tail {
+        always {
+            k := k + 1;
+            probe := k;
+        }
+        ref Tail: k > 0;
+    }
+}
+start Main = Pair;
 ";
 
 fn taktc() -> Command {
@@ -250,32 +296,59 @@ fn table_form_output_compiles_with_gate_flags() {
 }
 
 #[test]
-fn chain_state_is_refused_with_named_reason() {
+fn chain_state_becomes_a_table_row() {
     let dir = work_dir("chain");
+    let (ok, stderr, text) = compile(&dir, CHAIN, &["--fsm=table"]);
+    assert!(ok, "цепочка обязана переводиться таблицей: {stderr}");
+    // Страж строки — условие внешнего перехода формы `switch`: «цепочка на
+    // последнем шаге, и он завершён».
+    assert!(
+        text.contains("model->chain_state == PROBE_BOTH_CHAIN_SECOND1")
+            && text.contains("ProbeSecond_is_done(&model->chain_second1)"),
+        "страж строки не проверяет последний шаг цепочки:\n{text}"
+    );
+    // Машина шагов осталась в теле такта: она ведёт переходы ВНУТРИ состояния,
+    // и таблица её не заменяет.
+    let bodies = switch_bodies(&text);
+    assert!(
+        bodies.contains("model->chain_state =") && bodies.contains("ProbeFirst_tick("),
+        "машина шагов пропала из тела такта:\n{bodies}"
+    );
+    // Контроль: наружу состояние уходит только строкой таблицы.
+    assert!(
+        !bodies.contains("model->state ="),
+        "внешний переход остался в теле case:\n{bodies}"
+    );
+}
+
+#[test]
+fn chain_table_output_compiles_with_gate_flags() {
+    let dir = work_dir("chain_cc");
     let (ok, stderr, _) = compile(&dir, CHAIN, &["--fsm=table"]);
+    assert!(ok, "компиляция цепочки табличной формой: {stderr}");
+    let cc = Command::new("cc")
+        .args([
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Wno-unused-parameter",
+            "-Werror",
+            "-c",
+        ])
+        .arg(dir.join("out").join("probe.c"))
+        .arg("-I")
+        .arg(dir.join("out"))
+        .arg("-o")
+        .arg(dir.join("probe.o"))
+        .output();
+    let Ok(cc) = cc else {
+        eprintln!("cc недоступен — шаг пропущен");
+        return;
+    };
     assert!(
-        !ok,
-        "цепочка обязана отвергаться, а не печататься:\n{stderr}"
-    );
-    assert!(
-        stderr.contains("CC-025"),
-        "у отказа нет кода CC-025:\n{stderr}"
-    );
-    assert!(
-        stderr.contains("состояние-цепочка 'Chain'"),
-        "отказ не называет состояние:\n{stderr}"
-    );
-    assert!(
-        stderr.contains("--fsm=switch"),
-        "отказ не называет обход (форму по умолчанию):\n{stderr}"
-    );
-    // Контроль: та же модель формой по умолчанию переводится — отвергается
-    // именно табличная форма, а не вход.
-    let dir = work_dir("chain_default");
-    let (ok, stderr, _) = compile(&dir, CHAIN, &[]);
-    assert!(
-        ok,
-        "цепочка формой по умолчанию обязана переводиться: {stderr}"
+        cc.status.success(),
+        "cc не собрал табличную форму цепочки флагами гейта цели:\n{}",
+        String::from_utf8_lossy(&cc.stderr)
     );
 }
 
@@ -311,5 +384,30 @@ fn unknown_form_is_refused_with_list() {
     assert!(
         stderr.contains("switch") && stderr.contains("table"),
         "ошибка не перечисляет допустимые формы:\n{stderr}"
+    );
+}
+
+#[test]
+fn parallel_state_leaves_no_transition_in_the_body() {
+    let dir = work_dir("parallel");
+    let (ok, stderr, text) = compile(&dir, PARALLEL, &["--fsm=table"]);
+    assert!(ok, "параллель обязана переводиться таблицей: {stderr}");
+    // Страж строки — конъюнкция готовностей ветвей.
+    assert!(
+        text.contains("ProbePing_is_done(&model->both.ping0)")
+            && text.contains("ProbePong_is_done(&model->both.pong1)"),
+        "страж строки не проверяет обе ветви параллели:\n{text}"
+    );
+    let bodies = switch_bodies(&text);
+    // Тик ветвей остался в теле, а переход — нет.
+    assert!(
+        bodies.contains("ProbePing_tick("),
+        "тик ветви пропал из тела такта:\n{bodies}"
+    );
+    assert!(
+        !bodies.contains("model->state ="),
+        "внешний переход остался в теле case — он напечатан ДВАЖДЫ (и телом, и \
+         таблицей); трассы этого не видят, потому что тело меняет состояние \
+         раньше, чем диспетчер до него доходит:\n{bodies}"
     );
 }
