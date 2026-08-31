@@ -334,6 +334,16 @@ fn anon_global(cell: &crate::semantic::AnonPortAccess) -> Result<String, Diagnos
 ///
 /// Форма проверена пробами П3 (обёртка) и П8 (`VAR_GLOBAL … AT %…` внутри
 /// `CONFIGURATION`).
+/// Позиция объявления порта — для диагностики (фича 0455).
+fn port_loc(var: &VariableNode) -> Location {
+    match var {
+        VariableNode::Port { loc, .. }
+        | VariableNode::Simple { loc, .. }
+        | VariableNode::Const { loc, .. } => *loc,
+        VariableNode::Unresolved => Location::Codegen,
+    }
+}
+
 fn emit_configuration(
     p: &mut Printer,
     map: &StMap,
@@ -358,6 +368,13 @@ fn emit_configuration(
     let mut placed: Vec<String> = Vec::new();
     let mut warnings = Vec::new();
     let mut seen: Vec<String> = Vec::new();
+    // Имена, которые цель печатает рядом с глобальными переменными: блоки,
+    // программа, ресурс, экземпляр (фича 0455).
+    let block_names: Vec<String> = blocks
+        .iter()
+        .map(|(name, _)| name.unique_camelcase())
+        .collect();
+    let occupied = st_reserved::global_pou_names(&fb, &block_names);
     // Порты собираются со ВСЕХ моделей, а не только с корня: в `elevator_mini`
     // они объявлены внутри под-моделей (`out elevator_motor_up: bit;` в `Motor`).
     // Пропустить их значило бы оставить `VAR_EXTERNAL` без глобала — «the
@@ -389,6 +406,10 @@ fn emit_configuration(
                 continue;
             };
             seen.push(pname.clone());
+            // Имя глобальной переменной против имён POU (фича 0455): у MatIEC
+            // это одно пространство, и совпадение даёт «invalid global
+            // variable(s) declaration» при нулевом коде возврата.
+            st_reserved::check_st_global_clash(pname, &occupied, port_loc(&root.variables[name]))?;
             let (location, comment, mut w) = st_at::location_of(pname, ty, *direction, resolved)?;
             warnings.append(&mut w);
             let ty_name = st_type::get_st_type(ty, root)?;

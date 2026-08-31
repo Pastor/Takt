@@ -74,6 +74,7 @@ mod rust_shift_width_tests;
 mod same_type_cast_tests;
 mod slice_argument_tests;
 mod st_call_order_tests;
+mod st_global_name_clash_tests;
 mod st_helper_order_tests;
 mod st_local_array_argument_tests;
 mod st_reserved_names_tests;
