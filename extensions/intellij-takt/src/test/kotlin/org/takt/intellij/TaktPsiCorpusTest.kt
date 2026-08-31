@@ -32,6 +32,18 @@ class TaktPsiCorpusTest : BasePlatformTestCase() {
         val files = corpusFiles(root)
         assertTrue("корпус .takt неожиданно мал: ${files.size}", files.size >= 150)
 
+        // ⚠️ Порог выше проходит и БЕЗ корпуса матрицы — поэтому, когда каталог
+        // порождён (фича 0465), спрашивается ещё и он: иначе прогон молча шёл бы
+        // по прежней витрине, а сочетания матрицы остались бы непроверенными.
+        val matrix = root.resolve("target/matrix-corpus")
+        if (matrix.isDirectory) {
+            val fromMatrix = files.count { it.startsWith(matrix) }
+            assertTrue(
+                "корпус матрицы порождён, но в сверку не попал: $fromMatrix файлов",
+                fromMatrix >= 200,
+            )
+        }
+
         val factory = PsiFileFactory.getInstance(project)
         val roundTripFailures = ArrayList<String>()
         val errorFailures = ArrayList<String>()
@@ -65,9 +77,24 @@ class TaktPsiCorpusTest : BasePlatformTestCase() {
         return null
     }
 
-    /** Все `.takt` корпуса: подкаталоги `examples/` и `takt-lang/tests/data/`. */
+    /**
+     * Все `.takt` корпуса: `examples/`, `takt-lang/tests/data/` и — если он
+     * порождён — корпус МАТРИЦЫ (фича 0465).
+     *
+     * ⚠️ Матрица даёт сочетания, которых в витрине языка нет: порт
+     * перечислимого типа с адресом из внешней карты, вложенная композиция с
+     * параметром, транзитивный импорт. Порождается он тестом
+     * `matrix_corpus_export_tests` крейта `takt-lang` (`cargo test`), поэтому
+     * каталог может отсутствовать — тогда сверка идёт по прежнему корпусу, и
+     * это не ошибка: плагин собирается отдельно от Rust-дерева.
+     */
     private fun corpusFiles(root: File): List<File> {
-        val roots = listOf(root.resolve("examples"), root.resolve("takt-lang/tests/data"))
+        val matrix = root.resolve("target/matrix-corpus")
+        val roots = listOfNotNull(
+            root.resolve("examples"),
+            root.resolve("takt-lang/tests/data"),
+            matrix.takeIf { it.isDirectory },
+        )
         return roots.flatMap { base ->
             base.walkTopDown().filter { it.isFile && it.extension == "takt" }.toList()
         }.sorted()
