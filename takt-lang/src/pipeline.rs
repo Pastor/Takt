@@ -134,6 +134,16 @@ pub(crate) struct Compilation {
 }
 
 impl Compilation {
+    /// Проставляет диагностике путь её файла.
+    ///
+    /// ⚠️ Метод ТИПА, а не свободная функция с публичным полем: путь ставит
+    /// владелец реестра, и это то же решение, что у [`Compilation::emit`]
+    /// (0212). Нужен он диагностикам, рождённым ВНЕ генерации, — разрешению
+    /// адресов: его отказ печатался без координаты (фича 0467).
+    pub(crate) fn stamp(&self, diagnostic: Diagnostic) -> Diagnostic {
+        stamp_file(diagnostic, &self.files)
+    }
+
     /// Генерирует цель, проставляя диагностике путь её файла.
     pub(crate) fn emit(
         &self,
@@ -144,6 +154,17 @@ impl Compilation {
         crate::generator::generate(language, &self.model.borrow(), output_path, options)
             .map_err(|d| stamp_file(d, &self.files))
     }
+}
+
+/// Первая ОШИБКА списка диагностик (предупреждения пропускаются).
+///
+/// Живёт здесь, а не у двух вызывающих: разрешение адресов отдаёт смешанный
+/// список, и «найти в нём отказ» — одно правило на обе цели с адресами.
+pub(crate) fn first_error(diagnostics: &[Diagnostic]) -> Option<Diagnostic> {
+    diagnostics
+        .iter()
+        .find(|d| d.level == diagnostics::Level::Error)
+        .cloned()
 }
 
 /// Разрешает номер файла диагностики в путь.

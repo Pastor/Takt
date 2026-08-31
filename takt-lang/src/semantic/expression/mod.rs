@@ -251,7 +251,11 @@ pub fn construct_expression(
             let func = if let Some(func) = model.borrow().search_func(&id.name) {
                 func
             } else {
-                Rc::new(RefCell::new(builtin_function(&id.name)?.clone()))
+                Rc::new(RefCell::new(
+                    builtin_function(&id.name)
+                        .map_err(|d| d.at_if_unset(id.loc))?
+                        .clone(),
+                ))
             };
             let resolved_args = resolve_elems(args, params.clone(), model)?;
             Ok(ExpressionNode::Function(func, resolved_args))

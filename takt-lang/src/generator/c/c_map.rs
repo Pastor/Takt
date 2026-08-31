@@ -79,7 +79,11 @@ impl CMap {
             .ok_or_else(|| {
                 Diagnostic::error(
                     Location::Codegen,
-                    format!("Model with name '{}' not found", name),
+                    // Язык сообщений — свойство инструмента, а не автора строки
+                    // (фича 0467): две диагностики цели `c` оставались
+                    // английскими, тогда как парные им `RS-013` и `SV-011`
+                    // давно по-русски.
+                    format!("Модель '{}' не найдена", name),
                 )
                 .with_code("CC-004")
             })
@@ -91,7 +95,7 @@ impl CMap {
             .ok_or_else(|| {
                 Diagnostic::error(
                     Location::Codegen,
-                    format!("State with name '{}' not found", name),
+                    format!("Состояние '{}' не найдено", name),
                 )
                 .with_code("CC-005")
             })
