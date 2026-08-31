@@ -2,7 +2,7 @@
 name = "takt-lang"
 version = "0.55.0"
 authors = ["Pastor <viruszold@gmail.com>"]
-description = "Takt"
+description = "Takt — учебный DSL конечных автоматов: компилятор и LSP-сервер. Язык сделан в учебных целях и показывает принципы автоматного подхода к разработке"
 homepage = "https://but.ru"
 repository = "https://github.com/Pastor/Takt"
 readme = "../README.md"

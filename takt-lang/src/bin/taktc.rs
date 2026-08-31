@@ -438,6 +438,10 @@ fn print_verify_results(outcome: &takt_lang::VerifyOutcome) -> i32 {
 
 /// Выводит справку по использованию утилиты в stderr.
 fn print_usage() {
+    eprintln!(
+        "Takt — учебный язык автоматных моделей: показывает принципы автоматного подхода к разработке."
+    );
+    eprintln!();
     eprintln!("Использование: taktc compile [флаги] <input.takt> [-o <output>]");
     eprintln!("               taktc fmt [--check] [--stdin] <файлы/каталоги>");
     eprintln!(
