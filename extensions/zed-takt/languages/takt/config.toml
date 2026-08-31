@@ -1,6 +1,7 @@
 name = "Takt"
 path_suffixes = ["takt"]
 line_comments = ["// ", "/// "]
+block_comment = ["/* ", " */"]
 autoclose_before = ";:.,=}])"
 tab_size = 4
 hard_tabs = false

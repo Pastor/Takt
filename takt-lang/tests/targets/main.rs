@@ -54,6 +54,7 @@ mod generator_warnings_tests;
 mod guard_targets_tests;
 mod hal_bit_range_tests;
 mod local_aggregate_tests;
+mod matrix_corpus_export_tests;
 mod matrix_probes;
 mod mixed_arith_tests;
 mod mixed_sign_tests;
