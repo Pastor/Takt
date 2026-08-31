@@ -339,6 +339,14 @@ pub(crate) fn emit_declarations(
         });
     }
 
+    // ⚠️ В `VAR_IN_OUT` инициализатора быть НЕ МОЖЕТ: секция передаёт ссылку на
+    // чужую переменную, и MatIEC отвечает «';' missing at end of variable(s)
+    // declaration» (замер 0452). Значение появлялось само — у перечислимого
+    // типа умолчание есть всегда (первый вариант, правило 0391).
+    let in_outs: Vec<Declaration> = in_outs
+        .into_iter()
+        .map(|decl| Declaration { init: None, ..decl })
+        .collect();
     let sections = [
         ("VAR_INPUT", inputs),
         ("VAR_OUTPUT", outputs),

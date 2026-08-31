@@ -49,9 +49,28 @@ pub(crate) fn refusal(target: &str, touch: Touch, kind: Kind) -> Option<&'static
         // Внешней функции в синтезируемом RTL нет.
         ("sv" | "sv-mmio", Touch::ExternCall, _) => Some("SV-005"),
         // Порт перечислимого типа: HAL-трейт `rust` знает бит и число, а
-        // размещение `st-at` — только скаляры IEC.
-        ("rust", Touch::PortWrite | Touch::PortInit, Kind::Enum) => Some("RS-016"),
-        ("st-at", Touch::PortWrite | Touch::PortInit, Kind::Enum) => Some("ST-004"),
+        // размещение `st-at` — только скаляры IEC. Направление роли не играет.
+        (
+            "rust",
+            Touch::PortWrite
+            | Touch::PortInit
+            | Touch::PortRead
+            | Touch::InoutRead
+            | Touch::InoutWrite,
+            Kind::Enum,
+        ) => Some("RS-016"),
+        (
+            "st-at",
+            Touch::PortWrite
+            | Touch::PortInit
+            | Touch::PortRead
+            | Touch::InoutRead
+            | Touch::InoutWrite,
+            Kind::Enum,
+        ) => Some("ST-004"),
+        // Двунаправленный порт в регистровом файле: у шины сторона одна, и
+        // выразить `inout` ею нельзя (фича 0428).
+        ("sv-mmio", Touch::InoutRead | Touch::InoutWrite, _) => Some("SV-006"),
         _ => None,
     }
 }
