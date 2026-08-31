@@ -99,7 +99,7 @@ pub(crate) fn model_fn_needs_root(
     match which {
         ModelFn::Tick => {
             let mut seen = HashSet::new();
-            needs_root_inner(model, &mut seen)
+            needs_root_inner(model, clock_profile, &mut seen)
         }
         ModelFn::Init => {
             let mut seen = HashSet::new();
@@ -200,13 +200,20 @@ fn collect_extend_models(extend: &Extend, found: &mut Vec<Rc<RefCell<ModelNode>>
 
 fn needs_root_inner(
     model: &Rc<RefCell<ModelNode>>,
+    clock_profile: bool,
     seen: &mut HashSet<*const RefCell<ModelNode>>,
 ) -> bool {
     if !seen.insert(Rc::as_ptr(model)) {
         return false; // разделяемая под-модель уже учтена
     }
     let b = model.borrow();
-    let mut needed = false;
+    // ⚠️ Время в профиле «часы» — обращение к корню и в ТАКТЕ, а не только в
+    // `_init`: метка сравнивается с `main->now_ms(…)` при каждой проверке
+    // выдержки и переставляется при входе в состояние (фича 0134). Признак
+    // знал об этом только в ветви `_init`, и `_tick` под-модели с `after Nms`
+    // печатался без параметра — `cc` отвечал «use of undeclared identifier
+    // 'main'» при НУЛЕВОМ коде возврата `taktc` (замер 0449).
+    let mut needed = clock_profile && crate::generator::c::c_time::uses_duration_time(&b);
     for block in &b.named_blocks {
         if let Some(stmt) = block.statement() {
             needed |= stmt_touches_outside(stmt, model);
@@ -237,7 +244,7 @@ fn needs_root_inner(
     drop(b);
     for child in &nested {
         // Под-модель получает `main` от этой: нужен ей — нужен и здесь.
-        needed |= needs_root_inner(child, seen);
+        needed |= needs_root_inner(child, clock_profile, seen);
     }
     needed
 }

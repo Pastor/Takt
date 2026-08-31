@@ -684,9 +684,10 @@ cargo test <имя>                                # один тест по им
   ([0260](docs/features/0260-c-unused-struct-parameter.md),
   [0396](docs/features/0396-c-struct-parameter-on-demand.md),
   [0419](docs/features/0419-c-per-function-root-need.md)): признак общий с целью
-  `rust` (`c_needs` спрашивает `rust_needs::function_needs`). ⚠️ Пустой список —
-  `void` (`-Wstrict-prototypes`); тело `_init` обращается к корню тремя путями, и
-  признак дважды был неполон.
+  `rust`; сторож — сплошной перебор «вид обращения × форма реализации»
+  ([0449](docs/features/0449-c-needs-matrix-guard.md)), он и нашёл последний
+  промах. ⚠️ Пустой список — `void`; ошибка «нужен» **тиха**: её гасит заглушка
+  `(void)main;`, и инструменты молчат.
 - **`SE-036` видит и ЛОКАЛЬНЫЕ объявления тел, а у объявления есть позиция**
   ([0386](docs/features/0386-unused-local-warning.md),
   [0387](docs/features/0387-write-only-local.md)): признак —
