@@ -54,6 +54,7 @@ mod rust_func;
 mod rust_live;
 mod rust_map;
 mod rust_model;
+mod rust_modulo;
 mod rust_name;
 // Носитель «что функции нужно сверх параметров» (фича 0050) переиспользует
 // цель `c` (фича 0396): вопрос семантический, и второго знания о нём быть не
