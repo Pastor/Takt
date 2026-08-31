@@ -105,7 +105,7 @@ pub(crate) struct Fsm {
     /// Регистры: состояния уровней, переменные, выходные порты.
     regs: Vec<Reg>,
     /// Уровни с механизмом времени (фича 0134): перекрытие `_next` в `always_comb`.
-    time_levels: Vec<sv_time::TimeLevel>,
+    pub(crate) time_levels: Vec<sv_time::TimeLevel>,
     /// Имена регистровых сигналов (ключи для `Scope::registered`).
     pub(crate) registered: BTreeSet<String>,
     /// Имена двунаправленных портов (фича 0428): у них две стороны, `_i` и `_o`.
@@ -245,6 +245,22 @@ fn var_signal_name(model: &Name, var: &str) -> String {
 /// `INIT` не добавляется — его в цели `sv` не существует (см. шапку модуля).
 /// Если состояние с именем `End` объявлено автором, второй `END` не заводится:
 /// `unique_uppercase_snakecase` даёт для него ровно `<MODEL>_END`.
+/// Ширина перечисления состояний модели — тем же счётом, что у его печати.
+///
+/// Носитель один (фича 0441): вектор строк таблицы и `typedef enum` обязаны
+/// сойтись по ширине, иначе частичный выбор `[i*W +: W]` возьмёт чужие биты, а
+/// оба инструмента SV такой модуль примут.
+pub(crate) fn state_width(model: &Name, variants: &[String]) -> Result<usize, Diagnostic> {
+    let numbered: Vec<(String, i128)> = variants
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (v.clone(), i as i128))
+        .collect();
+    let (width, _) =
+        super::sv_type::enum_width(&numbered, &format!("состояния модели '{}'", model))?;
+    Ok(width as usize)
+}
+
 pub(crate) fn state_variants(model: &Name, states: &[Name]) -> Vec<String> {
     let mut variants: Vec<String> = states
         .iter()
@@ -567,6 +583,7 @@ pub(crate) fn emit_comb(
     map: &SvMap,
     fsm: &Fsm,
     root: &Name,
+    models: &[Name],
 ) -> Result<(), Diagnostic> {
     p.ident("// Комбинационная часть: БЛОКИРУЮЩИЕ присваивания, поэтому порядок")
         .nl();
@@ -614,6 +631,13 @@ pub(crate) fn emit_comb(
         }
     }
     crate::generator::sv::sv_locals::emit_defaults(p, &fsm.hoisted_locals);
+    // Умолчания признаков диспетчера таблицы (фича 0441) — по той же причине,
+    // что у регистров: диспетчер под-модели стоит ВНУТРИ ветви родителя, и на
+    // ветвях, где он не исполняется, признак остался бы без присваивания —
+    // yosys отвечает «Latch inferred», а verilator такой модуль принимает.
+    if map.fsm_table() {
+        super::sv_table::emit_defaults(p, map, models)?;
+    }
     p.nl();
     // Перекрытие умолчаний регистров времени (фича 0134) и тело — уже
     // напечатаны в буфер выше.
@@ -656,6 +680,9 @@ pub(crate) fn emit_model_body(
     // на том же входе печатает **одну** ветвь — расходилась одна цель.
     let terminal = end_variant(model);
     let mut printed_terminal = false;
+    // Предикаты готовности реализаций (фича 0441): собираются при печати тел и
+    // читаются диспетчером таблицы после `endcase`.
+    let mut ready: Vec<(String, String)> = Vec::new();
     for state_name in &states {
         let Some(element) = map.state_at(state_name.clone()) else {
             continue; // недостижимое состояние — ветви не получает
@@ -688,13 +715,21 @@ pub(crate) fn emit_model_body(
             }
         }
         match element {
+            // Табличная форма (фича 0441): переходы простого состояния — строки
+            // таблицы, и в ветви остаётся только тело такта.
+            Element::State { .. } if map.fsm_table() => {}
             Element::State { .. } => {
                 emit_transitions(p, map, fsm, raw, model, &states)?;
             }
             Element::StateExtend { extend, next, .. } => {
-                super::sv_compose::emit_extend(
+                if let Some(predicate) = super::sv_compose::emit_extend(
                     p, map, fsm, state_name, raw, model, &extend, &next, &states,
-                )?;
+                )? {
+                    // Готовность реализации вычисляется по ходу инлайна
+                    // композиции — здесь она запоминается для стража строки
+                    // (второго знания о раскладке её регистров не заводится).
+                    ready.push((state_name.unique().to_string(), predicate));
+                }
             }
             Element::Model { .. } => {
                 return Err(sv002("модель в позиции состояния"));
@@ -714,6 +749,11 @@ pub(crate) fn emit_model_body(
     }
     p.down();
     p.ident("endcase").nl();
+    // Табличная форма (фича 0441): переходы просматривает диспетчер — ПОСЛЕ тел
+    // состояний, ровно там, где стоял переход внутри ветви.
+    if map.fsm_table() {
+        super::sv_table::emit_dispatcher(p, map, fsm, model, &ready)?;
+    }
     Ok(())
 }
 

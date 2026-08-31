@@ -56,6 +56,7 @@ mod sv_names;
 mod sv_scope;
 mod sv_state_of;
 mod sv_stmt;
+mod sv_table;
 mod sv_time;
 mod sv_type;
 mod sv_unroll;
@@ -103,7 +104,8 @@ impl AsGenerator for Generator {
             model,
             options.guard_enable,
         )?
-        .with_time_profile(profile);
+        .with_time_profile(profile)
+        .with_fsm(options.fsm);
         let (program, warnings, adapter) =
             generate_program(&map, self.mmio, &options.address_map, options.bus)?;
         let filename = map.get_filename();
@@ -270,9 +272,18 @@ fn generate_program(
     sv_const::emit_constants(&mut p, map, &blocks)?;
     sv_enums::emit_state_enums(&mut p, map, &blocks)?;
     sv_enums::emit_step_enums(&mut p, &fsm)?;
+    // Таблица переходов (фича 0441) — ПОСЛЕ перечислений состояний: её векторы
+    // ссылаются на варианты (порядок разделов файла — урок 0347).
+    let models: Vec<_> = blocks.iter().map(|(name, _)| name.clone()).collect();
+    if map.fsm_table() {
+        sv_table::emit_tables(&mut p, map, &models)?;
+    }
     sv_fsm::emit_signals(&mut p, &fsm);
+    if map.fsm_table() {
+        sv_table::emit_signals(&mut p, map, &models)?;
+    }
     sv_func::emit_functions(&mut p, map, &fsm, &blocks)?;
-    sv_fsm::emit_comb(&mut p, map, &fsm, &root_name)?;
+    sv_fsm::emit_comb(&mut p, map, &fsm, &root_name, &models)?;
     sv_fsm::emit_ff(&mut p, map, &fsm, &blocks)?;
     // Регистровый файл (фича 0062): объявление входных регистров, их защёлкивание
     // шиной (`reg_wen`) и комбинационное чтение (`reg_rdata`). Выходные адресуемые

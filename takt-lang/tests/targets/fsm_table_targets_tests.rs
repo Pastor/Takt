@@ -270,12 +270,14 @@ fn st_table_form_is_accepted_by_iec2c() {
 #[test]
 fn table_flag_names_supporting_targets() {
     let dir = work_dir("targets");
-    let (ok, stderr, _) = compile(&dir, "sv", "sv", &["--fsm=table"]);
+    // `plantuml` — единственная цель без табличной формы: диаграмма переходов и
+    // есть отношение переходов, второй его формы у неё быть не может.
+    let (ok, stderr, _) = compile(&dir, "plantuml", "puml", &["--fsm=table"]);
     assert!(
         !ok,
         "флаг у цели без табличной формы обязан быть ошибкой:\n{stderr}"
     );
-    for target in ["c", "c-hal", "rust", "st", "st-at"] {
+    for target in ["c", "c-hal", "rust", "st", "st-at", "sv", "sv-mmio"] {
         assert!(
             stderr.contains(target),
             "ошибка не называет цель '{target}':\n{stderr}"

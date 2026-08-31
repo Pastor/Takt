@@ -565,11 +565,11 @@ pub fn run_compile(args: &[String]) -> i32 {
     if options.fsm == crate::generator::FsmForm::Table
         && !matches!(
             options.target.as_str(),
-            "c" | "c-hal" | "rust" | "st" | "st-at"
+            "c" | "c-hal" | "rust" | "st" | "st-at" | "sv" | "sv-mmio"
         )
     {
         eprintln!(
-            "Ошибка: --fsm=table не поддерживается целью '{}'. Табличную форму автомата печатают цели: c, c-hal, rust, st, st-at",
+            "Ошибка: --fsm=table не поддерживается целью '{}'. Табличную форму автомата печатают цели: c, c-hal, rust, st, st-at, sv, sv-mmio",
             options.target
         );
         return 1;

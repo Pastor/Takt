@@ -38,6 +38,12 @@ use crate::semantic::minimap::{Name, StateExtend};
 
 /// Печатает состояние-реализацию (`S = A | B` или `S = A + B`).
 #[allow(clippy::too_many_arguments)]
+/// Печатает тело составного состояния.
+///
+/// В табличной форме (фича 0441) возвращает **предикат готовности** реализации:
+/// переход наружу печатает таблица, а условие у него то же, при котором его
+/// печатает форма `unique case`. В форме по умолчанию возвращает `None` —
+/// переход уже напечатан.
 pub(crate) fn emit_extend(
     p: &mut Printer,
     map: &SvMap,
@@ -48,9 +54,9 @@ pub(crate) fn emit_extend(
     extend: &StateExtend,
     next: &Name,
     states: &[Name],
-) -> Result<(), Diagnostic> {
+) -> Result<Option<String>, Diagnostic> {
     match extend {
-        StateExtend::None => Ok(()),
+        StateExtend::None => Ok(None),
         // Последовательная композиция: шаг-регистр + инлайн активного шага.
         StateExtend::Concatenation(items) => {
             let exit = ChainExit::Parent {
@@ -66,7 +72,10 @@ pub(crate) fn emit_extend(
         StateExtend::Parallel(_) | StateExtend::Model(_, _) => {
             let done_exprs = inline_composed(p, map, fsm, state_name, extend, &mut Vec::new())?;
             if done_exprs.is_empty() {
-                return Ok(());
+                return Ok(None);
+            }
+            if map.fsm_table() {
+                return Ok(Some(done_exprs.join(" && ")));
             }
             p.ident(&format!("if ({}) begin", done_exprs.join(" && ")))
                 .nl();
@@ -74,7 +83,7 @@ pub(crate) fn emit_extend(
             emit_parent_transition(p, map, fsm, state, model, next, states)?;
             p.down();
             p.ident("end").nl();
-            Ok(())
+            Ok(None)
         }
     }
 }
@@ -107,11 +116,20 @@ fn emit_chain(
     items: &[StateExtend],
     path: &mut Vec<usize>,
     exit: ChainExit<'_>,
-) -> Result<(), Diagnostic> {
+) -> Result<Option<String>, Diagnostic> {
     let step = step_reg_name(state_name, path);
     // `unique case`: варианты `STEP_0..STEP_{N-1}` покрыты все — ветвь по шагу на
     // каждый элемент, значит CASEINCOMPLETE не возникает. У вложенной цепочки к
     // ним добавляется терминальный `DONE`, и он тоже обязан иметь ветвь.
+    // Условие «цепочка на последнем шаге» — регистр шага, а не `_next`: в
+    // комбинационном блоке он не меняется, и диспетчер таблицы видит то же
+    // значение, что ветвь `unique case` (фича 0441).
+    let step_at_last = format!(
+        "{} == {}",
+        step,
+        step_variant(state_name, path, items.len().saturating_sub(1))
+    );
+    let mut parent_ready: Option<String> = None;
     p.ident(&format!("unique case ({})", step)).nl();
     p.up();
     for (i, item) in items.iter().enumerate() {
@@ -132,6 +150,12 @@ fn emit_chain(
         if i + 1 == items.len() {
             match &exit {
                 // Последний шаг завершён — переход РОДИТЕЛЬСКОГО состояния.
+                // В табличной форме (фича 0441) его печатает таблица: здесь
+                // запоминается лишь условие «цепочка на последнем шаге и он
+                // завершён».
+                ChainExit::Parent { .. } if map.fsm_table() => {
+                    parent_ready = Some(format!("({}) && ({})", step_at_last, cond));
+                }
                 ChainExit::Parent {
                     state,
                     model,
@@ -176,7 +200,7 @@ fn emit_chain(
     }
     p.down();
     p.ident("endcase").nl();
-    Ok(())
+    Ok(parent_ready)
 }
 
 /// Инлайнит тело одного шага/ветви и возвращает done-выражения (на `_next`).

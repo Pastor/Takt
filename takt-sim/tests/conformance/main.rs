@@ -56,6 +56,7 @@ mod conformance_float_modes_tests;
 mod conformance_forward_type_tests;
 mod conformance_fsm_table_rust_tests;
 mod conformance_fsm_table_st_tests;
+mod conformance_fsm_table_sv_tests;
 mod conformance_fsm_table_tests;
 mod conformance_function_local_shadow_tests;
 mod conformance_import_specialize_tests;
