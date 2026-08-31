@@ -37,6 +37,8 @@ pub(crate) struct SvMap {
     guard_enable: bool,
     /// Профиль времени (фича 0134): «часы» (вход `time_ms`) либо «такты» (счётчик).
     time_profile: crate::semantic::duration::TimeProfile,
+    /// Форма печати автомата (фича 0441): `unique case` либо таблица переходов.
+    fsm: crate::generator::FsmForm,
 }
 
 impl SvMap {
@@ -57,10 +59,22 @@ impl SvMap {
             usage,
             guard_enable,
             time_profile: crate::semantic::duration::TimeProfile::default(),
+            fsm: crate::generator::FsmForm::default(),
         })
     }
 
     /// Задаёт профиль времени (фича 0134); умолчание — «часы» (аддитивно).
+    /// Задаёт форму печати автомата (фича 0441); умолчание — `unique case`.
+    pub(crate) fn with_fsm(mut self, fsm: crate::generator::FsmForm) -> Self {
+        self.fsm = fsm;
+        self
+    }
+
+    /// Печатается ли автомат таблицей переходов (`--fsm=table`).
+    pub(crate) fn fsm_table(&self) -> bool {
+        self.fsm == crate::generator::FsmForm::Table
+    }
+
     pub(crate) fn with_time_profile(
         mut self,
         profile: crate::semantic::duration::TimeProfile,
@@ -167,5 +181,17 @@ impl SvMap {
                 )
                 .with_code("SV-011")
             })
+    }
+}
+
+/// Карта цели `sv` — источник состояний для общего носителя строк таблицы
+/// (фича 0441).
+impl crate::generator::table::StateSource for SvMap {
+    fn state_element(&self, name: Name) -> Option<Element> {
+        self.state_at(name)
+    }
+
+    fn state_node(&self, name: Name) -> Result<Rc<RefCell<StateNode>>, Diagnostic> {
+        self.raw_state_at(name)
     }
 }
