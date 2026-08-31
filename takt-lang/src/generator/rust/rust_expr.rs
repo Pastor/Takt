@@ -432,6 +432,12 @@ fn comparison(
         Some(ty) => coerce_to(b, &ty, scope)?,
         None => print_expression(b, scope)?,
     };
+    // `x % k = 0` при беззнаковом `x` clippy требует записывать методом
+    // (`manual_is_multiple_of`). Проверка идёт по УЗЛАМ, а не по напечатанному
+    // тексту: делитель обязан быть ненулевым литералом (фича 0448).
+    if let Some(simplified) = super::rust_modulo::multiple_of(a, op, b, scope)? {
+        return Ok(simplified);
+    }
     // `x = 0` при булевом `x` даёт после приведения `x == false`, а clippy
     // требует отрицания (`bool_comparison`: «equality checks against false can
     // be replaced by a negation»). Форма `x.2 = 0` в корпусе обычна

@@ -66,6 +66,7 @@ mod conformance_literal_left_tests;
 mod conformance_local_decl_tests;
 mod conformance_mixed_arith_tests;
 mod conformance_mixed_sign_tests;
+mod conformance_modulo_tests;
 mod conformance_named_cond_tests;
 mod conformance_nested_chain_targets_tests;
 mod conformance_nested_composition_tests;
