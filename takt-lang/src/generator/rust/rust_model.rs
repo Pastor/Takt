@@ -497,6 +497,57 @@ pub(crate) fn needs_hal(
     false
 }
 
+/// Нужен ли HAL именно ТАКТУ модели (фича 0450).
+///
+/// Отличие от [`needs_hal`] — в объёме: здесь считаются только **тела**
+/// (блоки состояний, условия рёбер, именованные условия, функции), без
+/// инициализаторов объявлений. Начальное значение выходного порта пишет
+/// конструктор корня, и параметр `hal` в `tick` под-модели после этого не
+/// используется — `rustc` под `-D warnings` отвечает «unused variable: `hal`»
+/// при нулевом коде возврата `taktc` (замер 0450).
+///
+/// ⚠️ Признак **на функцию**, а не на модель — тот же приём, что у цели `c`
+/// (фича 0419): сигнатуры `init` и `tick` после этого расходятся, и это законно.
+pub(crate) fn needs_hal_in_tick(map: &RustMap, name: &Name, seen: &mut BTreeSet<String>) -> bool {
+    if !seen.insert(name.unique().to_string()) {
+        return false;
+    }
+    if let Ok(model_rc) = map.raw_model_at(name.clone()) {
+        let model = model_rc.borrow();
+        let usage = crate::semantic::unused::body_usage(&model_rc);
+        let needs_call = usage.functions.iter().any(|fname| {
+            crate::generator::rust::rust_needs::needs_of_call(fname, &model, &mut BTreeSet::new())
+                .map(|needs| needs.hal)
+                .unwrap_or(false)
+        });
+        if !usage.ports.is_empty() || needs_call || rust_time::needs_entry_ms(map, &model) {
+            return true;
+        }
+        // Дети по вызову: и объявленные внутри, и те, которыми реализованы
+        // состояния (`= M`, `A | B`, `A + B`) — их `tick` зовёт этот же `tick`
+        // и передаёт им HAL.
+        let mut children: Vec<std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>> =
+            model.models.values().cloned().collect();
+        children.extend(crate::semantic::extend::implementation_children(&model));
+        drop(model);
+        for child in children {
+            let child_name = child.borrow().name.clone().unwrap_or_default();
+            if let Some(sub) = map
+                .using_models()
+                .into_iter()
+                .find_map(|element| match element {
+                    Element::Model { name, .. } if name.local() == child_name => Some(name),
+                    _ => None,
+                })
+                && needs_hal_in_tick(map, &sub, seen)
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Ищет имя под-модели в карте по её уникальному имени.
 pub(crate) fn submodel_name(map: &RustMap, unique: &str) -> Option<Name> {
     map.using_models()

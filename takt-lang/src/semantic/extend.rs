@@ -437,6 +437,49 @@ fn state_location(state: &StateNode) -> Location {
     }
 }
 
+/// Модели, которыми реализованы состояния этой модели (фичи 0439, 0450).
+///
+/// ⚠️ Они **не** лежат в `ModelNode::models`: там объявленные внутри, а
+/// реализация ссылается на модель, объявленную где угодно в файле. Признаки
+/// целей («нужен ли указатель на корень» у `c`, «какие общие переменные
+/// передать» у `rust`) обязаны считать их детьми по вызову: тикает их та же
+/// функция и передаёт им своё состояние.
+///
+/// Пропуск даёт вывод, который отвергают чужие инструменты при НУЛЕВОМ коде
+/// возврата `taktc`: `cc` — «use of undeclared identifier 'main'» (0439),
+/// `rustc` — «cannot find value `shared` in this scope» (0450).
+pub fn implementation_children(
+    model: &crate::semantic::ModelNode,
+) -> Vec<std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>> {
+    let mut found = Vec::new();
+    for state in model.states.values() {
+        if let crate::semantic::StateNode::Implement { implements, .. } = state {
+            collect_extend_models(implements, &mut found);
+        }
+    }
+    found
+}
+
+/// Собирает модели из дерева реализации ([`Extend`]).
+///
+/// ⚠️ Разбор **исчерпывающий**: пропущенная форма означала бы «ребёнка не
+/// видно», то есть отказ чужого инструмента при нулевом коде возврата.
+fn collect_extend_models(
+    extend: &Extend,
+    found: &mut Vec<std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>>,
+) {
+    match extend {
+        Extend::Model(rc, _, _) => found.push(std::rc::Rc::clone(rc)),
+        Extend::Parentless(inner) => collect_extend_models(inner, found),
+        Extend::Concatenation(items) | Extend::Parallel(items) => {
+            for item in items {
+                collect_extend_models(item, found);
+            }
+        }
+        Extend::None | Extend::Unresolved(_) => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::diagnostics::Location;

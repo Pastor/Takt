@@ -198,7 +198,12 @@ impl StMap {
         let Some(sub_model) = self.map.model_at(Some(sub.unique().to_string())) else {
             return Vec::new();
         };
-        let usage = crate::semantic::unused::compute_usage(Rc::clone(&sub_model));
+        // Общий носитель: он видит и вложенные модели, и те, которыми
+        // РЕАЛИЗОВАНЫ состояния (фича 0450). Прежде промежуточный FB не
+        // получал `VAR_IN_OUT`, а его тело звало `only_first0(shared := shared)`
+        // — `iec2c` отвечал «Variable not declared in this scope» при нулевом
+        // коде возврата `taktc`.
+        let usage = crate::semantic::unused::usage_with_implementations(&sub_model);
         let own: Vec<String> = sub_model.borrow().variables.keys().cloned().collect();
         let root_ref = root.borrow();
 

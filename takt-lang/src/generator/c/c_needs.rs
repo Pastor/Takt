@@ -30,10 +30,8 @@ use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
 
 use crate::diagnostics::Diagnostic;
-use crate::semantic::extend::Extend;
 use crate::semantic::{
-    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, StatementNode,
-    VariableNode,
+    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StatementNode, VariableNode,
 };
 
 /// Нужен ли функции указатель на состояние.
@@ -155,47 +153,12 @@ fn init_needs_root_inner(
     // Модели, которыми РЕАЛИЗОВАНЫ состояния (`= M`, `A | B`, `A + B`), —
     // такие же дети по вызову: их `_init` зовёт эта модель и передаёт `main`
     // ровно тогда, когда он ребёнку нужен (фича 0439).
-    nested.extend(implementation_children(&b));
+    nested.extend(crate::semantic::extend::implementation_children(&b));
     drop(b);
     for child in &nested {
         needed |= init_needs_root_inner(child, clock_profile, seen);
     }
     needed
-}
-
-/// Модели, которыми реализованы состояния этой модели.
-///
-/// ⚠️ Они **не** лежат в `models`: там объявленные внутри, а реализация
-/// ссылается на модель, объявленную где угодно в файле. До фичи 0439 признак
-/// нужды в указателе их не видел, и модель-обёртка без собственных обращений к
-/// корню получала сигнатуру без `main`, тогда как её тело звало
-/// `Child_tick(&…, main)` — `cc` отвечал «use of undeclared identifier 'main'»
-/// при НУЛЕВОМ коде возврата `taktc`.
-fn implementation_children(model: &ModelNode) -> Vec<Rc<RefCell<ModelNode>>> {
-    let mut found = Vec::new();
-    for state in model.states.values() {
-        if let StateNode::Implement { implements, .. } = state {
-            collect_extend_models(implements, &mut found);
-        }
-    }
-    found
-}
-
-/// Собирает модели из дерева реализации (`Extend`).
-///
-/// ⚠️ Разбор **исчерпывающий**: пропущенная форма означала бы «ребёнка не
-/// видно», то есть тот самый отказ `cc` при нулевом коде возврата.
-fn collect_extend_models(extend: &Extend, found: &mut Vec<Rc<RefCell<ModelNode>>>) {
-    match extend {
-        Extend::Model(rc, _, _) => found.push(Rc::clone(rc)),
-        Extend::Parentless(inner) => collect_extend_models(inner, found),
-        Extend::Concatenation(items) | Extend::Parallel(items) => {
-            for item in items {
-                collect_extend_models(item, found);
-            }
-        }
-        Extend::None | Extend::Unresolved(_) => {}
-    }
 }
 
 fn needs_root_inner(
@@ -240,7 +203,7 @@ fn needs_root_inner(
     let mut nested: Vec<Rc<RefCell<ModelNode>>> = b.models.values().cloned().collect();
     // Реализации состояний — дети по вызову наравне с вложенными моделями
     // (фича 0439): `_tick` этой модели тикает их и передаёт `main`.
-    nested.extend(implementation_children(&b));
+    nested.extend(crate::semantic::extend::implementation_children(&b));
     drop(b);
     for child in &nested {
         // Под-модель получает `main` от этой: нужен ей — нужен и здесь.

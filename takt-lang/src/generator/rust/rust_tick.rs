@@ -41,7 +41,16 @@ pub(crate) fn emit_tick(
     // Поле `hal` есть только у корня; под-модель получает HAL параметром.
     // Параметр даётся, только если он ДЕЙСТВИТЕЛЬНО нужен: неиспользуемый
     // параметр — такое же `-D warnings`, как неиспользуемое поле.
-    let needs_hal_param = !is_root && uses_hal;
+    // ⚠️ Признак — НА ФУНКЦИЮ (фича 0450): HAL, нужный только начальному
+    // значению порта, в такте не используется, и `rustc` под `-D warnings`
+    // отвечает «unused variable: `hal`». Тот же приём у цели `c` — 0419.
+    let needs_hal_param = !is_root
+        && uses_hal
+        && crate::generator::rust::rust_model::needs_hal_in_tick(
+            map,
+            ctx.name,
+            &mut BTreeSet::new(),
+        );
     // Под-модель получает общие переменные ОДНИМ параметром `&mut Shared`
     // (фича 0059), а не по одному. Корень владеет полем `self.shared` и параметра
     // не получает. `hal` — ПОСЛЕДНИМ (правило 5 ADR / инвариант 0050).
@@ -634,7 +643,16 @@ fn call_args(
     }
     // HAL — ПОСЛЕДНИМ (правило 5 ADR / инвариант 0050), тем же предикатом, каким
     // `emit_tick` решает, объявлять ли параметр.
-    if !scope.hal.is_empty() && needs_hal(map, &sub_name, false, &mut BTreeSet::new()) {
+    // ⚠️ Предикат ТОТ ЖЕ, каким `emit_tick` объявляет параметр (фича 0450):
+    // разъедься они — «this method takes 0 arguments but 1 was supplied».
+    if !scope.hal.is_empty()
+        && needs_hal(map, &sub_name, false, &mut BTreeSet::new())
+        && crate::generator::rust::rust_model::needs_hal_in_tick(
+            map,
+            &sub_name,
+            &mut BTreeSet::new(),
+        )
+    {
         args.push(scope.hal_argument("вызов такта под-модели")?);
     }
     Ok(args.join(", "))
