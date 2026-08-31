@@ -153,6 +153,17 @@ pub(crate) enum Touch {
     InoutRead,
     /// Запись двунаправленного порта: сигналы `_o` и строб `_we`.
     InoutWrite,
+    /// Инвариант УРОВНЯ МОДЕЛИ: `invariant Имя = условие;` — сахар над `cond`
+    /// плюс охранная формула (фича 0044).
+    InvariantModel,
+    /// Инвариант в теле СОСТОЯНИЯ: то же обязательство, другое место
+    /// объявления (одно из шести, фича 0203).
+    InvariantState,
+    /// Охранная формула краткой формой: `: условие;`.
+    GuardFormula,
+    /// Темпоральное свойство `: [LTL] φ;` — до целей оно не доезжает вовсе
+    /// (предмет верификации), и это тоже часть таблицы.
+    LtlFormula,
     /// ЧАСТИЧНОЕ чтение входного порта: у составного значения читается одна
     /// часть (фича 0453).
     ///
@@ -163,7 +174,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 12] = [
+pub(crate) const TOUCHES: [Touch; 16] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -176,6 +187,10 @@ pub(crate) const TOUCHES: [Touch; 12] = [
     Touch::InoutRead,
     Touch::InoutWrite,
     Touch::PortReadPartial,
+    Touch::InvariantModel,
+    Touch::InvariantState,
+    Touch::GuardFormula,
+    Touch::LtlFormula,
 ];
 
 impl Touch {
@@ -193,6 +208,10 @@ impl Touch {
             Touch::InoutRead => "inout_read",
             Touch::InoutWrite => "inout_write",
             Touch::PortReadPartial => "port_read_partial",
+            Touch::InvariantModel => "invariant_model",
+            Touch::InvariantState => "invariant_state",
+            Touch::GuardFormula => "guard_formula",
+            Touch::LtlFormula => "ltl_formula",
         }
     }
 
@@ -246,7 +265,16 @@ impl Touch {
                 format!("    inout a: {} at 0x40000100;\n", kind.type_name())
             }
             Touch::ExternCall => "    extern fn probe_value() -> u8;\n".to_string(),
-            Touch::None | Touch::SharedRead | Touch::ClockAfter => String::new(),
+            // Обязательства уровня модели: инвариант — сахар над `cond` плюс
+            // охранная формула (0044), краткая форма — та же формула без имени.
+            Touch::InvariantModel => "    invariant Bound = k < 200;\n".to_string(),
+            Touch::GuardFormula => "    : k < 200;\n".to_string(),
+            // Темпоральное свойство опирается на ИМЕНОВАННОЕ условие: атом
+            // формулы обязан иметь имя (правило 0049).
+            Touch::LtlFormula => "    cond Low = k < 200;\n    : [LTL] G Low;\n".to_string(),
+            Touch::None | Touch::SharedRead | Touch::ClockAfter | Touch::InvariantState => {
+                String::new()
+            }
         }
     }
 
@@ -345,8 +373,15 @@ fn plain_child(name: &str) -> String {
 
 /// Модель, делающая обращение вида `touch` над значением формы `kind`.
 fn touching_model(name: &str, touch: Touch, kind: Kind) -> String {
+    // Инвариант СОСТОЯНИЯ объявляется внутри состояния — это другое из шести
+    // мест объявления формулы (фича 0203).
+    let in_state = if touch == Touch::InvariantState {
+        "        invariant InState = k < 200;\n"
+    } else {
+        ""
+    };
     format!(
-        "model {name} {{\n    var k: u8 := 0;\n{decl}{funcs}    start Go {{\n        always {{\n{body}        }}\n{transition}    }}\n    state Done;\n}}\n\n",
+        "model {name} {{\n    var k: u8 := 0;\n{decl}{funcs}    start Go {{\n{in_state}        always {{\n{body}        }}\n{transition}    }}\n    state Done;\n}}\n\n",
         decl = touch.declarations(kind),
         funcs = touch.functions(kind),
         body = touch.body(kind),

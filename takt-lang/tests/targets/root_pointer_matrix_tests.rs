@@ -36,7 +36,13 @@ use super::target_matrix_tests::refusal;
 /// повторяющий реализацию, доказывает лишь сам себя.
 fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
     match touch {
-        Touch::None | Touch::ExternCall => (false, false),
+        // Обязательства читают переменную самой модели: корня им не нужно.
+        Touch::None
+        | Touch::ExternCall
+        | Touch::InvariantModel
+        | Touch::InvariantState
+        | Touch::GuardFormula
+        | Touch::LtlFormula => (false, false),
         // Порт читается и пишется в ТАКТЕ — через HAL корня; у входного и
         // двунаправленного это так же, как у выходного (замер 0452).
         Touch::PortWrite

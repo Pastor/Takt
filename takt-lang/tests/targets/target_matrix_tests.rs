@@ -143,7 +143,7 @@ fn emit(dir: &Path, target: &str, text: &str) -> Emitted {
 }
 
 /// Прогоняет матрицу через одну цель; `check` судит порождённый каталог.
-fn sweep(target: &str, check: &dyn Fn(&Path, &Path) -> Result<(), String>) -> Vec<String> {
+fn sweep(target: &str, check: &dyn Fn(&Path, &Path, Touch) -> Result<(), String>) -> Vec<String> {
     let mut failures = Vec::new();
     for (shape, touch, kind) in cases() {
         let name = case_name(shape, touch, kind);
@@ -152,7 +152,7 @@ fn sweep(target: &str, check: &dyn Fn(&Path, &Path) -> Result<(), String>) -> Ve
         let text = source(shape, touch, kind);
         match (emit(&dir, target, &text), refusal(target, touch, kind)) {
             (Emitted::Ok(out), None) => {
-                if let Err(err) = check(&dir, &out) {
+                if let Err(err) = check(&dir, &out, touch) {
                     failures.push(format!("{name}: {err}"));
                 }
             }
@@ -182,8 +182,42 @@ fn verdict(target: &str, failures: Vec<String>) {
     );
 }
 
+/// Доезжает ли обязательство до цели — контроль осмысленности оси формул.
+///
+/// ⚠️ Без него перебор был бы зелен и на выводе, из которого формула пропала:
+/// охранная формула — это `assert` у трёх целей (фича 0235), а темпоральное
+/// свойство до целей не доезжает вовсе (предмет верификации). Проверяется
+/// **наличие** обязательства, а не его текст: текст — предмет 0235.
+fn assertion_expected(touch: Touch) -> Option<bool> {
+    match touch {
+        Touch::InvariantModel | Touch::InvariantState | Touch::GuardFormula => Some(true),
+        Touch::LtlFormula => Some(false),
+        _ => None,
+    }
+}
+
+/// Проверяет присутствие `assert` в выводе цели, если ось этого требует.
+fn check_assertion(text: &str, touch: Touch, marker: &str) -> Result<(), String> {
+    let Some(expected) = assertion_expected(touch) else {
+        return Ok(());
+    };
+    let found = text.contains(marker);
+    if found == expected {
+        return Ok(());
+    }
+    Err(if expected {
+        format!("обязательство не доехало до цели: '{marker}' в выводе нет")
+    } else {
+        format!("темпоральное свойство доехало до цели: '{marker}' в выводе есть")
+    })
+}
+
 /// Собирает порождённый C флагами гейта цели.
-fn cc_builds(dir: &Path, out: &Path) -> Result<(), String> {
+fn cc_builds(dir: &Path, out: &Path, _touch: Touch) -> Result<(), String> {
+    // ⚠️ Наличие `assert` у цели `c` не проверяется: её вывод содержит
+    // `assert(0 != model)` в каждой функции — маркер неразличим. Ось формул
+    // сторожится у `rust` и `sv`, где обязательство печатается отдельным
+    // оператором.
     let cc = Command::new("cc")
         .args([
             "-std=c11",
@@ -234,7 +268,7 @@ fn st_sweep(target: &str) {
         eprintln!("iec2c недоступен — перебор пропущен");
         return;
     };
-    let check = move |dir: &Path, out: &Path| -> Result<(), String> {
+    let check = move |dir: &Path, out: &Path, _touch: Touch| -> Result<(), String> {
         let work = dir.join("iec");
         std::fs::create_dir_all(&work).expect("рабочий каталог iec2c");
         let run = Command::new(&iec2c)
@@ -272,7 +306,7 @@ fn target_rust_accepts_every_shape() {
         eprintln!("clippy-driver недоступен — перебор пропущен");
         return;
     }
-    let check = |dir: &Path, out: &Path| -> Result<(), String> {
+    let check = |dir: &Path, out: &Path, touch: Touch| -> Result<(), String> {
         // ⚠️ Рабочий каталог — каталог случая: без него `clippy-driver` кладёт
         // `libprobe.rlib` в текущий, то есть в дерево репозитория (гейт 0377
         // ловит такие артефакты, но лучше их не порождать).
@@ -282,14 +316,14 @@ fn target_rust_accepts_every_shape() {
             .arg(out.join("probe.rs"))
             .output()
             .expect("запуск clippy-driver");
-        if run.status.success() {
-            Ok(())
-        } else {
-            Err(format!(
+        if !run.status.success() {
+            return Err(format!(
                 "clippy отверг вывод:\n{}",
                 String::from_utf8_lossy(&run.stderr)
-            ))
+            ));
         }
+        let text = std::fs::read_to_string(out.join("probe.rs")).unwrap_or_default();
+        check_assertion(&text, touch, "assert!(")
     };
     verdict("rust", sweep("rust", &check));
 }
@@ -302,7 +336,7 @@ fn sv_sweep(target: &str) {
         return;
     }
     let with_yosys = tool("yosys");
-    let check = move |_dir: &Path, out: &Path| -> Result<(), String> {
+    let check = move |_dir: &Path, out: &Path, touch: Touch| -> Result<(), String> {
         let module = out.join("probe.sv");
         let lint = Command::new("verilator")
             .args(["--lint-only", "-Wall"])
@@ -328,7 +362,8 @@ fn sv_sweep(target: &str) {
                 ));
             }
         }
-        Ok(())
+        let text = std::fs::read_to_string(&module).unwrap_or_default();
+        check_assertion(&text, touch, "assert (")
     };
     verdict(target, sweep(target, &check));
 }
@@ -346,7 +381,7 @@ fn target_sv_mmio_accepts_every_shape() {
 /// Цель `plantuml`: инструмента нет, вердикт — непустая диаграмма.
 #[test]
 fn target_plantuml_accepts_every_shape() {
-    let check = |_dir: &Path, out: &Path| -> Result<(), String> {
+    let check = |_dir: &Path, out: &Path, _touch: Touch| -> Result<(), String> {
         let text = std::fs::read_to_string(out.join("probe.puml"))
             .map_err(|e| format!("диаграмма не читается: {e}"))?;
         if text.contains("@startuml") && text.contains("@enduml") {
