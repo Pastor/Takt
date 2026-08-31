@@ -257,3 +257,15 @@ impl CMap {
         self.map.model_at(None)
     }
 }
+
+/// Карта цели `c` — источник состояний для общего носителя строк таблицы
+/// (фича 0440): вопросы к карте одни у всех целей, а сама карта у каждой своя.
+impl crate::generator::table::StateSource for CMap {
+    fn state_element(&self, name: Name) -> Option<Element> {
+        self.state_at(name)
+    }
+
+    fn state_node(&self, name: Name) -> Result<Rc<RefCell<StateNode>>, Diagnostic> {
+        self.raw_state_at(name)
+    }
+}

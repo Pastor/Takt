@@ -83,6 +83,11 @@ pub(crate) struct Extras {
     /// действительно передаётся в функцию: иначе именованным стал бы каждый
     /// массив вывода — правка формы там, где ничего не ломалось.
     pub array_forms: Vec<String>,
+    /// Константные массивы таблицы переходов (фича 0440): имя, тип, значение.
+    ///
+    /// Печатаются в `VAR CONSTANT` наравне с прочими константами: строки
+    /// таблицы — данные, и место им в объявлениях, а не в теле.
+    pub table_constants: Vec<(String, String, String)>,
     /// Экземпляры под-FB: `(имя, тип)`.
     /// Экземпляры под-FB: имя, тип, инициализатор экземпляра (фича 0185).
     ///
@@ -324,6 +329,14 @@ pub(crate) fn emit_declarations(
                 init: None,
             });
         }
+    }
+
+    for (name, ty, init) in &extras.table_constants {
+        constants.push(Declaration {
+            name: name.clone(),
+            ty: ty.clone(),
+            init: Some(init.clone()),
+        });
     }
 
     let sections = [

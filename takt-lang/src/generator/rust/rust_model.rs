@@ -405,6 +405,11 @@ pub(crate) fn emit_model(
     emit_is_done(p, &table, is_root)?;
     p.down();
     p.ident("}").nl().nl();
+    // Данные таблицы (фича 0440) живут на уровне модуля: тип строки не зависит
+    // от HAL, а `static` не пересобирается на каждом такте.
+    if map.fsm_table() {
+        crate::generator::rust::rust_table::emit_data(p, &ctx)?;
+    }
     emit_default_impl(p, &struct_name, is_root, uses_hal);
     Ok(())
 }

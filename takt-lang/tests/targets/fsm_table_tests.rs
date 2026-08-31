@@ -352,6 +352,11 @@ fn chain_table_output_compiles_with_gate_flags() {
     );
 }
 
+/// Цель, которая табличную форму не печатает, отвергает флаг.
+///
+/// ⚠️ Взята `sv`: цели `rust`, `st` и `st-at` форму получили фичей 0440, и
+/// полный список поддерживающих сторожит её набор
+/// (`fsm_table_targets_tests::table_flag_names_supporting_targets`).
 #[test]
 fn table_flag_is_refused_for_other_targets() {
     let dir = work_dir("target");
@@ -359,7 +364,7 @@ fn table_flag_is_refused_for_other_targets() {
     std::fs::write(&input, SIMPLE).expect("запись пробы");
     let out = taktc()
         .arg("compile")
-        .args(["-t", "st", "--fsm=table"])
+        .args(["-t", "sv", "--fsm=table"])
         .arg(&input)
         .arg("-o")
         .arg(dir.join("out"))

@@ -56,6 +56,7 @@ mod st_operand_type;
 mod st_reserved;
 mod st_sign;
 mod st_stmt;
+mod st_table;
 mod st_time;
 mod st_type;
 
@@ -96,7 +97,8 @@ impl AsGenerator for Generator {
             options.hal,
             options.address_map.clone(),
         )?
-        .with_time_profile(profile);
+        .with_time_profile(profile)
+        .with_fsm(options.fsm);
         let (program, warnings) = generate_program(&map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
@@ -536,7 +538,15 @@ fn emit_function_block(
         st_model::emit_body(&mut bp, map, &element, model, &table)?
     };
 
+    // Константы таблицы переходов (фича 0440) считаются по тем же строкам, что
+    // печатает диспетчер: носитель строк один (`generator::table`).
+    let table_constants = if map.fsm_table() {
+        st_table::constants(map, &element, model, &table)?
+    } else {
+        Vec::new()
+    };
     let extras = st_decl::Extras {
+        table_constants,
         state_var: true,
         is_done: true,
         external_ports: map.at_addresses(),

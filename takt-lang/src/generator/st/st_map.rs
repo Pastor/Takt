@@ -31,6 +31,8 @@ pub(crate) struct StMap {
     /// Профиль времени (фича 0134): «часы» (штатный `TON`) либо «такты» (счётчик).
     /// Разрешается общим слоем `resolve_profile` в `generate` — по образцу `CMap`.
     time_profile: crate::semantic::duration::TimeProfile,
+    /// Форма печати автомата (фича 0440): `CASE` либо таблица переходов.
+    fsm: crate::generator::FsmForm,
 }
 
 /// Собирает имена моделей из дерева реализации состояния.
@@ -64,7 +66,35 @@ impl StMap {
             at_addresses,
             addresses,
             time_profile: crate::semantic::duration::TimeProfile::default(),
+            fsm: crate::generator::FsmForm::default(),
         })
+    }
+
+    /// Задаёт форму печати автомата (фича 0440); умолчание — `CASE`.
+    pub(crate) fn with_fsm(mut self, fsm: crate::generator::FsmForm) -> Self {
+        self.fsm = fsm;
+        self
+    }
+
+    /// Печатается ли автомат таблицей переходов (`--fsm=table`).
+    pub(crate) fn fsm_table(&self) -> bool {
+        self.fsm == crate::generator::FsmForm::Table
+    }
+
+    /// Узел состояния по имени — для общего носителя строк таблицы (фича 0440).
+    pub(crate) fn raw_state_at(
+        &self,
+        name: Name,
+    ) -> Result<Rc<RefCell<crate::semantic::StateNode>>, Diagnostic> {
+        self.map
+            .state_at(Some(name.unique().to_string()))
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    Location::Codegen,
+                    format!("Состояние '{name}' не найдено в карте"),
+                )
+                .with_code("ST-012")
+            })
     }
 
     /// Задаёт профиль времени (фича 0134); умолчание — «часы» (аддитивно).
@@ -220,5 +250,20 @@ impl StMap {
     #[allow(dead_code)]
     pub fn at_addresses(&self) -> bool {
         self.at_addresses
+    }
+}
+
+/// Карта цели `st` — источник состояний для общего носителя строк таблицы
+/// (фича 0440).
+impl crate::generator::table::StateSource for StMap {
+    fn state_element(&self, name: Name) -> Option<Element> {
+        self.state_at(name)
+    }
+
+    fn state_node(
+        &self,
+        name: Name,
+    ) -> Result<Rc<RefCell<crate::semantic::StateNode>>, Diagnostic> {
+        self.raw_state_at(name)
     }
 }
