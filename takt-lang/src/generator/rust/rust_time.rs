@@ -248,6 +248,14 @@ pub(super) fn dwell_after_dynamic(expr: &str) -> String {
 
 /// Вычисляемая выдержка в профиле «часы»: разность меток сравнивается с
 /// выражением в миллисекундах.
+///
+/// ⚠️ Выражение **расширяется до `u64`**: метка времени фиксирована в `u64`
+/// (`now_ms` отдаёт его), а `duration` в целях — целое **32-битное** число
+/// миллисекунд (правило 0183). Без расширения `rustc` отвечает `E0308:
+/// expected u64, found u32` при НУЛЕВОМ коде возврата `taktc` (замер 0459).
+///
+/// ⚠️ Расширение, а не приведение метки вниз: усечение `now_ms` до 32 бит
+/// поменяло бы момент переполнения счётчика, то есть **поведение**.
 pub(super) fn clock_after_dynamic(hal: &str, expr: &str) -> String {
-    format!("{hal}.{NOW_MS_METHOD}().wrapping_sub(self.{ENTRY_MS_FIELD}) >= ({expr})")
+    format!("{hal}.{NOW_MS_METHOD}().wrapping_sub(self.{ENTRY_MS_FIELD}) >= u64::from({expr})")
 }

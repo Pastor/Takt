@@ -27,7 +27,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::matrix_probes::{Kind, Touch, case_name, cases, library_files, source};
+use super::matrix_probes::{Kind, Touch, case_name, cases, extra_flags, library_files, source};
 use super::target_matrix_tests::refusal;
 
 /// Ожидание: печатается ли `main` функциям `(_init, _tick)`.
@@ -73,7 +73,15 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::AddressMap
         | Touch::AddressDefine => (false, true),
         Touch::PortInit | Touch::VarInit => (true, false),
-        Touch::ClockAfter => (true, true),
+        // Время в профиле «часы» — обращение к корню и в `_init`, и в такте
+        // (метка сравнивается с `main->now_ms(…)`, фича 0449).
+        Touch::ClockAfter
+        | Touch::TimeEvery
+        | Touch::TimeDurationVar
+        | Touch::TimeComputed => (true, true),
+        // ⚠️ Тактовая выдержка `after Nt` и объявленный `clock` времени хоста
+        // не требуют: счётчик тактов живёт в самой модели.
+        Touch::TimeAfterTicks | Touch::TimeClockDeclared => (false, false),
     }
 }
 
@@ -109,6 +117,12 @@ fn compile(dir: &Path, source: &str, touch: Touch) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_taktc"))
         .arg("compile")
         .args(["-t", "c"])
+        // Ключи вида обращения: карта адресов, `-D`, `--tick-hz` (0458, 0459).
+        .args(
+            extra_flags(touch)
+                .into_iter()
+                .map(|flag| flag.replace("{dir}", &dir.display().to_string())),
+        )
         .arg(&input)
         .arg("-o")
         .arg(dir.join("out"))

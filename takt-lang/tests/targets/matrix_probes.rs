@@ -195,6 +195,16 @@ pub(crate) enum Touch {
     AddressMap,
     /// Адрес опирается на `-D` определение среды вычислителя (фича 0042).
     AddressDefine,
+    /// ТАКТОВАЯ выдержка `after Nt` — счёт тактов, а не миллисекунд.
+    TimeAfterTicks,
+    /// Периодический блок `every Nms`.
+    TimeEvery,
+    /// Выдержка от ПЕРЕМЕННОЙ типа `duration` — вычисляемая (фича 0183).
+    TimeDurationVar,
+    /// Вычисляемая выдержка выражением: `after (SETTLE + 500ms)`.
+    TimeComputed,
+    /// Модель ОБЪЯВЛЯЕТ такт: `clock 1kHz;` — флаг обязан совпасть (0134).
+    TimeClockDeclared,
     /// ЧАСТИЧНОЕ чтение входного порта: у составного значения читается одна
     /// часть (фича 0453).
     ///
@@ -205,7 +215,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 30] = [
+pub(crate) const TOUCHES: [Touch; 35] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -236,6 +246,11 @@ pub(crate) const TOUCHES: [Touch; 30] = [
     Touch::AddressExpression,
     Touch::AddressMap,
     Touch::AddressDefine,
+    Touch::TimeAfterTicks,
+    Touch::TimeEvery,
+    Touch::TimeDurationVar,
+    Touch::TimeComputed,
+    Touch::TimeClockDeclared,
 ];
 
 impl Touch {
@@ -271,6 +286,11 @@ impl Touch {
             Touch::AddressExpression => "address_expression",
             Touch::AddressMap => "address_map",
             Touch::AddressDefine => "address_define",
+            Touch::TimeAfterTicks => "time_after_ticks",
+            Touch::TimeEvery => "time_every",
+            Touch::TimeDurationVar => "time_duration_var",
+            Touch::TimeComputed => "time_computed",
+            Touch::TimeClockDeclared => "time_clock_declared",
         }
     }
 
@@ -331,6 +351,13 @@ impl Touch {
             // Карта и определение приходят снаружи: объявление обычное.
             Touch::AddressMap => "    out a: u8 at 0x40000100;\n".to_string(),
             Touch::AddressDefine => "    out a: u8;\n    address a = BASE + 4;\n".to_string(),
+            // Время: выдержка от переменной и от константного выражения — две
+            // формы вычисляемой выдержки (фича 0183).
+            Touch::TimeDurationVar => "    var hold: duration := 5ms;\n".to_string(),
+            Touch::TimeComputed => "    const SETTLE: duration := 5ms;\n".to_string(),
+            // Модель объявляет такт устройства: флаг `--tick-hz` обязан совпасть
+            // (контракт 0134, `SE-069`/`SE-070`).
+            Touch::TimeClockDeclared => "    clock 1kHz;\n".to_string(),
             Touch::InoutRead | Touch::InoutWrite => {
                 format!("    inout a: {} at 0x40000100;\n", kind.type_name())
             }
@@ -356,7 +383,10 @@ impl Touch {
             // Виды с параметром строят свой исходник целиком (см. `source`).
             | Touch::ParameterDefault
             | Touch::ParameterArgument
-            | Touch::ParameterExpression => String::new(),
+            | Touch::ParameterExpression
+            // Тактовая выдержка и периодический блок объявлений не требуют.
+            | Touch::TimeAfterTicks
+            | Touch::TimeEvery => String::new(),
         }
     }
 
@@ -404,8 +434,11 @@ impl Touch {
     /// Переход из стартового состояния.
     fn transition(self) -> &'static str {
         match self {
-            // Выдержка — единственный вид, которому нужен ход времени.
-            Touch::ClockAfter => "        ref Done: after 5ms;\n",
+            // Выдержка — вид, которому нужен ход времени.
+            Touch::ClockAfter | Touch::TimeClockDeclared => "        ref Done: after 5ms;\n",
+            Touch::TimeAfterTicks => "        ref Done: after 5t;\n",
+            Touch::TimeDurationVar => "        ref Done: after hold;\n",
+            Touch::TimeComputed => "        ref Done: after (SETTLE + 500ms);\n",
             _ => "        next Done;\n",
         }
     }
@@ -468,10 +501,12 @@ fn plain_child(name: &str) -> String {
 fn touching_model(name: &str, touch: Touch, kind: Kind) -> String {
     // Инвариант СОСТОЯНИЯ объявляется внутри состояния — это другое из шести
     // мест объявления формулы (фича 0203).
-    let in_state = if touch == Touch::InvariantState {
-        "        invariant InState = k < 200;\n"
-    } else {
-        ""
+    let in_state = match touch {
+        Touch::InvariantState => "        invariant InState = k < 200;\n",
+        // Периодический блок объявляется В СОСТОЯНИИ — ещё одно из мест, где
+        // живёт время (фича 0134).
+        Touch::TimeEvery => "        every 3ms {\n            k := k + 2;\n        }\n",
+        _ => "",
     };
     format!(
         "model {name} {{\n    var k: u8 := 0;\n{decl}{funcs}    start Go {{\n{in_state}        always {{\n{body}        }}\n{transition}    }}\n    state Done;\n}}\n\n",
@@ -553,6 +588,9 @@ pub(crate) fn extra_flags(touch: Touch) -> Vec<String> {
         Touch::AddressMap => vec!["--address-map".to_string(), "{dir}/plat.map".to_string()],
         // Среда вычислителя адреса: имя видно только ему (фича 0042).
         Touch::AddressDefine => vec!["-DBASE=0x40000000".to_string()],
+        // ⚠️ Модель объявила такт устройства — флаг ОБЯЗАН совпасть, иначе
+        // `SE-069`/`SE-070` (контракт 0134). Это часть случая, а не настройка.
+        Touch::TimeClockDeclared => vec!["--tick-hz=1000".to_string()],
         _ => Vec::new(),
     }
 }
