@@ -122,10 +122,8 @@ END_VAR
                 2:
                     cycle_drain2(stage := stage);
                     IF cycle_drain2.is_done THEN
-                        cycle_step := 3;
+                        state := 2; (* Done *)
                     END_IF;
-                3: (* конкатенация завершена *)
-                    state := 2; (* Done *)
             END_CASE;
         2: (* Done *)
             ready := TRUE;

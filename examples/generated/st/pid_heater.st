@@ -140,10 +140,8 @@ END_VAR
                 1:
                     pid_heater_heater1(ambient := ambient, ctrl := ctrl, gain := gain, loss := loss, meas := meas, target := target);
                     IF pid_heater_heater1.is_done THEN
-                        pid_heater_step := 2;
+                        state := 1; (* Finished *)
                     END_IF;
-                2: (* конкатенация завершена *)
-                    state := 1; (* Finished *)
             END_CASE;
         3: (* END *)
             state := 3;
