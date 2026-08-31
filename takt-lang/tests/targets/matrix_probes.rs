@@ -104,6 +104,16 @@ impl Kind {
         }
     }
 
+    /// Оператор, читающий ОДНУ часть значения (фича 0453).
+    fn partial_read_statement(self, name: &str) -> String {
+        match self {
+            Kind::Struct => format!("            k := k + {name}.hi;\n"),
+            Kind::Array => format!("            k := k + {name}[0];\n"),
+            // У скаляра и перечисления частей нет: чтение полное.
+            _ => self.read_statement(name),
+        }
+    }
+
     /// Оператор, пишущий в `name` значение, зависящее от такта.
     fn write_statement(self, name: &str) -> String {
         match self {
@@ -143,10 +153,17 @@ pub(crate) enum Touch {
     InoutRead,
     /// Запись двунаправленного порта: сигналы `_o` и строб `_we`.
     InoutWrite,
+    /// ЧАСТИЧНОЕ чтение входного порта: у составного значения читается одна
+    /// часть (фича 0453).
+    ///
+    /// ⚠️ Модель вправе так делать, а структурный порт цель `sv` печатает
+    /// одним сигналом (0390) — непрочитанные биты `verilator` под `-Wall`
+    /// считает ошибкой. Вид заведён именно ради этого случая.
+    PortReadPartial,
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 11] = [
+pub(crate) const TOUCHES: [Touch; 12] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -158,6 +175,7 @@ pub(crate) const TOUCHES: [Touch; 11] = [
     Touch::PortRead,
     Touch::InoutRead,
     Touch::InoutWrite,
+    Touch::PortReadPartial,
 ];
 
 impl Touch {
@@ -174,6 +192,7 @@ impl Touch {
             Touch::PortRead => "port_read",
             Touch::InoutRead => "inout_read",
             Touch::InoutWrite => "inout_write",
+            Touch::PortReadPartial => "port_read_partial",
         }
     }
 
@@ -192,6 +211,7 @@ impl Touch {
                 | Touch::PortRead
                 | Touch::InoutRead
                 | Touch::InoutWrite
+                | Touch::PortReadPartial
         )
     }
 
@@ -219,7 +239,9 @@ impl Touch {
                 kind.literal()
             ),
             Touch::VarInit => format!("    var seed: {} := shared;\n", kind.type_name()),
-            Touch::PortRead => format!("    in a: {} at 0x40000100;\n", kind.type_name()),
+            Touch::PortRead | Touch::PortReadPartial => {
+                format!("    in a: {} at 0x40000100;\n", kind.type_name())
+            }
             Touch::InoutRead | Touch::InoutWrite => {
                 format!("    inout a: {} at 0x40000100;\n", kind.type_name())
             }
@@ -249,6 +271,9 @@ impl Touch {
             Touch::VarInit => kind.read_statement("seed"),
             Touch::Transitive => "            k := bump(k);\n".to_string(),
             Touch::PortRead | Touch::InoutRead => kind.read_statement("a"),
+            // Читается ОДНА часть значения: у скаляра и перечисления это то же
+            // самое, что полное чтение, а у массива и структуры — нет.
+            Touch::PortReadPartial => kind.partial_read_statement("a"),
             Touch::InoutWrite => format!("            k := k + 1;\n{}", kind.write_statement("a")),
             Touch::ExternCall => "            k := probe_value();\n".to_string(),
             _ => "            k := k + 1;\n".to_string(),

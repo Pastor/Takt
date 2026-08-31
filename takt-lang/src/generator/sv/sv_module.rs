@@ -590,6 +590,75 @@ pub(crate) fn collect_ports(
     Ok(ports)
 }
 
+/// Печатает поглотители непрочитанных полей входного порта-структуры (0453).
+///
+/// # Зачем
+///
+/// Структурный порт цель печатает **одним** сигналом (решение 0390), а модель
+/// вправе читать часть полей: `verilator` под `-Wall` отвечает
+/// `UNUSEDSIGNAL` — «Bits of signal are not used» — то есть вывод отвергает
+/// гейт самой цели при нулевом коде возврата `taktc`.
+///
+/// ⚠️ Форма — та же, что у непрочитанной локальной (фича 0387):
+/// `_unused_<порт> = &{1'b0, <порт>}` — редукция И по всем битам. Проверена
+/// **обоими** инструментами: `verilator` замолкает, `yosys` синтезирует.
+///
+/// ⚠️ Печатается только при **неполном** чтении: набор читаемых полей даёт
+/// `usage_tree::read_port_fields`. Иначе вывод корпуса менялся бы там, где
+/// дефекта нет.
+pub(crate) fn emit_port_sinks(
+    p: &mut Printer,
+    structs: &std::collections::BTreeMap<String, Vec<(String, TypeNode)>>,
+    ports: &SvPorts,
+    blocks: &[(Name, Rc<RefCell<ModelNode>>)],
+) {
+    let mut printed = false;
+    for port in ports.inputs.iter().chain(ports.inouts.iter()) {
+        let TypeNode::Struct(struct_name) = &port.ty_node else {
+            continue;
+        };
+        let Some(fields) = structs.get(struct_name.as_str()) else {
+            continue;
+        };
+        let mut read: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (_, model_rc) in blocks {
+            read.extend(crate::semantic::usage_tree::read_port_fields(
+                model_rc, &port.name,
+            ));
+        }
+        if fields.iter().all(|(name, _)| read.contains(name)) {
+            continue;
+        }
+        let is_inout = ports.inouts.iter().any(|p| p.name == port.name);
+        // ⚠️ У двунаправленного порта сторона `_i` печатается по факту чтения
+        // (фича 0452): если модель порт только пишет, сигнала нет вовсе, и
+        // поглотитель ссылался бы на несуществующее имя («Can't find
+        // definition of variable»).
+        if is_inout && !port.is_read {
+            continue;
+        }
+        let signal = if is_inout {
+            inout_in(&port.name)
+        } else {
+            port.name.clone()
+        };
+        p.ident(&format!(
+            "// Непрочитанные поля порта '{}' гасит поглотитель: структурный порт",
+            port.name
+        ))
+        .nl();
+        p.ident("// остаётся одним сигналом, и verilator считает их ошибкой.")
+            .nl();
+        p.ident(&format!("logic _unused_{signal};")).nl();
+        p.ident(&format!("assign _unused_{signal} = &{{1'b0, {signal}}};"))
+            .nl();
+        printed = true;
+    }
+    if printed {
+        p.nl();
+    }
+}
+
 /// Печатает заголовок модуля со списком портов.
 ///
 /// Порядок — служебные, затем `in`, затем `out`, затем `is_done` (форма ADR).

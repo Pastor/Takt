@@ -44,7 +44,8 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::Transitive
         | Touch::PortRead
         | Touch::InoutRead
-        | Touch::InoutWrite => (false, true),
+        | Touch::InoutWrite
+        | Touch::PortReadPartial => (false, true),
         Touch::PortInit | Touch::VarInit => (true, false),
         Touch::ClockAfter => (true, true),
     }

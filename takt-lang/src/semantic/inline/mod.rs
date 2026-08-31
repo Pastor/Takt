@@ -136,7 +136,7 @@ fn count_in_block(blk: &NamedCodeBlockDefinitionNode, out: &mut HashMap<String, 
 }
 
 fn count_in_stmt(stmt: &StatementNode, out: &mut HashMap<String, usize>) {
-    rename::walk_stmt_exprs(stmt, &mut |expr| count_in_expr(expr, out));
+    crate::semantic::walk::walk_stmt_exprs(stmt, &mut |expr| count_in_expr(expr, out));
 }
 
 fn count_in_expr(expr: &ExpressionNode, out: &mut HashMap<String, usize>) {
@@ -330,7 +330,7 @@ fn expand_in_expr(
     prelude: &mut Vec<StatementNode>,
     loc: Location,
 ) {
-    rename::walk_expr_mut(expr, &mut |node| {
+    crate::semantic::walk::walk_expr_mut(expr, &mut |node| {
         if let Some(replacement) = expand_call(node, funcs, owner, ctx, prelude, loc) {
             *node = replacement;
         }

@@ -282,6 +282,9 @@ fn generate_program(
     if map.fsm_table() {
         sv_table::emit_signals(&mut p, map, &models)?;
     }
+    // Поглотители непрочитанных полей входного порта-структуры (фича 0453):
+    // объявления обязаны стоять до `always_comb`, который их пишет.
+    sv_module::emit_port_sinks(&mut p, &fsm.structs, &ports, &blocks);
     sv_func::emit_functions(&mut p, map, &fsm, &blocks)?;
     sv_fsm::emit_comb(&mut p, map, &fsm, &root_name, &models)?;
     sv_fsm::emit_ff(&mut p, map, &fsm, &blocks)?;
