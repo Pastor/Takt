@@ -111,3 +111,5 @@ mod conformance_var_shift_tests;
 mod conformance_wide_bits_tests;
 mod conformance_wider_integer_tests;
 mod conformance_write_only_local_tests;
+
+mod simulator_matrix_tests;
