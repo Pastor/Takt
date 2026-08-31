@@ -110,15 +110,21 @@ address_expr = address_literal | expression ;   (* без `:=` и без `?:` *)
 == Функции
 <функции>```ebnf
 function_define
-    = [ "extern" ] "fn" identifier parameter_list [ "->" type ]
-      ( ";" | block_statement ) ;
+    = [ attribute ] [ "extern" ] "fn" identifier parameter_list
+      [ "->" type ] ( ";" | block_statement ) ;
 
+attribute           = "[" identifier "]" ;
 parameter_list      = "(" [ fn_parameter { "," fn_parameter } ] ")" ;
 fn_parameter        = identifier ":" parameter_type_expr | parameter_type_expr ;
 parameter_type_expr = "[" type ";" integer "]" | expression ;
 ```
 
 `extern fn` — объявление без тела; `fn` — определение с телом.
+Атрибут `attribute` — указание о размещении функции в порождённом коде:
+`inline` (подставить тело в место вызова) и `noinline` (не подставлять).
+Имя атрибута — #strong[обычный идентификатор], новых ключевых слов
+конструкция не вводит; набор допустимых имён судит семантика
+(`SE-126`).
 Нетерминал `fn_parameter` — параметр функции; ключевое слово
 `"parameter"` (в кавычках выше) — объявление параметра модели, это
 разные вещи.

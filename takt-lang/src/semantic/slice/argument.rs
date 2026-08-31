@@ -73,106 +73,24 @@ const PREFIX: &str = "takt_slice_";
 /// Разворачивает срезы в аргументах вызовов по всему дереву.
 pub(crate) fn expand_slice_arguments(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     let mut visited = HashSet::new();
-    let mut taken = HashSet::new();
-    collect_names(model, &mut HashSet::new(), &mut taken);
-    let mut counter = 0usize;
-    let mut ctx = Ctx {
-        counter: &mut counter,
-        taken: &taken,
-    };
+    // Множество занятых имён и счётчик свежих — общий носитель
+    // `semantic::fresh` (он же обслуживает подстановку тела функции, 0444):
+    // второй сборщик разошёлся бы с первым молча.
+    let taken = crate::semantic::fresh::taken_names(model);
+    let mut fresh = crate::semantic::fresh::Fresh::new(PREFIX, &taken);
+    let mut ctx = Ctx { fresh: &mut fresh };
     expand_model(model, &mut visited, &mut ctx)
 }
 
-/// Состояние обхода: счётчик имён и множество занятых.
+/// Состояние обхода: счётчик свежих имён.
 struct Ctx<'a> {
-    counter: &'a mut usize,
-    taken: &'a HashSet<String>,
+    fresh: &'a mut crate::semantic::fresh::Fresh<'a>,
 }
 
 impl Ctx<'_> {
     /// Свободное имя временной переменной.
     fn fresh_name(&mut self) -> String {
-        loop {
-            *self.counter += 1;
-            let name = format!("{PREFIX}{}", self.counter);
-            if !self.taken.contains(&name) {
-                return name;
-            }
-        }
-    }
-}
-
-/// Собирает имена, занятые автором: объявления модели и локальные тел.
-fn collect_names(
-    model: &Rc<RefCell<ModelNode>>,
-    visited: &mut HashSet<*const RefCell<ModelNode>>,
-    out: &mut HashSet<String>,
-) {
-    if !visited.insert(Rc::as_ptr(model)) {
-        return;
-    }
-    let b = model.borrow();
-    out.extend(b.variables.keys().cloned());
-    for func in b.functions.values() {
-        if let FunctionDefinitionNode::Local { body, .. } = func {
-            collect_locals(body, out);
-        }
-    }
-    for blk in &b.named_blocks {
-        collect_block_locals(blk, out);
-    }
-    for st in b.states.values() {
-        if let StateNode::Simple { named_blocks, .. } | StateNode::Implement { named_blocks, .. } =
-            st
-        {
-            for blk in named_blocks {
-                collect_block_locals(blk, out);
-            }
-        }
-    }
-    let nested: Vec<Rc<RefCell<ModelNode>>> = b.models.values().cloned().collect();
-    drop(b);
-    for child in &nested {
-        collect_names(child, visited, out);
-    }
-}
-
-fn collect_block_locals(blk: &NamedCodeBlockDefinitionNode, out: &mut HashSet<String>) {
-    match blk {
-        NamedCodeBlockDefinitionNode::Enter { body, .. }
-        | NamedCodeBlockDefinitionNode::Exit { body, .. }
-        | NamedCodeBlockDefinitionNode::Always { body, .. }
-        | NamedCodeBlockDefinitionNode::Unknown { body, .. }
-        | NamedCodeBlockDefinitionNode::Every { body, .. } => collect_locals(body, out),
-        NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {}
-    }
-}
-
-/// Имена локальных объявлений тела.
-///
-/// ⚠️ Обход **не** исчерпывающий: пропущенная форма даёт лишь риск столкнуться
-/// с чужим именем, а не порчу вывода, — и обе стороны здесь безопасны.
-fn collect_locals(stmt: &StatementNode, out: &mut HashSet<String>) {
-    match stmt {
-        StatementNode::Variable(name, _, _, _) => {
-            out.insert(name.clone());
-        }
-        StatementNode::Block(items) => items.iter().for_each(|s| collect_locals(s, out)),
-        StatementNode::If { then_, else_, .. } => {
-            collect_locals(then_, out);
-            if let Some(alt) = else_ {
-                collect_locals(alt, out);
-            }
-        }
-        StatementNode::Loop { body, .. } => collect_locals(body, out),
-        StatementNode::For { init, body, .. } => {
-            if let Some(i) = init {
-                collect_locals(i, out);
-            }
-            collect_locals(body, out);
-        }
-        StatementNode::Match { arms, .. } => arms.iter().for_each(|a| collect_locals(&a.body, out)),
-        _ => {}
+        self.fresh.fresh_name()
     }
 }
 

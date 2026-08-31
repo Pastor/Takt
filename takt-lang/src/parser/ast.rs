@@ -701,6 +701,12 @@ pub struct FunctionDefine {
     pub body: Option<Statement>,
     /// Является ли функция внешней.
     pub external: bool,
+    /// Атрибут объявления: `[inline]` либо `[noinline]` (фича 0444).
+    ///
+    /// Хранится **именем**, а не разобранным признаком: набор атрибутов знает
+    /// семантика, а не грамматика, и неизвестное имя обязано получить
+    /// диагностику с позицией, а не отказ разбора.
+    pub attribute: Option<Identifier>,
 }
 
 impl FunctionDefine {

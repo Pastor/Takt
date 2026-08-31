@@ -826,13 +826,22 @@ fn print_function(out: &mut Out, func: &ast::FunctionDefine) -> Result<(), Forma
         Some(ty) => format!(" -> {}", expr::ty(ty)?),
         None => String::new(),
     };
+    // Атрибут печатается ПЕРЕД `fn` (фича 0444). ⚠️ Молча потерять его нельзя:
+    // `taktc fmt` пишет на месте, и потеря сменила бы форму порождённого кода
+    // у уже отформатированной модели (правило врезки 0024).
+    let attribute = match &func.attribute {
+        Some(name) => format!("[{}] ", name.name),
+        None => String::new(),
+    };
     match &func.body {
         // `extern fn f(...);` — объявление без тела.
         None => {
-            out.line(&format!("extern fn {name}({params}){ret};"));
+            out.line(&format!("{attribute}extern fn {name}({params}){ret};"));
             Ok(())
         }
-        Some(body) => stmt::block_with_head(out, &format!("fn {name}({params}){ret} "), body),
+        Some(body) => {
+            stmt::block_with_head(out, &format!("{attribute}fn {name}({params}){ret} "), body)
+        }
     }
 }
 
