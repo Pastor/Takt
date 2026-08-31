@@ -14,6 +14,102 @@
 //! `SE-052`), а прочим безразличен — проверено прогоном (сигнатуры цели `c` от
 //! адреса не меняются).
 
+/// Форма ОБЪЯВЛЕНИЯ того, к чему идёт обращение (фича 0451).
+///
+/// Ось заведена потому, что тип меняет и путь печати, и границы целей:
+/// массив и структура в порту **разворачиваются по листам** (фичи 0350, 0417),
+/// перечисление в порту `rust` и `st-at` не размещают вовсе, а инициализатор
+/// массива от другой переменной цель `c` не выражает.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Kind {
+    /// Скаляр `u8`.
+    Scalar,
+    /// Массив `[u8; 3]`.
+    Array,
+    /// Структура из двух полей.
+    Struct,
+    /// Перечисление из двух вариантов.
+    Enum,
+}
+
+/// Формы объявления — перебор идёт по ним целиком.
+pub(crate) const KINDS: [Kind; 4] = [Kind::Scalar, Kind::Array, Kind::Struct, Kind::Enum];
+
+impl Kind {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Kind::Scalar => "scalar",
+            Kind::Array => "array",
+            Kind::Struct => "struct",
+            Kind::Enum => "enum",
+        }
+    }
+
+    /// Имя типа в объявлении.
+    fn type_name(self) -> &'static str {
+        match self {
+            Kind::Scalar => "u8",
+            Kind::Array => "[u8; 3]",
+            Kind::Struct => "Pair",
+            Kind::Enum => "Mode",
+        }
+    }
+
+    /// Объявление типа, если оно нужно.
+    fn type_declaration(self) -> &'static str {
+        match self {
+            Kind::Struct => "struct Pair {\n    lo: u8,\n    hi: u8\n}\n\n",
+            Kind::Enum => "enum Mode {\n    Idle = 1,\n    Work = 2\n}\n\n",
+            _ => "",
+        }
+    }
+
+    /// Значение для инициализатора.
+    fn literal(self) -> &'static str {
+        match self {
+            Kind::Scalar => "7",
+            Kind::Array => "{4, 5, 6}",
+            Kind::Struct => "{4, 5}",
+            Kind::Enum => "Work",
+        }
+    }
+
+    /// Начальное значение объявления в корне.
+    fn root_literal(self) -> &'static str {
+        match self {
+            Kind::Scalar => "3",
+            Kind::Array => "{1, 2, 3}",
+            Kind::Struct => "{1, 2}",
+            Kind::Enum => "Idle",
+        }
+    }
+
+    /// Оператор, читающий значение `name` и прибавляющий его к `k`.
+    fn read_statement(self, name: &str) -> String {
+        match self {
+            Kind::Scalar => format!("            k := k + {name};\n"),
+            Kind::Array => format!("            k := k + {name}[1];\n"),
+            Kind::Struct => format!("            k := k + {name}.hi;\n"),
+            // У перечисления арифметики нет: читается СРАВНЕНИЕМ.
+            Kind::Enum => {
+                format!(
+                    "            if {name} = Work {{\n                k := k + 2;\n            }}\n"
+                )
+            }
+        }
+    }
+
+    /// Оператор, пишущий в `name` значение, зависящее от такта.
+    fn write_statement(self, name: &str) -> String {
+        match self {
+            Kind::Scalar => format!("            {name} := k;\n"),
+            Kind::Array => format!("            {name}[1] := k;\n"),
+            Kind::Struct => format!("            {name}.hi := k;\n"),
+            Kind::Enum => format!("            {name} := Work;\n"),
+        }
+    }
+}
+
 /// Вид обращения к корню — то, ради чего указатель и печатается.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Touch {
@@ -63,44 +159,69 @@ impl Touch {
         }
     }
 
+    /// Значима ли для этого вида форма объявления.
+    ///
+    /// У обращений, которые не касаются объявленного значения (`none`,
+    /// `clock_after`, `extern_call`), тип перебирать нечего — они идут
+    /// однажды, со скаляром.
+    pub(crate) fn varies_by_kind(self) -> bool {
+        matches!(
+            self,
+            Touch::PortWrite | Touch::SharedRead | Touch::PortInit | Touch::VarInit
+        )
+    }
+
     /// Объявления файла (корня), нужные этому виду.
-    fn root_declarations(self) -> &'static str {
+    fn root_declarations(self, kind: Kind) -> String {
         match self {
-            Touch::SharedRead | Touch::VarInit => "var shared: u8 := 3;\n\n",
-            _ => "",
+            Touch::SharedRead | Touch::VarInit => format!(
+                "var shared: {} := {};\n\n",
+                kind.type_name(),
+                kind.root_literal()
+            ),
+            _ => String::new(),
         }
     }
 
     /// Объявления модели, делающей обращение.
-    fn declarations(self) -> &'static str {
+    fn declarations(self, kind: Kind) -> String {
         match self {
-            Touch::PortWrite | Touch::Transitive => "    out a: u8 at 0x40000100;\n",
-            Touch::PortInit => "    out a: u8 at 0x40000100 := 7;\n",
-            Touch::VarInit => "    var seed: u8 := shared;\n",
-            Touch::ExternCall => "    extern fn probe_value() -> u8;\n",
-            _ => "",
+            Touch::PortWrite | Touch::Transitive => {
+                format!("    out a: {} at 0x40000100;\n", kind.type_name())
+            }
+            Touch::PortInit => format!(
+                "    out a: {} at 0x40000100 := {};\n",
+                kind.type_name(),
+                kind.literal()
+            ),
+            Touch::VarInit => format!("    var seed: {} := shared;\n", kind.type_name()),
+            Touch::ExternCall => "    extern fn probe_value() -> u8;\n".to_string(),
+            _ => String::new(),
         }
     }
 
     /// Функции модели, делающей обращение.
-    fn functions(self) -> &'static str {
+    fn functions(self, kind: Kind) -> String {
         match self {
-            Touch::Transitive => {
-                "    fn bump(v: u8) -> u8 {\n        a := v;\n        return v + 1;\n    }\n"
-            }
-            _ => "",
+            Touch::Transitive => format!(
+                "    fn bump(v: u8) -> u8 {{\n{}        return v + 1;\n    }}\n",
+                kind.write_statement("a")
+                    .replace("            ", "        ")
+                    .replace("k;", "v;")
+            ),
+            _ => String::new(),
         }
     }
 
     /// Тело блока `always`.
-    fn body(self) -> &'static str {
+    fn body(self, kind: Kind) -> String {
         match self {
-            Touch::PortWrite => "            k := k + 1;\n            a := k;\n",
-            Touch::SharedRead => "            k := k + shared;\n",
-            Touch::VarInit => "            k := k + seed;\n",
-            Touch::Transitive => "            k := bump(k);\n",
-            Touch::ExternCall => "            k := probe_value();\n",
-            _ => "            k := k + 1;\n",
+            Touch::PortWrite => format!("            k := k + 1;\n{}", kind.write_statement("a")),
+            Touch::SharedRead => kind.read_statement("shared"),
+            Touch::VarInit => kind.read_statement("seed"),
+            Touch::Transitive => "            k := bump(k);\n".to_string(),
+            Touch::ExternCall => "            k := probe_value();\n".to_string(),
+            _ => "            k := k + 1;\n".to_string(),
         }
     }
 
@@ -167,26 +288,27 @@ fn plain_child(name: &str) -> String {
     )
 }
 
-/// Модель, делающая обращение вида `touch`.
-fn touching_model(name: &str, touch: Touch) -> String {
+/// Модель, делающая обращение вида `touch` над значением формы `kind`.
+fn touching_model(name: &str, touch: Touch, kind: Kind) -> String {
     format!(
         "model {name} {{\n    var k: u8 := 0;\n{decl}{funcs}    start Go {{\n        always {{\n{body}        }}\n{transition}    }}\n    state Done;\n}}\n\n",
-        decl = touch.declarations(),
-        funcs = touch.functions(),
-        body = touch.body(),
+        decl = touch.declarations(kind),
+        funcs = touch.functions(kind),
+        body = touch.body(kind),
         transition = touch.transition(),
     )
 }
 
 /// Исходник случая: обращение живёт в `First` (либо в самой обёртке).
-pub(crate) fn source(shape: Shape, touch: Touch) -> String {
+pub(crate) fn source(shape: Shape, touch: Touch, kind: Kind) -> String {
     let mut text = String::new();
-    text.push_str(touch.root_declarations());
+    text.push_str(kind.type_declaration());
+    text.push_str(&touch.root_declarations(kind));
     if shape == Shape::Plain {
         // Обращение делает сама обёртка: спутники не нужны.
-        text.push_str(&touching_model("Wrap", touch));
+        text.push_str(&touching_model("Wrap", touch, kind));
     } else {
-        text.push_str(&touching_model("First", touch));
+        text.push_str(&touching_model("First", touch, kind));
         text.push_str(&plain_child("Second"));
         text.push_str(&plain_child("Third"));
         text.push_str(&format!(
@@ -196,4 +318,35 @@ pub(crate) fn source(shape: Shape, touch: Touch) -> String {
     }
     text.push_str("start Main = Wrap;\n");
     text
+}
+
+/// Все случаи перебора: форма реализации × вид обращения × форма объявления.
+///
+/// ⚠️ Форма объявления перебирается только у тех видов, которые её касаются
+/// (`varies_by_kind`): у `none`, `clock_after` и `extern_call` объявленного
+/// значения нет вовсе, и четыре одинаковых прогона были бы просто платой за
+/// время.
+pub(crate) fn cases() -> Vec<(Shape, Touch, Kind)> {
+    let mut out = Vec::new();
+    for shape in SHAPES {
+        for touch in TOUCHES {
+            if touch.varies_by_kind() {
+                for kind in KINDS {
+                    out.push((shape, touch, kind));
+                }
+            } else {
+                out.push((shape, touch, Kind::Scalar));
+            }
+        }
+    }
+    out
+}
+
+/// Имя случая — оно же тег каталога и строка отчёта.
+pub(crate) fn case_name(shape: Shape, touch: Touch, kind: Kind) -> String {
+    if touch.varies_by_kind() {
+        format!("{}_{}_{}", shape.name(), touch.name(), kind.name())
+    } else {
+        format!("{}_{}", shape.name(), touch.name())
+    }
 }

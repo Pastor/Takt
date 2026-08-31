@@ -59,6 +59,13 @@ type LeafCells = BTreeMap<String, Vec<(Vec<Step>, Rc<RefCell<VariableNode>>)>>;
 struct Leaf {
     name: String,
     path: Vec<Step>,
+    /// Позиции шагов в ПОЗИЦИОННОМ агрегате: индекс элемента массива либо номер
+    /// поля структуры в порядке объявления (правило 0034).
+    ///
+    /// ⚠️ Ведётся параллельно пути: по самому пути позицию поля не восстановить
+    /// — тип структуры лежит в модели, а начальное значение раздаётся листам
+    /// уже без неё (фича 0451).
+    positions: Vec<usize>,
     ty: TypeNode,
     offset: i128,
 }
@@ -124,13 +131,14 @@ fn split_here(model: &Rc<RefCell<ModelNode>>, what: PortSplit) -> Result<(), Dia
             address,
             direction,
             loc,
+            init,
             ..
         } = var
         else {
             continue;
         };
         let mut leaves = Vec::new();
-        collect_leaves(name, &[], ty, 0, &model.borrow(), &mut leaves)?;
+        collect_leaves(name, &[], &[], ty, 0, &model.borrow(), &mut leaves)?;
         let base = literal_address(address);
         let mut made = Vec::new();
         for leaf in &leaves {
@@ -146,7 +154,11 @@ fn split_here(model: &Rc<RefCell<ModelNode>>, what: PortSplit) -> Result<(), Dia
                     Some(value) => ExpressionNode::Number(value + leaf.offset),
                     None => ExpressionNode::None,
                 },
-                init: ExpressionNode::None,
+                // Начальное значение листа берётся из АГРЕГАТА исходного порта
+                // (фича 0451). Прежде оно выбрасывалось: `out a: [u8;3] := {4,
+                // 5, 6}` не писал ничего, тогда как эталон показывал `[4,5,6]`,
+                // — молчаливое расхождение при валидном выводе всех целей.
+                init: leaf_initializer(init, &leaf.positions),
                 direction: *direction,
             };
             model
@@ -179,6 +191,7 @@ fn is_composite(ty: &TypeNode, what: PortSplit) -> bool {
 fn collect_leaves(
     prefix: &str,
     path: &[Step],
+    positions: &[usize],
     ty: &TypeNode,
     offset: i128,
     model: &ModelNode,
@@ -193,9 +206,12 @@ fn collect_leaves(
         for index in 0..i128::from(*size) {
             let mut next = path.to_vec();
             next.push(Step::Index(index));
+            let mut next_positions = positions.to_vec();
+            next_positions.push(usize::try_from(index).unwrap_or(0));
             collect_leaves(
                 &format!("{prefix}_{index}"),
                 &next,
+                &next_positions,
                 elem,
                 offset + index * step,
                 model,
@@ -208,6 +224,7 @@ fn collect_leaves(
         out.push(Leaf {
             name: prefix.to_string(),
             path: path.to_vec(),
+            positions: positions.to_vec(),
             ty: ty.clone(),
             offset,
         });
@@ -221,12 +238,15 @@ fn collect_leaves(
         .with_code("SE-119")
     })?;
     let mut at = offset;
-    for (field, field_ty) in &def.fields {
+    for (position, (field, field_ty)) in def.fields.iter().enumerate() {
         let mut next = path.to_vec();
         next.push(Step::Field(field.clone()));
+        let mut next_positions = positions.to_vec();
+        next_positions.push(position);
         collect_leaves(
             &format!("{prefix}_{field}"),
             &next,
+            &next_positions,
             field_ty,
             at,
             model,
@@ -418,6 +438,32 @@ fn leaf_of(base: &ExpressionNode, step: &Step, cells: &LeafCells) -> Option<Expr
                 .find(|(path, _)| path.as_slice() == [step.clone()])
         })
         .map(|(_, cell)| ExpressionNode::Variable(Rc::clone(cell)))
+}
+
+/// Начальное значение листа: часть агрегата по позициям пути (фича 0451).
+///
+/// `ExpressionNode::None` — начального значения не было либо оно не агрегат:
+/// подставлять целое значение каждому листу нельзя, а гадать не о чем.
+///
+/// ⚠️ Разбирается **значение**, а не форма записи: агрегат массива и
+/// инициализатор структуры — разные узлы, а позиционный доступ у них общий
+/// (порядок элементов значим — правило 0034).
+fn leaf_initializer(init: &ExpressionNode, positions: &[usize]) -> ExpressionNode {
+    let mut value = init;
+    for position in positions {
+        while let ExpressionNode::Parenthesis(inner) = value {
+            value = inner;
+        }
+        let items = match value {
+            ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => items,
+            _ => return ExpressionNode::None,
+        };
+        match items.get(*position) {
+            Some(next) => value = next,
+            None => return ExpressionNode::None,
+        }
+    }
+    value.clone()
 }
 
 /// Обращение к части значения по пути листа: поле — точкой, элемент — индексом.

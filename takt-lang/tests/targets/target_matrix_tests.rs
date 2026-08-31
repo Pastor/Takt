@@ -28,14 +28,30 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::matrix_probes::{SHAPES, TOUCHES, Touch, source};
+use super::matrix_probes::{Kind, Touch, case_name, cases, source};
 
-/// Ожидание для пары «цель × вид обращения»: перевод либо отказ с кодом.
-fn refusal(target: &str, touch: Touch) -> Option<&'static str> {
-    match (target, touch) {
-        ("rust", Touch::VarInit) => Some("RS-017"),
-        ("sv" | "sv-mmio", Touch::VarInit) => Some("SV-002"),
-        ("sv" | "sv-mmio", Touch::ExternCall) => Some("SV-005"),
+/// Ожидание для тройки «цель × вид обращения × форма объявления»: перевод либо
+/// отказ **названным** кодом.
+///
+/// ⚠️ Таблица снята прогоном (правило 30). Границы целей — её часть: цель,
+/// которая вдруг перевела то, что не умеет, роняет сторож так же, как
+/// невалидный вывод.
+pub(crate) fn refusal(target: &str, touch: Touch, kind: Kind) -> Option<&'static str> {
+    match (target, touch, kind) {
+        // Инициализатор от переменной корня: у `rust` функция порождается
+        // свободной и состояния модели не видит, у `sv` ветвь сброса выражений
+        // не вычисляет.
+        ("rust", Touch::VarInit, _) => Some("RS-017"),
+        ("sv" | "sv-mmio", Touch::VarInit, _) => Some("SV-002"),
+        // Инициализатор массива значением другой переменной: в C массив не
+        // присваивается.
+        ("c" | "c-hal", Touch::VarInit, Kind::Array) => Some("CC-017"),
+        // Внешней функции в синтезируемом RTL нет.
+        ("sv" | "sv-mmio", Touch::ExternCall, _) => Some("SV-005"),
+        // Порт перечислимого типа: HAL-трейт `rust` знает бит и число, а
+        // размещение `st-at` — только скаляры IEC.
+        ("rust", Touch::PortWrite | Touch::PortInit, Kind::Enum) => Some("RS-016"),
+        ("st-at", Touch::PortWrite | Touch::PortInit, Kind::Enum) => Some("ST-004"),
         _ => None,
     }
 }
@@ -108,27 +124,26 @@ fn emit(dir: &Path, target: &str, text: &str) -> Emitted {
 /// Прогоняет матрицу через одну цель; `check` судит порождённый каталог.
 fn sweep(target: &str, check: &dyn Fn(&Path, &Path) -> Result<(), String>) -> Vec<String> {
     let mut failures = Vec::new();
-    for shape in SHAPES {
-        for touch in TOUCHES {
-            let tag = format!("{target}_{}_{}", shape.name(), touch.name());
-            let dir = work_dir(&tag);
-            let text = source(shape, touch);
-            match (emit(&dir, target, &text), refusal(target, touch)) {
-                (Emitted::Ok(out), None) => {
-                    if let Err(err) = check(&dir, &out) {
-                        failures.push(format!("{tag}: {err}"));
-                    }
+    for (shape, touch, kind) in cases() {
+        let name = case_name(shape, touch, kind);
+        let tag = format!("{target}_{name}");
+        let dir = work_dir(&tag);
+        let text = source(shape, touch, kind);
+        match (emit(&dir, target, &text), refusal(target, touch, kind)) {
+            (Emitted::Ok(out), None) => {
+                if let Err(err) = check(&dir, &out) {
+                    failures.push(format!("{name}: {err}"));
                 }
-                (Emitted::Ok(_), Some(code)) => failures.push(format!(
-                    "{tag}: цель перевела вход, а ожидался отказ {code} — граница исчезла молча"
-                )),
-                (Emitted::Refused(code), Some(expected)) if code == expected => {}
-                (Emitted::Refused(code), Some(expected)) => {
-                    failures.push(format!("{tag}: отказ {code}, а ожидался {expected}"))
-                }
-                (Emitted::Refused(code), None) => {
-                    failures.push(format!("{tag}: цель отказала кодом {code}"))
-                }
+            }
+            (Emitted::Ok(_), Some(code)) => failures.push(format!(
+                "{name}: цель перевела вход, а ожидался отказ {code} — граница исчезла молча"
+            )),
+            (Emitted::Refused(code), Some(expected)) if code == expected => {}
+            (Emitted::Refused(code), Some(expected)) => {
+                failures.push(format!("{name}: отказ {code}, а ожидался {expected}"))
+            }
+            (Emitted::Refused(code), None) => {
+                failures.push(format!("{name}: цель отказала кодом {code}"))
             }
         }
     }
@@ -141,7 +156,7 @@ fn verdict(target: &str, failures: Vec<String>) {
         failures.is_empty(),
         "цель `{target}`: {} случаев из {} разошлись с ожиданием:\n{}",
         failures.len(),
-        SHAPES.len() * TOUCHES.len(),
+        cases().len(),
         failures.join("\n")
     );
 }
@@ -236,8 +251,12 @@ fn target_rust_accepts_every_shape() {
         eprintln!("clippy-driver недоступен — перебор пропущен");
         return;
     }
-    let check = |_dir: &Path, out: &Path| -> Result<(), String> {
+    let check = |dir: &Path, out: &Path| -> Result<(), String> {
+        // ⚠️ Рабочий каталог — каталог случая: без него `clippy-driver` кладёт
+        // `libprobe.rlib` в текущий, то есть в дерево репозитория (гейт 0377
+        // ловит такие артефакты, но лучше их не порождать).
         let run = Command::new("clippy-driver")
+            .current_dir(dir)
             .args(["--edition", "2021", "--crate-type", "lib", "-D", "warnings"])
             .arg(out.join("probe.rs"))
             .output()

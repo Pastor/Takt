@@ -72,6 +72,7 @@ mod conformance_nested_chain_targets_tests;
 mod conformance_nested_composition_tests;
 mod conformance_param_apply_tests;
 mod conformance_param_modes_tests;
+mod conformance_port_aggregate_init_tests;
 mod conformance_port_array_tests;
 mod conformance_port_init_tests;
 mod conformance_port_split_tests;
