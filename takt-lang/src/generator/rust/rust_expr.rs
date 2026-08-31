@@ -849,9 +849,19 @@ pub(crate) fn call_arguments(
     // корне, `(*x)` в под-модели, `x` в теле другой функции. Именно поэтому
     // `shared_variables` обязана включать переменные вызываемых функций —
     // иначе под-модели нечего было бы передать.
-    for vname in needs.vars.keys() {
+    for (vname, vty) in &needs.vars {
         let text = scope.field(vname, Location::Codegen)?;
-        args.push(unwrap_outer(&text).to_string());
+        // Массив передаётся ПО ССЫЛКЕ (фича 0389) — и НЕЯВНЫЙ аргумент тоже
+        // (фича 0466): сигнатура печатает `&[u8; 4]`, а место вызова отдавало
+        // значение, и `rustc` отвечал `E0308` при нулевом коде возврата
+        // `taktc`. Печатников признака стало три, и все спрашивают один
+        // носитель — разойдись они, вывод не собрался бы.
+        let text = if crate::generator::rust::rust_byref::is_array_by_reference(vty) {
+            format!("&{}", unwrap_outer(&text))
+        } else {
+            unwrap_outer(&text).to_string()
+        };
+        args.push(text);
     }
     // HAL — ПОСЛЕДНИМ аргументом, зеркально сигнатуре: иначе вызов вида
     // `f(&mut hal, hal.read_u8(…))` взял бы `hal` изменяемо дважды (E0499).

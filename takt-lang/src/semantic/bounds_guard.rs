@@ -42,6 +42,34 @@
 //! временную дал бы то же поведение, но потребовал бы знать тип элемента в
 //! каждой позиции; условие же строится из размера массива, известного у базы.
 //!
+//! ⚠️ **Оборачивая `return`, ветвь отказа ВОЗВРАЩАЕТ УМОЛЧАНИЕ типа** (фича
+//! 0466): без этого `c` печатал функцию, которая возвращает значение не по
+//! всем путям (`cc -Werror` отвергал), `rust` — `else`-ветвь типа `()`
+//! (`E0308`), а `sv` и `st` молча отдавали неопределённое значение — при
+//! нулевом коде возврата компилятора. Значение строит
+//! [`default_value`](crate::semantic::default_value); типу без умолчания
+//! `return` не оборачивается вовсе — граница названа, а не забыта.
+//!
+//! ⚠️ **ОБЪЯВЛЕНИЕ оборачивается иначе, чем прочие операторы** (фича 0466):
+//! спрятав `var x := d[i];` внутрь `if`, проход унёс бы туда и саму
+//! переменную — дальше по телу её уже не видно (`E0425` у `rust`,
+//! «undeclared identifier» у `c`). Поэтому объявление остаётся снаружи с
+//! УМОЛЧАНИЕМ, а под guard уходит запись:
+//!
+//! ```text
+//! var x: T := d[i];
+//! ⇓
+//! var x: T := <умолчание>;
+//! if i < N { x := d[i]; } else { bounds_fault := 1; }
+//! ```
+//!
+//! ⚠️ **Объявление функции живёт в ДВУХ представлениях**, и проход обязан
+//! обновить оба (фича 0466, класс 0184/0096): владелец — `ModelNode::functions`,
+//! а вызов держит свою `Rc<RefCell<FunctionDefinitionNode>>`. Пока обновлялся
+//! один, признак «функции нужен указатель состояния» (`c_needs`/`rust_needs`)
+//! отвечал у объявления «да», а у вызова «нет» — и `cc` отвечал «too few
+//! arguments», `rustc` — `E0061`, при нулевом коде возврата `taktc`.
+//!
 //! ⚠️ **Нижняя граница проверяется только у знакового индекса**: у
 //! беззнакового `i >= 0` истинно всегда, и цели отвечали бы предупреждением
 //! своего линта (`clippy`, `verilator`), а гейты считают его ошибкой.
@@ -52,7 +80,9 @@ use std::rc::Rc;
 
 use crate::diagnostics::Location;
 use crate::semantic::PortDirection;
+use crate::semantic::default_value;
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::walk;
 use crate::semantic::{
     ExpressionNode, FunctionDefinitionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode,
     StatementNode, VariableNode,
@@ -60,7 +90,25 @@ use crate::semantic::{
 
 /// Имя синтетического порта-признака. Обязано быть допустимым идентификатором
 /// **целевых** языков (урок 0400) и не сталкиваться с именем автора.
-const FAULT_PORT: &str = "bounds_fault";
+pub(crate) const FAULT_PORT: &str = "bounds_fault";
+
+/// Заметка к диагностике о порте, заведённом ЭТИМ проходом (фича 0466).
+///
+/// `None` — порт написан автором, и объяснять нечего.
+///
+/// ⚠️ Текст один на двух носителей `SE-052` (`validate::ports` и
+/// `address_map::resolve`): вторая формулировка разошлась бы молча — класс
+/// 0084/0193/0195. Позиции у заметки нет: объявления в исходнике не
+/// существует (тот же довод, что у `SE-119`).
+pub fn synthetic_port_note(name: &str) -> Option<crate::diagnostics::Note> {
+    (name == FAULT_PORT).then(|| crate::diagnostics::Note {
+        loc: crate::diagnostics::Location::Codegen,
+        message: format!(
+            "порт '{FAULT_PORT}' заводит флаг `--bounds-check` (guard границ массива): \
+             задайте ему адрес во внешней карте (`--address-map`) либо снимите флаг"
+        ),
+    })
+}
 
 /// Вставляет guard границ во все тела дерева.
 ///
@@ -101,8 +149,10 @@ fn guard_bodies(model: &Rc<RefCell<ModelNode>>) {
         let borrowed = model.borrow();
         let fault = fault_cell(model);
         for func in functions.values_mut() {
-            if let FunctionDefinitionNode::Local { body, .. } = func {
-                guard_stmt(body, &borrowed, &fault, &mut used);
+            if let FunctionDefinitionNode::Local { body, ret, .. } = func {
+                // Тип возврата нужен ветви отказа: см. врезку про `return`.
+                let ret_default = default_value::default_expression(ret, &borrowed);
+                guard_stmt(body, &borrowed, &fault, &mut used, ret_default.as_ref());
             }
         }
         for blk in named_blocks.iter_mut() {
@@ -120,10 +170,15 @@ fn guard_bodies(model: &Rc<RefCell<ModelNode>>) {
             }
         }
     }
+    {
+        let mut b = model.borrow_mut();
+        b.functions = functions;
+        b.named_blocks = named_blocks;
+        b.states = states;
+    }
+    // Ячейки вызовов несут СВОЮ копию объявления — синхронизируем (см. врезку).
+    sync_call_cells(model);
     let mut b = model.borrow_mut();
-    b.functions = functions;
-    b.named_blocks = named_blocks;
-    b.states = states;
     if used && !b.variables.contains_key(FAULT_PORT) {
         b.variables.insert(
             FAULT_PORT.to_string(),
@@ -137,6 +192,76 @@ fn guard_bodies(model: &Rc<RefCell<ModelNode>>) {
                 direction: PortDirection::Out,
             },
         );
+    }
+}
+
+/// Переносит исправленные тела функций в ячейки, на которые ссылаются вызовы.
+///
+/// ⚠️ Сверка идёт по ИМЕНИ: у каждого употребления своя ячейка (тот же урок,
+/// что у подстановки тела — 0444), и адресовать её иначе нечем.
+fn sync_call_cells(model: &Rc<RefCell<ModelNode>>) {
+    let updated: Vec<(String, FunctionDefinitionNode)> = model
+        .borrow()
+        .functions
+        .iter()
+        .map(|(name, def)| (name.clone(), def.clone()))
+        .collect();
+    if updated.is_empty() {
+        return;
+    }
+    let (mut functions, mut named_blocks, mut states) = {
+        let mut b = model.borrow_mut();
+        (
+            std::mem::take(&mut b.functions),
+            std::mem::take(&mut b.named_blocks),
+            std::mem::take(&mut b.states),
+        )
+    };
+    let mut refresh = |expr: &mut ExpressionNode| {
+        if let ExpressionNode::Function(cell, _) = expr {
+            let name = cell.borrow().name().to_string();
+            if let Some((_, def)) = updated.iter().find(|(n, _)| *n == name) {
+                *cell.borrow_mut() = def.clone();
+            }
+        }
+    };
+    for func in functions.values_mut() {
+        if let FunctionDefinitionNode::Local { body, .. } = func {
+            walk::walk_stmt_exprs_mut(body, &mut refresh);
+        }
+    }
+    for blk in named_blocks.iter_mut() {
+        if let Some(body) = block_body_mut(blk) {
+            walk::walk_stmt_exprs_mut(body, &mut refresh);
+        }
+    }
+    for st in states.values_mut() {
+        match st {
+            StateNode::Simple { named_blocks, .. } | StateNode::Implement { named_blocks, .. } => {
+                for blk in named_blocks.iter_mut() {
+                    if let Some(body) = block_body_mut(blk) {
+                        walk::walk_stmt_exprs_mut(body, &mut refresh);
+                    }
+                }
+            }
+            StateNode::Unresolved => {}
+        }
+    }
+    let mut b = model.borrow_mut();
+    b.functions = functions;
+    b.named_blocks = named_blocks;
+    b.states = states;
+}
+
+/// Тело именованного блока, если оно у него есть.
+fn block_body_mut(blk: &mut NamedCodeBlockDefinitionNode) -> Option<&mut StatementNode> {
+    match blk {
+        NamedCodeBlockDefinitionNode::Enter { body, .. }
+        | NamedCodeBlockDefinitionNode::Exit { body, .. }
+        | NamedCodeBlockDefinitionNode::Always { body, .. }
+        | NamedCodeBlockDefinitionNode::Unknown { body, .. }
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => Some(body),
+        NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => None,
     }
 }
 
@@ -160,12 +285,16 @@ fn guard_block(
     fault: &Rc<RefCell<VariableNode>>,
     used: &mut bool,
 ) {
+    // Тело блока состояния возврата не несёт: `return` вне функции языком не
+    // принимается, и умолчания тут не требуется.
     match blk {
         NamedCodeBlockDefinitionNode::Enter { body, .. }
         | NamedCodeBlockDefinitionNode::Exit { body, .. }
         | NamedCodeBlockDefinitionNode::Always { body, .. }
         | NamedCodeBlockDefinitionNode::Unknown { body, .. }
-        | NamedCodeBlockDefinitionNode::Every { body, .. } => guard_stmt(body, model, fault, used),
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => {
+            guard_stmt(body, model, fault, used, None)
+        }
         NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {}
     }
 }
@@ -177,30 +306,31 @@ fn guard_stmt(
     model: &ModelNode,
     fault: &Rc<RefCell<VariableNode>>,
     used: &mut bool,
+    ret_default: Option<&ExpressionNode>,
 ) {
     match stmt {
         StatementNode::Block(items) => {
             for item in items.iter_mut() {
-                guard_stmt(item, model, fault, used);
-                wrap_item(item, model, fault, used);
+                guard_stmt(item, model, fault, used, ret_default);
+                wrap_item(item, model, fault, used, ret_default);
             }
         }
         StatementNode::If { then_, else_, .. } => {
-            guard_stmt(then_, model, fault, used);
+            guard_stmt(then_, model, fault, used, ret_default);
             if let Some(alt) = else_ {
-                guard_stmt(alt, model, fault, used);
+                guard_stmt(alt, model, fault, used, ret_default);
             }
         }
-        StatementNode::Loop { body, .. } => guard_stmt(body, model, fault, used),
+        StatementNode::Loop { body, .. } => guard_stmt(body, model, fault, used, ret_default),
         StatementNode::For { init, body, .. } => {
             if let Some(i) = init {
-                guard_stmt(i, model, fault, used);
+                guard_stmt(i, model, fault, used, ret_default);
             }
-            guard_stmt(body, model, fault, used);
+            guard_stmt(body, model, fault, used, ret_default);
         }
         StatementNode::Match { arms, .. } => {
             for arm in arms.iter_mut() {
-                guard_stmt(&mut arm.body, model, fault, used);
+                guard_stmt(&mut arm.body, model, fault, used, ret_default);
             }
         }
         _ => {}
@@ -213,6 +343,7 @@ fn wrap_item(
     model: &ModelNode,
     fault: &Rc<RefCell<VariableNode>>,
     used: &mut bool,
+    ret_default: Option<&ExpressionNode>,
 ) {
     // Составной оператор уже обойдён внутри — его элементы обёрнуты по одному.
     if matches!(
@@ -230,20 +361,71 @@ fn wrap_item(
     let Some(cond) = conjunction(checks) else {
         return;
     };
+    // Возврат обязан отдать значение и в ветви отказа: иначе вывод целей
+    // невалиден либо значение неопределено (фича 0466). Умолчания у типа нет —
+    // оператор не трогаем: дыра в guard честнее невалидного вывода.
+    let returns = matches!(item, StatementNode::Return(Some(_)));
+    if returns && ret_default.is_none() {
+        return;
+    }
+    // Объявление переменной: значение уходит под guard, само объявление
+    // остаётся снаружи — иначе переменная теряется вместе с областью видимости
+    // (см. врезку). Умолчания у типа нет — оператор не трогаем.
+    if let StatementNode::Variable(name, ty, Some(_), loc) = item {
+        let Some(default) = default_value::default_expression(ty, model) else {
+            return;
+        };
+        let (name, ty, loc) = (name.clone(), ty.clone(), *loc);
+        let StatementNode::Variable(_, _, Some(init), _) = std::mem::take(item) else {
+            unreachable!("вид оператора проверен выше");
+        };
+        *used = true;
+        let place = ExpressionNode::Variable(Rc::new(RefCell::new(VariableNode::Simple {
+            upper: None,
+            loc: Location::Implicit,
+            name: name.clone(),
+            ty: ty.clone(),
+            expr: ExpressionNode::None,
+        })));
+        *item = StatementNode::Block(vec![
+            StatementNode::Variable(name, ty, Some(Box::new(default)), loc),
+            StatementNode::If {
+                cond: Box::new(cond),
+                then_: Box::new(StatementNode::Expression(
+                    Box::new(ExpressionNode::Assign(Box::new(place), init)),
+                    Location::Implicit,
+                )),
+                else_: Some(Box::new(raise_fault(fault))),
+            },
+        ]);
+        return;
+    }
     *used = true;
     let body = std::mem::take(item);
+    let raise = raise_fault(fault);
+    let otherwise = match ret_default {
+        Some(value) if returns => StatementNode::Block(vec![
+            raise,
+            StatementNode::Return(Some(Box::new(value.clone()))),
+        ]),
+        _ => raise,
+    };
     *item = StatementNode::If {
         cond: Box::new(cond),
         then_: Box::new(body),
-        else_: Box::new(StatementNode::Expression(
-            Box::new(ExpressionNode::Assign(
-                Box::new(ExpressionNode::Variable(Rc::clone(fault))),
-                Box::new(ExpressionNode::Number(1)),
-            )),
-            Location::Implicit,
-        ))
-        .into(),
+        else_: Box::new(otherwise).into(),
     };
+}
+
+/// Оператор «взвести признак выхода за границу».
+fn raise_fault(fault: &Rc<RefCell<VariableNode>>) -> StatementNode {
+    StatementNode::Expression(
+        Box::new(ExpressionNode::Assign(
+            Box::new(ExpressionNode::Variable(Rc::clone(fault))),
+            Box::new(ExpressionNode::Number(1)),
+        )),
+        Location::Implicit,
+    )
 }
 
 /// Соединяет проверки конъюнкцией; `None` — проверять нечего.

@@ -75,17 +75,22 @@ fn collect_incomplete_addresses(
         let has_operator = borrowed.address_defs.iter().any(|d| &d.port == name);
         let has_external = external_ports.contains(name);
         if !has_inline && !has_operator && !has_external {
-            out.push(
-                Diagnostic::warning(
-                    *loc,
-                    format!(
-                        "порт '{}' используется в кодогенерации, но не имеет адреса \
-                         (ни inline, ни оператором `address`, ни во внешней карте)",
-                        name
-                    ),
-                )
-                .with_code("SE-052"),
-            );
+            let mut diagnostic = Diagnostic::warning(
+                *loc,
+                format!(
+                    "порт '{}' используется в кодогенерации, но не имеет адреса \
+                     (ни inline, ни оператором `address`, ни во внешней карте)",
+                    name
+                ),
+            )
+            .with_code("SE-052");
+            // Порт, заведённый КОМПИЛЯТОРОМ, автор в тексте не найдёт: отказ
+            // без этой заметки читался как «исправьте то, чего вы не писали»
+            // (фича 0466).
+            if let Some(note) = crate::semantic::bounds_guard::synthetic_port_note(name) {
+                diagnostic.notes.push(note);
+            }
+            out.push(diagnostic);
         }
     }
     let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();

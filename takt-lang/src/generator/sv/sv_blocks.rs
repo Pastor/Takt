@@ -70,6 +70,11 @@ fn emit_block_body(
     let mut unread = crate::semantic::unused::unread_locals(stmt);
     // Переменная цикла читается ЧАСТИЧНО (фича 0425) — тот же поглотитель.
     crate::generator::sv::sv_stmt::loop_variables(stmt, &mut unread);
+    // Локальная, прочитанная ТОЛЬКО как индекс, читается частично тоже (фича
+    // 0466): индекс печатается сужением, старшие разряды не читает никто.
+    // Класс виден после подстановки — параметр функции становится локальной.
+    let local_names: Vec<String> = inline.iter().map(|(n, _)| (*n).to_string()).collect();
+    crate::generator::sv::sv_stmt::index_only_variables(stmt, &local_names, &mut unread);
     crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &inline, &unread)?;
     print_statement(p, stmt, &scope)?;
     // ⚠️ Присваивание поглотителя идёт ПОСЛЕ тела: `always_comb`, читающий
