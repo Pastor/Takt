@@ -26,6 +26,12 @@ const FIXTURE: &str = "tests/data/eval/conformance_inline.takt";
 const UNIT: &str = "conformance_inline";
 const TICKS: usize = 6;
 
+/// Фикстура РАННЕГО возврата (фича 0446): подстановка идёт через признак
+/// выхода, и разойтись с вызовом она может каждым порогом.
+const EARLY_FIXTURE: &str = "tests/data/eval/conformance_inline_early.takt";
+const EARLY_UNIT: &str = "conformance_inline_early";
+const EARLY_TICKS: usize = 8;
+
 fn tool(bin: &str) -> bool {
     Command::new(bin)
         .arg("--version")
@@ -48,18 +54,18 @@ fn build_dir(tag: &str) -> PathBuf {
     dir
 }
 
-fn source() -> String {
-    std::fs::read_to_string(FIXTURE).expect("фикстура читается")
+fn source(fixture: &str) -> String {
+    std::fs::read_to_string(fixture).expect("фикстура читается")
 }
 
 /// Трасса эталона: значение порта `probe` по тактам.
-fn simulator_trace() -> Vec<i128> {
-    let (ast, _) = takt_lang::parse(&source(), 0).expect("разбор фикстуры");
+fn simulator_trace(fixture: &str, ticks: usize) -> Vec<i128> {
+    let (ast, _) = takt_lang::parse(&source(fixture), 0).expect("разбор фикстуры");
     let model = construct_model(&ast, None, &[]).expect("семантика");
     let mut unit = build_unit(model).expect("построение Unit");
     let mut trace = Vec::new();
     let mut probe = 0i128;
-    for _ in 0..TICKS {
+    for _ in 0..ticks {
         let result = unit.tick();
         assert!(
             !matches!(result, TickResult::Failed(_)),
@@ -74,37 +80,39 @@ fn simulator_trace() -> Vec<i128> {
 }
 
 /// Трасса прошивки цели `c` при заданном режиме подстановки.
-fn c_trace(dir: &Path, inline: InlinePolicy) -> Vec<i128> {
+fn c_trace(dir: &Path, fixture: &str, unit: &str, ticks: usize, inline: InlinePolicy) -> Vec<i128> {
     let mut options = GenerateOptions::default();
     options.inline = inline;
     takt_lang::compile_to_c(
-        UNIT,
-        &source(),
+        unit,
+        &source(fixture),
         dir.to_str().expect("путь в UTF-8"),
         &[],
         &options,
     )
     .expect("порождение C");
+    let camel = camel(unit);
     let harness = format!(
         r#"#include <stdio.h>
-#include "{UNIT}.h"
+#include "{unit}.h"
 static long long probe;
-static void on_num(ConformanceInline_Out_NumericPort port, int64_t value, void *userdata) {{
+static void on_num({camel}_Out_NumericPort port, int64_t value, void *userdata) {{
     (void)userdata;
-    if (port == CONFORMANCE_INLINE_WORKER_PORT_PROBE) {{ probe = (long long)value; }}
+    if (port == {upper}_WORKER_PORT_PROBE) {{ probe = (long long)value; }}
 }}
 int main(void) {{
-    ConformanceInline m;
-    ConformanceInline_init(&m);
+    {camel} m;
+    {camel}_init(&m);
     m.write_numeric = on_num;
     m.userdata = 0;
-    for (int i = 0; i < {TICKS}; i++) {{
-        ConformanceInline_tick(&m);
+    for (int i = 0; i < {ticks}; i++) {{
+        {camel}_tick(&m);
         printf("%lld\n", probe);
     }}
     return 0;
 }}
-"#
+"#,
+        upper = unit.to_uppercase(),
     );
     std::fs::write(dir.join("harness.c"), harness).expect("харнесс");
     let bin = dir.join("bin");
@@ -119,7 +127,7 @@ int main(void) {{
         ])
         .arg(&bin)
         .arg(dir.join("harness.c"))
-        .arg(dir.join(format!("{UNIT}.c")))
+        .arg(dir.join(format!("{unit}.c")))
         .arg("-I")
         .arg(dir)
         .output()
@@ -137,22 +145,29 @@ int main(void) {{
 }
 
 /// Трасса модуля Rust при заданном режиме подстановки.
-fn rust_trace(dir: &Path, inline: InlinePolicy) -> Vec<i128> {
+fn rust_trace(
+    dir: &Path,
+    fixture: &str,
+    unit: &str,
+    ticks: usize,
+    inline: InlinePolicy,
+) -> Vec<i128> {
     let mut options = GenerateOptions::default();
     options.inline = inline;
     takt_lang::compile_to_rust(
-        UNIT,
-        &source(),
+        unit,
+        &source(fixture),
         dir.to_str().expect("путь в UTF-8"),
         &[],
         &options,
     )
     .expect("порождение Rust");
-    let module = dir.join(format!("{UNIT}.rs"));
+    let module = dir.join(format!("{unit}.rs"));
+    let camel = camel(unit);
     let driver = format!(
         r#"#[path = "{module}"]
 mod generated;
-use generated::{{ConformanceInline, Hal, OutU8Port}};
+use generated::{{{camel}, Hal, OutU8Port}};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -168,9 +183,9 @@ impl Hal for Probe {{
 
 fn main() {{
     let reg = Rc::new(RefCell::new(0u8));
-    let mut model = ConformanceInline::new(Probe {{ reg: Rc::clone(&reg) }});
+    let mut model = {camel}::new(Probe {{ reg: Rc::clone(&reg) }});
     model.init();
-    for _ in 0..{TICKS} {{
+    for _ in 0..{ticks} {{
         model.tick();
         println!("{{}}", reg.borrow());
     }}
@@ -199,6 +214,19 @@ fn main() {{
         .collect()
 }
 
+/// Имя структуры корня: `conformance_inline` → `ConformanceInline`.
+fn camel(unit: &str) -> String {
+    unit.split('_')
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
 /// Цель `c`: подстановка не меняет значений — ни атрибутом, ни эвристикой.
 #[test]
 fn inlined_c_firmware_matches_reference() {
@@ -206,9 +234,15 @@ fn inlined_c_firmware_matches_reference() {
         eprintln!("cc недоступен — сверка пропущена");
         return;
     }
-    let expected = simulator_trace();
-    let plain = c_trace(&build_dir("c_off"), InlinePolicy::Off);
-    let auto = c_trace(&build_dir("c_auto"), InlinePolicy::Auto);
+    let expected = simulator_trace(FIXTURE, TICKS);
+    let plain = c_trace(&build_dir("c_off"), FIXTURE, UNIT, TICKS, InlinePolicy::Off);
+    let auto = c_trace(
+        &build_dir("c_auto"),
+        FIXTURE,
+        UNIT,
+        TICKS,
+        InlinePolicy::Auto,
+    );
     assert_eq!(plain, expected, "прошивка с атрибутом разошлась с эталоном");
     assert_eq!(auto, expected, "прошивка с эвристикой разошлась с эталоном");
     // Контроль: трасса меняется по тактам — на постоянной подмена операнда
@@ -226,9 +260,64 @@ fn inlined_rust_module_matches_reference() {
         eprintln!("rustc недоступен — сверка пропущена");
         return;
     }
-    let expected = simulator_trace();
-    let plain = rust_trace(&build_dir("rs_off"), InlinePolicy::Off);
-    let auto = rust_trace(&build_dir("rs_auto"), InlinePolicy::Auto);
+    let expected = simulator_trace(FIXTURE, TICKS);
+    let plain = rust_trace(
+        &build_dir("rs_off"),
+        FIXTURE,
+        UNIT,
+        TICKS,
+        InlinePolicy::Off,
+    );
+    let auto = rust_trace(
+        &build_dir("rs_auto"),
+        FIXTURE,
+        UNIT,
+        TICKS,
+        InlinePolicy::Auto,
+    );
     assert_eq!(plain, expected, "модуль с атрибутом разошёлся с эталоном");
     assert_eq!(auto, expected, "модуль с эвристикой разошёлся с эталоном");
+}
+
+/// РАННИЙ возврат (фича 0446): признак выхода считает ровно то же, что вызов.
+///
+/// ⚠️ Эталон вызов **исполняет**, а не подставляет, поэтому сверка проверяет
+/// именно преобразование: пропущенная обёртка «выхода ещё не было» даёт
+/// валидный код, считающий другое (последний порог перезаписал бы ранний).
+#[test]
+fn early_return_inlining_matches_reference() {
+    let expected = simulator_trace(EARLY_FIXTURE, EARLY_TICKS);
+    // Контроль осмысленности: в трассе видны ВСЕ три порога функции `grade`
+    // (иначе ранний выход мог бы ни разу не сработать).
+    assert!(
+        expected.iter().any(|v| *v % 100 >= 90)
+            && expected.iter().any(|v| (50..60).contains(&(v % 100))),
+        "трасса не проходит через оба ранних выхода: {expected:?}"
+    );
+    if tool("cc") {
+        let actual = c_trace(
+            &build_dir("early_c"),
+            EARLY_FIXTURE,
+            EARLY_UNIT,
+            EARLY_TICKS,
+            InlinePolicy::Off,
+        );
+        assert_eq!(
+            actual, expected,
+            "цель c разошлась с эталоном на раннем возврате"
+        );
+    }
+    if tool("rustc") {
+        let actual = rust_trace(
+            &build_dir("early_rs"),
+            EARLY_FIXTURE,
+            EARLY_UNIT,
+            EARLY_TICKS,
+            InlinePolicy::Off,
+        );
+        assert_eq!(
+            actual, expected,
+            "цель rust разошлась с эталоном на раннем возврате"
+        );
+    }
 }

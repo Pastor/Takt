@@ -77,6 +77,7 @@ mod st_local_array_argument_tests;
 mod st_reserved_names_tests;
 mod st_tests;
 mod st_type_clash_tests;
+mod st_unused_function_tests;
 mod statement_site_tests;
 mod struct_codegen_tests;
 mod sv_apb_adapter_tests;

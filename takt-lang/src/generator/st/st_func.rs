@@ -321,6 +321,7 @@ fn print_call_in(
 pub(crate) fn emit_functions(
     p: &mut Printer,
     models: &[(crate::semantic::minimap::Name, Rc<RefCell<ModelNode>>)],
+    usage: &crate::semantic::unused::UsageSet,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     let mut warnings = Vec::new();
     // Формы массивов из параметров — тот же список, что у продюсера
@@ -352,6 +353,18 @@ pub(crate) fn emit_functions(
             let Some(name) = pou_name(def) else {
                 continue;
             };
+            // Функция, которую никто не зовёт, не печатается — так же, как у
+            // целей `c`, `rust` и `sv` (фича 0445). Признак общий —
+            // `UsageSet::functions`; спрашивается ГОЛОЕ имя, потому что
+            // `pou_name` уже несёт префикс модели-владельца.
+            //
+            // ⚠️ `iec2c` мёртвый POU принимает, поэтому гейт цели класса не
+            // видел: цена — лишний код в программе ПЛК, а после подстановки
+            // тела (0444) там оставалось объявление функции, вызовов которой
+            // в файле уже нет.
+            if !def.name().is_empty() && !usage.functions.contains(def.name()) {
+                continue;
+            }
             if emitted.contains(&name) {
                 continue;
             }
@@ -737,10 +750,13 @@ mod tests {
             .unwrap()
             .root_name();
         let models = vec![(name, Rc::clone(&rc))];
+        // Признак использования — тот же, что у конвейера (фича 0445): без него
+        // юнит-тест печатал бы то, чего цель уже не печатает.
+        let usage = crate::semantic::unused::compute_usage(Rc::clone(&rc));
         let mut text = String::new();
         let warnings = {
             let mut p = Printer::new(4, &mut text);
-            emit_functions(&mut p, &models).expect("функции должны печататься")
+            emit_functions(&mut p, &models, &usage).expect("функции должны печататься")
         };
         (text, warnings)
     }

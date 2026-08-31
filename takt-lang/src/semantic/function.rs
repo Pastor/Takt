@@ -200,11 +200,13 @@ pub fn construct_function(
                 // 0444). Молча оставить вызов значило бы не исполнить
                 // написанное автором, поэтому — `SE-128` с названным обходом.
                 if matches!(attribute_mode, InlineMode::Always)
-                    && crate::semantic::inline::split_tail_return(&statement).is_none()
+                    && let Some(why) =
+                        crate::semantic::inline::inline_obstacle(&statement, &rett, &model.borrow())
                 {
-                    return Err(crate::semantic::inline::early_return_refusal(
+                    return Err(crate::semantic::inline::inline_refusal(
                         attribute_loc,
                         &name,
+                        why,
                     ));
                 }
                 Ok(FunctionDefinitionNode::Local {

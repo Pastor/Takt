@@ -3,32 +3,6 @@
  * Не редактировать вручную: файл перезаписывается при каждой генерации.
  *)
 
-FUNCTION Stacker_abs_diff : USINT
-VAR_INPUT
-    a : USINT;
-    b : USINT;
-END_VAR
-    IF a > b THEN
-        Stacker_abs_diff := a - b;
-        RETURN;
-    END_IF;
-    Stacker_abs_diff := b - a;
-    RETURN;
-END_FUNCTION
-
-FUNCTION Stacker_max2 : USINT
-VAR_INPUT
-    a : USINT;
-    b : USINT;
-END_VAR
-    IF a > b THEN
-        Stacker_max2 := a;
-        RETURN;
-    END_IF;
-    Stacker_max2 := b;
-    RETURN;
-END_FUNCTION
-
 FUNCTION Stacker_travel_time : USINT
 VAR_INPUT
     to_stack : USINT;

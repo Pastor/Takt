@@ -213,15 +213,6 @@ pub(crate) fn rename_stmt(
     walk_stmt_exprs_mut(stmt, &mut |expr| rename_one(expr, map, owner));
 }
 
-/// Переименовывает локальные имена в выражении.
-pub(crate) fn rename_expr(
-    expr: &mut ExpressionNode,
-    map: &HashMap<String, String>,
-    owner: &Rc<RefCell<ModelNode>>,
-) {
-    walk_expr_mut(expr, &mut |node| rename_one(node, map, owner));
-}
-
 /// Заменяет ячейку переменной, если её имя переименовано.
 fn rename_one(
     expr: &mut ExpressionNode,
