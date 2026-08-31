@@ -1,15 +1,15 @@
 //! Семантические узлы языка Takt.
 //!
-//! [`ModelNode`] — модель со словарями состояний, переменных, условий, функций
-//! и моделей; [`StateNode`] — состояние, [`ReferenceNode`] — переход,
+//! [`ModelNode`] — модель со словарями состояний, переменных, условий, функций и
+//! моделей; [`StateNode`] — состояние, [`ReferenceNode`] — переход,
 //! [`ConditionNode`] — условие, [`VariableNode`] — переменная, [`Extend`] — реализация.
 
 pub mod bounds_guard;
 mod condition_node;
+pub mod default_value;
 mod expression_node;
 pub mod time_ast;
 pub use {condition_node::ConditionNode, expression_node::ExpressionNode};
-
 pub mod anon_collect;
 pub mod anon_port;
 pub use anon_collect::{

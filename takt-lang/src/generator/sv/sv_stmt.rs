@@ -19,6 +19,8 @@
 //! `always_ff` защёлкнет по фронту. Отображение имени делает
 //! [`Scope`](super::sv_expr::Scope) — здесь только выбор стороны.
 
+use std::collections::BTreeMap;
+
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::sv::sv_expr::sv002;
@@ -394,6 +396,59 @@ pub(crate) fn loop_variables(stmt: &StatementNode, out: &mut Vec<String>) {
 }
 
 /// Присваивание поглотителя — печатается после объявлений (фича 0387).
+/// Имена, которые тело читает ТОЛЬКО как индекс массива (фича 0466).
+///
+/// Индекс печатается сужением по размеру массива (`a[2'(i)]`, фича 0365), и
+/// старшие разряды имени не читает никто: `verilator` отвечает
+/// `UNUSEDSIGNAL` — «Bits of … are not used: 'i'[7:2]». Гасит их тот же
+/// поглотитель, что и вовсе непрочитанную локальную (0387) и переменную цикла
+/// (0425), поэтому признак и отдаёт имена **в тот же список**.
+///
+/// ⚠️ Признак по ДЕРЕВУ, а не по напечатанному тексту (в отличие от заглушки
+/// 0337): объявление поглотителя обязано встать до операторов, то есть до
+/// того, как тело напечатано.
+///
+/// ⚠️ Индекс-ВЫРАЖЕНИЕ (`a[i + 1]`) под правило не подпадает: там читается всё
+/// имя целиком. Граница названа — лишний поглотитель гасил бы честное
+/// предупреждение.
+pub(crate) fn index_only_variables(body: &StatementNode, names: &[String], out: &mut Vec<String>) {
+    if names.is_empty() {
+        return;
+    }
+    // Обход идёт по КОПИИ: изменяемый обход — единственный, который спускается
+    // внутрь выражения (носитель `semantic::walk`), а второй такой заводить
+    // нельзя (класс 0084/0193/0195).
+    let mut copy = body.clone();
+    let mut total: BTreeMap<String, usize> = BTreeMap::new();
+    let mut under: BTreeMap<String, usize> = BTreeMap::new();
+    // ⚠️ `walk_stmt_exprs_mut` САМ спускается в подвыражения — второй
+    // `walk_expr_mut` внутри дал бы двойной счёт (замер: `i` считался дважды,
+    // и признак молчал).
+    crate::semantic::walk::walk_stmt_exprs_mut(&mut copy, &mut |node| match node {
+        ExpressionNode::Variable(cell) => {
+            let name = cell.borrow().name().to_string();
+            if names.contains(&name) {
+                *total.entry(name).or_default() += 1;
+            }
+        }
+        ExpressionNode::ArraySubscript(_, index) => {
+            if let ExpressionNode::Variable(cell) = &**index {
+                let name = cell.borrow().name().to_string();
+                if names.contains(&name) {
+                    *under.entry(name).or_default() += 1;
+                }
+            }
+        }
+        _ => {}
+    });
+    for name in names {
+        let seen = total.get(name).copied().unwrap_or(0);
+        if seen > 0 && under.get(name).copied().unwrap_or(0) == seen && !out.contains(name) {
+            out.push(name.clone());
+        }
+    }
+}
+
 pub(crate) fn emit_local_sinks(p: &mut Printer, locals: &[(&str, &TypeNode)], unread: &[String]) {
     for (name, _) in locals {
         if unread.iter().any(|n| n == name) {

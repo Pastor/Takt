@@ -25,6 +25,7 @@ use crate::generator::st::st_reserved::check_st_field_name;
 use crate::generator::st::st_type::{self, get_st_type};
 use crate::semantic::FunctionDefinitionNode;
 use crate::semantic::minimap::Name;
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -196,7 +197,22 @@ fn function_array_forms(
             // отвергает («invalid return type defined in function
             // declaration»), а именованный принимает — форма та же, что у
             // параметра-массива (0348).
-            for ty in params.iter().map(|(_, ty)| ty).chain(std::iter::once(ret)) {
+            // Переменная модели, которую тело читает, приходит функции
+            // НЕЯВНО — через `VAR_IN_OUT` (`state_params`), и массиву там
+            // нужна та же именованная форма (фича 0466): без объявления
+            // `iec2c` отвечал «unexpected token after 'VAR_IN_OUT'», а с
+            // анонимной формой — «Data type incompatibility».
+            let implicit: Vec<TypeNode> =
+                crate::generator::st::st_func::state_params(&model.functions[key], model)
+                    .into_iter()
+                    .map(|(_, ty)| ty)
+                    .collect();
+            for ty in params
+                .iter()
+                .map(|(_, ty)| ty)
+                .chain(std::iter::once(ret))
+                .chain(implicit.iter())
+            {
                 let Some(form) = st_type::array_form_name(ty, model) else {
                     continue;
                 };

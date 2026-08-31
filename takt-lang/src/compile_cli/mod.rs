@@ -13,6 +13,8 @@ use crate::address_map::split_include_dirs;
 use std::fs;
 use std::process;
 
+mod target_flags;
+
 #[cfg(test)]
 mod tests;
 
@@ -589,22 +591,19 @@ pub fn run_compile(args: &[String]) -> i32 {
         }
     };
 
-    // Форма автомата применима не ко всякой цели (фича 0435): таблицу
-    // переходов печатает генератор C (цели `c` и `c-hal`). Флаг, отданный
-    // прочим целям, — ошибка CLI с перечислением поддерживающих: молчаливо
-    // проигнорированный флаг означал бы «форма как получится», а автор ждал бы
-    // таблицу и получил `switch` (класс 0184 — рапорт об успехе на входе,
-    // который не исполнен).
-    if options.fsm == crate::generator::FsmForm::Table
-        && !matches!(
-            options.target.as_str(),
-            "c" | "c-hal" | "rust" | "st" | "st-at" | "sv" | "sv-mmio"
-        )
-    {
-        eprintln!(
-            "Ошибка: --fsm=table не поддерживается целью '{}'. Табличную форму автомата печатают цели: c, c-hal, rust, st, st-at, sv, sv-mmio",
-            options.target
-        );
+    // Применимость флага к цели — один носитель (фича 0466, `target_flags`):
+    // прежде на один вопрос отвечали трое и по-разному, вплоть до молчаливого
+    // приёма `--bus=apb` целью `rust` (рапорт об успехе на невыполненной
+    // просьбе, класс 0184).
+    let mut raised: Vec<&str> = Vec::new();
+    if options.fsm == crate::generator::FsmForm::Table {
+        raised.push("--fsm=table");
+    }
+    if options.bus.is_some() {
+        raised.push("--bus=apb");
+    }
+    if let Err(message) = target_flags::check(&options.target, &raised) {
+        eprintln!("{message}");
         return 1;
     }
 

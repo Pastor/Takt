@@ -458,7 +458,16 @@ fn emit_function(
             p.ident(&format!("{} : {};", pname, ty)).nl();
         }
         for (vname, vty) in &state {
-            let ty = get_st_type(vty, model)?;
+            // Переменная-МАССИВ объявляется ИМЕНОВАННОЙ формой, как и
+            // параметр-массив (фичи 0210/0348, здесь — 0466): анонимный
+            // `ARRAY […] OF T` в `VAR_IN_OUT` `iec2c` встречает отказом «Data
+            // type incompatibility for value passed in position N». Класс
+            // виден только тогда, когда массив приходит функции НЕЯВНО —
+            // тело читает переменную модели, а не свой параметр.
+            let ty = match crate::generator::st::st_type::array_form_name(vty, model) {
+                Some(form) => form,
+                None => get_st_type(vty, model)?,
+            };
             p.ident(&format!("{} : {};", vname, ty)).nl();
         }
         p.down();

@@ -126,7 +126,25 @@ pub(crate) fn emit_functions(
             // Переменная цикла читается ЧАСТИЧНО (фича 0425): гасим её разряды
             // тем же поглотителем, что и вовсе непрочитанную локальную.
             crate::generator::sv::sv_stmt::loop_variables(body, &mut unread);
+            // Локальная, прочитанная ТОЛЬКО как индекс, читается частично —
+            // гасится тем же поглотителем (фича 0466). Класс виден после
+            // подстановки: параметр становится локальной.
+            let local_list: Vec<String> = locals.iter().map(|(n, _)| (*n).to_string()).collect();
+            crate::generator::sv::sv_stmt::index_only_variables(body, &local_list, &mut unread);
             emit_hoisted_locals(p, &locals, &unread)?;
+            // То же для ПАРАМЕТРОВ: их объявления в `emit_hoisted_locals` не
+            // входят, поэтому поглотитель им печатается здесь — до пролога
+            // распаковки, иначе объявление встало бы после операторов.
+            let param_list: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
+            let mut narrow_params = Vec::new();
+            crate::generator::sv::sv_stmt::index_only_variables(
+                body,
+                &param_list,
+                &mut narrow_params,
+            );
+            for param in &narrow_params {
+                p.ident(&format!("logic _unused_{param};")).nl();
+            }
             // Пролог распаковки (фичи 0369, 0372) — у носителя раскладки.
             for (param, ty, flat_param) in &unpack {
                 crate::generator::sv::sv_array::emit_unpack_prologue(
@@ -180,6 +198,13 @@ pub(crate) fn emit_functions(
                 }
             }
             p.print(&body_text);
+            // Присваивание поглотителя частично прочитанного параметра — ПОСЛЕ
+            // тела: чтение до записи verilator встречает `ALWCOMBORDER` (тот же
+            // порядок, что у поглотителя локальной, 0387).
+            for param in &narrow_params {
+                p.ident(&format!("_unused_{param} = &{{1'b0, {param}}};"))
+                    .nl();
+            }
             // Поглотитель локальной, которую тело только пишет (фича 0387) —
             // ПОСЛЕ тела: чтение до записи verilator встречает `ALWCOMBORDER`.
             crate::generator::sv::sv_stmt::emit_local_sinks(p, &locals, &unread);

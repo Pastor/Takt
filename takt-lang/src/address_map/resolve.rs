@@ -392,17 +392,21 @@ fn resolve_model(
                 // Если источник был, но его выражение не вычислилось, причина
                 // уже названа (`SE-054`/`SE-055`) — второй диагностики не надо.
                 if used_ports.contains(name) && !failed {
-                    out.diagnostics.push(
-                        Diagnostic::error(
-                            *loc,
-                            format!(
-                                "порт '{}' используется в кодогенерации, но не имеет адреса \
-                                 (ни inline, ни оператором `address`, ни во внешней карте)",
-                                name
-                            ),
-                        )
-                        .with_code("SE-052"),
-                    );
+                    let mut diagnostic = Diagnostic::error(
+                        *loc,
+                        format!(
+                            "порт '{}' используется в кодогенерации, но не имеет адреса \
+                             (ни inline, ни оператором `address`, ни во внешней карте)",
+                            name
+                        ),
+                    )
+                    .with_code("SE-052");
+                    // Порт, заведённый флагом, автор в тексте не найдёт —
+                    // заметку даёт тот проход, который его завёл (фича 0466).
+                    if let Some(note) = crate::semantic::bounds_guard::synthetic_port_note(name) {
+                        diagnostic.notes.push(note);
+                    }
+                    out.diagnostics.push(diagnostic);
                 }
             }
         }

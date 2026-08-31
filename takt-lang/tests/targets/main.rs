@@ -25,6 +25,8 @@ mod array_slice_tests;
 mod array_struct_init_tests;
 mod bit_value_targets_tests;
 mod bit_write_targets_tests;
+mod build_matrix_tests;
+mod build_probes;
 mod c_builtin_dropped_tests;
 mod c_default_init_tests;
 mod c_diagnostic_code_tests;

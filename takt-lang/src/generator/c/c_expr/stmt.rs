@@ -372,8 +372,45 @@ pub(in crate::generator::c) fn generate_code_block(
                 map.float_width(),
                 &format!("локальная переменная '{}'", name),
             )?;
+            // ⚠️ Локальный МАССИВ с инициализатором-выражением объявляется и
+            // копируется ПОЭЛЕМЕНТНО (фича 0466): в C массив не инициализируется
+            // другим массивом (`uint8_t a[4] = model->data;` — «array initializer
+            // must be an initializer list»). Класс жил под `--inline=auto`:
+            // подстановка заводит копию параметра, и у параметра-массива вывод
+            // не собирался при нулевом коде возврата `taktc`. Агрегатный литерал
+            // ветвь не трогает — его C принимает списком.
+            let copy_elementwise = matches!(ty, TypeNode::Array(_, _))
+                && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+                && matches!(
+                    init.as_deref(),
+                    Some(e) if !matches!(
+                        e,
+                        ExpressionNode::Initializer(_) | ExpressionNode::Array(_)
+                    )
+                );
             printer.ident(&decl);
             if let Some(init_expr) = init {
+                if copy_elementwise {
+                    printer.print(";").nl();
+                    let count = match ty {
+                        TypeNode::Array(len, _) => *len as usize,
+                        _ => 0,
+                    };
+                    for place in crate::generator::aggregate::places(None, Some(ty), count) {
+                        printer.ident(&format!("{snake_name}{}", place.suffix));
+                        printer.print(" = ");
+                        generate_stmt_expression(
+                            printer,
+                            map,
+                            owner,
+                            params.clone(),
+                            init_expr,
+                            has_model,
+                        )?;
+                        printer.print(&format!("{};", place.suffix)).nl();
+                    }
+                    return Ok(());
+                }
                 printer.print(" = ");
                 generate_stmt_expression(printer, map, owner, params, init_expr, has_model)?;
             }
