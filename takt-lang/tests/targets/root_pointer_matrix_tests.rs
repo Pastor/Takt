@@ -65,7 +65,13 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::PortRead
         | Touch::InoutRead
         | Touch::InoutWrite
-        | Touch::PortReadPartial => (false, true),
+        | Touch::PortReadPartial
+        // Адресованный порт пишется в такте — через HAL корня, как обычный.
+        | Touch::AddressOperator
+        | Touch::AddressBit
+        | Touch::AddressExpression
+        | Touch::AddressMap
+        | Touch::AddressDefine => (false, true),
         Touch::PortInit | Touch::VarInit => (true, false),
         Touch::ClockAfter => (true, true),
     }
