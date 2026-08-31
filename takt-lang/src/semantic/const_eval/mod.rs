@@ -588,12 +588,21 @@ fn resolve_name(
     scope: &Rc<RefCell<ModelNode>>,
     budget: &mut Budget,
 ) -> Result<ConstValue, Diagnostic> {
-    let found = scope.borrow().search_var(name).ok_or_else(|| {
-        not_constant(
+    // Вариант перечисления — значение, известное при компиляции: имя занято
+    // объявлением `enum`, и в такте оно не меняется (фича 0451).
+    //
+    // ⚠️ Перечисление спрашивается ПОСЛЕ переменных: объявленная переменная
+    // затеняет одноимённый вариант — тот же порядок, что у разрешения
+    // выражений (`expression::resolve_expr`).
+    let Some(found) = scope.borrow().search_var(name) else {
+        if let Some((_, value)) = scope.borrow().search_enum_variant(name) {
+            return Ok(ConstValue::Int(value));
+        }
+        return Err(not_constant(
             loc,
             format!("имя '{name}' в области видимости не объявлено"),
-        )
-    })?;
+        ));
+    };
     match found {
         VariableNode::Const { expr, .. } => eval_node(&expr, loc, scope, budget),
         VariableNode::Simple { .. } => Err(not_constant(
