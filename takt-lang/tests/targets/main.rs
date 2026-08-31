@@ -47,6 +47,7 @@ mod enum_in_function_tests;
 mod fsm_table_sv_tests;
 mod fsm_table_targets_tests;
 mod fsm_table_tests;
+mod function_inline_tests;
 mod generator_warnings_tests;
 mod guard_targets_tests;
 mod hal_bit_range_tests;

@@ -17,6 +17,60 @@ use crate::semantic::{FunctionDefinitionNode, ModelNode, StatementNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Режим подстановки функции, заданный атрибутом объявления (фича 0444).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InlineMode {
+    /// Атрибута нет: решает эвристика (`--inline=auto`), а по умолчанию —
+    /// подстановки не происходит.
+    #[default]
+    Auto,
+    /// `[inline]` — подставлять всегда.
+    Always,
+    /// `[noinline]` — не подставлять никогда.
+    Never,
+}
+
+/// Разбирает атрибут объявления функции.
+///
+/// ⚠️ Имя атрибута — обычный идентификатор (грамматика о наборе не знает,
+/// урок 0385), поэтому неизвестное имя судит семантика: `SE-126` с
+/// перечислением допустимых.
+pub fn inline_mode(def: &ast::FunctionDefine) -> InlineMode {
+    match def.attribute.as_ref().map(|a| a.name.as_str()) {
+        Some("inline") => InlineMode::Always,
+        Some("noinline") => InlineMode::Never,
+        _ => InlineMode::Auto,
+    }
+}
+
+/// Проверяет атрибут объявления функции.
+fn check_attribute(def: &ast::FunctionDefine) -> Result<(), Diagnostic> {
+    let Some(attribute) = def.attribute.as_ref() else {
+        return Ok(());
+    };
+    if !matches!(attribute.name.as_str(), "inline" | "noinline") {
+        return Err(Diagnostic::error(
+            attribute.loc,
+            format!(
+                "неизвестный атрибут функции '{}': допустимы 'inline' (подставлять тело \
+                 в место вызова) и 'noinline' (не подставлять)",
+                attribute.name
+            ),
+        )
+        .with_code("SE-126"));
+    }
+    if def.external && attribute.name == "inline" {
+        return Err(Diagnostic::error(
+            attribute.loc,
+            "атрибут 'inline' на внешней функции: тела у неё нет, подставлять нечего — \
+             её вызов остаётся вызовом в порождённом коде"
+                .to_string(),
+        )
+        .with_code("SE-127"));
+    }
+    Ok(())
+}
+
 /// Строит разрешённый семантический узел функции из [`FunctionDefinitionNode`].
 ///
 /// Обрабатывает только `Unresolved`-вариант; остальные возвращаются без изменений.
@@ -103,6 +157,13 @@ pub fn construct_function(
                     params.push((param_name, param_type));
                 }
             }
+            // Атрибут объявления (фича 0444) судится ЗДЕСЬ: у внешней функции
+            // сырого АСД в узле не остаётся, а сказать об ошибке надо и о ней.
+            check_attribute(&def)?;
+            // Режим и позиция атрибута снимаются ДО разбора типа возврата:
+            // дальше `def` частично перемещается в конструкторы узлов.
+            let attribute_mode = inline_mode(&def);
+            let attribute_loc = def.attribute.as_ref().map_or(def.loc, |a| a.loc);
             let rett = match def.return_type {
                 Some(t) => construct_type(Some(t), model.clone())?,
                 None => TypeNode::Unit,
@@ -134,6 +195,18 @@ pub fn construct_function(
                     )
                     .with_code("SE-118"));
                 };
+                // Атрибут `[inline]` обязывает подстановку, а она выражается
+                // только для тела с ЕДИНСТВЕННЫМ хвостовым возвратом (фича
+                // 0444). Молча оставить вызов значило бы не исполнить
+                // написанное автором, поэтому — `SE-128` с названным обходом.
+                if matches!(attribute_mode, InlineMode::Always)
+                    && crate::semantic::inline::split_tail_return(&statement).is_none()
+                {
+                    return Err(crate::semantic::inline::early_return_refusal(
+                        attribute_loc,
+                        &name,
+                    ));
+                }
                 Ok(FunctionDefinitionNode::Local {
                     upper: Some(Rc::downgrade(&model)),
                     loc: def.loc,

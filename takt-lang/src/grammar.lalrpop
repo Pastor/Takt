@@ -286,7 +286,14 @@ BlockStatementOrSemiColon: Option<Statement> = {
 }
 
 FunctionDefine: Box<FunctionDefine> = {
-    <l:@L> <e: ("extern")?> "fn" <nl:@L> <name:IdentifierOrError> <nr:@R> <params:ParameterList>
+    // Атрибут функции (фича 0444): `[inline] fn …`, `[noinline] fn …`.
+    //
+    // Слово внутри скобок — ОБЫЧНЫЙ идентификатор, как `[Guard]` и `[LTL]` у
+    // формул: новых ключевых слов не заводится, и `var inline: u8;` остаётся
+    // законным (урок 0385). Какое имя допустимо, судит семантика — грамматике
+    // о наборе атрибутов знать нечего.
+    <l:@L> <attr: ("[" <AttributeName> "]")?> <e: ("extern")?> "fn"
+    <nl:@L> <name:IdentifierOrError> <nr:@R> <params:ParameterList>
     <return_type:("->" <Type>)?> <r:@R> <body:BlockStatementOrSemiColon> => {
         Box::new(FunctionDefine {
             loc: Location::source(file_no, l, r),
@@ -296,8 +303,14 @@ FunctionDefine: Box<FunctionDefine> = {
             return_type,
             body,
             external: e.is_some(),
+            attribute: attr,
         })
     },
+}
+
+// Имя атрибута объявления — обычный идентификатор (фича 0444).
+AttributeName: Identifier = {
+    <name:Identifier> => name,
 }
 
 NamedBlockCodeDefine: Box<NamedBlockCodeDefine> = {

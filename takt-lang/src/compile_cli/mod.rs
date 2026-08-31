@@ -107,6 +107,14 @@ pub struct CompileOptions {
     /// цели `c` и `c-hal`; у прочих флаг отвергается **с перечислением
     /// поддерживающих целей**, а не молча игнорируется.
     pub fsm: crate::generator::FsmForm,
+    /// Эвристика подстановки тела функции — флаг `--inline=off|auto` (фича
+    /// 0444).
+    ///
+    /// Умолчание [`InlinePolicy::Off`](crate::generator::InlinePolicy::Off):
+    /// подставляются только функции с атрибутом `[inline]`, вывод корпуса
+    /// прежний байт-в-байт. `auto` добавляет эвристику «тело не длиннее пяти
+    /// операторов и 1…3 вызова».
+    pub inline: crate::generator::InlinePolicy,
     /// Адаптер шины для цели `sv-mmio` — флаг `--bus=apb` (фича 0169).
     ///
     /// `None` без флага — вывод прежний байт-в-байт: адаптер не порождается.
@@ -158,6 +166,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut tick_hz: Option<u64> = None;
     let mut bus: Option<crate::generator::Bus> = None;
     let mut fsm = crate::generator::FsmForm::default();
+    let mut inline = crate::generator::InlinePolicy::default();
 
     let mut i = 0;
     while i < args.len() {
@@ -276,6 +285,14 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
             "--fsm" => {
                 return Err("--fsm требует значение: --fsm=switch|table".to_string());
             }
+            // Фича 0444: эвристика подстановки. Атрибут `[inline]` от флага не
+            // зависит — он написан автором.
+            a if a.starts_with("--inline=") => {
+                inline = parse_inline(&a["--inline=".len()..])?;
+            }
+            "--inline" => {
+                return Err("--inline требует значение: --inline=off|auto".to_string());
+            }
             // Фича 0134: частота такта устройства. Обе формы, как у соседей.
             "--tick-hz" => {
                 i += 1;
@@ -327,6 +344,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         tick_hz,
         bus,
         fsm,
+        inline,
     })
 }
 
@@ -418,6 +436,18 @@ fn parse_fsm(value: &str) -> Result<crate::generator::FsmForm, String> {
     }
 }
 
+/// Разбирает значение `--inline=` (фича 0444).
+fn parse_inline(value: &str) -> Result<crate::generator::InlinePolicy, String> {
+    match value {
+        "off" => Ok(crate::generator::InlinePolicy::Off),
+        "auto" => Ok(crate::generator::InlinePolicy::Auto),
+        other => Err(format!(
+            "--inline: неизвестный режим '{other}'. Поддерживаются: off (по умолчанию; \
+             подставляются только функции с атрибутом 'inline'), auto (плюс эвристика)"
+        )),
+    }
+}
+
 fn parse_tick_hz(value: &str) -> Result<u64, String> {
     let hz = value
         .parse::<u64>()
@@ -452,6 +482,9 @@ fn generate_options(options: &CompileOptions) -> crate::GenerateOptions {
     // ДО генерации: молчаливо проигнорированный флаг означал бы «форма как
     // получится».
     generate.fsm = options.fsm;
+    // Эвристика подстановки (фича 0444). Цели флаг не различают: подстановка
+    // живёт в семантике, и печатники о ней не знают.
+    generate.inline = options.inline;
     generate
 }
 

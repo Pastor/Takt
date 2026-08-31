@@ -90,6 +90,17 @@ pub(crate) fn parse_and_construct(
     if options.bounds_check {
         semantic::bounds_guard::insert_bounds_guards(&model);
     }
+    // Подстановка тела функции (фича 0444) — тоже ПОСЛЕ семантики и тоже в
+    // конвейере цели: атрибут автора действует всегда, эвристика — по флагу.
+    //
+    // ⚠️ Эталон этот проход не зовёт **намеренно**: подстановка меняет форму, а
+    // не поведение, и сверка «эталон против прошивки» тем и доказывает
+    // тождественность. Позови её обе стороны — сверка перестала бы видеть
+    // дефект подстановки.
+    semantic::inline::inline_functions(
+        &model,
+        matches!(options.inline, crate::generator::InlinePolicy::Auto),
+    );
     Ok(Compilation { model, files })
 }
 

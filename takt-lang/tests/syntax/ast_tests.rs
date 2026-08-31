@@ -595,6 +595,7 @@ fn empty_fn() -> FunctionDefine {
         return_type: None,
         body: None,
         external: false,
+        attribute: None,
     }
 }
 

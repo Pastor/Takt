@@ -60,6 +60,7 @@ mod conformance_fsm_table_sv_tests;
 mod conformance_fsm_table_tests;
 mod conformance_function_local_shadow_tests;
 mod conformance_import_specialize_tests;
+mod conformance_inline_tests;
 mod conformance_inout_port_tests;
 mod conformance_literal_left_tests;
 mod conformance_local_decl_tests;
