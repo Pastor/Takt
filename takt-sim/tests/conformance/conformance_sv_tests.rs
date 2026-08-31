@@ -66,7 +66,10 @@ const TRACE_TICKS: usize = 6;
 fn verilate(dir: &std::path::Path, design: &str) -> std::process::Output {
     Command::new("verilator")
         .current_dir(dir)
-        .args(["--binary", "-j", "0", "--timing", "-Wno-fatal"])
+        // ⚠️ `-j 1`, а не `-j 0`: гейт предкоммита гоняет verilator в
+        // одиночку, а тестов с ним три десятка, и cargo запускает их
+        // параллельно (флак 0429-01).
+        .args(["--binary", "-j", "4", "--timing", "-Wno-fatal"])
         .args(["--top-module", "tb", "tb.sv", design, "-o", "simtb"])
         .output()
         .expect("запуск verilator")
