@@ -99,6 +99,14 @@ pub struct CompileOptions {
     /// `SE-069`/`SE-070`); если не объявила — флаг задаёт частоту. `None` без
     /// флага — профиль «часы» (внешний источник времени).
     pub tick_hz: Option<u64>,
+    /// Форма печати автомата — флаг `--fsm=switch|table` (фича 0435).
+    ///
+    /// Умолчание [`FsmForm::Switch`](crate::generator::FsmForm::Switch) — вывод
+    /// прежний байт-в-байт. `table` печатает переходы **данными**: таблица
+    /// «откуда → страж → действие → куда» и общий диспетчер. Форму потребляют
+    /// цели `c` и `c-hal`; у прочих флаг отвергается **с перечислением
+    /// поддерживающих целей**, а не молча игнорируется.
+    pub fsm: crate::generator::FsmForm,
     /// Адаптер шины для цели `sv-mmio` — флаг `--bus=apb` (фича 0169).
     ///
     /// `None` без флага — вывод прежний байт-в-байт: адаптер не порождается.
@@ -149,6 +157,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut float_embedded = false;
     let mut tick_hz: Option<u64> = None;
     let mut bus: Option<crate::generator::Bus> = None;
+    let mut fsm = crate::generator::FsmForm::default();
 
     let mut i = 0;
     while i < args.len() {
@@ -259,6 +268,14 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
             "--bus" => {
                 return Err("--bus требует значение: --bus=apb".to_string());
             }
+            // Фича 0435: форма печати автомата. Только слитная форма со
+            // значением — как у `--parameters=` и `--bus=`.
+            a if a.starts_with("--fsm=") => {
+                fsm = parse_fsm(&a["--fsm=".len()..])?;
+            }
+            "--fsm" => {
+                return Err("--fsm требует значение: --fsm=switch|table".to_string());
+            }
             // Фича 0134: частота такта устройства. Обе формы, как у соседей.
             "--tick-hz" => {
                 i += 1;
@@ -309,6 +326,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         parameters,
         tick_hz,
         bus,
+        fsm,
     })
 }
 
@@ -386,6 +404,20 @@ fn parse_bus(value: &str) -> Result<crate::generator::Bus, String> {
     }
 }
 
+/// Разбирает значение `--fsm=` (фича 0435).
+///
+/// Неизвестное значение — ошибка с перечислением допустимых, а не молчаливое
+/// умолчание: молчание здесь означало бы «форма как получится».
+fn parse_fsm(value: &str) -> Result<crate::generator::FsmForm, String> {
+    match value {
+        "switch" => Ok(crate::generator::FsmForm::Switch),
+        "table" => Ok(crate::generator::FsmForm::Table),
+        other => Err(format!(
+            "--fsm: неизвестная форма '{other}'. Поддерживаются: switch (по умолчанию), table"
+        )),
+    }
+}
+
 fn parse_tick_hz(value: &str) -> Result<u64, String> {
     let hz = value
         .parse::<u64>()
@@ -415,6 +447,11 @@ fn generate_options(options: &CompileOptions) -> crate::GenerateOptions {
     // Адаптер шины (фича 0169): применим только к цели `sv-mmio` — у прочих
     // регистрового файла нет, и попытка кончается `SV-019`, а не молчанием.
     generate.bus = options.bus;
+    // Форма печати автомата (фича 0435): потребляют её цели `c` и `c-hal` —
+    // генератор у них общий. Применимость к цели проверяет `run_compile`
+    // ДО генерации: молчаливо проигнорированный флаг означал бы «форма как
+    // получится».
+    generate.fsm = options.fsm;
     generate
 }
 
@@ -518,6 +555,22 @@ pub fn run_compile(args: &[String]) -> i32 {
             return 1;
         }
     };
+
+    // Форма автомата применима не ко всякой цели (фича 0435): таблицу
+    // переходов печатает генератор C (цели `c` и `c-hal`). Флаг, отданный
+    // прочим целям, — ошибка CLI с перечислением поддерживающих: молчаливо
+    // проигнорированный флаг означал бы «форма как получится», а автор ждал бы
+    // таблицу и получил `switch` (класс 0184 — рапорт об успехе на входе,
+    // который не исполнен).
+    if options.fsm == crate::generator::FsmForm::Table
+        && !matches!(options.target.as_str(), "c" | "c-hal")
+    {
+        eprintln!(
+            "Ошибка: --fsm=table не поддерживается целью '{}'. Табличную форму автомата печатают цели: c, c-hal",
+            options.target
+        );
+        return 1;
+    }
 
     // Читаем исходный файл
     let source = match fs::read_to_string(&options.input_file) {

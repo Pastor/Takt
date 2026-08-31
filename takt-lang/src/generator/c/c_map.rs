@@ -14,6 +14,8 @@ pub struct CMap {
     usage: UsageSet,
     /// Флаг включения генерации проверок Guard-формул.
     guard_enable: bool,
+    /// Форма печати автомата (фича 0435): `switch` либо таблица переходов.
+    fsm: crate::generator::FsmForm,
     /// Ширина вещественного типа (фича 0029): `double` при `W64`, `float` при `W32`.
     float_width: FloatWidth,
     /// Профиль времени (фича 0134): в какие единицы пересчитывается длительность.
@@ -118,8 +120,23 @@ impl CMap {
             float_width: FloatWidth::default(),
             time_profile: crate::semantic::duration::TimeProfile::default(),
             hal: false,
+            fsm: crate::generator::FsmForm::default(),
             warnings: RefCell::new(Vec::new()),
         })
+    }
+
+    /// Задаёт форму печати автомата (фича 0435).
+    ///
+    /// Отдельным методом по той же причине, что профиль времени и режим HAL:
+    /// умолчание — `switch`, и существующие вызовы `new` его не повторяют.
+    pub fn with_fsm(mut self, fsm: crate::generator::FsmForm) -> Self {
+        self.fsm = fsm;
+        self
+    }
+
+    /// Печатается ли автомат таблицей переходов (`--fsm=table`).
+    pub(crate) fn fsm_table(&self) -> bool {
+        self.fsm == crate::generator::FsmForm::Table
     }
 
     /// Включает режим `c-hal` (фича 0020-05, потребитель — фича 0189).

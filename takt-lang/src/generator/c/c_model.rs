@@ -533,6 +533,10 @@ fn generate_model_tick(
         // выпадает в молчаливый no-op. Цепочка `if let` этого не давала — для
         // неё компилятор обязан допустить `else`.
         match state {
+            // Табличная форма (фича 0435): переходы простого состояния —
+            // строки таблицы, и в теле `case` их не печатается вовсе. Тело
+            // при этом прежнее: блоки `always`, `every`, проверки формул.
+            Element::State { .. } if map.fsm_table() => {}
             Element::State { .. } => {
                 generate_state_transitions(printer, raw_state, map, model, &model_name, states)?;
                 // Терминальное состояние (нет переходов) — явно переходим в END
@@ -567,28 +571,34 @@ fn generate_model_tick(
                             .print(arg)
                             .print(");")
                             .nl();
-                        printer
-                            .ident(&format!(
-                                "if ({}_is_done(&model->{}",
-                                name.unique_camelcase(),
-                                state_name.local_lowercase_snakecase()
-                            ))
-                            .print(")) {")
-                            .up()
-                            .nl();
-                        // Переход печатает ОБЩАЯ функция (фича 0303): прежде
-                        // эта ветвь несла свою копию «next либо END», и
-                        // собственные рёбра состояния теряла вместе с ней.
-                        generate_extend_transition(
-                            printer,
-                            raw_state,
-                            map,
-                            model,
-                            &model_name,
-                            &next,
-                            states,
-                        )?;
-                        printer.down().ident("}").nl();
+                        // Табличная форма (фича 0435): тик реализации —
+                        // тело такта и остаётся здесь, а её завершение
+                        // становится СТРАЖЕМ строки (`M_is_done(&model->x)`).
+                        if !map.fsm_table() {
+                            printer
+                                .ident(&format!(
+                                    "if ({}_is_done(&model->{}",
+                                    name.unique_camelcase(),
+                                    state_name.local_lowercase_snakecase()
+                                ))
+                                .print(")) {")
+                                .up()
+                                .nl();
+                            // Переход печатает ОБЩАЯ функция (фича 0303):
+                            // прежде эта ветвь несла свою копию «next либо
+                            // END», и собственные рёбра состояния теряла
+                            // вместе с ней.
+                            generate_extend_transition(
+                                printer,
+                                raw_state,
+                                map,
+                                model,
+                                &model_name,
+                                &next,
+                                states,
+                            )?;
+                            printer.down().ident("}").nl();
+                        }
                     }
                     StateExtend::Parallel(steps) => {
                         let local = state_name.local_lowercase_snakecase();
@@ -685,6 +695,12 @@ fn generate_model_tick(
     // этом реальный пропуск состояния (все достижимые состояния имеют `case`).
     printer.ident("default: break;").nl();
     printer.down().ident("}").nl();
+    // Табличная форма (фича 0435): переходы просматривает диспетчер — ПОСЛЕ
+    // тел состояний и ДО обновления счётчика выдержки, ровно там, где стоял
+    // переход внутри `case`.
+    if map.fsm_table() {
+        c::c_table::emit_dispatch_call(printer, model, c::c_table::wants_root(model, map));
+    }
     // Счётчик выдержки (фича 0134) обновляется в КОНЦЕ такта — так значение,
     // видимое условиям на такте M, равно числу тактов, прошедших с входа в
     // состояние. Смена состояния в этом такте означает вход, поэтому счётчик
@@ -780,6 +796,12 @@ pub(super) fn generate_model_functions(
         String::new()
     };
     let struct_name = name.unique_camelcase();
+    // Табличная форма (фича 0435) печатается ПЕРЕД функциями модели: стражи,
+    // действия и таблица статичны, а диспетчер зовётся из `_tick` — в C
+    // определение обязано стоять выше вызова.
+    if map.fsm_table() {
+        c::c_table::emit_transition_table(printer, model, map, wants_tick)?;
+    }
     printer
         .print(&format!(
             "/// Функция инициализации модели {}",

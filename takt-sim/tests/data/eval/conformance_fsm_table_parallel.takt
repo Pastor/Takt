@@ -1,0 +1,43 @@
+// Фикстура сверки табличной формы на параллельной композиции (фича 0435):
+// страж строки — конъюнкция готовностей ветвей, и берётся она у того же
+// носителя, что печатает их тик.
+model Ping {
+    out ping: u8;
+    start Go {
+        always {
+            ping := 1;
+        }
+        next Fin;
+    }
+    state Fin;
+}
+
+model Pong {
+    out pong: u8;
+    start Go {
+        always {
+            pong := 2;
+        }
+        next Fin;
+    }
+    state Fin;
+}
+
+model Pair {
+    var k: u8 := 0;
+    out probe: u8;
+
+    start Both = Ping | Pong {
+        next Tail;
+    }
+
+    state Tail {
+        always {
+            k := k + 1;
+            probe := k;
+        }
+        ref Tail: k > 0;
+    }
+}
+
+start Main = Pair;
