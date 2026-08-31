@@ -17,6 +17,7 @@
 //! обязан вычищать из него `:` — после слияния имя потока несёт префикс модуля.
 
 mod address_export_tests;
+mod address_map_roundtrip_tests;
 mod address_map_tests;
 mod aggregate_assign_targets_tests;
 mod anon_port_tests;

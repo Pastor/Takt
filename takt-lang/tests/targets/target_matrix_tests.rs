@@ -28,7 +28,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::matrix_probes::{Kind, Shape, Touch, case_name, cases, library_files, source};
+use super::matrix_probes::{
+    Kind, Shape, Touch, case_name, cases, extra_flags, library_files, source,
+};
 
 /// Ожидание для тройки «цель × вид обращения × форма объявления»: перевод либо
 /// отказ **названным** кодом.
@@ -137,6 +139,12 @@ fn emit(dir: &Path, target: &str, text: &str, touch: Touch, mode: &str) -> Emitt
         // Режим параметров — часть случая (фича 0457): дефект дубля сигнала у
         // `sv-mmio` жил только в `specialize`.
         .arg(format!("--parameters={mode}"))
+        // Ключи, которых требует вид обращения: внешняя карта, `-D` (0458).
+        .args(
+            extra_flags(touch)
+                .into_iter()
+                .map(|flag| flag.replace("{dir}", &dir.display().to_string())),
+        )
         .arg(&input)
         .arg("-o")
         .arg(&out_dir)
@@ -250,8 +258,41 @@ fn check_assertion(text: &str, touch: Touch, marker: &str) -> Result<(), String>
     })
 }
 
+/// Какой адрес обязан стоять в выводе цели `c-hal` — контроль оси адресации.
+///
+/// ⚠️ Без него перебор был бы зелен и тогда, когда адрес молча потерян или взят
+/// не из того источника: приоритет `inline < address < карта` (правило 0020)
+/// иначе никем в переборе не проверяется.
+fn expected_address(touch: Touch) -> Option<&'static str> {
+    match touch {
+        Touch::AddressOperator => Some("0x40000200u"),
+        // Арифметику адреса вычисляет компилятор: `0x40000000 + 8`.
+        Touch::AddressExpression => Some("0x40000008u"),
+        // `-DBASE=0x40000000` плюс `+ 4`.
+        Touch::AddressDefine => Some("0x40000004u"),
+        // Внешняя карта ПЕРЕКРЫВАЕТ inline-адрес объявления (0x40000100).
+        Touch::AddressMap => Some("0x200004u"),
+        _ => None,
+    }
+}
+
+/// Проверяет адрес в выводе `c-hal`, если ось этого требует.
+fn check_address(text: &str, touch: Touch) -> Result<(), String> {
+    let Some(expected) = expected_address(touch) else {
+        return Ok(());
+    };
+    if !text.contains(expected) {
+        return Err(format!("в выводе нет ожидаемого адреса '{expected}'"));
+    }
+    // Карта обязана перекрыть inline: старого адреса в выводе быть не должно.
+    if touch == Touch::AddressMap && text.contains("0x40000100u") {
+        return Err("внешняя карта не перекрыла inline-адрес объявления".to_string());
+    }
+    Ok(())
+}
+
 /// Собирает порождённый C флагами гейта цели.
-fn cc_builds(dir: &Path, out: &Path, _touch: Touch) -> Result<(), String> {
+fn cc_builds(dir: &Path, out: &Path, touch: Touch) -> Result<(), String> {
     // ⚠️ Наличие `assert` у цели `c` не проверяется: её вывод содержит
     // `assert(0 != model)` в каждой функции — маркер неразличим. Ось формул
     // сторожится у `rust` и `sv`, где обязательство печатается отдельным
@@ -272,14 +313,19 @@ fn cc_builds(dir: &Path, out: &Path, _touch: Touch) -> Result<(), String> {
         .arg(dir.join("probe.o"))
         .output()
         .expect("запуск cc");
-    if cc.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
+    if !cc.status.success() {
+        return Err(format!(
             "cc отверг вывод:\n{}",
             String::from_utf8_lossy(&cc.stderr)
-        ))
+        ));
     }
+    // Адрес проверяется по заголовку цели `c-hal`: там он печатается таблицей
+    // размещений. У цели `c` таблицы нет — контроль ей не адресован.
+    let header = std::fs::read_to_string(out.join("probe.h")).unwrap_or_default();
+    if header.contains("uintptr_t") {
+        check_address(&header, touch)?;
+    }
+    Ok(())
 }
 
 #[test]

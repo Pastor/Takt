@@ -184,6 +184,17 @@ pub(crate) enum Touch {
     ParameterArgument,
     /// Аргумент — константное ВЫРАЖЕНИЕ: `M(portion := BASE + 2)`.
     ParameterExpression,
+    /// Адрес порта задан оператором `address`, а не inline (фича 0020).
+    AddressOperator,
+    /// Оператор `address` с ПОЗИЦИЕЙ БИТА: `0x…:3`.
+    AddressBit,
+    /// Адрес — константное ВЫРАЖЕНИЕ (арифметика вычисляется компилятором).
+    AddressExpression,
+    /// Адрес приходит ВНЕШНЕЙ КАРТОЙ (`--address-map`) и перекрывает inline —
+    /// приоритет источников: inline < `address` < карта (фича 0020).
+    AddressMap,
+    /// Адрес опирается на `-D` определение среды вычислителя (фича 0042).
+    AddressDefine,
     /// ЧАСТИЧНОЕ чтение входного порта: у составного значения читается одна
     /// часть (фича 0453).
     ///
@@ -194,7 +205,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 25] = [
+pub(crate) const TOUCHES: [Touch; 30] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -220,6 +231,11 @@ pub(crate) const TOUCHES: [Touch; 25] = [
     Touch::ParameterDefault,
     Touch::ParameterArgument,
     Touch::ParameterExpression,
+    Touch::AddressOperator,
+    Touch::AddressBit,
+    Touch::AddressExpression,
+    Touch::AddressMap,
+    Touch::AddressDefine,
 ];
 
 impl Touch {
@@ -250,6 +266,11 @@ impl Touch {
             Touch::ParameterDefault => "parameter_default",
             Touch::ParameterArgument => "parameter_argument",
             Touch::ParameterExpression => "parameter_expression",
+            Touch::AddressOperator => "address_operator",
+            Touch::AddressBit => "address_bit",
+            Touch::AddressExpression => "address_expression",
+            Touch::AddressMap => "address_map",
+            Touch::AddressDefine => "address_define",
         }
     }
 
@@ -299,6 +320,17 @@ impl Touch {
             Touch::PortRead | Touch::PortReadPartial => {
                 format!("    in a: {} at 0x40000100;\n", kind.type_name())
             }
+            // Адрес задаётся ОТДЕЛЬНО (оператором либо картой), поэтому у
+            // объявления его нет. ⚠️ Оператор `address` действует в области
+            // СВОЕГО объявления — он стоит рядом с портом (замер 0458).
+            Touch::AddressOperator => "    out a: u8;\n    address a = 0x40000200;\n".to_string(),
+            Touch::AddressBit => "    out a: bit;\n    address a = 0x40000004:3;\n".to_string(),
+            Touch::AddressExpression => {
+                "    out a: u8;\n    address a = 0x40000000 + 8;\n".to_string()
+            }
+            // Карта и определение приходят снаружи: объявление обычное.
+            Touch::AddressMap => "    out a: u8 at 0x40000100;\n".to_string(),
+            Touch::AddressDefine => "    out a: u8;\n    address a = BASE + 4;\n".to_string(),
             Touch::InoutRead | Touch::InoutWrite => {
                 format!("    inout a: {} at 0x40000100;\n", kind.type_name())
             }
@@ -357,6 +389,12 @@ impl Touch {
             }
             Touch::ImportType => "            k := k + p.hi;\n".to_string(),
             Touch::ImportTransitive => "            k := mid_value();\n".to_string(),
+            // Однобитному порту пишется бит, прочим — счётчик.
+            Touch::AddressBit => "            k := k + 1;\n            a := 1;\n".to_string(),
+            Touch::AddressOperator
+            | Touch::AddressExpression
+            | Touch::AddressMap
+            | Touch::AddressDefine => "            k := k + 1;\n            a := k;\n".to_string(),
             Touch::InoutWrite => format!("            k := k + 1;\n{}", kind.write_statement("a")),
             Touch::ExternCall => "            k := probe_value();\n".to_string(),
             _ => "            k := k + 1;\n".to_string(),
@@ -471,6 +509,11 @@ pub(crate) fn library_files(touch: Touch) -> Vec<ProbeFile> {
         | Touch::ImportType
         | Touch::ImportModel
         | Touch::ImportNestedModel => vec![helper("")],
+        // Внешняя карта адресов лежит рядом с пробой и перекрывает inline.
+        Touch::AddressMap => vec![ProbeFile {
+            name: "plat.map",
+            text: "a = 0x00200004;\n".to_string(),
+        }],
         // Транзитивный импорт: подключённый файл сам подключает третий.
         Touch::ImportTransitive => vec![
             ProbeFile {
@@ -497,6 +540,20 @@ fn parameter_argument(touch: Touch) -> Option<&'static str> {
         Touch::ParameterArgument => Some("(portion := 7)"),
         Touch::ParameterExpression => Some("(portion := BASE + 2)"),
         _ => None,
+    }
+}
+
+/// Дополнительные ключи CLI, которых требует вид обращения (фича 0458).
+pub(crate) fn extra_flags(touch: Touch) -> Vec<String> {
+    match touch {
+        // ⚠️ Карта передаётся ПУТЁМ ОТ РАБОЧЕГО КАТАЛОГА процесса, а не от
+        // каталога пробы (в отличие от `import`, который ищется рядом с
+        // импортёром, — правило 0055). Путь подставляет вызывающий: он один
+        // знает каталог случая.
+        Touch::AddressMap => vec!["--address-map".to_string(), "{dir}/plat.map".to_string()],
+        // Среда вычислителя адреса: имя видно только ему (фича 0042).
+        Touch::AddressDefine => vec!["-DBASE=0x40000000".to_string()],
+        _ => Vec::new(),
     }
 }
 
