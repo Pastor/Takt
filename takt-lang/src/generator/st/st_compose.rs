@@ -333,21 +333,12 @@ fn emit_chain_case(
         state_name: ctx.state_name,
         prefix: &inner_prefix,
     };
-    // Табличная форма (фича 0440): готовность цепочки защёлкивается ДО машины
-    // шагов — форма `CASE` уходит наружу из ветви `<число шагов>`, то есть на
-    // скане ПОСЛЕ завершения последнего шага. Защёлка повторяет этот момент.
-    // Табличная форма (фича 0440): готовность цепочки защёлкивается ДО машины
-    // шагов — форма `CASE` уходит наружу из ветви `<число шагов>`, то есть на
-    // скане ПОСЛЕ завершения последнего шага. Защёлка повторяет этот момент.
-    if map.fsm_table()
-        && let ChainExit::Parent { .. } = exit
-    {
-        crate::generator::st::st_table::emit_ready_latch(
-            p,
-            ctx.state_name,
-            &format!("{} = {}", counter, items.len()),
-            out,
-        );
+    // Табличная форма (фича 0440): выход печатает таблица, а здесь готовность
+    // сбрасывается перед машиной шагов и взводится ровно там, где форма `CASE`
+    // исполняет выход, — в ветви последнего шага (фича 0443).
+    let parent_chain = matches!(exit, ChainExit::Parent { .. });
+    if map.fsm_table() && parent_chain {
+        crate::generator::st::st_table::emit_ready_latch(p, ctx.state_name, "FALSE", out);
     }
     p.ident(&format!("CASE {} OF", counter)).nl();
     p.up();
@@ -359,23 +350,37 @@ fn emit_chain_case(
         path.pop();
         p.ident(&format!("IF {} THEN", done)).nl();
         p.up();
-        p.ident(&format!("{} := {};", counter, i + 1)).nl();
+        // ⚠️ ПОСЛЕДНИЙ шаг цепочки ВЕРХНЕГО уровня уводит состояние **в этом
+        // же скане** (фича 0443). Прежде он лишь ставил счётчик на терминальное
+        // значение, а выход исполняла отдельная ветвь `CASE` — то есть скан
+        // спустя: цель `st` тратила лишний скан там, где эталон и цель `c`
+        // уходят сразу. `iec2c` вывод принимал, а расхождение видела только
+        // потактовая сверка (класс 0191, но в композиции).
+        //
+        // ⚠️ У ВЛОЖЕННОЙ цепочки поведение прежнее: её готовность вмещающая
+        // композиция читает по терминальному значению счётчика (`counter = N`),
+        // и читает его в том же скане — лишнего скана там не было.
+        match (i + 1 == items.len(), exit) {
+            (true, ChainExit::Parent { .. }) if map.fsm_table() => {
+                crate::generator::st::st_table::emit_ready_latch(p, ctx.state_name, "TRUE", out);
+            }
+            (
+                true,
+                ChainExit::Parent {
+                    state,
+                    model,
+                    next,
+                    table,
+                },
+            ) => {
+                emit_state_exit(p, map, ctx.state_name, state, model, next, table, out)?;
+            }
+            _ => {
+                p.ident(&format!("{} := {};", counter, i + 1)).nl();
+            }
+        }
         p.down();
         p.ident("END_IF;").nl();
-        p.down();
-    }
-    if let ChainExit::Parent {
-        state,
-        model,
-        next,
-        table,
-    } = exit
-        && !map.fsm_table()
-    {
-        p.ident(&format!("{}: (* конкатенация завершена *)", items.len()))
-            .nl();
-        p.up();
-        emit_state_exit(p, map, ctx.state_name, state, model, next, table, out)?;
         p.down();
     }
     p.down();

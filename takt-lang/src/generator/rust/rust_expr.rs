@@ -671,11 +671,52 @@ fn wrapping_or_plain(
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
     if is_unsigned_int(a) || is_unsigned_int(b) {
-        let left = print_expression(a, scope)?;
+        let left = wrapping_receiver(a, b, scope)?;
         let right = print_expression(b, scope)?;
         return Ok(format!("{left}.{wrapping}({})", unwrap_outer(&right)));
     }
     binary(a, op, b, scope)
+}
+
+/// Левый операнд обёрточной арифметики — ПОЛУЧАТЕЛЬ метода, и литералу здесь
+/// нужен тип (фича 0442).
+///
+/// ⚠️ Вывод типа в Rust **не проходит сквозь вызов метода**: `10.wrapping_add(x)`
+/// не компилируется вовсе (`E0689`: «can't call method on ambiguous numeric
+/// type»), тогда как `x.wrapping_add(10)` печатается верно. Замер 2026-08-31:
+/// `probe := 10 + n;` переводили все восемь целей, но вывод `rust` отвергал
+/// `rustc` при НУЛЕВОМ коде возврата `taktc`.
+///
+/// ⚠️ Тип берётся у ВТОРОГО операнда, а не у приёмника: у обёрточной арифметики
+/// оба операнда одного типа по построению (`SE-059` запрещает смешение), и
+/// печатнику доступен именно он. Приём — суффикс, а не приведение: `10 as u8`
+/// это `clippy::unnecessary_cast`, то есть отказ гейта цели (класс 0263 и 0415).
+///
+/// ⚠️ Отрицательный литерал под правило не подпадает: `-1u8` невыразим, а
+/// значение вне диапазона типа отвергает семантика (`SE-089`) — печатнику
+/// такого входа не приходит.
+fn wrapping_receiver(
+    a: &ExpressionNode,
+    b: &ExpressionNode,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    let printed = print_expression(a, scope)?;
+    if crate::generator::shift_width::type_of(a).is_some() {
+        return Ok(printed);
+    }
+    let Some(literal) = crate::generator::shift_width::literal(a) else {
+        return Ok(printed);
+    };
+    if literal < 0 {
+        return Ok(printed);
+    }
+    match rust_fixed::expression_type(b) {
+        Some(ty @ TypeNode::Integer { .. }) => {
+            let name = crate::generator::rust::rust_type::rust_type(&ty, "операнд арифметики")?;
+            Ok(format!("{literal}{name}"))
+        }
+        _ => Ok(printed),
+    }
 }
 
 /// Беззнаковое ли целое у выражения (тип известен и не знаковый).

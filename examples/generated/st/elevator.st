@@ -216,10 +216,8 @@ END_VAR
                 4:
                     middle_engine6(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
                     IF middle_engine6.is_done THEN
-                        middle_step := 5;
+                        state := 1; (* End *)
                     END_IF;
-                5: (* конкатенация завершена *)
-                    state := 1; (* End *)
             END_CASE;
         4: (* END *)
             state := 4;

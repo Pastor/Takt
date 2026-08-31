@@ -277,10 +277,8 @@ END_VAR
                 1:
                     start_f1();
                     IF start_f1.is_done THEN
-                        start_step := 2;
+                        state := 1; (* End *)
                     END_IF;
-                2: (* конкатенация завершена *)
-                    state := 1; (* End *)
             END_CASE;
         3: (* END *)
             state := 3;
@@ -345,10 +343,8 @@ END_VAR
                 3:
                     start_e5();
                     IF start_e5.is_done THEN
-                        start_step := 4;
+                        state := 1; (* Next *)
                     END_IF;
-                4: (* конкатенация завершена *)
-                    state := 1; (* Next *)
             END_CASE;
         3: (* END *)
             state := 3;
