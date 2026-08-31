@@ -520,6 +520,24 @@ fn generate_parallel_items_init(
     Ok(())
 }
 
+/// Перечислитель шага — у общего носителя `c_chain` (фича 0438).
+///
+/// Форма, которую печать такта не ведёт (вложенная цепочка), доходить сюда не
+/// должна: у неё нет ни варианта, ни тика, — и она получает `CC-007`.
+fn variant_of(
+    state_unique_upper: &str,
+    item: &StateExtend,
+    idx: usize,
+) -> Result<String, Diagnostic> {
+    crate::generator::c::c_chain::step_variant(state_unique_upper, item, idx).ok_or_else(|| {
+        Diagnostic::error(
+            Location::Codegen,
+            "Неподдерживаемый тип элемента конкатенации".to_string(),
+        )
+        .with_code("CC-007")
+    })
+}
+
 /// Генерирует вызов `_init` для одного элемента конкатенации и возвращает
 /// соответствующий вариант enum `{state_local}_state`.
 ///
@@ -539,12 +557,8 @@ pub(super) fn generate_concat_item_init(
 ) -> Result<String, Diagnostic> {
     match item {
         StateExtend::Model(name, args) => {
-            let access = format!(
-                "model->{}_{}{}",
-                state_local,
-                name.local_lowercase_snakecase(),
-                idx
-            );
+            // Имена машины шагов — у общего носителя (фича 0438).
+            let access = crate::generator::c::c_chain::model_access(state_local, name, idx);
             printer
                 .ident(&format!(
                     "{}_init(&{}{});",
@@ -558,16 +572,12 @@ pub(super) fn generate_concat_item_init(
                 ))
                 .nl();
             generate_argument_assignments(printer, map, model_element, &access, args)?;
-            Ok(format!(
-                "{}_{}{}",
-                state_unique_upper,
-                name.local_lowercase_snakecase().to_uppercase(),
-                idx,
-            ))
+            variant_of(state_unique_upper, item, idx)
         }
         StateExtend::Parallel(inner) => {
-            let access = format!("model->{}_parallel{}", state_local, idx);
-            let nested_upper = format!("{}_PARALLEL{}", state_unique_upper, idx);
+            let access = crate::generator::c::c_chain::parallel_access(state_local, idx);
+            let nested_upper =
+                crate::generator::c::c_chain::parallel_upper(state_unique_upper, idx);
             generate_parallel_items_init(
                 printer,
                 map,
@@ -580,7 +590,7 @@ pub(super) fn generate_concat_item_init(
             printer
                 .ident(&format!("{}.state = {}_INIT;", access, nested_upper))
                 .nl();
-            Ok(format!("{}_PARALLEL{}", state_unique_upper, idx))
+            variant_of(state_unique_upper, item, idx)
         }
         _ => Err(Diagnostic::error(
             Location::Codegen,
