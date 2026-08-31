@@ -463,6 +463,10 @@ fn print_usage() {
     eprintln!("                         Флаги --verbose и --quiet взаимоисключающие");
     eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
+    eprintln!("  --fsm=switch|table     Форма автомата в порождённом коде (цели c, c-hal):");
+    eprintln!(
+        "                         switch — по умолчанию; table — переходы данными (таблица + диспетчер)"
+    );
     eprintln!("  --bounds-check         Guard границ массива: доступ за границей не выполняется,");
     eprintln!(
         "                         признак уходит в выходной порт bounds_fault (по умолчанию выкл.)"

@@ -51,6 +51,7 @@ mod c_params;
 mod c_port_enums;
 mod c_ports;
 mod c_source;
+mod c_table;
 /// Механизм времени цели `c` (фича 0134).
 mod c_time;
 mod c_unresolved;
@@ -179,6 +180,7 @@ impl AsGenerator for Generator {
         )?
         .with_float_width(options.float_width)
         .with_time_profile(profile)
+        .with_fsm(options.fsm)
         .with_hal(options.hal);
         let header = generate_header(map.get_filename(), &map, options)?;
         let source = generate_source(map.get_filename(), &map)?;
