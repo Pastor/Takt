@@ -28,7 +28,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::matrix_probes::{Kind, Touch, case_name, cases, source};
+use super::matrix_probes::{Kind, Touch, case_name, cases, library_files, source};
 
 /// Ожидание для тройки «цель × вид обращения × форма объявления»: перевод либо
 /// отказ **названным** кодом.
@@ -73,6 +73,10 @@ pub(crate) fn refusal(target: &str, touch: Touch, kind: Kind) -> Option<&'static
         // Двунаправленный порт в регистровом файле: у шины сторона одна, и
         // выразить `inout` ею нельзя (фича 0428).
         ("sv-mmio", Touch::InoutRead | Touch::InoutWrite, _) => Some("SV-006"),
+        // Полный импорт вносит только модель-КОНТЕЙНЕР файла; вложенная модель
+        // снаружи не видна, и взять её реализацией нельзя. Отказ приходит из
+        // семантики, то есть у всех целей одинаково (правило 0279).
+        (_, Touch::ImportNestedModel, _) => Some("SE-106"),
         _ => None,
     }
 }
@@ -118,9 +122,14 @@ enum Emitted {
 }
 
 /// Компилирует случай заданной целью.
-fn emit(dir: &Path, target: &str, text: &str) -> Emitted {
+fn emit(dir: &Path, target: &str, text: &str, touch: Touch) -> Emitted {
     let input = dir.join("probe.takt");
     std::fs::write(&input, text).expect("запись пробы");
+    // Подключаемые файлы кладутся РЯДОМ: импорт ищется в каталоге импортёра
+    // (правило 0055), и пути поиска задавать не нужно.
+    for file in library_files(touch) {
+        std::fs::write(dir.join(file.name), file.text).expect("запись библиотеки");
+    }
     let out_dir = dir.join("out");
     let out = Command::new(env!("CARGO_BIN_EXE_taktc"))
         .arg("compile")
@@ -150,7 +159,10 @@ fn sweep(target: &str, check: &dyn Fn(&Path, &Path, Touch) -> Result<(), String>
         let tag = format!("{target}_{name}");
         let dir = work_dir(&tag);
         let text = source(shape, touch, kind);
-        match (emit(&dir, target, &text), refusal(target, touch, kind)) {
+        match (
+            emit(&dir, target, &text, touch),
+            refusal(target, touch, kind),
+        ) {
             (Emitted::Ok(out), None) => {
                 if let Err(err) = check(&dir, &out, touch) {
                     failures.push(format!("{name}: {err}"));

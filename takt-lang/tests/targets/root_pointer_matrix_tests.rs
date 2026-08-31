@@ -27,7 +27,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::matrix_probes::{Kind, Touch, case_name, cases, source};
+use super::matrix_probes::{Kind, Touch, case_name, cases, library_files, source};
 use super::target_matrix_tests::refusal;
 
 /// Ожидание: печатается ли `main` функциям `(_init, _tick)`.
@@ -42,7 +42,16 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::InvariantModel
         | Touch::InvariantState
         | Touch::GuardFormula
-        | Touch::LtlFormula => (false, false),
+        | Touch::LtlFormula
+        // Импортированное объявление — объявление ИМПОРТЁРА (правило 0184):
+        // функция, тип и константа приходят к нему, и корня им не нужно.
+        | Touch::ImportFunction
+        | Touch::ImportSelective
+        | Touch::ImportType
+        | Touch::ImportTransitive
+        // Реализация подключённой моделью: обёртка своих обращений не имеет.
+        | Touch::ImportModel
+        | Touch::ImportNestedModel => (false, false),
         // Порт читается и пишется в ТАКТЕ — через HAL корня; у входного и
         // двунаправленного это так же, как у выходного (замер 0452).
         Touch::PortWrite
@@ -80,9 +89,12 @@ fn cc_available() -> bool {
 }
 
 /// Компилирует случай целью `c`; отдаёт текст порождённого файла.
-fn compile(dir: &Path, source: &str) -> String {
+fn compile(dir: &Path, source: &str, touch: Touch) -> String {
     let input = dir.join("probe.takt");
     std::fs::write(&input, source).expect("запись пробы");
+    for file in library_files(touch) {
+        std::fs::write(dir.join(file.name), file.text).expect("запись библиотеки");
+    }
     let out = Command::new(env!("CARGO_BIN_EXE_taktc"))
         .arg("compile")
         .args(["-t", "c"])
@@ -153,6 +165,9 @@ fn root_pointer_is_exact_for_every_shape_and_touch() {
             let dir = work_dir(&tag);
             let input = dir.join("probe.takt");
             std::fs::write(&input, source(*shape, *touch, *kind)).expect("запись пробы");
+            for file in library_files(*touch) {
+                std::fs::write(dir.join(file.name), file.text).expect("запись библиотеки");
+            }
             let out = Command::new(env!("CARGO_BIN_EXE_taktc"))
                 .arg("compile")
                 .args(["-t", "c"])
@@ -175,7 +190,7 @@ fn root_pointer_is_exact_for_every_shape_and_touch() {
             continue;
         }
         let dir = work_dir(&tag);
-        let text = compile(&dir, &source(*shape, *touch, *kind));
+        let text = compile(&dir, &source(*shape, *touch, *kind), *touch);
         if let Err(err) = build(&dir) {
             failures.push(format!("{tag}: cc отверг вывод:\n{err}"));
             continue;
