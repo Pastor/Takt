@@ -8,11 +8,14 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::rust::rust_blocks::{emit_model_named_blocks, emit_named_blocks};
-use crate::generator::rust::rust_chain::{seq_enum_name, seq_field_name};
+use crate::generator::rust::rust_chain::{
+    concat_steps, seq_enum_name, seq_field_name, step_prefix,
+};
 use crate::generator::rust::rust_ctx::{ModelEmit, StateEmit};
 use crate::generator::rust::rust_expr::{Scope, condition_as_bool, unwrap_outer};
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_model::{Instance, StateTable, needs_hal, submodel_name};
+use crate::generator::rust::rust_name::rust_value_name;
 use crate::generator::rust::rust_shared::{shared_type_name, shared_variables};
 use crate::generator::rust::rust_stmt::StmtOutput;
 use crate::semantic::minimap::{Element, Name, StateExtend};
@@ -456,131 +459,189 @@ fn emit_extend(
     scope: &mut Scope,
     out: &mut StmtOutput,
 ) -> Result<(), Diagnostic> {
-    let (map, instances, concats, model_name, is_root) =
-        (ctx.map, ctx.instances, ctx.concats, ctx.name, ctx.is_root);
-    let (state_name, raw, extend, next) = (state.name, state.raw, state.extend, state.next);
-    let Some((_, list)) = instances
+    let (map, instances) = (ctx.map, ctx.instances);
+    let (state_name, extend) = (state.name, state.extend);
+    if !instances
         .iter()
-        .find(|(n, _)| n.unique() == state_name.unique())
-    else {
+        .any(|(n, _)| n.unique() == state_name.unique())
+    {
         return Ok(());
-    };
-    match extend {
-        StateExtend::None => Ok(()),
+    }
+    let prefix = state_name.local_lowercase_snakecase();
+    let done = emit_node_tick(p, ctx, state, extend, &mut Vec::new(), &prefix, scope, out)?;
+    // У цепочки состояния переход печатает её последний шаг — здесь остаётся
+    // только параллель и одиночная модель.
+    if matches!(extend, StateExtend::Concatenation(_)) || done.is_empty() {
+        return Ok(());
+    }
+    // Табличная форма (фича 0440): внешний переход печатает таблица —
+    // здесь остаётся только тик ветвей.
+    if map.fsm_table() {
+        return Ok(());
+    }
+    p.ident(&format!("if {} {{", done.join(" && "))).nl();
+    p.up();
+    emit_extend_transition(p, ctx, state.raw, state.next, scope, out)?;
+    p.down();
+    p.ident("}").nl();
+    Ok(())
+}
+
+/// Печатает такт УЗЛА композиции и возвращает условия его готовности.
+///
+/// Рекурсия идёт по дереву, а место узла задаёт `path` — тот же адрес, каким
+/// цепочки пользуются у целей `c`, `st` и `sv`
+/// ([`chain_site`](crate::generator::chain_site), фича 0427). Прежде печать
+/// знала два уровня: цепочка состояния и цепочка внутри параллели состояния.
+/// Цепочка глубже (`((A + B) | C) + E`) машины шагов не получала, и её ветви
+/// тикали разом — валидный Rust с другим автоматом (фича 0479).
+#[allow(clippy::too_many_arguments)]
+fn emit_node_tick(
+    p: &mut Printer,
+    ctx: &ModelEmit,
+    state: &StateEmit,
+    node: &StateExtend,
+    path: &mut Vec<usize>,
+    prefix: &str,
+    scope: &mut Scope,
+    out: &mut StmtOutput,
+) -> Result<Vec<String>, Diagnostic> {
+    match node {
+        StateExtend::None => Ok(Vec::new()),
+        // Одиночная под-модель: тикает всегда, готовность — её собственная.
+        StateExtend::Model(_, _) => {
+            let field = rust_value_name(prefix, Location::Codegen)?;
+            let instance = instance_at(ctx, state.name, &field)?;
+            let args = call_args(ctx.map, instance, scope, ctx.is_root)?;
+            p.ident(&format!("self.{}.tick({});", field, args)).nl();
+            Ok(vec![format!("self.{}.is_done()", field)])
+        }
         // Параллельная композиция: тикают ВСЕ ветви каждый такт, в порядке
         // объявления — как в цели `c` (ветвь, уже завершённая, тикает в свой
         // `End` вхолостую). Порядок обязан совпадать с C, иначе потактовая
         // сверка разъедется.
-        StateExtend::Model(_, _) | StateExtend::Parallel(_) => {
-            // Вложенные цепочки параллели (фича 0426) тикают ПО ШАГАМ, а их
-            // экземпляры из общего списка исключаются: прежде все ветви
-            // тикали разом, и `A + B` внутри `| C` превращалась в параллель
-            // трёх — валидный Rust, другой автомат.
-            let chains: Vec<&crate::generator::rust::rust_chain::Chain> = concats
-                .iter()
-                .filter(|c| c.state.unique() == state_name.unique() && c.suffix.is_some())
-                .collect();
-            let chained: std::collections::BTreeSet<String> = chains
-                .iter()
-                .flat_map(|c| c.steps.iter())
-                .flat_map(|s| s.instances.iter())
-                .map(|i| i.field.clone())
-                .collect();
+        StateExtend::Parallel(items) => {
             let mut done = Vec::new();
-            for chain in &chains {
-                emit_chain_tick(p, ctx, chain, scope)?;
-                done.push(format!(
-                    "self.{} == {}::Done",
-                    crate::generator::rust::rust_chain::seq_field_name(
-                        &chain.state,
-                        chain.suffix.as_deref()
-                    )?,
-                    crate::generator::rust::rust_chain::seq_enum_name(
-                        model_name,
-                        &chain.state,
-                        chain.suffix.as_deref()
-                    )?
-                ));
+            for (idx, item) in items.iter().enumerate() {
+                let sub = step_prefix(prefix, item, idx);
+                path.push(idx);
+                let result = emit_node_tick(p, ctx, state, item, path, &sub, scope, out);
+                path.pop();
+                done.extend(result?);
             }
-            for instance in list {
-                if chained.contains(&instance.field) {
-                    continue;
-                }
-                let args = call_args(map, instance, scope, is_root)?;
-                p.ident(&format!("self.{}.tick({});", instance.field, args))
-                    .nl();
-                done.push(format!("self.{}.is_done()", instance.field));
-            }
-            if done.is_empty() {
-                return Ok(());
-            }
-            // Табличная форма (фича 0440): внешний переход печатает таблица —
-            // здесь остаётся только тик ветвей.
-            if map.fsm_table() {
-                return Ok(());
-            }
-            p.ident(&format!("if {} {{", done.join(" && "))).nl();
-            p.up();
-            emit_extend_transition(p, ctx, raw, next, scope, out)?;
-            p.down();
-            p.ident("}").nl();
-            Ok(())
+            Ok(done)
         }
         // Последовательная композиция: шаги идут ПО ОЧЕРЕДИ, внутри шага
         // (параллельная группа) — одновременно.
-        StateExtend::Concatenation(_) => {
-            let Some(chain) = concats
-                .iter()
-                .find(|c| c.state.unique() == state_name.unique() && c.suffix.is_none())
-            else {
-                return Ok(());
-            };
-            let steps = &chain.steps;
-            let field = seq_field_name(state_name, None)?;
-            let seq = seq_enum_name(model_name, state_name, None)?;
-            for (idx, step) in steps.iter().enumerate() {
-                let head = if idx == 0 { "if" } else { "} else if" };
-                p.ident(&format!(
-                    "{} self.{} == {}::{} {{",
-                    head, field, seq, step.variant
-                ))
-                .nl();
-                p.up();
-                // Ветви шага тикают все и в порядке объявления — как в C.
-                let mut done = Vec::new();
-                for instance in &step.instances {
-                    let args = call_args(map, instance, scope, is_root)?;
-                    p.ident(&format!("self.{}.tick({});", instance.field, args))
-                        .nl();
-                    done.push(format!("self.{}.is_done()", instance.field));
-                }
-                p.ident(&format!("if {} {{", done.join(" && "))).nl();
-                p.up();
-                match steps.get(idx + 1) {
-                    // Передача хода следующему шагу СТОИТ ТАКТА — как в C, где
-                    // за установкой варианта стоит `break`. Здесь такт кончается
-                    // сам: цепочка `else if` уже вошла в эту ветвь, и следующий
-                    // шаг в этом же такте не тикнет.
-                    Some(next_step) => {
-                        for instance in &next_step.instances {
-                            p.ident(&format!("self.{}.init();", instance.field)).nl();
-                        }
-                        p.ident(&format!("self.{} = {}::{};", field, seq, next_step.variant))
-                            .nl();
-                    }
-                    // Последний шаг завершён — уходим из составного состояния.
-                    // В табличной форме этот переход печатает таблица (0440).
-                    None if map.fsm_table() => {}
-                    None => emit_extend_transition(p, ctx, raw, next, scope, out)?,
-                }
-                p.down();
-                p.ident("}").nl();
-                p.down();
-            }
-            p.ident("}").nl();
-            Ok(())
+        StateExtend::Concatenation(items) => {
+            emit_chain_tick(p, ctx, state, items, path, prefix, scope, out)
         }
     }
+}
+
+/// Печатает машину шагов одной цепочки и возвращает условие её готовности.
+///
+/// Форма одна у цепочки состояния и у вложенной; отличается только конец
+/// последнего шага: состояние уходит переходом, вложенная цепочка ставит
+/// терминальный вариант `Done` — вмещающая параллель обязана узнать, что ветвь
+/// кончилась, а выхода из состояния у неё нет.
+#[allow(clippy::too_many_arguments)]
+fn emit_chain_tick(
+    p: &mut Printer,
+    ctx: &ModelEmit,
+    state: &StateEmit,
+    items: &[StateExtend],
+    path: &mut Vec<usize>,
+    prefix: &str,
+    scope: &mut Scope,
+    out: &mut StmtOutput,
+) -> Result<Vec<String>, Diagnostic> {
+    let steps = concat_steps(items, prefix, state.name)?;
+    if steps.is_empty() {
+        return Ok(Vec::new());
+    }
+    let nested = !path.is_empty();
+    let field = seq_field_name(state.name, path)?;
+    let seq = seq_enum_name(ctx.name, state.name, path)?;
+    // Индекс шага в ИСХОДНОМ списке: пустые элементы шагами не становятся, а
+    // путь адресует дерево — расхождение сдвинуло бы имена полей.
+    let sites: Vec<usize> = items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| !matches!(item, StateExtend::None))
+        .map(|(idx, _)| idx)
+        .collect();
+    for (order, step) in steps.iter().enumerate() {
+        let head = if order == 0 { "if" } else { "} else if" };
+        p.ident(&format!(
+            "{} self.{} == {}::{} {{",
+            head, field, seq, step.variant
+        ))
+        .nl();
+        p.up();
+        path.push(sites[order]);
+        let result = emit_node_tick(p, ctx, state, &step.node, path, &step.prefix, scope, out);
+        path.pop();
+        let done = result?;
+        if done.is_empty() {
+            p.down();
+            continue;
+        }
+        p.ident(&format!("if {} {{", done.join(" && "))).nl();
+        p.up();
+        match steps.get(order + 1) {
+            // Передача хода следующему шагу СТОИТ ТАКТА — как в C, где
+            // за установкой варианта стоит `break`. Здесь такт кончается
+            // сам: цепочка `else if` уже вошла в эту ветвь, и следующий
+            // шаг в этом же такте не тикнет.
+            Some(next_step) => {
+                for instance in &next_step.instances {
+                    p.ident(&format!("self.{}.init();", instance.field)).nl();
+                }
+                p.ident(&format!("self.{} = {}::{};", field, seq, next_step.variant))
+                    .nl();
+            }
+            // Последний шаг завершён. Вложенная цепочка объявляет себя
+            // готовой, цепочка состояния уходит из него; в табличной форме
+            // этот переход печатает таблица (0440).
+            None if nested => {
+                p.ident(&format!("self.{} = {}::Done;", field, seq)).nl();
+            }
+            None if ctx.map.fsm_table() => {}
+            None => emit_extend_transition(p, ctx, state.raw, state.next, scope, out)?,
+        }
+        p.down();
+        p.ident("}").nl();
+        p.down();
+    }
+    p.ident("}").nl();
+    if nested {
+        return Ok(vec![format!("self.{} == {}::Done", field, seq)]);
+    }
+    Ok(Vec::new())
+}
+
+/// Экземпляр состояния по имени поля — аргументы вызова живут в нём.
+fn instance_at<'a>(
+    ctx: &'a ModelEmit,
+    state: &Name,
+    field: &str,
+) -> Result<&'a Instance, Diagnostic> {
+    ctx.instances
+        .iter()
+        .find(|(n, _)| n.unique() == state.unique())
+        .and_then(|(_, list)| list.iter().find(|i| i.field == field))
+        .ok_or_else(|| {
+            Diagnostic::error(
+                Location::Codegen,
+                format!(
+                    "Экземпляр '{}' состояния '{}' не найден",
+                    field,
+                    state.local()
+                ),
+            )
+            .with_code("RS-012")
+        })
 }
 
 /// Печатает переход по завершении реализации состояния.
@@ -664,66 +725,4 @@ fn call_args(
         args.push(scope.hal_argument("вызов такта под-модели")?);
     }
     Ok(args.join(", "))
-}
-
-/// Такт ВЛОЖЕННОЙ цепочки внутри параллели (фича 0426).
-///
-/// Форма — та же машина шагов, что у цепочки состояния: на такте исполняется
-/// один шаг, по его завершении инициализируется следующий. Отличие одно —
-/// терминальный вариант `Done`: параллель обязана узнать, что ветвь кончилась,
-/// а выхода из состояния у вложенной цепочки нет.
-fn emit_chain_tick(
-    p: &mut Printer,
-    ctx: &ModelEmit,
-    chain: &crate::generator::rust::rust_chain::Chain,
-    scope: &Scope,
-) -> Result<(), Diagnostic> {
-    let field =
-        crate::generator::rust::rust_chain::seq_field_name(&chain.state, chain.suffix.as_deref())?;
-    let seq = crate::generator::rust::rust_chain::seq_enum_name(
-        ctx.name,
-        &chain.state,
-        chain.suffix.as_deref(),
-    )?;
-    for (idx, step) in chain.steps.iter().enumerate() {
-        let head = if idx == 0 { "if" } else { "} else if" };
-        p.ident(&format!(
-            "{} self.{} == {}::{} {{",
-            head, field, seq, step.variant
-        ))
-        .nl();
-        p.up();
-        let mut done = Vec::new();
-        for instance in &step.instances {
-            let args = call_args(ctx.map, instance, scope, ctx.is_root)?;
-            p.ident(&format!("self.{}.tick({});", instance.field, args))
-                .nl();
-            done.push(format!("self.{}.is_done()", instance.field));
-        }
-        if done.is_empty() {
-            p.down();
-            continue;
-        }
-        p.ident(&format!("if {} {{", done.join(" && "))).nl();
-        p.up();
-        match chain.steps.get(idx + 1) {
-            Some(next_step) => {
-                for instance in &next_step.instances {
-                    p.ident(&format!("self.{}.init();", instance.field)).nl();
-                }
-                p.ident(&format!("self.{} = {}::{};", field, seq, next_step.variant))
-                    .nl();
-            }
-            None => {
-                p.ident(&format!("self.{} = {}::Done;", field, seq)).nl();
-            }
-        }
-        p.down();
-        p.ident("}").nl();
-        p.down();
-    }
-    if !chain.steps.is_empty() {
-        p.ident("}").nl();
-    }
-    Ok(())
 }
