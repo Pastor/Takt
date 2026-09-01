@@ -215,6 +215,19 @@ pub(crate) enum Touch {
     InvariantScoped,
     /// Инвариант с ИМЕНЕМ, доезжающим до сообщения цели `rust` (фича 0044).
     InvariantNamed,
+    /// Именованное условие в УСЛОВИИ РЕБРА: `ref Go: Low;` (фича 0476).
+    CondOnEdge,
+    /// Именованное условие в ТЕЛЕ: `if Low { … }` (фича 0331).
+    ///
+    /// ⚠️ До 0331 этот вход давал пять ответов, а у цели `c` — ссылку на
+    /// неопределённый идентификатор при нулевом коде возврата: печатник тела
+    /// имел своё представление об условии.
+    CondInBody,
+    /// Именованное условие в ОХРАННОЙ формуле: `: [Guard] Low;`.
+    CondInGuard,
+    /// Условие ЧЕРЕЗ условие: `cond A = B;` — раскрытие обязано быть
+    /// транзитивным.
+    CondNested,
     /// Модель подключённого файла НОСИТ ИМЯ ФАЙЛА (фича 0469): полный импорт
     /// вносит контейнер под тем же именем, и путь до состояния получает два
     /// одинаковых сегмента подряд.
@@ -256,7 +269,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 46] = [
+pub(crate) const TOUCHES: [Touch; 50] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -283,6 +296,10 @@ pub(crate) const TOUCHES: [Touch; 46] = [
     Touch::LtlInNested,
     Touch::InvariantScoped,
     Touch::InvariantNamed,
+    Touch::CondOnEdge,
+    Touch::CondInBody,
+    Touch::CondInGuard,
+    Touch::CondNested,
     Touch::ImportFunction,
     Touch::ImportSelective,
     Touch::ImportType,
@@ -334,6 +351,10 @@ impl Touch {
             Touch::LtlInNested => "ltl_in_nested",
             Touch::InvariantScoped => "invariant_scoped",
             Touch::InvariantNamed => "invariant_named",
+            Touch::CondOnEdge => "cond_on_edge",
+            Touch::CondInBody => "cond_in_body",
+            Touch::CondInGuard => "cond_in_guard",
+            Touch::CondNested => "cond_nested",
             Touch::ImportFunction => "import_function",
             Touch::ImportSelective => "import_selective",
             Touch::ImportType => "import_type",
@@ -437,7 +458,14 @@ impl Touch {
             Touch::LtlInBlock
             | Touch::LtlInFunction
             | Touch::LtlInState
-            | Touch::LtlInNested => "    cond Low = k < 200;\n".to_string(),
+            | Touch::LtlInNested
+            | Touch::CondOnEdge
+            | Touch::CondInBody
+            | Touch::CondInGuard => "    cond Low = k < 200;\n".to_string(),
+            // Условие ЧЕРЕЗ условие: раскрытие обязано быть транзитивным.
+            Touch::CondNested => {
+                "    cond Low = k < 200;\n    cond Nested = Low;\n".to_string()
+            }
             // Блок `always` УРОВНЯ МОДЕЛИ — ещё одно из шести мест (0203): он
             // исполняется каждый такт до диспетчеризации состояния (0083).
             Touch::LtlInModelBlock => {
@@ -536,6 +564,13 @@ impl Touch {
             Touch::LtlInNested => {
                 "            k := k + 1;\n            if k > 0 {\n                : [LTL] G Low;\n            }\n".to_string()
             }
+            // Именованное условие в теле (фича 0331) и в охранной формуле.
+            Touch::CondInBody => {
+                "            if Low {\n                k := k + 1;\n            }\n".to_string()
+            }
+            Touch::CondInGuard => {
+                "            : [Guard] Low;\n            k := k + 1;\n".to_string()
+            }
             _ => "            k := k + 1;\n".to_string(),
         }
     }
@@ -548,6 +583,10 @@ impl Touch {
             Touch::TimeAfterTicks => "        ref Done: after 5t;\n",
             Touch::TimeDurationVar => "        ref Done: after hold;\n",
             Touch::TimeComputed => "        ref Done: after (SETTLE + 500ms);\n",
+            // Именованное условие НА РЕБРЕ (фича 0476): здесь оно и живёт
+            // штатно, а `Nested` — то же через второе условие.
+            Touch::CondOnEdge => "        ref Done: Low;\n",
+            Touch::CondNested => "        ref Done: Nested;\n",
             _ => "        next Done;\n",
         }
     }
