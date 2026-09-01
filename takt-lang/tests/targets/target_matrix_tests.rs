@@ -50,6 +50,18 @@ pub(crate) fn refusal(target: &str, touch: Touch, kind: Kind) -> Option<&'static
         ("c" | "c-hal", Touch::VarInit, Kind::Array) => Some("CC-017"),
         // Внешней функции в синтезируемом RTL нет.
         ("sv" | "sv-mmio", Touch::ExternCall, _) => Some("SV-005"),
+        // Цикл в синтезируемом RTL обязан РАЗВОРАЧИВАТЬСЯ в схему (фича 0321),
+        // то есть иметь границы, известные на этапе синтеза. Их даёт только
+        // форма `for` с литеральным началом и сравнением переменной цикла;
+        // прочие четыре — законная граница цели, а не пробел (замер 0477).
+        (
+            "sv" | "sv-mmio",
+            Touch::LoopForNoInit | Touch::LoopWhile | Touch::LoopBreak | Touch::LoopContinue,
+            _,
+        ) => Some("SV-002"),
+        // В IEC 61131-3 есть `EXIT` (аналог `break`), а продолжения итерации
+        // нет вовсе: `continue` целью `st` не выражается (замер 0477).
+        ("st" | "st-at", Touch::LoopContinue, _) => Some("ST-011"),
         // Порт перечислимого типа: HAL-трейт `rust` знает бит и число, а
         // размещение `st-at` — только скаляры IEC. Направление роли не играет.
         (

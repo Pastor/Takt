@@ -228,6 +228,24 @@ pub(crate) enum Touch {
     /// Условие ЧЕРЕЗ условие: `cond A = B;` — раскрытие обязано быть
     /// транзитивным.
     CondNested,
+    /// Цикл `for` со СТАТИЧЕСКИМИ границами (фича 0477).
+    ///
+    /// ⚠️ Единственная форма, которую цель `sv` разворачивает в схему (0321):
+    /// прочие она отвергает `SV-002`, и это граница цели, а не пробел.
+    LoopForStatic,
+    /// Цикл `for` БЕЗ инициализатора: `for ; i < 3; i := i + 1`.
+    LoopForNoInit,
+    /// Цикл `while` (синоним `loop` с условием — 0024).
+    LoopWhile,
+    /// Бесконечный `loop` с выходом по `break`.
+    LoopBreak,
+    /// ВЛОЖЕННЫЕ циклы `for`.
+    LoopNested,
+    /// `continue` внутри цикла.
+    ///
+    /// ⚠️ У цели `st` это `ST-011`: в IEC есть `EXIT` (аналог `break`), а
+    /// продолжения итерации нет вовсе — граница языка ПЛК, а не недоделка.
+    LoopContinue,
     /// Модель подключённого файла НОСИТ ИМЯ ФАЙЛА (фича 0469): полный импорт
     /// вносит контейнер под тем же именем, и путь до состояния получает два
     /// одинаковых сегмента подряд.
@@ -269,7 +287,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 50] = [
+pub(crate) const TOUCHES: [Touch; 56] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -300,6 +318,12 @@ pub(crate) const TOUCHES: [Touch; 50] = [
     Touch::CondInBody,
     Touch::CondInGuard,
     Touch::CondNested,
+    Touch::LoopForStatic,
+    Touch::LoopForNoInit,
+    Touch::LoopWhile,
+    Touch::LoopBreak,
+    Touch::LoopNested,
+    Touch::LoopContinue,
     Touch::ImportFunction,
     Touch::ImportSelective,
     Touch::ImportType,
@@ -355,6 +379,12 @@ impl Touch {
             Touch::CondInBody => "cond_in_body",
             Touch::CondInGuard => "cond_in_guard",
             Touch::CondNested => "cond_nested",
+            Touch::LoopForStatic => "loop_for_static",
+            Touch::LoopForNoInit => "loop_for_no_init",
+            Touch::LoopWhile => "loop_while",
+            Touch::LoopBreak => "loop_break",
+            Touch::LoopNested => "loop_nested",
+            Touch::LoopContinue => "loop_continue",
             Touch::ImportFunction => "import_function",
             Touch::ImportSelective => "import_selective",
             Touch::ImportType => "import_type",
@@ -462,10 +492,20 @@ impl Touch {
             | Touch::CondOnEdge
             | Touch::CondInBody
             | Touch::CondInGuard => "    cond Low = k < 200;\n".to_string(),
+            // Циклам объявлений уровня модели не требуется: счётчик они
+            // объявляют в заголовке (кроме формы без инициализатора выше).
+            Touch::LoopForStatic
+            | Touch::LoopWhile
+            | Touch::LoopBreak
+            | Touch::LoopNested
+            | Touch::LoopContinue => String::new(),
             // Условие ЧЕРЕЗ условие: раскрытие обязано быть транзитивным.
             Touch::CondNested => {
                 "    cond Low = k < 200;\n    cond Nested = Low;\n".to_string()
             }
+            // Циклу без инициализатора счётчик нужен переменной МОДЕЛИ: своего
+            // объявления у такого заголовка нет.
+            Touch::LoopForNoInit => "    var i: u8 := 0;\n".to_string(),
             // Блок `always` УРОВНЯ МОДЕЛИ — ещё одно из шести мест (0203): он
             // исполняется каждый такт до диспетчеризации состояния (0083).
             Touch::LtlInModelBlock => {
@@ -570,6 +610,27 @@ impl Touch {
             }
             Touch::CondInGuard => {
                 "            : [Guard] Low;\n            k := k + 1;\n".to_string()
+            }
+            // Шесть форм цикла (фича 0477). Все дают одно и то же наблюдаемое
+            // приращение — так расхождение целей видно по значению, а не по
+            // форме вывода.
+            Touch::LoopForStatic => {
+                "            for var n: u8 := 0; n < 3; n := n + 1 {\n                k := k + 1;\n            }\n".to_string()
+            }
+            Touch::LoopForNoInit => {
+                "            for ; i < 3; i := i + 1 {\n                k := k + 1;\n            }\n".to_string()
+            }
+            Touch::LoopWhile => {
+                "            while k < 3 {\n                k := k + 1;\n            }\n".to_string()
+            }
+            Touch::LoopBreak => {
+                "            loop {\n                k := k + 1;\n                if k > 2 {\n                    break;\n                }\n            }\n".to_string()
+            }
+            Touch::LoopNested => {
+                "            for var n: u8 := 0; n < 2; n := n + 1 {\n                for var m: u8 := 0; m < 2; m := m + 1 {\n                    k := k + 1;\n                }\n            }\n".to_string()
+            }
+            Touch::LoopContinue => {
+                "            for var n: u8 := 0; n < 4; n := n + 1 {\n                if n = 1 {\n                    continue;\n                }\n                k := k + 1;\n            }\n".to_string()
             }
             _ => "            k := k + 1;\n".to_string(),
         }
