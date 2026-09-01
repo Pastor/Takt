@@ -664,26 +664,52 @@ pub(crate) fn print_statement_ctx(
             Ok(0)
         }
         StatementNode::If { cond, then_, else_ } => {
+            // Ветви печатаются В БУФЕР: тело, состоящее только из темпоральной
+            // формулы, до цели не доезжает по существу (её место — `taktc
+            // verify`), и оставался `if … { }` — «this `if` branch is empty»,
+            // то есть отказ `clippy` под `-D warnings` при нулевом коде
+            // возврата `taktc` (фича 0474).
+            //
+            // ⚠️ Условие языка побочных эффектов не имеет (присваивание —
+            // оператор), поэтому пустая конструкция опускается целиком. Тот же
+            // приём, что у пустого `IF` цели `st` (0473).
+            let mut then_text = String::new();
+            {
+                let mut buffer = p.fork(&mut then_text);
+                buffer.up();
+                print_statement(then_, scope, &mut buffer, out)?;
+                buffer.down();
+            }
+            let mut else_text = String::new();
+            if let Some(alt) = else_ {
+                let mut buffer = p.fork(&mut else_text);
+                buffer.up();
+                print_statement(alt, scope, &mut buffer, out)?;
+                buffer.down();
+            }
+            if then_text.trim().is_empty() && else_text.trim().is_empty() {
+                return Ok(0);
+            }
             p.ident(&format!(
                 "if {} {{",
                 unwrap_outer(&print_as_bool(cond, scope)?)
             ))
             .nl();
-            p.up();
-            print_statement(then_, scope, p, out)?;
-            p.down();
-            match else_ {
-                Some(alt) => {
-                    p.ident("} else {").nl();
-                    p.up();
-                    print_statement(alt, scope, p, out)?;
-                    p.down();
-                    p.ident("}").nl();
-                }
-                None => {
-                    p.ident("}").nl();
-                }
+            if then_text.trim().is_empty() {
+                // Пустая ветвь `then` при непустом `else` в Rust законна, но
+                // `clippy` её не принимает — печатаем комментарий-заполнитель.
+                p.up();
+                p.ident("// тело ветви до цели не доезжает — см. SE-055")
+                    .nl();
+                p.down();
+            } else {
+                p.print(&then_text);
             }
+            if !else_text.trim().is_empty() {
+                p.ident("} else {").nl();
+                p.print(&else_text);
+            }
+            p.ident("}").nl();
             Ok(0)
         }
         StatementNode::Loop { cond, body } => {
