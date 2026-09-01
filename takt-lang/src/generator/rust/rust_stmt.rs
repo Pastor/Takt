@@ -531,7 +531,11 @@ pub(crate) fn print_statement_ctx(
                 .nl();
             Ok(0)
         }
-        StatementNode::Variable(name, ty, init, _) => {
+        StatementNode::Variable(name, ty, init, loc) => {
+            // Объявление тела объявляет своё место (фича 0468): позиция у него
+            // есть с 0386, а отказ печати типа или инициализатора приходил без
+            // координаты.
+            crate::generator::site::enter(*loc);
             let ident = rust_value_name(name, crate::diagnostics::Location::Codegen)?;
             let ty_name = rust_type(ty, &format!("переменная '{}'", name))?;
             // `mut` ставится по факту присваивания, а не по объявлению: в Takt

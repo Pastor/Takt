@@ -124,7 +124,7 @@ impl AsGenerator for Generator {
 fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Корневой элемент карты не является моделью".to_string(),
         )
         .with_code("ST-012"));
@@ -143,7 +143,7 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
         && let Some(cell) = crate::semantic::collect_anon_ports(&root).first()
     {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!(
                 "обращение к ячейке по адресу ('#0x{:X}') требует размещения, \
                  которого цель 'st' не знает: она порождает библиотеку блоков. \
@@ -302,7 +302,7 @@ fn anon_global(cell: &crate::semantic::AnonPortAccess) -> Result<String, Diagnos
     );
     if !is_bit && cell.bit != 0 {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!(
                 "обращение '#0x{:X}:{} as {}' задаёт поле со смещением, а локация \
                  IEC 61131-3 такого не выражает: допустимы либо один бит \
@@ -410,6 +410,10 @@ fn emit_configuration(
             // это одно пространство, и совпадение даёт «invalid global
             // variable(s) declaration» при нулевом коде возврата.
             st_reserved::check_st_global_clash(pname, &occupied, port_loc(&root.variables[name]))?;
+            // Объявление объявляет своё место (фича 0468): отказ и
+            // предупреждение размещения рождаются вне операторов, и без слоя
+            // печатались без координаты — автор не знал, какой порт назван.
+            crate::generator::site::enter_declaration(port_loc(&root.variables[name]));
             let (location, comment, mut w) = st_at::location_of(pname, ty, *direction, resolved)?;
             warnings.append(&mut w);
             let ty_name = st_type::get_st_type(ty, root)?;
@@ -428,6 +432,8 @@ fn emit_configuration(
                 pname, location, ty_name, init_text, comment
             ));
         }
+        // Слой объявления снимается парно входу (фича 0468).
+        crate::generator::site::leave_declaration();
     }
     // Анонимные ячейки (фича 0189): у них нет объявления в исходнике, но
     // локация в IEC принадлежит **объявлению**, поэтому цель заводит
@@ -507,7 +513,7 @@ fn topological_order(map: &StMap, models: Vec<Name>) -> Vec<Name> {
 /// Строит диагностику `ST-012` — снимок карты не содержит корневой модели.
 fn root_missing(name: Name) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!("Корневая модель '{}' отсутствует в снимке карты", name),
     )
     .with_code("ST-012")

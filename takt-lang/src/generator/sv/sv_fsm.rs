@@ -357,6 +357,8 @@ impl Fsm {
                     continue;
                 }
                 check_sv_name(var_name, *loc)?;
+                // Объявление объявляет своё место (фича 0468).
+                crate::generator::site::enter_declaration(*loc);
                 let signal = var_signal_name(name, var_name);
                 let decl = sv_type(ty, &format!("переменная '{}'", var_name))?;
                 // Параметр, заданный при инстанцировании (фича 0185): значение
@@ -399,6 +401,8 @@ impl Fsm {
                     default: None,
                 });
             }
+            // Слой объявления снимается парно входу (фича 0468).
+            crate::generator::site::leave_declaration();
             drop(model);
 
             // Регистр шага на каждую цепочку `+` (задача 0057-01). Служебное
@@ -782,6 +786,8 @@ pub(crate) fn emit_transitions(
         // Решение «ребро безусловно» — у ОДНОГО носителя (фича 0291); см.
         // `ConditionNode::is_unconditional`. Прежде здесь стоял `Unresolved`,
         // и условное ребро становилось безусловным молча.
+        // Переход объявляет своё место (фича 0468).
+        crate::generator::site::enter(reference.location);
         let unconditional = reference.cond.is_unconditional();
         if unconditional {
             // Безусловное ребро: всё, что ниже, недостижимо, — и это верно, так

@@ -394,6 +394,11 @@ fn emit_function(
     // функции имя префиксовано (`Stacker_travel_time`) и совпасть не может; у
     // `extern` оно голое (`abs`, `concat`…) — вот здесь `ST-014` и сработает.
     check_st_name(&name, def.loc())?;
+    // Объявление функции объявляет своё место (фича 0468): предупреждение о
+    // заглушке `extern` рождается вне операторов и печаталось без координаты —
+    // автор не знал, какую функцию заменять вручную.
+    crate::generator::site::enter_declaration(def.loc());
+    // Снятие — сразу после печати тела функции (ниже по этой же функции).
     // Возврат-МАССИВ печатается ИМЕНОВАННЫМ типом (фича 0431): анонимную форму
     // MatIEC отвергает в заголовке `FUNCTION`, хотя в объявлении переменной
     // принимает. Имя строит тот же носитель, что у параметра-массива (0348), —
@@ -535,7 +540,7 @@ fn emit_function(
         FunctionDefinitionNode::External { .. } => {
             warnings.push(
                 Diagnostic::warning(
-                    Location::Codegen,
+                    crate::generator::site::at(Location::Codegen),
                     format!(
                         "Внешняя функция '{}': тело неизвестно, а IEC 61131-3 требует \
                          его от FUNCTION. Эмитирована заглушка, возвращающая {} — в \
@@ -561,6 +566,9 @@ fn emit_function(
         | FunctionDefinitionNode::Unresolved(_) => {}
     }
     p.ident("END_FUNCTION").nl().nl();
+    // Слой объявления снимается парно входу (фича 0468): переживи он печать
+    // функции, отказ в теле состояния получил бы её координату.
+    crate::generator::site::leave_declaration();
     Ok(())
 }
 

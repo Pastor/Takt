@@ -83,7 +83,14 @@ fn sv003(what: &str) -> Diagnostic {
 
 /// Строит диагностику `SV-004` — форма типа недопустима.
 fn sv004(what: &str, why: &str) -> Diagnostic {
-    Diagnostic::error(Location::Codegen, format!("{}: {}", what, why)).with_code("SV-004")
+    // Позицию даёт носитель: оператор, объявление либо ничего (фичи 0308,
+    // 0468). Прежде отказ печатался с `Codegen`, то есть без координаты, хотя
+    // объявление, о котором он говорит, своё место знает.
+    Diagnostic::error(
+        crate::generator::site::at(Location::Codegen),
+        format!("{}: {}", what, why),
+    )
+    .with_code("SV-004")
 }
 
 /// Объявление типа в SystemVerilog: часть до имени и распакованная размерность

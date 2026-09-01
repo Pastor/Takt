@@ -31,7 +31,7 @@ pub(super) fn generate_model_init(
     } = model
     else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Элемент не является моделью".to_string(),
         )
         .with_code("CC-006"));
@@ -67,11 +67,15 @@ pub(super) fn generate_model_init(
             name: var_name,
             ty,
             expr,
+            loc,
             ..
         } = var
         else {
             continue;
         };
+        // Объявление объявляет своё место (фича 0468): отказ об инициализаторе
+        // рождается вне операторов и печатался без координаты.
+        crate::generator::site::enter_declaration(*loc);
         // Пропускаем неиспользуемые переменные — они не попадают в struct
         if !map.usage().variables.contains(var_name) {
             continue;
@@ -100,6 +104,9 @@ pub(super) fn generate_model_init(
         }
         generate_scalar_init(printer, map, model, &var.name(), ty, expr, &raw_rc)?;
     }
+    // Слой объявления снимается парно входу (фича 0468): переживи он цикл,
+    // отказ в теле получил бы координату последней переменной.
+    crate::generator::site::leave_declaration();
     generate_port_initial_values(printer, map, model, raw, name, hal_ptr)?;
     Ok(())
 }
@@ -324,7 +331,7 @@ fn generate_array_init(
 ) -> Result<(), Diagnostic> {
     let TypeNode::Array(size, _) = ty else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!("переменная '{}': ожидался массив", field),
         )
         .with_code("CC-017"));
@@ -334,7 +341,7 @@ fn generate_array_init(
     // запись; принимать только одну значило бы отвергать корректный исходник.
     let (ExpressionNode::Initializer(elems) | ExpressionNode::Array(elems)) = expr else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!(
                 "переменная '{}': скалярный инициализатор массива не выразим в C — \
                  массив в C не присваивается; используйте агрегат вида ':= {{0, 0, …}}'",
@@ -345,7 +352,7 @@ fn generate_array_init(
     };
     if elems.len() != usize::from(*size) {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!(
                 "переменная '{}': инициализатор из {} элементов не соответствует массиву [{}]",
                 field,
@@ -531,7 +538,7 @@ fn variant_of(
 ) -> Result<String, Diagnostic> {
     crate::generator::c::c_chain::step_variant(state_unique_upper, item, idx).ok_or_else(|| {
         Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Неподдерживаемый тип элемента конкатенации".to_string(),
         )
         .with_code("CC-007")
@@ -593,7 +600,7 @@ pub(super) fn generate_concat_item_init(
             variant_of(state_unique_upper, item, idx)
         }
         _ => Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Неподдерживаемый тип элемента конкатенации".to_string(),
         )
         .with_code("CC-007")),
