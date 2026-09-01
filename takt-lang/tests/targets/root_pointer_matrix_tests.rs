@@ -61,6 +61,13 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::CondInBody
         | Touch::CondInGuard
         | Touch::CondNested
+        // Цикл считает переменную самой модели: корня ему не нужно (0477).
+        | Touch::LoopForStatic
+        | Touch::LoopForNoInit
+        | Touch::LoopWhile
+        | Touch::LoopBreak
+        | Touch::LoopNested
+        | Touch::LoopContinue
         // Импортированное объявление — объявление ИМПОРТЁРА (правило 0184):
         // функция, тип и константа приходят к нему, и корня им не нужно.
         | Touch::ImportFunction
