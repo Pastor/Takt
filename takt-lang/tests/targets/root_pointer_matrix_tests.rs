@@ -52,6 +52,11 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         // Реализация подключённой моделью: обёртка своих обращений не имеет.
         | Touch::ImportModel
         | Touch::ImportNestedModel => (false, false),
+        // Имя модели совпало с именем файла (фича 0469): модель библиотеки
+        // ПИШЕТ В ПОРТ (без этого проба не показывает второй слой дефекта), и
+        // указатель нужен ей и обёртке, которая её тикает, — как у видов с
+        // параметром. Замер 2026-09-01.
+        Touch::ImportNameClash => (false, true),
         // Донор с параметром пишет свой порт — указатель нужен ему и обёртке,
         // которая его тикает (замер 0457).
         Touch::ParameterDefault | Touch::ParameterArgument | Touch::ParameterExpression => {
