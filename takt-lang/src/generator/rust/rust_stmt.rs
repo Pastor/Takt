@@ -831,27 +831,73 @@ pub(crate) fn print_statement_ctx(
             }
             Ok(0)
         }
-        // Формула в теле блока — предмет верификации (`taktc verify`), а не
-        // трансляции: LTL описывает бесконечные прогоны, которых в прошивке нет.
-        // Предупреждение, а НЕ тишина: молчаливая потеря `: [LTL]` — ровно тот
-        // дефект, который закрыла фича 0035.
+        // Формула в теле блока: ОХРАННАЯ печатается `assert!`, темпоральная —
+        // предмет `taktc verify` (фича 0472).
+        //
+        // ⚠️ Прежде обе давали `RS-010` «LTL-формула не транслируется», хотя
+        // охранную цель переводит на уровне модели и состояния с фичи 0235:
+        // сообщение говорило о непереводимости того, что переводится, и
+        // называло LTL, которого во входе не было вовсе. Формула-ОПЕРАТОР и
+        // формула-ЭЛЕМЕНТ печатаются теперь одним носителем (`emit_guard`) —
+        // второй ответ на один вопрос и был дефектом.
         StatementNode::InlineFormula(formulas) => {
-            out.warnings.push(
-                Diagnostic::warning(
-                    // Позиция самой формулы (фича 0471): прежде предупреждение
-                    // печаталось без места, и автор искал `: [LTL]` глазами.
-                    crate::semantic::formula::first_location(formulas)
-                        .unwrap_or(crate::diagnostics::Location::Codegen),
-                    "LTL-формула в теле блока не транслируется в Rust: \
-                     проверяйте её через 'taktc verify'. Порождённый код формулу \
-                     не содержит"
-                        .to_string(),
-                )
-                .with_code("RS-010"),
-            );
+            if scope.guard_enable {
+                for formula in formulas {
+                    // ⚠️ Отказ печати условия НЕ роняет компиляцию: формула —
+                    // обязательство, а не поведение, и вход, который прежде
+                    // переводился (формула молча терялась), обязан переводиться
+                    // и теперь. Непереводимое условие становится предупреждением
+                    // С ПРИЧИНОЙ — например обращение к переменной модели из
+                    // тела функции (`RS-017`): у цели `rust` функция свободна.
+                    if let Err(why) =
+                        crate::generator::rust::rust_tick::emit_guard(p, formula, scope)
+                    {
+                        out.warnings.push(
+                            Diagnostic::warning(
+                                why.loc,
+                                format!(
+                                    "охранная формула в теле не транслируется в Rust: {}. \
+                                     Порождённый код проверки не содержит",
+                                    why.message
+                                ),
+                            )
+                            .with_code("RS-010"),
+                        );
+                    }
+                }
+            }
+            // Предупреждение — только о темпоральной: она в прошивку не
+            // попадает по существу (бесконечные прогоны), и молчать о ней
+            // нельзя (класс 0035).
+            if formulas.iter().any(has_temporal) {
+                out.warnings.push(
+                    Diagnostic::warning(
+                        crate::semantic::formula::first_location(formulas)
+                            .unwrap_or(crate::diagnostics::Location::Codegen),
+                        "LTL-формула в теле блока не транслируется в Rust: \
+                         проверяйте её через 'taktc verify'. Порождённый код \
+                         формулу не содержит"
+                            .to_string(),
+                    )
+                    .with_code("RS-010"),
+                );
+            }
             Ok(0)
         }
         StatementNode::Unresolved(_) => Err(unsupported("неразрешённый оператор")),
+    }
+}
+
+/// Есть ли в формуле ТЕМПОРАЛЬНАЯ часть (фича 0472).
+///
+/// Предупреждение `RS-010` адресовано только ей: охранная форма печатается
+/// `assert!` и молчания не требует.
+fn has_temporal(formula: &crate::semantic::formula::Formula) -> bool {
+    use crate::semantic::formula::Formula;
+    match formula {
+        Formula::LTL(_, _) => true,
+        Formula::Formulas(items) => items.iter().any(has_temporal),
+        Formula::Guard(_, _, _) | Formula::None => false,
     }
 }
 

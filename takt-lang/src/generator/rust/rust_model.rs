@@ -599,6 +599,7 @@ fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         return_type: None,
         // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
         power_target: None,
+        guard_enable: map.guard_enable(),
     };
     let args = if is_root && uses_hal { "hal: H" } else { "" };
     let vis = if is_root { "pub " } else { "" };
@@ -795,6 +796,7 @@ fn emit_init(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         return_type: None,
         // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
         power_target: None,
+        guard_enable: map.guard_enable(),
     };
     let vis = if is_root { "pub " } else { "" };
     p.ident("/// Возвращает модель в начальное состояние.").nl();

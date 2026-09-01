@@ -261,9 +261,11 @@ fn loop_header_without_init_names_its_place() {
 /// **T7.** Формула в теле блока называет своё место (фича 0471).
 ///
 /// Координата была в АСД всегда, а при понижении терялась: цели `rust` и `st`
-/// печатали предупреждение без места. ⚠️ Проверяется ОХРАННАЯ форма: её
-/// позиция терялась той же правкой, что и у темпоральной, — обе строились с
-/// `Location::Builtin`.
+/// печатали предупреждение без места.
+///
+/// ⚠️ Проверяется ТЕМПОРАЛЬНАЯ форма: охранная с фичи 0472 предупреждения не
+/// вызывает вовсе — она печатается `assert!` (её место сторожит набор
+/// `formula_in_body_tests`).
 #[test]
 fn formula_in_body_names_its_place() {
     const FORMULA: &str = "out o: u8 at 0;\n\
@@ -271,12 +273,13 @@ fn formula_in_body_names_its_place() {
                            \n\
                            start Run {\n\
                            \x20   always {\n\
-                           \x20       : [Guard] level < 5;\n\
+                           \x20       : [LTL] F Done;\n\
                            \x20       level := level + 1;\n\
                            \x20       o := level;\n\
                            \x20   }\n\
-                           \x20   ref Run: level < 3;\n\
-                           }\n";
+                           \x20   ref Done: level > 2;\n\
+                           }\n\
+                           state Done;\n";
     let dir = std::env::temp_dir()
         .join(format!("takt_pid{}", std::process::id()))
         .join(format!(

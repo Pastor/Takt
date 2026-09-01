@@ -177,6 +177,7 @@ pub(crate) fn emit_functions(
                 .chain(locals.iter().map(|(local, _)| (*local).to_string()))
                 .collect();
             let scope = Scope {
+                guard_enable: fsm.guard_enable,
                 registered: &fsm.registered,
                 inouts: &fsm.inouts,
                 function: Some(name),
