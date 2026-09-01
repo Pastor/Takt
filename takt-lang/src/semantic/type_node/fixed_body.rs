@@ -261,6 +261,7 @@ fn lower_stmt(
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(s) = init {
                 lower_stmt(s, model, ret)?;

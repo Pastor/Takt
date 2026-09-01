@@ -67,6 +67,7 @@ pub(crate) fn collect_assigned(stmt: &StatementNode, out: &mut BTreeSet<String>)
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(init) = init {
                 collect_assigned(init, out);
@@ -712,6 +713,7 @@ pub(crate) fn print_statement_ctx(
             cond,
             step,
             body,
+            ..
         } => {
             p.ident("{").nl();
             p.up();
@@ -833,10 +835,13 @@ pub(crate) fn print_statement_ctx(
         // трансляции: LTL описывает бесконечные прогоны, которых в прошивке нет.
         // Предупреждение, а НЕ тишина: молчаливая потеря `: [LTL]` — ровно тот
         // дефект, который закрыла фича 0035.
-        StatementNode::InlineFormula(_) => {
+        StatementNode::InlineFormula(formulas) => {
             out.warnings.push(
                 Diagnostic::warning(
-                    crate::diagnostics::Location::Codegen,
+                    // Позиция самой формулы (фича 0471): прежде предупреждение
+                    // печаталось без места, и автор искал `: [LTL]` глазами.
+                    crate::semantic::formula::first_location(formulas)
+                        .unwrap_or(crate::diagnostics::Location::Codegen),
                     "LTL-формула в теле блока не транслируется в Rust: \
                      проверяйте её через 'taktc verify'. Порождённый код формулу \
                      не содержит"

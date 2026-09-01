@@ -579,7 +579,7 @@ fn adopt_formula(ctx: &mut Adoption, f: &mut Formula) {
                 adopt_formula(ctx, item);
             }
         }
-        Formula::None | Formula::LTL(_) => {}
+        Formula::None | Formula::LTL(_, _) => {}
     }
 }
 
@@ -609,6 +609,7 @@ fn adopt_stmt(ctx: &mut Adoption, stmt: &mut StatementNode) {
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(s) = init {
                 adopt_stmt(ctx, s);

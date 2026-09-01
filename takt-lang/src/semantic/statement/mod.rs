@@ -172,7 +172,7 @@ fn resolve_ast_statement(
         // та регистрируется в модели до разрешения условия, шага и тела цикла,
         // чтобы они могли на неё ссылаться. После разрешения всей конструкции
         // переменная удаляется из модели.
-        ast::Statement::For(_, init, cond, step, body) => {
+        ast::Statement::For(loc, init, cond, step, body) => {
             let init_resolved = init
                 .as_ref()
                 .map(|s| resolve_ast_statement(s, params.clone(), model.clone()))
@@ -220,6 +220,9 @@ fn resolve_ast_statement(
                 cond,
                 step,
                 body,
+                // Позиция заголовка приходит из АСД (фича 0471): там она была
+                // всегда, а при понижении терялась.
+                loc: *loc,
             })
         }
 
@@ -279,23 +282,31 @@ fn resolve_ast_statement(
         // ── Встроенная формула ─────────────────────────────────────────────────
         ast::Statement::InlineFormula(inline) => {
             match &**inline {
-                ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                ast::InlineFormulaDefine::Guard {
+                    conditions, loc, ..
+                } => {
                     let resolved: Vec<Formula> = conditions
                         .iter()
                         .map(|c| resolve_condition(c, model.clone()))
                         .collect::<Result<Vec<_>, _>>()?
                         .iter()
-                        .map(crate::semantic::formula::condition_to_formula)
+                        // Позиция объявления формулы (фича 0471): прежде
+                        // охранная формула тела строилась без места.
+                        .map(|c| crate::semantic::formula::condition_to_formula_at(c, *loc))
                         .collect();
                     Ok(StatementNode::InlineFormula(resolved))
                 }
-                ast::InlineFormulaDefine::Ltl { formulas, .. } => {
+                ast::InlineFormulaDefine::Ltl { formulas, loc } => {
                     // 0035: LTL в блоке разбирается той же тотальной функцией, что
                     // на уровнях модели и состояния (`tree.rs`), — паритет уровней.
                     // Прежде ветка молча возвращала `Vec::new()` (тихая потеря).
                     let resolved: Vec<Formula> = formulas
                         .iter()
-                        .map(|f| Formula::LTL(crate::semantic::formula::ltl_ast_to_semantic(f)))
+                        // Позиция приходит из АСД (фича 0471): там она есть у
+                        // объявления формулы.
+                        .map(|f| {
+                            Formula::LTL(crate::semantic::formula::ltl_ast_to_semantic(f), *loc)
+                        })
                         .collect();
                     Ok(StatementNode::InlineFormula(resolved))
                 }

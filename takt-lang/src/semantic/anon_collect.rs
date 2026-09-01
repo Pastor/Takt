@@ -268,6 +268,7 @@ fn walk_stmt_writes(
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(init) = init {
                 walk_stmt_writes(init, seen, out);
@@ -394,6 +395,7 @@ fn walk_stmt(
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(init) = init {
                 walk_stmt(init, found, out);

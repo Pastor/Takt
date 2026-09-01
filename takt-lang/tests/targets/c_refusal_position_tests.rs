@@ -212,3 +212,97 @@ fn anon_cell_refusal_names_the_access_site() {
         "координата обязана указывать на строку обращения к ячейке"
     );
 }
+
+/// **T6.** Заголовок цикла БЕЗ инициализатора называет своё место (фича 0471).
+///
+/// Позиция у `StatementNode::For` появилась своя — прежде её брали у объявления
+/// в заголовке, а `for ; i < 3; …` такого объявления не имеет и координаты не
+/// получал вовсе.
+#[test]
+fn loop_header_without_init_names_its_place() {
+    const LOOP: &str = "out o: u8 at 0;\n\
+                        var i: u8 := 0;\n\
+                        \n\
+                        start Run {\n\
+                        \x20   always {\n\
+                        \x20       for ; i < 3; i := i + 1 {\n\
+                        \x20           o := i;\n\
+                        \x20       }\n\
+                        \x20   }\n\
+                        \x20   ref Run: i < 1;\n\
+                        }\n";
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0471_loop_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("main")
+                .replace(':', "_")
+        ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог теста");
+    let err = takt_lang::compile_to_sv(
+        "loop_probe",
+        LOOP,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect_err("цель `sv` разворачивает только статический цикл");
+    assert_eq!(err.code.as_deref(), Some("SV-002"), "код отказа");
+    assert_eq!(
+        line_of(LOOP, &err),
+        6,
+        "координата обязана указывать на заголовок цикла"
+    );
+}
+
+/// **T7.** Формула в теле блока называет своё место (фича 0471).
+///
+/// Координата была в АСД всегда, а при понижении терялась: цели `rust` и `st`
+/// печатали предупреждение без места. ⚠️ Проверяется ОХРАННАЯ форма: её
+/// позиция терялась той же правкой, что и у темпоральной, — обе строились с
+/// `Location::Builtin`.
+#[test]
+fn formula_in_body_names_its_place() {
+    const FORMULA: &str = "out o: u8 at 0;\n\
+                           var level: u8 := 0;\n\
+                           \n\
+                           start Run {\n\
+                           \x20   always {\n\
+                           \x20       : [Guard] level < 5;\n\
+                           \x20       level := level + 1;\n\
+                           \x20       o := level;\n\
+                           \x20   }\n\
+                           \x20   ref Run: level < 3;\n\
+                           }\n";
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0471_formula_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("main")
+                .replace(':', "_")
+        ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог теста");
+    let warnings = takt_lang::compile_to_rust(
+        "formula_probe",
+        FORMULA,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("цель `rust` переводит эту модель");
+    let warning = warnings
+        .iter()
+        .find(|d| d.code.as_deref() == Some("RS-010"))
+        .expect("предупреждение о формуле в теле");
+    assert_eq!(
+        line_of(FORMULA, warning),
+        6,
+        "координата обязана указывать на строку формулы"
+    );
+}

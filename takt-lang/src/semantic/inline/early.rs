@@ -115,6 +115,7 @@ fn return_in_open_loop(stmt: &StatementNode) -> bool {
             cond,
             step,
             body,
+            ..
         } => {
             if init.as_ref().is_some_and(|s| super::has_return(s)) {
                 return true;
@@ -295,6 +296,7 @@ impl Lowering {
                 cond,
                 step,
                 body,
+                loc,
             } if super::has_return(body) => {
                 let lowered = self.statement(body, false);
                 StatementNode::For {
@@ -302,6 +304,9 @@ impl Lowering {
                     cond: cond.clone(),
                     step: step.clone(),
                     body: Box::new(self.guarded(lowered)),
+                    // Позиция заголовка переносится: подстановка меняет тело,
+                    // а не место цикла (фича 0471).
+                    loc: *loc,
                 }
             }
             other => other.clone(),

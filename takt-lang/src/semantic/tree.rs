@@ -643,13 +643,8 @@ pub(super) fn construct_model_stage0(
                             .push(Formula::Guard(guard, None, at));
                     }
                 }
-                ast::InlineFormulaDefine::Ltl { formulas, .. } => {
-                    for f in formulas {
-                        model_node
-                            .borrow_mut()
-                            .formulas
-                            .push(Formula::LTL(formula::ltl_ast_to_semantic(f)));
-                    }
+                ast::InlineFormulaDefine::Ltl { formulas, loc } => {
+                    formula::push_ltl(&mut model_node.borrow_mut().formulas, formulas, *loc);
                 }
             }
         }
@@ -795,7 +790,7 @@ fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Fo
             )),
             other => Ok(Formula::Guard(other, name, loc)),
         },
-        Formula::LTL(ltl) => Ok(Formula::LTL(ltl)),
+        Formula::LTL(ltl, loc) => Ok(Formula::LTL(ltl, loc)),
     }
 }
 
@@ -1086,10 +1081,8 @@ pub fn construct_states(
                                 state_formulas.push(Formula::Guard(guard, None, at));
                             }
                         }
-                        ast::InlineFormulaDefine::Ltl { formulas, .. } => {
-                            for f in formulas {
-                                state_formulas.push(Formula::LTL(formula::ltl_ast_to_semantic(f)));
-                            }
+                        ast::InlineFormulaDefine::Ltl { formulas, loc } => {
+                            formula::push_ltl(&mut state_formulas, formulas, *loc);
                         }
                     }
                 } else if let StateElement::Invariant(inv) = element {

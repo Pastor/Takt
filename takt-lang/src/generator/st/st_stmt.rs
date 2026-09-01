@@ -236,6 +236,7 @@ pub(crate) fn print_statement(
             cond,
             step,
             body,
+            ..
         } => print_for(init, cond, step, body, model, p, out, fn_name),
         // Объявление: тип уезжает в шапку POU, инициализатор остаётся здесь.
         StatementNode::Variable(name, ty, init, loc) => {
@@ -314,7 +315,9 @@ pub(crate) fn print_statement(
             if !formulas.is_empty() {
                 out.warnings.push(
                     Diagnostic::warning(
-                        Location::Codegen,
+                        // Позиция самой формулы (фича 0471).
+                        crate::semantic::formula::first_location(formulas)
+                            .unwrap_or(Location::Codegen),
                         format!(
                             "LTL-формул ({}) в блоке кода: в Structured Text они не \
                              транслируются и в порождённый ПЛК-код не попадут",

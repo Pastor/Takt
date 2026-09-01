@@ -360,6 +360,7 @@ fn verdict_of(name: &str, stmt: &StatementNode) -> Verdict {
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(init) = init {
                 match verdict_of(name, init) {

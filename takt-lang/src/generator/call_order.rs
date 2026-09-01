@@ -100,6 +100,7 @@ fn walk_statement(stmt: &StatementNode, exprs: &mut Vec<crate::semantic::Express
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(init) = init {
                 walk_statement(init, exprs);

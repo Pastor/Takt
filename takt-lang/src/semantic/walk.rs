@@ -123,6 +123,7 @@ pub(crate) fn walk_stmt_exprs_mut(
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(i) = init {
                 walk_stmt_exprs_mut(i, f);

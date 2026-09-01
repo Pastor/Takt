@@ -40,7 +40,7 @@ pub(in crate::generator::c) fn generate_formula_check(
                 printer.ident(&format!("assert({});", cond_expr)).nl();
             }
         }
-        Formula::LTL(_) => {
+        Formula::LTL(_, _) => {
             // 0035: цель `c` LTL не верифицирует (эмиссия не меняется, R6). Это
             // не тихая потеря: предупреждение SE-055 выдаёт `takt_lang::ltl_warnings`
             // (`semantic/ltl_check.rs`) на каждую LTL-формулу любого уровня.
@@ -271,6 +271,7 @@ pub(in crate::generator::c) fn generate_code_block(
             cond,
             step,
             body,
+            ..
         } => {
             let has_var_init = matches!(
                 init.as_ref().map(|b| b.as_ref()),

@@ -145,6 +145,7 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>, found: &mut 
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(init) = init {
                 check_stmt(init, model, found);

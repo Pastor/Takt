@@ -27,8 +27,14 @@ pub enum Formula {
     None,
     /// Последовательность формул, разделённые запятой.
     Formulas(Vec<Formula>),
-    /// LTL-формула из синтаксического дерева.
-    LTL(Ltl),
+    /// LTL-формула из синтаксического дерева и её ПОЗИЦИЯ (фича 0471).
+    ///
+    /// Координата была в АСД с самого начала (`ast::Formula::Ltl { loc, … }`),
+    /// а при понижении терялась: цели `rust` и `st` печатали предупреждение
+    /// «темпоральная формула в теле не транслируется» без места, и автор искал
+    /// формулу глазами. Охранная форма (`Guard`) позицию несла всегда — это и
+    /// было расхождением между двумя видами одной сущности.
+    LTL(Ltl, Location),
     /// Охранное условие перехода (`assert` языка Takt).
     ///
     /// Второе поле — **имя инварианта** (фича 0044), если формула получена
@@ -44,10 +50,36 @@ pub enum Formula {
     Guard(ConditionNode, Option<String>, Location),
 }
 
+/// Кладёт темпоральные формулы АСД в список семантических (фича 0471).
+///
+/// Носитель один: позиция берётся у объявления, и повторять это в трёх местах
+/// построения дерева незачем.
+pub fn push_ltl(target: &mut Vec<Formula>, formulas: &[LtlExpr], loc: Location) {
+    for f in formulas {
+        target.push(Formula::LTL(ltl_ast_to_semantic(f), loc));
+    }
+}
+
+/// Позиция ПЕРВОЙ формулы списка — для диагностики о теле блока (фича 0471).
+///
+/// `None` — список пуст либо ни одна формула позиции не несёт. Носитель один:
+/// цели `rust` и `st` печатают об одном и том же, и вторая формула выбора
+/// разошлась бы с первой молча (класс 0084/0193/0195).
+pub fn first_location(formulas: &[Formula]) -> Option<Location> {
+    formulas.iter().find_map(|f| match f {
+        Formula::LTL(_, loc) => Some(*loc),
+        Formula::Guard(_, _, loc) => Some(*loc),
+        Formula::Formulas(inner) => first_location(inner),
+        Formula::None => None,
+    })
+}
+
 impl PartialEq for Formula {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::LTL(a), Self::LTL(b)) => a == b,
+            // ⚠️ Позиция в равенство НЕ входит (фича 0471) — тот же довод, что у
+            // охранной формы ниже и у `PartialEq for Extend` (0056).
+            (Self::LTL(a, _), Self::LTL(b, _)) => a == b,
             (Self::Formulas(a), Self::Formulas(b)) => a == b,
             // Имя и позиция — метаданные диагностики; равенство определяется
             // условием (позиция исключена по тому же доводу, что и в
@@ -66,9 +98,18 @@ impl Eq for Formula {}
 /// [`ConditionNode::None`] отображается в [`Formula::None`];
 /// все остальные условия — в [`Formula::Guard`].
 pub fn condition_to_formula(cond: &ConditionNode) -> Formula {
+    condition_to_formula_at(cond, Location::Builtin)
+}
+
+/// То же с ИЗВЕСТНОЙ позицией объявления (фича 0471).
+///
+/// Охранная формула В ТЕЛЕ блока строилась с `Location::Builtin`, хотя её
+/// объявление в АСД координату несёт: диагностика о таком теле печаталась без
+/// места наравне с темпоральной.
+pub fn condition_to_formula_at(cond: &ConditionNode, loc: Location) -> Formula {
     match cond {
         ConditionNode::None => Formula::None,
-        cond => Formula::Guard(cond.clone(), None, Location::Builtin),
+        cond => Formula::Guard(cond.clone(), None, loc),
     }
 }
 

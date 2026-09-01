@@ -463,7 +463,7 @@ fn build_guards(formulas: &[takt_lang::semantic::formula::Formula]) -> Vec<crate
         match f {
             Formula::Guard(cond, name, _) => out.push((create_predicate(cond), name.clone())),
             Formula::Formulas(inner) => out.extend(build_guards(inner)),
-            Formula::LTL(_) | Formula::None => {}
+            Formula::LTL(_, _) | Formula::None => {}
         }
     }
     out
