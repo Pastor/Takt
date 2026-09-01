@@ -532,13 +532,28 @@ pub(crate) fn needs_hal_in_tick(map: &RustMap, name: &Name, seen: &mut BTreeSet<
         drop(model);
         for child in children {
             let child_name = child.borrow().name.clone().unwrap_or_default();
-            if let Some(sub) = map
-                .using_models()
-                .into_iter()
-                .find_map(|element| match element {
-                    Element::Model { name, .. } if name.local() == child_name => Some(name),
-                    _ => None,
-                })
+            // ⚠️ Сперва по УНИКАЛЬНОМУ имени, и лишь потом по локальному (фича
+            // 0469): одноимённых моделей в карте бывает несколько — файл
+            // `helper.takt` вносится как модель `Helper`, а внутри него
+            // объявлена модель с тем же именем. Поиск по локальному имени
+            // находил ОБЁРТКУ, её `unique` уже лежал в `seen`, и признак
+            // отвечал «HAL не нужен»: цель печатала `self.root.tick(&mut
+            // *hal)` в функции без параметра `hal` — `E0425` при нулевом коде
+            // возврата `taktc`.
+            //
+            // ⚠️ Запасной путь по локальному имени оставлен: ребёнок ПО ВЫЗОВУ
+            // (`= M`, `A | B`) живёт в карте под своим уникальным именем, а не
+            // под `<родитель>:<имя>`.
+            let exact = submodel_name(map, &format!("{}:{}", name.unique(), child_name));
+            let found = exact.or_else(|| {
+                map.using_models()
+                    .into_iter()
+                    .find_map(|element| match element {
+                        Element::Model { name, .. } if name.local() == child_name => Some(name),
+                        _ => None,
+                    })
+            });
+            if let Some(sub) = found
                 && needs_hal_in_tick(map, &sub, seen)
             {
                 return true;

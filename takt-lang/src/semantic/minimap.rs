@@ -351,10 +351,25 @@ fn model_by_unique_name(
             return model_by_unique_name(rest, child);
         }
     } else {
-        // Последний сегмент без ':'
+        // Последний сегмент без ':'.
+        //
+        // ⚠️ Порядок: сперва ПРЯМОЙ ребёнок, и лишь затем «это сам узел»
+        // (фича 0469). Обратный порядок ломался ровно на совпадении имён:
+        // файл `helper.takt` вносится импортёром как модель `Helper`, а внутри
+        // него объявлена модель с тем же именем — путь `App:Helper:Helper`
+        // возвращал ОБЁРТКУ, у которой искомого состояния нет, и три цели
+        // отвечали «Состояние … не найдено» на корректной программе.
+        //
+        // ⚠️ `search_model` поднимается по `upper`, поэтому им нельзя
+        // подменить проверку прямого ребёнка: у обёртки он нашёл бы её саму в
+        // словаре родителя — тот же неверный ответ.
+        if let Some(child) = owned.borrow().models.get(model_name) {
+            return Some(Rc::clone(child));
+        }
         if owned.borrow().name() == model_name {
             return Some(owned);
-        } else if let Some(model) = owned.borrow().search_model(model_name) {
+        }
+        if let Some(model) = owned.borrow().search_model(model_name) {
             return Some(model);
         }
     }

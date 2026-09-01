@@ -178,6 +178,10 @@ pub(crate) enum Touch {
     ImportNestedModel,
     /// ТРАНЗИТИВНЫЙ импорт: подключённый файл сам подключает третий.
     ImportTransitive,
+    /// Модель подключённого файла НОСИТ ИМЯ ФАЙЛА (фича 0469): полный импорт
+    /// вносит контейнер под тем же именем, и путь до состояния получает два
+    /// одинаковых сегмента подряд.
+    ImportNameClash,
     /// Модель с ПАРАМЕТРОМ, взятая с настройкой по умолчанию (фича 0185).
     ParameterDefault,
     /// То же с аргументом в месте инстанцирования: `M(portion := 7)`.
@@ -215,7 +219,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 35] = [
+pub(crate) const TOUCHES: [Touch; 36] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -238,6 +242,7 @@ pub(crate) const TOUCHES: [Touch; 35] = [
     Touch::ImportModel,
     Touch::ImportNestedModel,
     Touch::ImportTransitive,
+    Touch::ImportNameClash,
     Touch::ParameterDefault,
     Touch::ParameterArgument,
     Touch::ParameterExpression,
@@ -278,6 +283,7 @@ impl Touch {
             Touch::ImportModel => "import_model",
             Touch::ImportNestedModel => "import_nested_model",
             Touch::ImportTransitive => "import_transitive",
+            Touch::ImportNameClash => "import_name_clash",
             Touch::ParameterDefault => "parameter_default",
             Touch::ParameterArgument => "parameter_argument",
             Touch::ParameterExpression => "parameter_expression",
@@ -380,6 +386,7 @@ impl Touch {
             | Touch::ImportModel
             | Touch::ImportNestedModel
             | Touch::ImportTransitive
+            | Touch::ImportNameClash
             // Виды с параметром строят свой исходник целиком (см. `source`).
             | Touch::ParameterDefault
             | Touch::ParameterArgument
@@ -544,6 +551,16 @@ pub(crate) fn library_files(touch: Touch) -> Vec<ProbeFile> {
         | Touch::ImportType
         | Touch::ImportModel
         | Touch::ImportNestedModel => vec![helper("")],
+        // Имя модели СОВПАДАЕТ с именем файла (фича 0469): импортёр видит
+        // контейнер `Clash`, внутри которого модель `Clash`.
+        Touch::ImportNameClash => vec![ProbeFile {
+            name: "clash.takt",
+            // ⚠️ Модель ПИШЕТ В ПОРТ намеренно: без этого признак «нужен ли
+            // HAL» отвечает «нет» у обеих одноимённых моделей, и второй слой
+            // дефекта (вызов `tick(&mut *hal)` из функции без `hal`) проба не
+            // показывает — мутация признака остаётся непойманной.
+            text: "model Clash {\n    out beat: u8 at 0x40000100;\n    var h: u8 := 0;\n    start Work {\n        always {\n            h := h + 1;\n            beat := h;\n        }\n        next Done;\n    }\n    state Done;\n}\n\nstart Root = Clash;\n".to_string(),
+        }],
         // Внешняя карта адресов лежит рядом с пробой и перекрывает inline.
         Touch::AddressMap => vec![ProbeFile {
             name: "plat.map",
@@ -604,6 +621,7 @@ fn import_line(touch: Touch) -> &'static str {
         Touch::ImportSelective => "import { twice } from \"helper.takt\";\n\n",
         Touch::ImportModel => "import { Engine } from \"helper.takt\";\n\n",
         Touch::ImportTransitive => "import \"mid.takt\";\n\n",
+        Touch::ImportNameClash => "import \"clash.takt\";\n\n",
         _ => "",
     }
 }
@@ -628,6 +646,12 @@ pub(crate) fn source(shape: Shape, touch: Touch, kind: Kind) -> String {
     }
     // Модель подключённого файла реализует состояние обёртки — формы
     // реализации к ней не применяются: она сама и есть реализация.
+    // Контейнер файла реализует состояние обёртки, и имя у него то же, что у
+    // модели внутри (фича 0469).
+    if touch == Touch::ImportNameClash {
+        text.push_str("model Wrap {\n    start Only = Clash;\n}\n\nstart Main = Wrap;\n");
+        return text;
+    }
     if matches!(touch, Touch::ImportModel | Touch::ImportNestedModel) {
         let implementation = if touch == Touch::ImportModel {
             "Engine"
