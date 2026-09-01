@@ -63,6 +63,7 @@ mod conformance_import_name_clash_tests;
 mod conformance_import_specialize_tests;
 mod conformance_inline_tests;
 mod conformance_inout_port_tests;
+mod conformance_invariant_scope_tests;
 mod conformance_literal_left_tests;
 mod conformance_local_decl_tests;
 mod conformance_mixed_arith_tests;

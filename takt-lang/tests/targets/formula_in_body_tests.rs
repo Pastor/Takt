@@ -153,3 +153,45 @@ fn guard_disable_removes_body_guards() {
         );
     }
 }
+
+/// **Имя инварианта доезжает до сообщения цели `rust` (фичи 0044, 0475).**
+///
+/// ⚠️ У цели `c` имя НЕ печатается, и это решение, а не пробел: `assert()` в C
+/// показывает само условие, а строка сообщения потребовала бы своей формы
+/// вывода. Проверяются обе стороны — иначе «имя пропало у `rust`» и «имя
+/// появилось у `c`» отличить было бы нечем.
+#[test]
+fn invariant_name_reaches_rust_message_only() {
+    const NAMED: &str = "out o: u8 at 0;\n\
+                         var level: u8 := 0;\n\
+                         \n\
+                         start Run {\n\
+                         \x20   invariant NamedHere = level < 9;\n\
+                         \x20   always {\n\
+                         \x20       level := level + 1;\n\
+                         \x20       o := level;\n\
+                         \x20   }\n\
+                         \x20   ref Run: level < 3;\n\
+                         }\n";
+    let dir = work_dir("named_rust");
+    takt_lang::compile_to_rust("probe", NAMED, dir.to_str().unwrap(), &[], &options())
+        .expect("цель `rust` переводит эту модель");
+    let rust = std::fs::read_to_string(dir.join("probe.rs")).expect("вывод цели `rust`");
+    assert!(
+        rust.contains("нарушен инвариант 'NamedHere'"),
+        "имя обязательства обязано доехать до сообщения:\n{rust}"
+    );
+
+    let dir = work_dir("named_c");
+    takt_lang::compile_to_c("probe", NAMED, dir.to_str().unwrap(), &[], &options())
+        .expect("цель `c` переводит эту модель");
+    let c = std::fs::read_to_string(dir.join("probe.c")).expect("вывод цели `c`");
+    assert!(
+        c.contains("assert(model->level < 9)"),
+        "у цели `c` печатается само условие:\n{c}"
+    );
+    assert!(
+        !c.contains("NamedHere"),
+        "имя обязательства у цели `c` не печатается — решение 0044:\n{c}"
+    );
+}

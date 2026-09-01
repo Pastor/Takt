@@ -206,6 +206,15 @@ pub(crate) enum Touch {
     LtlInState,
     /// Темпоральная формула во ВЛОЖЕННОМ блоке (`if` внутри `always`).
     LtlInNested,
+    /// Инвариант состояния ПРИ ДВУХ состояниях (фича 0475).
+    ///
+    /// ⚠️ Проверяет ОБЛАСТЬ: обязательство, объявленное в состоянии, говорит о
+    /// прогонах этого состояния (0044/0051), и проверка обязана стоять в его
+    /// ветви. Стой она в общем теле — второе состояние роняло бы её, а модель
+    /// корректна.
+    InvariantScoped,
+    /// Инвариант с ИМЕНЕМ, доезжающим до сообщения цели `rust` (фича 0044).
+    InvariantNamed,
     /// Модель подключённого файла НОСИТ ИМЯ ФАЙЛА (фича 0469): полный импорт
     /// вносит контейнер под тем же именем, и путь до состояния получает два
     /// одинаковых сегмента подряд.
@@ -247,7 +256,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 44] = [
+pub(crate) const TOUCHES: [Touch; 46] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -272,6 +281,8 @@ pub(crate) const TOUCHES: [Touch; 44] = [
     Touch::LtlInFunction,
     Touch::LtlInState,
     Touch::LtlInNested,
+    Touch::InvariantScoped,
+    Touch::InvariantNamed,
     Touch::ImportFunction,
     Touch::ImportSelective,
     Touch::ImportType,
@@ -321,6 +332,8 @@ impl Touch {
             Touch::LtlInFunction => "ltl_in_function",
             Touch::LtlInState => "ltl_in_state",
             Touch::LtlInNested => "ltl_in_nested",
+            Touch::InvariantScoped => "invariant_scoped",
+            Touch::InvariantNamed => "invariant_named",
             Touch::ImportFunction => "import_function",
             Touch::ImportSelective => "import_selective",
             Touch::ImportType => "import_type",
@@ -447,6 +460,10 @@ impl Touch {
             | Touch::GuardInBlock
             | Touch::GuardInFunction
             | Touch::GuardInNested
+            // Инвариант объявляется В СОСТОЯНИИ — объявлений уровня модели ему
+            // не требуется.
+            | Touch::InvariantScoped
+            | Touch::InvariantNamed
             // Виды с параметром строят свой исходник целиком (см. `source`).
             | Touch::ParameterDefault
             | Touch::ParameterArgument
@@ -595,6 +612,12 @@ fn touching_model(name: &str, touch: Touch, kind: Kind) -> String {
     // мест объявления формулы (фича 0203).
     let in_state = match touch {
         Touch::InvariantState => "        invariant InState = k < 200;\n",
+        // Инвариант, который держится ТОЛЬКО в своём состоянии: во втором `k`
+        // выходит за границу, и вывод остаётся корректным лишь тогда, когда
+        // проверка стоит в ветви состояния-владельца (фича 0475).
+        Touch::InvariantScoped => "        invariant OnlyHere = k < 250;\n",
+        // Имя обязательства доезжает до сообщения цели `rust` (фича 0044).
+        Touch::InvariantNamed => "        invariant NamedHere = k < 200;\n",
         // Темпоральная формула УРОВНЯ СОСТОЯНИЯ: её область — прогоны из него.
         Touch::LtlInState => "        : [LTL] G Low;\n",
         // Периодический блок объявляется В СОСТОЯНИИ — ещё одно из мест, где

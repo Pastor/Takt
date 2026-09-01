@@ -53,6 +53,8 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::LtlInFunction
         | Touch::LtlInState
         | Touch::LtlInNested
+        | Touch::InvariantScoped
+        | Touch::InvariantNamed
         // Импортированное объявление — объявление ИМПОРТЁРА (правило 0184):
         // функция, тип и константа приходят к нему, и корня им не нужно.
         | Touch::ImportFunction
