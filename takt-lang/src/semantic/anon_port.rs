@@ -45,7 +45,7 @@ pub const MAX_ANON_WIDTH: u16 = 64;
 /// `c-hal` (`{addr, bit, width}`) и регистровый файл цели `sv-mmio`
 /// (`reg[bit +: width]`). Собственного представления фича не заводит намеренно:
 /// разойдясь, они дали бы разный доступ к одной ячейке.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct AnonPortAccess {
     /// Адрес ячейки.
     pub addr: i64,
@@ -53,7 +53,26 @@ pub struct AnonPortAccess {
     pub bit: i64,
     /// Тип доступа: он же задаёт разрядность поля.
     pub ty: TypeNode,
+    /// Место ОБРАЩЕНИЯ в исходнике (фича 0470).
+    ///
+    /// Нужно координате отказа: цели без адресного пространства (`c`, `st`,
+    /// `sv`) отвергают такую модель ДО первой строки вывода, когда носитель
+    /// позиции ещё пуст, — и сообщение печаталось без места.
+    ///
+    /// ⚠️ В равенство поле **не входит** (`PartialEq` ниже написан руками):
+    /// два обращения к одной ячейке из разных строк — одна и та же ячейка, и
+    /// путать её идентичность с местом нельзя (тот же урок, что у `Extend`,
+    /// фича 0056).
+    pub loc: Location,
 }
+
+impl PartialEq for AnonPortAccess {
+    fn eq(&self, other: &Self) -> bool {
+        self.addr == other.addr && self.bit == other.bit && self.ty == other.ty
+    }
+}
+
+impl Eq for AnonPortAccess {}
 
 impl AnonPortAccess {
     /// Разрядность поля в битах.
@@ -260,7 +279,7 @@ fn build(
         .with_code("SE-098"));
     }
 
-    Ok(AnonPortAccess { addr, bit, ty })
+    Ok(AnonPortAccess { addr, bit, ty, loc })
 }
 
 /// `SE-097` — ширина доступа не задана.
@@ -376,6 +395,7 @@ mod tests {
             addr: 0x346619,
             bit: 4,
             ty: TypeNode::Bit,
+            loc: Location::Codegen,
         };
         assert_eq!(access.synthetic_name(), "AT_346619_4_1");
     }

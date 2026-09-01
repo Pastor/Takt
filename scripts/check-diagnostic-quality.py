@@ -62,6 +62,12 @@ DEBUG_MARKERS = (
 
 DIAGNOSTIC = re.compile(r"\[([A-Z]{2,3}-\d{3})\]:\s*(.*)$")
 POSITION = re.compile(r"^\S+:\d+:\d+:")
+# Заметка печатается своей строкой, и координата в ней стоит ПОСЛЕ слова
+# «примечание» (`  примечание: 62:13: причина [CC-021]: …`). Судить её общей
+# регуляркой нельзя: та требует позицию в начале строки и объявляла бы
+# безадресной заметку, которая место как раз называет (фича 0470).
+NOTE = re.compile(r"^\s*примечание:\s*")
+NOTE_POSITION = re.compile(r"^\s*примечание:\s*(\S+:)?\d+:\d+:")
 
 
 def fail(message):
@@ -154,7 +160,12 @@ def main():
                 seen.add(code)
                 checked += 1
                 where = f"{code} ({source.name}, цель {target})"
-                if not POSITION.match(line):
+                has_position = (
+                    NOTE_POSITION.match(line)
+                    if NOTE.match(line)
+                    else POSITION.match(line)
+                )
+                if not has_position:
                     seen_without_position.add(code)
                     if code not in position_debt:
                         problems.append(f"D2 {where}: позиции нет — {text[:70]}")

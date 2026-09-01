@@ -337,8 +337,12 @@ pub(in crate::generator::c) fn generate_condition_expr(
                                     "(((*{ptr}->{read_numeric})({variant}, {ptr}->userdata) >> {n}) & 1u)",
                                     read_numeric = FUNCTION_PORT_READ_NUMERIC
                                 )),
+                                // Позицию даёт носитель (0308/0468): условие
+                                // ребра объявляет своё место, и без этого
+                                // причина отказа приезжала заметкой БЕЗ
+                                // координаты — «примечание: причина [CC-001]».
                                 PortClass::Rational => Err(Diagnostic::error(
-                                    Location::Codegen,
+                                    crate::generator::site::at(Location::Codegen),
                                     "BitAccess на float-порт не поддерживается в условии"
                                         .to_string(),
                                 )

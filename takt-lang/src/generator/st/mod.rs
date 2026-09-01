@@ -143,7 +143,10 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
         && let Some(cell) = crate::semantic::collect_anon_ports(&root).first()
     {
         return Err(Diagnostic::error(
-            crate::generator::site::at(Location::Codegen),
+            // Место ОБРАЩЕНИЯ к ячейке (фича 0470): отказ приходит до первой
+            // строки вывода, когда носитель позиции ещё пуст, — координату
+            // несёт сама ячейка.
+            crate::generator::site::at(cell.loc),
             format!(
                 "обращение к ячейке по адресу ('#0x{:X}') требует размещения, \
                  которого цель 'st' не знает: она порождает библиотеку блоков. \

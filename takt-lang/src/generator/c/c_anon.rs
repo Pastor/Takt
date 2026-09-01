@@ -139,7 +139,12 @@ mod tests {
     use super::*;
 
     fn access(addr: i64, bit: i64, ty: TypeNode) -> AnonPortAccess {
-        AnonPortAccess { addr, bit, ty }
+        AnonPortAccess {
+            addr,
+            bit,
+            ty,
+            loc: crate::diagnostics::Location::Codegen,
+        }
     }
 
     /// Слово целиком: ни сдвига, ни маски — лишнее чтение MMIO не печатается.
