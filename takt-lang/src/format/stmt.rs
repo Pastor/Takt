@@ -184,7 +184,13 @@ fn print_inner(out: &mut Out, statement: &ast::Statement) -> Result<(), FormatEr
                         ast::MatchPattern::Value(e) => expr::expression(e),
                     })
                     .collect::<Result<Vec<_>, FormatError>>()?
-                    .join(" | ");
+                    // ⚠️ Разделитель образцов — ЗАПЯТАЯ (`CommaOne<MatchPattern>`
+                    // в грамматике). Печать через `|` меняла СМЫСЛ: `0 | 1`
+                    // читается обратно как ОДИН образец-выражение (побитовое
+                    // ИЛИ), а не как два. Класс поймал сторож A3 фичи 0462 —
+                    // «форматтер изменил смысл» — на первом же входе с
+                    // многообразцовой ветвью (фича 0478).
+                    .join(", ");
                 block_with_head(out, &format!("{patterns} => "), &arm.body)?;
             }
             out.down();

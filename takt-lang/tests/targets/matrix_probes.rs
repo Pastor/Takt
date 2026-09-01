@@ -241,6 +241,23 @@ pub(crate) enum Touch {
     LoopBreak,
     /// ВЛОЖЕННЫЕ циклы `for`.
     LoopNested,
+    /// `match` с ветвью `_` (фича 0478).
+    MatchWildcard,
+    /// `match` БЕЗ ветви `_`.
+    ///
+    /// ⚠️ У цели `sv` `default` печатается ВСЕГДА (0322): без него синтезатор
+    /// выводит защёлку молча. Форма и проверяет, что ветвь появляется сама.
+    MatchNoWildcard,
+    /// Несколько ОБРАЗЦОВ в одной ветви: `0, 1 => …`.
+    MatchMultiPattern,
+    /// Образцы — варианты ПЕРЕЧИСЛЕНИЯ.
+    ///
+    /// ⚠️ У цели `rust` `match` печатается цепочкой сравнений, а не `match`
+    /// языка (0050): образец Takt — произвольное выражение, и `match s { p =>
+    /// … }` связал бы `p` как новое имя вместо сравнения с ним.
+    MatchEnum,
+    /// ВЛОЖЕННЫЙ `match`.
+    MatchNested,
     /// `continue` внутри цикла.
     ///
     /// ⚠️ У цели `st` это `ST-011`: в IEC есть `EXIT` (аналог `break`), а
@@ -287,7 +304,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 56] = [
+pub(crate) const TOUCHES: [Touch; 61] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -324,6 +341,11 @@ pub(crate) const TOUCHES: [Touch; 56] = [
     Touch::LoopBreak,
     Touch::LoopNested,
     Touch::LoopContinue,
+    Touch::MatchWildcard,
+    Touch::MatchNoWildcard,
+    Touch::MatchMultiPattern,
+    Touch::MatchEnum,
+    Touch::MatchNested,
     Touch::ImportFunction,
     Touch::ImportSelective,
     Touch::ImportType,
@@ -385,6 +407,11 @@ impl Touch {
             Touch::LoopBreak => "loop_break",
             Touch::LoopNested => "loop_nested",
             Touch::LoopContinue => "loop_continue",
+            Touch::MatchWildcard => "match_wildcard",
+            Touch::MatchNoWildcard => "match_no_wildcard",
+            Touch::MatchMultiPattern => "match_multi_pattern",
+            Touch::MatchEnum => "match_enum",
+            Touch::MatchNested => "match_nested",
             Touch::ImportFunction => "import_function",
             Touch::ImportSelective => "import_selective",
             Touch::ImportType => "import_type",
@@ -498,7 +525,15 @@ impl Touch {
             | Touch::LoopWhile
             | Touch::LoopBreak
             | Touch::LoopNested
-            | Touch::LoopContinue => String::new(),
+            | Touch::LoopContinue
+            | Touch::MatchWildcard
+            | Touch::MatchNoWildcard
+            | Touch::MatchMultiPattern => String::new(),
+            // Образцам-вариантам нужен свой тип: `Kind::Enum` задаёт форму
+            // ЗНАЧЕНИЯ, а здесь перечисление — предмет разбора.
+            Touch::MatchEnum | Touch::MatchNested => {
+                "    enum Phase {\n        Low,\n        High\n    }\n    var phase: Phase := Low;\n".to_string()
+            }
             // Условие ЧЕРЕЗ условие: раскрытие обязано быть транзитивным.
             Touch::CondNested => {
                 "    cond Low = k < 200;\n    cond Nested = Low;\n".to_string()
@@ -631,6 +666,22 @@ impl Touch {
             }
             Touch::LoopContinue => {
                 "            for var n: u8 := 0; n < 4; n := n + 1 {\n                if n = 1 {\n                    continue;\n                }\n                k := k + 1;\n            }\n".to_string()
+            }
+            // Пять форм `match` (фича 0478).
+            Touch::MatchWildcard => {
+                "            match k {\n                0 => { k := k + 1; }\n                _ => { k := k + 2; }\n            }\n".to_string()
+            }
+            Touch::MatchNoWildcard => {
+                "            match k {\n                0 => { k := k + 1; }\n                1 => { k := k + 2; }\n            }\n".to_string()
+            }
+            Touch::MatchMultiPattern => {
+                "            match k {\n                0, 1 => { k := k + 1; }\n                _ => { k := k + 2; }\n            }\n".to_string()
+            }
+            Touch::MatchEnum => {
+                "            match phase {\n                Low => { k := k + 1; }\n                _ => { k := k + 2; }\n            }\n".to_string()
+            }
+            Touch::MatchNested => {
+                "            match k {\n                0 => {\n                    match phase {\n                        Low => { k := k + 1; }\n                        _ => { k := k + 2; }\n                    }\n                }\n                _ => { k := k + 3; }\n            }\n".to_string()
             }
             _ => "            k := k + 1;\n".to_string(),
         }
