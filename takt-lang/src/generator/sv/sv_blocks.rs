@@ -140,7 +140,7 @@ pub(crate) fn emit_model_prelude(
 /// безопасности, а компилятор рапортовал об успехе (находка фичи 0203).
 fn emit_state_guards(p: &mut Printer, state: &StateNode, fsm: &Fsm) -> Result<(), Diagnostic> {
     for formula in state.formulas() {
-        emit_guard(p, formula, fsm)?;
+        emit_guard(p, formula, &fsm.scope())?;
     }
     Ok(())
 }
@@ -148,7 +148,7 @@ fn emit_state_guards(p: &mut Printer, state: &StateNode, fsm: &Fsm) -> Result<()
 /// Печатает охранные формулы **модели** — перед `unique case`, как в цели `c`.
 fn emit_model_guards(p: &mut Printer, model: &ModelNode, fsm: &Fsm) -> Result<(), Diagnostic> {
     for formula in &model.formulas {
-        emit_guard(p, formula, fsm)?;
+        emit_guard(p, formula, &fsm.scope())?;
     }
     Ok(())
 }
@@ -167,11 +167,15 @@ fn emit_model_guards(p: &mut Printer, model: &ModelNode, fsm: &Fsm) -> Result<()
 /// значения, устойчивые в пределах такта, — комбинационных ложных срабатываний
 /// не будет. Синтез не задет: yosys кладёт проверку в ячейку `$check`, а
 /// логика остаётся прежней (проба: 8 `$_DFF_PN0_` с проверкой и без).
-fn emit_guard(p: &mut Printer, formula: &Formula, fsm: &Fsm) -> Result<(), Diagnostic> {
+pub(crate) fn emit_guard(
+    p: &mut Printer,
+    formula: &Formula,
+    scope: &crate::generator::sv::sv_scope::Scope,
+) -> Result<(), Diagnostic> {
     match formula {
         // Имя инварианта не печатается — см. оговорку о yosys выше.
         Formula::Guard(cond, _, _) => {
-            let text = print_condition(cond, &fsm.scope())?;
+            let text = print_condition(cond, scope)?;
             if !text.is_empty() {
                 p.ident(&format!("assert ({});", text)).nl();
             }
@@ -179,7 +183,7 @@ fn emit_guard(p: &mut Printer, formula: &Formula, fsm: &Fsm) -> Result<(), Diagn
         }
         Formula::Formulas(items) => {
             for item in items {
-                emit_guard(p, item, fsm)?;
+                emit_guard(p, item, scope)?;
             }
             Ok(())
         }

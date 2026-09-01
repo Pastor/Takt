@@ -102,6 +102,8 @@ pub(crate) struct StepEnum {
 }
 
 pub(crate) struct Fsm {
+    /// Печатать ли охранные формулы (`--guard-enable`, фича 0472).
+    pub(crate) guard_enable: bool,
     /// Регистры: состояния уровней, переменные, выходные порты.
     regs: Vec<Reg>,
     /// Уровни с механизмом времени (фича 0134): перекрытие `_next` в `always_comb`.
@@ -287,6 +289,7 @@ impl Fsm {
         mmio: Option<&crate::generator::sv::sv_mmio::Mmio>,
     ) -> Result<Self, Diagnostic> {
         let mut fsm = Fsm {
+            guard_enable: map.guard_enable(),
             regs: Vec::new(),
             time_levels: Vec::new(),
             registered: BTreeSet::new(),
@@ -553,6 +556,7 @@ impl Fsm {
         Scope {
             registered: &self.registered,
             inouts: &self.inouts,
+            guard_enable: self.guard_enable,
             function: None,
             function_ret: None,
             locals: crate::generator::sv::sv_scope::no_locals(),

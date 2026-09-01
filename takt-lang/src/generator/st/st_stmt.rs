@@ -312,7 +312,11 @@ pub(crate) fn print_statement(
         // молчание здесь — ровно класс дефекта фичи 0025 (ср. фича 0035, где
         // формулы теряются молча уже в семантике).
         StatementNode::InlineFormula(formulas) => {
-            if !formulas.is_empty() {
+            // ⚠️ Предупреждение адресовано ТЕМПОРАЛЬНОЙ формуле (фича 0472).
+            // Прежде оно печаталось на любую, и охранная получала ДВА
+            // сообщения: верное `ST-022` (обход мест 0203) и это, называющее
+            // LTL, которого во входе нет.
+            if formulas.iter().any(has_temporal) {
                 out.warnings.push(
                     Diagnostic::warning(
                         // Позиция самой формулы (фича 0471).
@@ -572,6 +576,16 @@ fn low_bit_as_bool(rhs: &ExpressionNode, model: &ModelNode) -> Result<String, Di
     }
 }
 
+/// Есть ли в формуле ТЕМПОРАЛЬНАЯ часть (фича 0472).
+fn has_temporal(formula: &crate::semantic::formula::Formula) -> bool {
+    use crate::semantic::formula::Formula;
+    match formula {
+        Formula::LTL(_, _) => true,
+        Formula::Formulas(items) => items.iter().any(has_temporal),
+        Formula::Guard(_, _, _) | Formula::None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -799,7 +813,13 @@ mod tests {
             construct_model(&ast, None, &[]).unwrap()
         };
         let model = rc.borrow();
-        let stmt = StatementNode::InlineFormula(vec![Formula::Formulas(Vec::new())]);
+        // ⚠️ Формула ТЕМПОРАЛЬНАЯ: с фичи 0472 `ST-010` адресован только ей,
+        // а охранная получает `ST-022` (обход мест 0203) и печатается целями
+        // `c`, `rust`, `sv`.
+        let stmt = StatementNode::InlineFormula(vec![Formula::LTL(
+            crate::verification::ltl::Ltl::True,
+            crate::diagnostics::Location::Codegen,
+        )]);
         let mut text = String::new();
         let mut out = StmtOutput::default();
         {

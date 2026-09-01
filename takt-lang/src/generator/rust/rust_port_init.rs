@@ -59,6 +59,7 @@ pub(crate) fn port_initial_writes(
         return_type: None,
         // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
         power_target: None,
+        guard_enable: map.guard_enable(),
     };
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut out = Vec::new();

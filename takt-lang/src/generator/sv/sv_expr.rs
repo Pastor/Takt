@@ -565,6 +565,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -589,6 +590,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -616,6 +618,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -643,6 +646,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -671,6 +675,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -699,6 +704,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -722,6 +728,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -754,6 +761,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -776,6 +784,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -821,6 +830,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,

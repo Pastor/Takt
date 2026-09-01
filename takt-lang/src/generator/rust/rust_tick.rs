@@ -112,6 +112,7 @@ pub(crate) fn emit_tick(
         return_type: None,
         // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
         power_target: None,
+        guard_enable: map.guard_enable(),
     };
 
     p.ident("/// Один такт автомата.").nl();
@@ -271,7 +272,11 @@ pub(crate) fn emit_tick(
 /// Проба 2026-07-16: `assert!` живёт в `core`, профиль `no_std` её не теряет.
 /// Имя инварианта попадает в сообщение — в цели `c` генератор его игнорирует,
 /// здесь оно бесплатно и полезно.
-fn emit_guard(p: &mut Printer, formula: &Formula, scope: &Scope) -> Result<(), Diagnostic> {
+pub(crate) fn emit_guard(
+    p: &mut Printer,
+    formula: &Formula,
+    scope: &Scope,
+) -> Result<(), Diagnostic> {
     match formula {
         Formula::Guard(cond, label, _) => {
             let text = condition_as_bool(cond, scope)?;

@@ -240,10 +240,24 @@ pub(crate) fn print_statement(
             p.ident("endcase").nl();
             Ok(())
         }
-        // LTL-формула — свойство для верификации, а не поведение. Цель `c` её
-        // игнорирует; здесь то же, и молчания в этом нет: `taktc verify`
-        // (фича 0049) проверяет формулы отдельно.
-        StatementNode::InlineFormula(_) => Ok(()),
+        // Формула в теле: ОХРАННАЯ печатается `assert`, темпоральная — предмет
+        // `taktc verify` (фича 0472).
+        //
+        // ⚠️ Прежде ветвь молчала на обеих, хотя охранную цель печатает на
+        // уровне модели и состояния с фичи 0235: обязательство автора теряЛОСЬ
+        // молча — тот же класс, что закрыла 0035 у семантики. Носитель печати
+        // один с формулой-элементом (`sv_blocks::emit_guard`).
+        //
+        // ⚠️ Отказ печати условия не роняет компиляцию: формула — обязательство,
+        // а не поведение, и вход, прежде переводившийся, обязан переводиться.
+        StatementNode::InlineFormula(formulas) => {
+            if scope.guard_enable {
+                for formula in formulas {
+                    let _ = crate::generator::sv::sv_blocks::emit_guard(p, formula, scope);
+                }
+            }
+            Ok(())
+        }
         StatementNode::Unresolved(_) => Err(sv002("неразрешённый оператор")),
     }
 }
@@ -730,6 +744,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -762,6 +777,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,
@@ -792,6 +808,7 @@ mod tests {
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
+            guard_enable: true,
             inouts: crate::generator::sv::sv_scope::no_inouts(),
             function: None,
             function_ret: None,

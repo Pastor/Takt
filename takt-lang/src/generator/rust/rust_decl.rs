@@ -408,6 +408,7 @@ pub(crate) fn emit_constants(
             return_type: None,
             // Подсказка о приёмнике степени ставится в `coerce_to` (фича 0415).
             power_target: None,
+            guard_enable: map.guard_enable(),
         };
         for var in model.variables.values() {
             let VariableNode::Const {
