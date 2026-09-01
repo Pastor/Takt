@@ -240,7 +240,11 @@ fn verdict(target: &str, failures: Vec<String>) {
 fn assertion_expected(touch: Touch) -> Option<bool> {
     match touch {
         Touch::InvariantModel | Touch::InvariantState | Touch::GuardFormula => Some(true),
-        Touch::LtlFormula => Some(false),
+        // Формула-ОПЕРАТОР доезжает до целей так же, как формула-объявление
+        // (фичи 0235, 0472): проверка обязана быть в выводе.
+        Touch::GuardInBlock | Touch::GuardInFunction | Touch::GuardInNested => Some(true),
+        // Темпоральная не доезжает — ни объявлением, ни оператором.
+        Touch::LtlFormula | Touch::LtlInBlock => Some(false),
         _ => None,
     }
 }

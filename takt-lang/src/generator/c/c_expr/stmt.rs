@@ -441,9 +441,15 @@ pub(in crate::generator::c) fn generate_code_block(
 
         StatementNode::InlineFormula(formulas) => {
             if map.guard_enable() {
-                for formula in formulas {
-                    generate_formula_check(printer, map, owner, formula)?;
-                }
+                // Параметры функции объявляются на время печати условия
+                // (фича 0473): иначе `: [Guard] v < 200;` в теле `fn bump(v)`
+                // печаталось как `model->v` — обращение к полю, которого нет.
+                crate::generator::c::c_expr::condition::enter_function_params(params.clone());
+                let result = formulas
+                    .iter()
+                    .try_for_each(|formula| generate_formula_check(printer, map, owner, formula));
+                crate::generator::c::c_expr::condition::leave_function_params();
+                result?;
             }
         }
 

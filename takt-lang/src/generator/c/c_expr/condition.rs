@@ -150,6 +150,37 @@ fn generate_state_comparison(
     Ok(format!("{} {} {}", path, op, state_const))
 }
 
+thread_local! {
+    /// Параметры функции, в теле которой печатается условие (фича 0473).
+    ///
+    /// # Зачем носитель, а не аргумент
+    ///
+    /// Условие печатается 27 вызовами `generate_condition_expr`, и почти всем
+    /// параметры не нужны: у ребра и у именованного условия их не бывает.
+    /// Нужны они ОДНОМУ месту — охранной формуле в теле функции, где `v < 200`
+    /// печаталось как `model->v`, то есть обращением к полю модели, которого
+    /// нет. Приём тот же, что у позиции отказа (`site`, 0308): состояние
+    /// потоковое, объявляется на время печати и снимается парно.
+    static FUNCTION_PARAMS: std::cell::RefCell<Vec<(String, crate::semantic::type_node::TypeNode)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Объявляет параметры функции, чьё тело печатается сейчас (фича 0473).
+pub(in crate::generator::c) fn enter_function_params(
+    params: Vec<(String, crate::semantic::type_node::TypeNode)>,
+) {
+    FUNCTION_PARAMS.with(|p| *p.borrow_mut() = params);
+}
+
+/// Снимает параметры. Парен [`enter_function_params`].
+pub(in crate::generator::c) fn leave_function_params() {
+    FUNCTION_PARAMS.with(|p| p.borrow_mut().clear());
+}
+
+fn current_params() -> Vec<(String, crate::semantic::type_node::TypeNode)> {
+    FUNCTION_PARAMS.with(|p| p.borrow().clone())
+}
+
 /// Преобразует [`ConditionNode`] в строку C-выражения.
 ///
 /// Используется при генерации условий переходов для простых состояний.
@@ -267,13 +298,16 @@ pub(in crate::generator::c) fn generate_condition_expr(
         }
         ConditionNode::Variable(var_rc, _) => {
             let var = var_rc.borrow();
+            // Параметры функции, если печатается её тело (фича 0473): без них
+            // имя параметра печаталось обращением к полю модели.
+            let params = current_params();
             if let VariableNode::Simple { upper, .. } = &*var
                 && let Some(s) =
-                    resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true)
+                    resolve_simple_var_in_context(var.name(), upper, &params, owner, map, true)
             {
                 return Ok(s);
             }
-            resolve_variable_c_expr(&var, &[], map, owner, true)
+            resolve_variable_c_expr(&var, &params, map, owner, true)
         }
         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
         // База — выражение (фича 0358): печатается тем же печатником условий.

@@ -178,6 +178,22 @@ pub(crate) enum Touch {
     ImportNestedModel,
     /// ТРАНЗИТИВНЫЙ импорт: подключённый файл сам подключает третий.
     ImportTransitive,
+    /// Охранная формула в ТЕЛЕ блока `always` (фича 0473).
+    ///
+    /// Прежде перебор знал формулу только как ОБЪЯВЛЕНИЕ (уровень модели и
+    /// состояния); формула-оператор жила в слепой зоне, и там нашёлся дефект
+    /// 0472: цель `sv` теряла её молча, `rust` подменял сообщением о LTL.
+    GuardInBlock,
+    /// Охранная формула в теле ФУНКЦИИ.
+    ///
+    /// ⚠️ Условие читает ПАРАМЕТР, а не переменную модели: у цели `rust`
+    /// функция порождается свободной (`RS-017`), и обращение к состоянию было
+    /// бы границей цели, а не проверкой формулы.
+    GuardInFunction,
+    /// Охранная формула во ВЛОЖЕННОМ блоке (`if` внутри `always`).
+    GuardInNested,
+    /// ТЕМПОРАЛЬНАЯ формула в теле блока: до целей не доезжает по существу.
+    LtlInBlock,
     /// Модель подключённого файла НОСИТ ИМЯ ФАЙЛА (фича 0469): полный импорт
     /// вносит контейнер под тем же именем, и путь до состояния получает два
     /// одинаковых сегмента подряд.
@@ -219,7 +235,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 36] = [
+pub(crate) const TOUCHES: [Touch; 40] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -236,6 +252,10 @@ pub(crate) const TOUCHES: [Touch; 36] = [
     Touch::InvariantState,
     Touch::GuardFormula,
     Touch::LtlFormula,
+    Touch::GuardInBlock,
+    Touch::GuardInFunction,
+    Touch::GuardInNested,
+    Touch::LtlInBlock,
     Touch::ImportFunction,
     Touch::ImportSelective,
     Touch::ImportType,
@@ -277,6 +297,10 @@ impl Touch {
             Touch::InvariantState => "invariant_state",
             Touch::GuardFormula => "guard_formula",
             Touch::LtlFormula => "ltl_formula",
+            Touch::GuardInBlock => "guard_in_block",
+            Touch::GuardInFunction => "guard_in_function",
+            Touch::GuardInNested => "guard_in_nested",
+            Touch::LtlInBlock => "ltl_in_block",
             Touch::ImportFunction => "import_function",
             Touch::ImportSelective => "import_selective",
             Touch::ImportType => "import_type",
@@ -375,6 +399,9 @@ impl Touch {
             // Темпоральное свойство опирается на ИМЕНОВАННОЕ условие: атом
             // формулы обязан иметь имя (правило 0049).
             Touch::LtlFormula => "    cond Low = k < 200;\n    : [LTL] G Low;\n".to_string(),
+            // Атом темпоральной формулы обязан иметь имя (правило 0049) — и
+            // тогда, когда сама формула стоит в теле.
+            Touch::LtlInBlock => "    cond Low = k < 200;\n".to_string(),
             // Тип из подключённого файла — объявление обёртки.
             Touch::ImportType => "    var p: Pair := {1, 2};\n".to_string(),
             Touch::None
@@ -387,6 +414,11 @@ impl Touch {
             | Touch::ImportNestedModel
             | Touch::ImportTransitive
             | Touch::ImportNameClash
+            // Формула-оператор объявлений не требует: она сама и есть
+            // содержимое тела (кроме темпоральной — ей нужен именованный атом).
+            | Touch::GuardInBlock
+            | Touch::GuardInFunction
+            | Touch::GuardInNested
             // Виды с параметром строят свой исходник целиком (см. `source`).
             | Touch::ParameterDefault
             | Touch::ParameterArgument
@@ -400,6 +432,12 @@ impl Touch {
     /// Функции модели, делающей обращение.
     fn functions(self, kind: Kind) -> String {
         match self {
+            // Формула в теле ФУНКЦИИ: условие читает параметр (см. врезку у
+            // вида) — обращение к состоянию модели у цели `rust` невозможно.
+            Touch::GuardInFunction => {
+                "    fn bump(v: u8) -> u8 {\n        : [Guard] v < 200;\n        return v + 1;\n    }\n"
+                    .to_string()
+            }
             Touch::Transitive => format!(
                 "    fn bump(v: u8) -> u8 {{\n{}        return v + 1;\n    }}\n",
                 kind.write_statement("a")
@@ -434,6 +472,17 @@ impl Touch {
             | Touch::AddressDefine => "            k := k + 1;\n            a := k;\n".to_string(),
             Touch::InoutWrite => format!("            k := k + 1;\n{}", kind.write_statement("a")),
             Touch::ExternCall => "            k := probe_value();\n".to_string(),
+            // Формула-ОПЕРАТОР: три места, различающиеся вместилищем.
+            Touch::GuardInBlock => {
+                "            : [Guard] k < 200;\n            k := k + 1;\n".to_string()
+            }
+            Touch::GuardInFunction => "            k := bump(k);\n".to_string(),
+            Touch::GuardInNested => {
+                "            k := k + 1;\n            if k > 0 {\n                : [Guard] k < 200;\n            }\n".to_string()
+            }
+            Touch::LtlInBlock => {
+                "            : [LTL] G Low;\n            k := k + 1;\n".to_string()
+            }
             _ => "            k := k + 1;\n".to_string(),
         }
     }
