@@ -194,6 +194,18 @@ pub(crate) enum Touch {
     GuardInNested,
     /// ТЕМПОРАЛЬНАЯ формула в теле блока: до целей не доезжает по существу.
     LtlInBlock,
+    /// Темпоральная формула в теле `always` УРОВНЯ МОДЕЛИ (фича 0474).
+    LtlInModelBlock,
+    /// Темпоральная формула в теле ФУНКЦИИ.
+    LtlInFunction,
+    /// Темпоральная формула объявлением УРОВНЯ СОСТОЯНИЯ.
+    ///
+    /// ⚠️ Её область — прогоны ИЗ ЭТОГО состояния (решение 0049): верификатор
+    /// десахаризует её в `G (Состояние -> φ)`, и это наблюдаемое отличие от
+    /// формулы уровня модели.
+    LtlInState,
+    /// Темпоральная формула во ВЛОЖЕННОМ блоке (`if` внутри `always`).
+    LtlInNested,
     /// Модель подключённого файла НОСИТ ИМЯ ФАЙЛА (фича 0469): полный импорт
     /// вносит контейнер под тем же именем, и путь до состояния получает два
     /// одинаковых сегмента подряд.
@@ -235,7 +247,7 @@ pub(crate) enum Touch {
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 40] = [
+pub(crate) const TOUCHES: [Touch; 44] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -256,6 +268,10 @@ pub(crate) const TOUCHES: [Touch; 40] = [
     Touch::GuardInFunction,
     Touch::GuardInNested,
     Touch::LtlInBlock,
+    Touch::LtlInModelBlock,
+    Touch::LtlInFunction,
+    Touch::LtlInState,
+    Touch::LtlInNested,
     Touch::ImportFunction,
     Touch::ImportSelective,
     Touch::ImportType,
@@ -301,6 +317,10 @@ impl Touch {
             Touch::GuardInFunction => "guard_in_function",
             Touch::GuardInNested => "guard_in_nested",
             Touch::LtlInBlock => "ltl_in_block",
+            Touch::LtlInModelBlock => "ltl_in_model_block",
+            Touch::LtlInFunction => "ltl_in_function",
+            Touch::LtlInState => "ltl_in_state",
+            Touch::LtlInNested => "ltl_in_nested",
             Touch::ImportFunction => "import_function",
             Touch::ImportSelective => "import_selective",
             Touch::ImportType => "import_type",
@@ -401,7 +421,15 @@ impl Touch {
             Touch::LtlFormula => "    cond Low = k < 200;\n    : [LTL] G Low;\n".to_string(),
             // Атом темпоральной формулы обязан иметь имя (правило 0049) — и
             // тогда, когда сама формула стоит в теле.
-            Touch::LtlInBlock => "    cond Low = k < 200;\n".to_string(),
+            Touch::LtlInBlock
+            | Touch::LtlInFunction
+            | Touch::LtlInState
+            | Touch::LtlInNested => "    cond Low = k < 200;\n".to_string(),
+            // Блок `always` УРОВНЯ МОДЕЛИ — ещё одно из шести мест (0203): он
+            // исполняется каждый такт до диспетчеризации состояния (0083).
+            Touch::LtlInModelBlock => {
+                "    cond Low = k < 200;\n    always {\n        : [LTL] G Low;\n    }\n".to_string()
+            }
             // Тип из подключённого файла — объявление обёртки.
             Touch::ImportType => "    var p: Pair := {1, 2};\n".to_string(),
             Touch::None
@@ -436,6 +464,10 @@ impl Touch {
             // вида) — обращение к состоянию модели у цели `rust` невозможно.
             Touch::GuardInFunction => {
                 "    fn bump(v: u8) -> u8 {\n        : [Guard] v < 200;\n        return v + 1;\n    }\n"
+                    .to_string()
+            }
+            Touch::LtlInFunction => {
+                "    fn bump(v: u8) -> u8 {\n        : [LTL] G Low;\n        return v + 1;\n    }\n"
                     .to_string()
             }
             Touch::Transitive => format!(
@@ -482,6 +514,10 @@ impl Touch {
             }
             Touch::LtlInBlock => {
                 "            : [LTL] G Low;\n            k := k + 1;\n".to_string()
+            }
+            Touch::LtlInFunction => "            k := bump(k);\n".to_string(),
+            Touch::LtlInNested => {
+                "            k := k + 1;\n            if k > 0 {\n                : [LTL] G Low;\n            }\n".to_string()
             }
             _ => "            k := k + 1;\n".to_string(),
         }
@@ -559,6 +595,8 @@ fn touching_model(name: &str, touch: Touch, kind: Kind) -> String {
     // мест объявления формулы (фича 0203).
     let in_state = match touch {
         Touch::InvariantState => "        invariant InState = k < 200;\n",
+        // Темпоральная формула УРОВНЯ СОСТОЯНИЯ: её область — прогоны из него.
+        Touch::LtlInState => "        : [LTL] G Low;\n",
         // Периодический блок объявляется В СОСТОЯНИИ — ещё одно из мест, где
         // живёт время (фича 0134).
         Touch::TimeEvery => "        every 3ms {\n            k := k + 2;\n        }\n",
