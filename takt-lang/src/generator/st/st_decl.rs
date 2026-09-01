@@ -21,7 +21,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
-use crate::generator::st::st_reserved::check_st_declaration;
+use crate::generator::st::st_reserved::{check_st_declaration, check_st_local_clash};
 use crate::generator::st::st_type::{self, get_st_type};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::UsageSet;
@@ -193,6 +193,21 @@ pub(crate) fn emit_declarations(
         });
     }
 
+    // Занятые имена POU (фича 0480). Набор строится из того, что цель УЖЕ
+    // напечатала: служебные `state`/`is_done`, разделяемые переменные,
+    // экземпляры под-моделей, поднятые локальные и константы перечислений.
+    // Отдельного списка служебных имён не заводится — он разошёлся бы с
+    // печатью при первом же новом служебном объявлении.
+    let mut occupied: Vec<String> = inputs
+        .iter()
+        .chain(outputs.iter())
+        .chain(in_outs.iter())
+        .chain(externals.iter())
+        .chain(locals.iter())
+        .chain(constants.iter())
+        .map(|d: &Declaration| d.name.clone())
+        .collect();
+
     let mut names: Vec<&String> = model.variables.keys().collect();
     names.sort();
     for key in names {
@@ -220,6 +235,12 @@ pub(crate) fn emit_declarations(
                 if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
+                // Столкновение имён внутри POU — `ST-025` (фича 0480). Проверка
+                // стоит ЗДЕСЬ, после фильтра использования и после разделяемых:
+                // разделяемая уже объявлена в `VAR_IN_OUT` этим же именем, и
+                // проверка выше дала бы ложный отказ на ней самой.
+                check_st_local_clash(name, &occupied, *loc)?;
+                occupied.push(name.clone());
                 locals.push(declaration(
                     name,
                     ty,
@@ -245,6 +266,8 @@ pub(crate) fn emit_declarations(
                 if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
+                check_st_local_clash(name, &occupied, *loc)?;
+                occupied.push(name.clone());
                 // Начальное значение порта (фича 0187) — инициализатор
                 // объявления `VAR_OUTPUT`: экземпляр `FUNCTION_BLOCK` получает
                 // его при создании, то есть до первого вызова. Это ровно то
@@ -289,6 +312,8 @@ pub(crate) fn emit_declarations(
                     continue;
                 }
                 check_st_declaration(name, model, *loc)?;
+                check_st_local_clash(name, &occupied, *loc)?;
+                occupied.push(name.clone());
                 constants.push(declaration(
                     name,
                     ty,
