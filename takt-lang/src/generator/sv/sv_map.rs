@@ -176,7 +176,7 @@ impl SvMap {
             .state_at(Some(name.unique().to_string()))
             .ok_or_else(|| {
                 Diagnostic::error(
-                    Location::Codegen,
+                    crate::generator::site::at(Location::Codegen),
                     format!("Состояние '{}' не найдено", name),
                 )
                 .with_code("SV-011")

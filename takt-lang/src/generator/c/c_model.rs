@@ -109,6 +109,9 @@ fn generate_state_transitions(
         // молчит, а автомат другой — переход срабатывает всегда. Теперь такое
         // ребро идёт в печатник, получает `CC-023` и доезжает до автора обёрткой
         // `CC-018` (позиция ребра + причина заметкой, устройство ADR 0028).
+        // Переход объявляет своё место (фича 0468): условие ребра — не
+        // оператор, и отказ в нём печатался без координаты вовсе.
+        crate::generator::site::enter(reference.location);
         let has_cond = !reference.cond.is_unconditional();
         if has_cond {
             match generate_condition_expr(&reference.cond, map, model) {

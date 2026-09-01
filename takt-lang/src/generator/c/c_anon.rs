@@ -125,7 +125,7 @@ pub(super) fn write(access: &AnonPortAccess, rhs: &str) -> String {
 /// Отказ цели `c`: адресов она не знает по устройству (ADR 0020).
 pub(super) fn refuse_plain_c() -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         "обращение к ячейке по адресу ('#0x…') целью 'c' не транслируется: \
          порты этой цели идут через колбэки HAL, адресов она не знает. \
          Соберите целью 'c-hal' (либо 'st-at'/'sv-mmio')"

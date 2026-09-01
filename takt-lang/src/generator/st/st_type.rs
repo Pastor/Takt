@@ -148,7 +148,7 @@ pub(crate) fn get_st_type(typ: &TypeNode, model: &ModelNode) -> Result<String, D
 /// Строит диагностику `ST-002` — тип без представления в IEC 61131-3.
 fn unmapped(shown: &str, why: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "Тип '{}' не имеет представления в IEC 61131-3: {}",
             shown, why
@@ -246,7 +246,7 @@ fn array_dims_and_base(
         }
         if *size == 0 {
             return Err(Diagnostic::error(
-                Location::Codegen,
+                crate::generator::site::at(Location::Codegen),
                 format!(
                     "Массив нулевого размера ('{}') невыразим в IEC 61131-3: \
                      диапазон 'ARRAY [0..-1]' пуст",
@@ -302,7 +302,7 @@ fn struct_type(name: &str, model: &ModelNode) -> Result<String, Diagnostic> {
 /// Строит диагностику `ST-008` — именованный тип не разрешается в модели.
 fn unresolved(kind: &str, name: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "{} '{}' не найдена в модели: объявление типа для ST построить нельзя",
             kind, name

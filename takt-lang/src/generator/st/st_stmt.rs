@@ -238,7 +238,11 @@ pub(crate) fn print_statement(
             body,
         } => print_for(init, cond, step, body, model, p, out, fn_name),
         // Объявление: тип уезжает в шапку POU, инициализатор остаётся здесь.
-        StatementNode::Variable(name, ty, init, _) => {
+        StatementNode::Variable(name, ty, init, loc) => {
+            // Объявление тела объявляет своё место (фича 0468): позиция у него
+            // есть с 0386, а отказ печати типа или инициализатора приходил без
+            // координаты.
+            crate::generator::site::enter(*loc);
             out.hoisted.push(Hoisted {
                 name: name.clone(),
                 ty: ty.clone(),

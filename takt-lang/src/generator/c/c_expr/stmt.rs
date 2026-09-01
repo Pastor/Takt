@@ -359,7 +359,11 @@ pub(in crate::generator::c) fn generate_code_block(
             }
         }
 
-        StatementNode::Variable(name, ty, init, _) => {
+        StatementNode::Variable(name, ty, init, loc) => {
+            // Объявление тела объявляет своё место (фича 0468): позиция у него
+            // есть с 0386, а отказ печати типа или инициализатора приходил без
+            // координаты.
+            crate::generator::site::enter(*loc);
             let model = map.raw_model_at(owner.name())?;
             let model_ref = model.borrow();
             let snake_name = normalize_lowercase_snakecase(name.clone());

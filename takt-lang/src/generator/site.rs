@@ -45,6 +45,28 @@
 //! (инвариант 0190), а генерация внутри потока однопоточна по построению — одна
 //! цель, один проход.
 //!
+//! # Второй слой: ОБЪЯВЛЕНИЕ (фича 0468)
+//!
+//! Отказ, рождённый вне операторов, координаты не имел вовсе: печать
+//! объявлений (портов, переменных, типов) идёт до всякого тела, и `current`
+//! отвечает `Builtin`. Замер 0467 нашёл так **23 кода** — «порт 'temp':
+//! вещественный тип», «переменная 'z': массив нулевого размера», «Размещение
+//! порта…». Узел, о котором они говорят, свою позицию знает всегда.
+//!
+//! Поэтому у носителя два слоя: печатник объявлений объявляет своё место
+//! ([`enter_declaration`]) и снимает его по выходе ([`leave_declaration`]), а
+//! [`at`] спрашивает сперва оператор, затем объявление, и лишь потом берёт
+//! свою.
+//!
+//! ⚠️ Порядок слоёв именно такой: оператор ТОЧНЕЕ объявления. Печать тела идёт
+//! внутри модели, у которой объявления уже напечатаны, но слой объявления к
+//! тому времени снят — а если бы не был, отказ в теле получил бы координату
+//! последнего объявления, то есть указал бы не туда (класс 0264).
+//!
+//! ⚠️ **Снятие обязательно**, и оно парное входу: незакрытый слой пережил бы
+//! печать объявлений и достался бы телам. Отсюда и форма — `leave_declaration`
+//! зовётся сразу после печати, а не «когда-нибудь».
+//!
 //! ⚠️ **Сброс обязателен на входе в генерацию** ([`reset`]): позиция последнего
 //! оператора пережила бы вызов и досталась бы **следующей** генерации в том же
 //! потоке — то есть отказ вне операторов получил бы координату из чужого файла.
@@ -56,6 +78,8 @@ use std::cell::Cell;
 thread_local! {
     /// Позиция оператора, который печатается сейчас, — одна на поток.
     static SITE: Cell<Location> = const { Cell::new(Location::Builtin) };
+    /// Позиция объявления, которое печатается сейчас (фича 0468).
+    static DECLARATION: Cell<Location> = const { Cell::new(Location::Builtin) };
 }
 
 /// Объявляет начало печати оператора. Зовёт **только** печатник операторов.
@@ -68,6 +92,23 @@ pub(crate) fn current() -> Location {
     SITE.with(Cell::get)
 }
 
+/// Объявляет начало печати ОБЪЯВЛЕНИЯ (порта, переменной, типа) — фича 0468.
+///
+/// Зовёт печатник объявлений цели; снимается [`leave_declaration`].
+pub(crate) fn enter_declaration(loc: Location) {
+    DECLARATION.with(|site| site.set(loc));
+}
+
+/// Снимает слой объявления. Парен [`enter_declaration`].
+pub(crate) fn leave_declaration() {
+    DECLARATION.with(|site| site.set(Location::Builtin));
+}
+
+/// Позиция текущего объявления; `Location::Builtin`, если оно не начато.
+pub(crate) fn current_declaration() -> Location {
+    DECLARATION.with(Cell::get)
+}
+
 /// Позиция для отказа цели: **оператор**, если он начат, иначе — своя.
 ///
 /// ⚠️ Порядок именно такой, и это следствие замера. У выражения «своей»
@@ -76,9 +117,12 @@ pub(crate) fn current() -> Location {
 /// 1 — места, где объявлена `mem`. Такая координата не «менее точна», она
 /// **указывает не туда**, и предпочитать её позиции оператора нельзя.
 pub(crate) fn at(own: Location) -> Location {
-    match current() {
-        Location::Builtin => own,
-        statement => statement,
+    match (current(), current_declaration()) {
+        (Location::Builtin, Location::Builtin) => own,
+        // Оператор точнее объявления: тело печатается позже, и слой объявления
+        // к тому времени снят (см. врезку о втором слое).
+        (Location::Builtin, declaration) => declaration,
+        (statement, _) => statement,
     }
 }
 
@@ -89,6 +133,7 @@ pub(crate) fn at(own: Location) -> Location {
 /// указывал бы туда — ложь достовернее молчания (класс 0264).
 pub(crate) fn reset() {
     SITE.with(|site| site.set(Location::Builtin));
+    DECLARATION.with(|site| site.set(Location::Builtin));
 }
 
 #[cfg(test)]
@@ -146,5 +191,38 @@ mod tests {
         enter(Location::Source(0, 100, 110));
         reset();
         assert!(matches!(at(Location::Codegen), Location::Codegen));
+    }
+
+    /// Слой ОБЪЯВЛЕНИЯ даёт координату, когда оператор не начат (фича 0468).
+    #[test]
+    fn declaration_gives_position_outside_statements() {
+        reset();
+        enter_declaration(Location::Source(1, 42, 45));
+        assert_eq!(at(Location::Codegen), Location::Source(1, 42, 45));
+        reset();
+    }
+
+    /// Оператор ТОЧНЕЕ объявления: начатый оператор побеждает.
+    #[test]
+    fn statement_wins_over_declaration() {
+        reset();
+        enter_declaration(Location::Source(1, 42, 45));
+        enter(Location::Source(1, 100, 110));
+        assert_eq!(at(Location::Codegen), Location::Source(1, 100, 110));
+        reset();
+    }
+
+    /// Снятие слоя обязано возвращать «координаты нет».
+    ///
+    /// ⚠️ Это главный риск второго слоя: переживи он печать объявлений, отказ
+    /// в теле получил бы координату последнего объявления — та самая ложь, от
+    /// которой ушли 0264 и 0276.
+    #[test]
+    fn leaving_the_declaration_forgets_it() {
+        reset();
+        enter_declaration(Location::Source(1, 42, 45));
+        leave_declaration();
+        assert_eq!(at(Location::Codegen), Location::Codegen);
+        reset();
     }
 }

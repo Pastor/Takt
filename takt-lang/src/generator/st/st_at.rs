@@ -97,7 +97,7 @@ pub(crate) fn location_of(
         if resolved.bit.is_some() {
             warnings.push(
                 Diagnostic::warning(
-                    Location::Codegen,
+                    crate::generator::site::at(Location::Codegen),
                     format!(
                         "Порт '{}' не булев, а в адресе задан бит: у локации %{}{} \
                          бита нет — он ПРОИГНОРИРОВАН",
@@ -150,7 +150,12 @@ fn source_name(source: AddressSource) -> &'static str {
 
 /// Строит диагностику `ST-004` — порт без выразимой локации.
 fn no_location(what: &str) -> Diagnostic {
-    Diagnostic::error(Location::Codegen, format!("Размещение порта: {}", what)).with_code("ST-004")
+    // Позицию даёт носитель (0308, 0468): своей у отказа размещения нет.
+    Diagnostic::error(
+        crate::generator::site::at(Location::Codegen),
+        format!("Размещение порта: {}", what),
+    )
+    .with_code("ST-004")
 }
 
 #[cfg(test)]

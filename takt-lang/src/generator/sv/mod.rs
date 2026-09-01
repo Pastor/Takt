@@ -156,7 +156,7 @@ fn generate_program(
 ) -> Result<ProgramOutput, Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Корневой элемент карты не является моделью".to_string(),
         )
         .with_code("SV-010"));
@@ -164,7 +164,7 @@ fn generate_program(
     let root_name = map.root_name();
     let root = map.root_model_node().ok_or_else(|| {
         Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!("Корневая модель '{}' отсутствует в снимке карты", root_name),
         )
         .with_code("SV-010")
@@ -208,7 +208,7 @@ fn generate_program(
     // через все печатники (тот же приём, что у цели `st`).
     if !mmio && let Some(cell) = anon_cells.first() {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!(
                 "обращение к ячейке по адресу ('#0x{:X}') требует адресного \
                  пространства, которого у RTL нет: сигнал приходит на вывод \

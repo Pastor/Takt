@@ -52,7 +52,7 @@ run() {
 
 # Какие коды даёт наш корпус — спрашиваем сам гейт (режим отчёта).
 : > "$TMP/empty"
-printf 'SV-003 # сторож\nSV-002 # сторож\nCC-001 # сторож\nST-011 # сторож\nRS-011 # сторож\n' > "$TMP/pos"
+printf 'CC-001 # сторож\n' > "$TMP/pos"
 TAKT_DIAG_CORPUS="$CORPUS" TAKT_DIAG_POSITION_DEBT="$TMP/pos" \
     TAKT_DIAG_COVERAGE_DEBT="$TMP/empty" \
     python3 "$ROOT/scripts/check-diagnostic-quality.py" --emit-reached > "$TMP/seen.txt"
@@ -98,5 +98,19 @@ if run "$TMP/pos" "$TMP/cov_stale"; then
 fi
 grep -q 'протухла' "$TMP/out" || { echo "  ПРОВАЛ: отказ не назвал протухшую запись"; exit 1; }
 echo "  OK: протухшая запись покрытия ловится (D5)"
+
+# 5. Протухшая запись долга позиций ловится (D2, фича 0468): код, который
+#    корпус печатает С координатой, в долге стоять не вправе.
+printf 'CC-001 # сторож\nSE-004 # протухшая: корпус сторожа даёт её С координатой\n' > "$TMP/pos_stale"
+if run "$TMP/pos_stale" "$TMP/cov_ok"; then
+    echo "  ПРОВАЛ: протухшая запись долга позиций не поймана (D2)"
+    exit 1
+fi
+grep -q 'запись протухла' "$TMP/out" || {
+    echo "  ПРОВАЛ: отказ не назвал протухшую запись долга позиций"
+    cat "$TMP/out"
+    exit 1
+}
+echo "  OK: протухшая запись долга позиций ловится (D2)"
 
 echo "Сторож гейта качества диагностик: все проверки пройдены"

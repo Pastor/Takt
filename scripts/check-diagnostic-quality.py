@@ -118,6 +118,10 @@ def main():
     out_dir = Path(os.environ.get("TMPDIR", "/tmp")) / "takt_diag_quality"
 
     seen = set()
+    # Коды, встреченные БЕЗ позиции: по ним судится, не протухла ли запись
+    # долга (фича 0468). Без этой половины долг мог бы только расти — записи о
+    # починенных кодах оставались бы навсегда.
+    seen_without_position = set()
     problems = []
     checked = 0
     for source in corpus():
@@ -150,8 +154,10 @@ def main():
                 seen.add(code)
                 checked += 1
                 where = f"{code} ({source.name}, цель {target})"
-                if not POSITION.match(line) and code not in position_debt:
-                    problems.append(f"D2 {where}: позиции нет — {text[:70]}")
+                if not POSITION.match(line):
+                    seen_without_position.add(code)
+                    if code not in position_debt:
+                        problems.append(f"D2 {where}: позиции нет — {text[:70]}")
                 if not re.search(r"[а-яА-ЯёЁ]", text) and code not in position_debt:
                     problems.append(f"D3 {where}: текст не на русском — {text[:70]}")
                 for marker in DEBUG_MARKERS:
@@ -178,6 +184,14 @@ def main():
                 f"D5 {code}: код в реестре, но ни один вход корпуса его не даёт "
                 f"и в реестре недостижимых его нет"
             )
+    # D2: запись долга позиций, чей код корпус даёт ВСЕГДА с координатой.
+    for code in sorted(position_debt):
+        if code in seen and code not in seen_without_position:
+            problems.append(
+                f"D2 {code}: записан как «без позиции», но корпус печатает его "
+                f"с координатой — запись протухла"
+            )
+
     stale = sorted(code for code in coverage_debt if code in seen)
     for code in stale:
         problems.append(

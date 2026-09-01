@@ -47,7 +47,7 @@ fn generate_state_comparison(
     // печатало внутреннее представление узла целиком.
     let Some(eq_name) = compared_state_name(right) else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "аргумент 'S(Модель)' не разрешён в модель: ожидалось имя модели".to_string(),
         )
         .with_code("CC-013"));
@@ -60,7 +60,7 @@ fn generate_state_comparison(
         .find(|m| m.name().eq(&model_name))
         .ok_or_else(|| {
             Diagnostic::error(
-                Location::Codegen,
+                crate::generator::site::at(Location::Codegen),
                 format!("Модель {} не найдена", model_name),
             )
             .with_code("CC-012")
@@ -68,7 +68,7 @@ fn generate_state_comparison(
 
     let Element::Model { states, .. } = element else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!("Элемент {} не является моделью", model_name),
         )
         .with_code("CC-006"));
@@ -79,7 +79,7 @@ fn generate_state_comparison(
         .find(|s| s.local() == eq_name)
         .ok_or_else(|| {
             Diagnostic::error(
-                Location::Codegen,
+                crate::generator::site::at(Location::Codegen),
                 format!("Состояние {} не найдено в модели {}", eq_name, model_name),
             )
             .with_code("CC-011")
@@ -128,7 +128,7 @@ fn generate_state_comparison(
         // молча, то есть ровно тот класс дефекта, против которого заведена 0028.
         let chain = path_from_root(model).ok_or_else(|| {
             Diagnostic::error(
-                Location::Codegen,
+                crate::generator::site::at(Location::Codegen),
                 format!(
                     "состояние модели '{}' недостижимо из '{}': модель не \
                      встроена ни в одно состояние родителя",
@@ -362,7 +362,7 @@ pub(in crate::generator::c) fn generate_condition_expr(
                     | FunctionDefinitionNode::Builtin { .. }
             ) {
                 return Err(Diagnostic::error(
-                    Location::Codegen,
+                    crate::generator::site::at(Location::Codegen),
                     "Неразрешённая функция в условии перехода".to_string(),
                 )
                 .with_code("CC-002"));
@@ -388,7 +388,7 @@ pub(in crate::generator::c) fn generate_condition_expr(
             }
         }
         ConditionNode::Model(_, _) | ConditionNode::State(_, _) => Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Ссылки на модели и состояния не поддерживаются в условиях переходов".to_string(),
         )
         .with_code("CC-003")),

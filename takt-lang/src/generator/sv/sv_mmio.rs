@@ -222,8 +222,25 @@ impl Mmio {
             }
         }
 
+        // Позиция ОБЪЯВЛЕНИЯ порта: разрешённый адрес её не несёт (она не
+        // нужна ни выгрузке карты, ни регистровому файлу), а отказу нужна —
+        // иначе он печатается без координаты (фича 0468). Берётся первое
+        // объявление: одноимённые порты разных под-моделей делят один бит, и
+        // это ограничение цели, а не выбор здесь.
+        let mut locs: BTreeMap<String, Location> = BTreeMap::new();
+        for (_, model_rc) in blocks {
+            for var in model_rc.borrow().variables.values() {
+                if let VariableNode::Port { name, loc, .. } = var {
+                    locs.entry(name.clone()).or_insert(*loc);
+                }
+            }
+        }
+
         let mut ports: Vec<MmioPort> = Vec::new();
         for resolved in address_map.values() {
+            if let Some(loc) = locs.get(&resolved.name) {
+                crate::generator::site::enter_declaration(*loc);
+            }
             // Фича 0084: ключ карты квалифицирован моделью; имя регистра
             // (пользовательское) — голое `resolved.name`, не ключ.
             let name = &resolved.name;
@@ -273,6 +290,8 @@ impl Mmio {
                 reset: reset_literal(&resolved.ty, &enums),
             });
         }
+        // Слой объявления снимается парно входу (фича 0468).
+        crate::generator::site::leave_declaration();
         // Анонимные ячейки (фича 0189): у них нет объявления, но в регистровом
         // файле они — такой же бит по адресу, как порт. Направления автор не
         // объявлял, поэтому ячейка ведёт себя как **`out`**: регистр внутри

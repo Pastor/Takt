@@ -93,8 +93,11 @@ impl CMap {
         self.map
             .state_at(Some(name.unique().to_string()))
             .ok_or_else(|| {
+                // Позицию даёт носитель (0308, 0468): своей у отказа нет —
+                // состояния, о котором он говорит, не существует, зато место
+                // ССЫЛКИ на него знает печатник переходов.
                 Diagnostic::error(
-                    Location::Codegen,
+                    crate::generator::site::at(Location::Codegen),
                     format!("Состояние '{}' не найдено", name),
                 )
                 .with_code("CC-005")

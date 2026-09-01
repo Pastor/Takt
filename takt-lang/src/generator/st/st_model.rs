@@ -116,7 +116,7 @@ pub(crate) fn emit_body(
 ) -> Result<BodyOutput, Diagnostic> {
     let Element::Model { start, .. } = element else {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Тело автомата строится только для модели".to_string(),
         )
         .with_code("ST-012"));
