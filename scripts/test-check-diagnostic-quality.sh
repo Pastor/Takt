@@ -31,22 +31,23 @@ start S {
 }
 EOF
 
-# Вход, дающий диагностику БЕЗ позиции: темпоральная формула в теле блока.
-# ⚠️ Именно она и осталась в долге по УСТРОЙСТВУ (фича 0470): ни `Formula::LTL`,
-# ни именованный блок координат не несут.
+# Вход, дающий диагностику БЕЗ позиции: модель объявила такт устройства, а
+# флаг не передан.
+# ⚠️ Именно `SE-069` и осталась единственной записью долга (фича 0471): её
+# позиция `Implicit` ОСОЗНАННО — контракт относится ко всей модели, а не к
+# строке (решение 0134).
 cat > "$CORPUS/faceless.takt" <<'EOF'
-out o: u8;
-var level: u8 := 0;
-
-start Run {
-    always {
-        : [LTL] F Done;
-        level := level + 1;
-        o := level;
+model Timed {
+    clock 1kHz;
+    out o: u8;
+    var n: u8 := 0;
+    start Run {
+        always { n := n + 1; o := n; }
+        ref Run: n < 3;
     }
-    ref Done: level > 2;
 }
-state Done;
+
+start Main = Timed;
 EOF
 
 run() {
@@ -58,7 +59,7 @@ run() {
 
 # Какие коды даёт наш корпус — спрашиваем сам гейт (режим отчёта).
 : > "$TMP/empty"
-printf 'RS-010 # сторож\nST-010 # сторож\n' > "$TMP/pos"
+printf 'SE-069 # сторож\n' > "$TMP/pos"
 TAKT_DIAG_CORPUS="$CORPUS" TAKT_DIAG_POSITION_DEBT="$TMP/pos" \
     TAKT_DIAG_COVERAGE_DEBT="$TMP/empty" \
     python3 "$ROOT/scripts/check-diagnostic-quality.py" --emit-reached > "$TMP/seen.txt"
@@ -107,7 +108,7 @@ echo "  OK: протухшая запись покрытия ловится (D5)
 
 # 5. Протухшая запись долга позиций ловится (D2, фича 0468): код, который
 #    корпус печатает С координатой, в долге стоять не вправе.
-printf 'RS-010 # сторож\nST-010 # сторож\nSE-004 # протухшая: корпус сторожа даёт её С координатой\n' > "$TMP/pos_stale"
+printf 'SE-069 # сторож\nSE-004 # протухшая: корпус сторожа даёт её С координатой\n' > "$TMP/pos_stale"
 if run "$TMP/pos_stale" "$TMP/cov_ok"; then
     echo "  ПРОВАЛ: протухшая запись долга позиций не поймана (D2)"
     exit 1

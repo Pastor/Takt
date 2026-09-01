@@ -408,6 +408,7 @@ fn check_enum_stmt(
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(i) = init {
                 check_enum_stmt(i, model, out);

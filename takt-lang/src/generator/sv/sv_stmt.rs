@@ -156,14 +156,13 @@ pub(crate) fn print_statement(
             cond,
             step,
             body,
+            loc,
         } => {
-            // Заголовок цикла объявляет своё место позицией ИНИЦИАЛИЗАТОРА
-            // (фича 0470): у самого `StatementNode::For` координаты нет, а у
-            // объявления в его заголовке — есть (0386). Без этого отказ
-            // «цикл не разворачивается» печатался без места.
-            if let Some(StatementNode::Variable(_, _, _, loc)) = init.as_deref() {
-                crate::generator::site::enter(*loc);
-            }
+            // Заголовок цикла объявляет СВОЁ место (фича 0471): позиция есть
+            // у самого узла, и брать её у инициализатора больше не нужно —
+            // заголовок без объявления (`for ; i < 3; i := i + 1`) прежде
+            // координаты не получал вовсе.
+            crate::generator::site::enter(*loc);
             let Some(unrolled) = crate::generator::sv::sv_unroll::unroll(
                 init.as_deref(),
                 cond.as_deref(),

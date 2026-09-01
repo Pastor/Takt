@@ -345,6 +345,7 @@ fn check_stmt(stmt: &StatementNode, model: &ModelNode) -> Result<(), Diagnostic>
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(s) = init {
                 check_stmt(s, model)?;

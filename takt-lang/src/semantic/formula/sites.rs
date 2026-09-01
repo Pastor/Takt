@@ -170,7 +170,7 @@ fn collect_formula(
     out: &mut Vec<FormulaSite>,
 ) {
     match formula {
-        Formula::LTL(ltl) => out.push(FormulaSite {
+        Formula::LTL(ltl, _) => out.push(FormulaSite {
             formula: FormulaLeaf::Ltl(ltl.clone()),
             loc,
             state: scope,

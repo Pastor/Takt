@@ -291,6 +291,7 @@ pub(crate) fn exec_statement(
             cond,
             step,
             body,
+            ..
         } => exec_for(init.as_deref(), cond.as_deref(), step.as_deref(), body, ctx),
         StatementNode::Match { expr, arms } => {
             let subject = eval_expression(expr, ctx)?;

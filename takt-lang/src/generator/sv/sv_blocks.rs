@@ -185,6 +185,6 @@ fn emit_guard(p: &mut Printer, formula: &Formula, fsm: &Fsm) -> Result<(), Diagn
         }
         // LTL цель `sv` не верифицирует (как и прочие цели): о ней говорит
         // SE-055 из семантики. Пустая формула объявлением не является.
-        Formula::LTL(_) | Formula::None => Ok(()),
+        Formula::LTL(_, _) | Formula::None => Ok(()),
     }
 }

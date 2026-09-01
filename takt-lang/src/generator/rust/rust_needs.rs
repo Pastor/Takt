@@ -180,6 +180,7 @@ fn walk_statement(
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(init) = init {
                 walk_statement(init, model, locals, needs, seen)?;

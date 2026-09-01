@@ -354,6 +354,7 @@ pub(crate) fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(s) = init {
                 usage_from_stmt(s, set);
@@ -803,6 +804,7 @@ fn collect_from_stmt(stmt: &StatementNode, used: &mut HashSet<String>) {
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(s) = init {
                 collect_from_stmt(s, used);
@@ -843,7 +845,7 @@ fn collect_from_formula(formula: &Formula, used: &mut HashSet<String>) {
         }
         // Guard несёт `ConditionNode` — тот же обход, что и у условий рёбер.
         Formula::Guard(cond, _, _) => collect_from_condition(cond, used),
-        Formula::LTL(ltl) => collect_from_ltl(ltl, used),
+        Formula::LTL(ltl, _) => collect_from_ltl(ltl, used),
     }
 }
 

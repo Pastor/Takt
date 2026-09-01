@@ -669,12 +669,12 @@ pub enum FunctionNode {
 /// конкретными разрешёнными вариантами.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum StatementNode {
-    /// Оператор отсутствует (значение по умолчанию).
+    /// Оператор отсутствует (умолчание).
     #[default]
     None,
-    /// «Сырой» АСД-оператор, ещё не прошедший семантическое понижение.
+    /// «Сырой» АСД-оператор, ещё не прошедший понижение.
     Unresolved(ast::Statement),
-    /// Блок операторов: `{ операторы* }`.
+    /// Блок операторов `{ … }`.
     Block(Vec<StatementNode>),
     /// Оператор-выражение и его позиция (0264; у выражения своей нет).
     Expression(Box<ExpressionNode>, crate::diagnostics::Location),
@@ -687,15 +687,14 @@ pub enum StatementNode {
         /// Ветка `else` (если задана).
         else_: Option<Box<StatementNode>>,
     },
-    /// Цикл `loop [условие] { тело }`.
-    /// Условие `None` означает бесконечный цикл.
+    /// Цикл `loop [условие]`.
     Loop {
         /// Условие продолжения (`None` — бесконечный цикл).
         cond: Option<Box<ExpressionNode>>,
         /// Тело цикла.
         body: Box<StatementNode>,
     },
-    /// Оператор цикла `for`.
+    /// Цикл `for`; поле `loc` — позиция заголовка (0471).
     For {
         /// Инициализация (опционально).
         init: Option<Box<StatementNode>>,
@@ -705,6 +704,8 @@ pub enum StatementNode {
         step: Option<Box<ExpressionNode>>,
         /// Тело цикла.
         body: Box<StatementNode>,
+        /// Позиция заголовка (0471).
+        loc: Location,
     },
     /// Объявление: `(имя, тип, инициализатор?, позиция)` — позиция с 0386.
     Variable(String, TypeNode, Option<Box<ExpressionNode>>, Location),
@@ -714,7 +715,7 @@ pub enum StatementNode {
     Continue,
     /// Оператор `break`.
     Break,
-    /// Встроенная формула: `: условие1[, условие2, …];`
+    /// Встроенная формула `: условие1[, условие2, …];`
     InlineFormula(Vec<Formula>),
     /// Оператор `match`: `match expr { patterns => body, … }`.
     Match {
@@ -745,7 +746,6 @@ pub enum MatchPatternNode {
 }
 
 // ─── Ce4: Перечисления ────────────────────────────────────────────────────────
-
 /// Семантический узел именованного условия.
 ///
 /// Хранит имя условия и его разрешённое значение.

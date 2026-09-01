@@ -369,6 +369,7 @@ fn lower_stmt(stmt: &mut StatementNode, m: u8, n: u8) -> Result<(), Diagnostic> 
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(s) = init {
                 lower_stmt(s, m, n)?;

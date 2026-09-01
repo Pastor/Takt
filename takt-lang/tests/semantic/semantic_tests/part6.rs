@@ -332,7 +332,7 @@ fn invariant_name_is_ltl_atom() {
     assert!(
         node.formulas
             .iter()
-            .any(|f| matches!(f, takt_lang::semantic::formula::Formula::LTL(_))),
+            .any(|f| matches!(f, takt_lang::semantic::formula::Formula::LTL(_, _))),
         "должна быть LTL-формула, ссылающаяся на инвариант"
     );
 }

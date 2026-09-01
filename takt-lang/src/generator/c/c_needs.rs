@@ -238,6 +238,7 @@ fn stmt_touches_outside(stmt: &StatementNode, owner: &Rc<RefCell<ModelNode>>) ->
             cond,
             step,
             body,
+            ..
         } => {
             init.as_ref()
                 .is_some_and(|i| stmt_touches_outside(i, owner))

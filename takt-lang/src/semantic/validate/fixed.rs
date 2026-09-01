@@ -117,6 +117,7 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>) -> Result<()
             cond,
             step,
             body,
+            ..
         } => {
             if let Some(s) = init {
                 check_stmt(s, model)?;
