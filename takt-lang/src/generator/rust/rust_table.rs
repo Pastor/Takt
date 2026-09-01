@@ -22,7 +22,7 @@
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::rust::rust_blocks::emit_named_blocks;
-use crate::generator::rust::rust_chain::{seq_enum_name, seq_field_name};
+use crate::generator::rust::rust_chain::{concat_steps, node_done, seq_enum_name, seq_field_name};
 use crate::generator::rust::rust_ctx::ModelEmit;
 use crate::generator::rust::rust_expr::{Scope, condition_as_bool, unwrap_outer};
 use crate::generator::rust::rust_stmt::StmtOutput;
@@ -348,66 +348,54 @@ fn done_predicate(
     state: &Name,
     extend: &StateExtend,
 ) -> Result<Option<String>, Diagnostic> {
-    let Some((_, list)) = ctx
+    if !ctx
         .instances
         .iter()
-        .find(|(n, _)| n.unique() == state.unique())
-    else {
+        .any(|(n, _)| n.unique() == state.unique())
+    {
         return Ok(None);
-    };
+    }
+    let prefix = state.local_lowercase_snakecase();
     match extend {
         StateExtend::None => Ok(None),
+        // Готовность узла считает общий носитель (фича 0479): вложенная
+        // цепочка отвечает своим счётчиком, а не конъюнкцией `is_done()`
+        // своих моделей, и глубина у неё любая.
         StateExtend::Model(_, _) | StateExtend::Parallel(_) => {
-            let chains: Vec<&crate::generator::rust::rust_chain::Chain> = ctx
-                .concats
-                .iter()
-                .filter(|c| c.state.unique() == state.unique() && c.suffix.is_some())
-                .collect();
-            let chained: std::collections::BTreeSet<String> = chains
-                .iter()
-                .flat_map(|c| c.steps.iter())
-                .flat_map(|s| s.instances.iter())
-                .map(|i| i.field.clone())
-                .collect();
-            let mut done = Vec::new();
-            for chain in &chains {
-                done.push(format!(
-                    "self.{} == {}::Done",
-                    seq_field_name(&chain.state, chain.suffix.as_deref())?,
-                    seq_enum_name(ctx.name, &chain.state, chain.suffix.as_deref())?
-                ));
-            }
-            for instance in list {
-                if chained.contains(&instance.field) {
-                    continue;
-                }
-                done.push(format!("self.{}.is_done()", instance.field));
-            }
+            let done = node_done(ctx.name, state, extend, &mut Vec::new(), &prefix)?;
             if done.is_empty() {
                 return Ok(None);
             }
             Ok(Some(done.join(" && ")))
         }
-        StateExtend::Concatenation(_) => {
-            let Some(chain) = ctx
-                .concats
-                .iter()
-                .find(|c| c.state.unique() == state.unique() && c.suffix.is_none())
-            else {
-                return Ok(None);
-            };
-            let Some(last) = chain.steps.last() else {
+        // У цепочки состояния готовность — последний шаг, доигранный до
+        // конца: терминального варианта `Done` у неё нет (выход печатает сам
+        // последний шаг).
+        StateExtend::Concatenation(items) => {
+            let steps = concat_steps(items, &prefix, state)?;
+            let Some(last) = steps.last() else {
                 return Ok(None);
             };
             let mut done = vec![format!(
                 "self.{} == {}::{}",
-                seq_field_name(state, None)?,
-                seq_enum_name(ctx.name, state, None)?,
+                seq_field_name(state, &[])?,
+                seq_enum_name(ctx.name, state, &[])?,
                 last.variant
             )];
-            for instance in &last.instances {
-                done.push(format!("self.{}.is_done()", instance.field));
-            }
+            let site = items
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| !matches!(item, StateExtend::None))
+                .map(|(idx, _)| idx)
+                .nth(steps.len() - 1)
+                .unwrap_or(0);
+            done.extend(node_done(
+                ctx.name,
+                state,
+                &last.node,
+                &mut vec![site],
+                &last.prefix,
+            )?);
             Ok(Some(done.join(" && ")))
         }
     }

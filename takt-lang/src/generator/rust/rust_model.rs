@@ -168,7 +168,7 @@ fn emit_seq_enums(p: &mut Printer, model: &Name, concats: &[Chain]) -> Result<()
         p.ident("#[derive(Debug, Clone, Copy, PartialEq, Eq)]").nl();
         p.ident(&format!(
             "enum {} {{",
-            seq_enum_name(model, &chain.state, chain.suffix.as_deref())?
+            seq_enum_name(model, &chain.state, &chain.path)?
         ))
         .nl();
         p.up();
@@ -178,7 +178,7 @@ fn emit_seq_enums(p: &mut Printer, model: &Name, concats: &[Chain]) -> Result<()
         // ⚠️ У ВЛОЖЕННОЙ цепочки есть терминальный вариант (фича 0426):
         // параллель обязана знать, что ветвь кончилась, — у цепочки состояния
         // роль признака играет выход из самого состояния.
-        if chain.suffix.is_some() {
+        if chain.nested() {
             p.ident("Done,").nl();
         }
         p.down();
@@ -356,8 +356,8 @@ pub(crate) fn emit_model(
         .nl();
         p.ident(&format!(
             "{}: {},",
-            seq_field_name(&chain.state, chain.suffix.as_deref())?,
-            seq_enum_name(name, &chain.state, chain.suffix.as_deref())?
+            seq_field_name(&chain.state, &chain.path)?,
+            seq_enum_name(name, &chain.state, &chain.path)?
         ))
         .nl();
     }
@@ -689,8 +689,8 @@ fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         })?;
         p.ident(&format!(
             "{}: {}::{},",
-            seq_field_name(&chain.state, chain.suffix.as_deref())?,
-            seq_enum_name(model_name, &chain.state, chain.suffix.as_deref())?,
+            seq_field_name(&chain.state, &chain.path)?,
+            seq_enum_name(model_name, &chain.state, &chain.path)?,
             first.variant
         ))
         .nl();
@@ -847,8 +847,8 @@ fn emit_init(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         })?;
         p.ident(&format!(
             "self.{} = {}::{};",
-            seq_field_name(&chain.state, chain.suffix.as_deref())?,
-            seq_enum_name(model_name, &chain.state, chain.suffix.as_deref())?,
+            seq_field_name(&chain.state, &chain.path)?,
+            seq_enum_name(model_name, &chain.state, &chain.path)?,
             first.variant
         ))
         .nl();

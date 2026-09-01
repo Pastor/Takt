@@ -717,15 +717,25 @@ pub(crate) enum Shape {
     Chain,
     /// `= (First + Second) | Third` — вложенная композиция.
     Nested,
+    /// `= ((First + Second) | Third) + Fourth` — цепочка ВНУТРИ параллели,
+    /// которая сама является шагом цепочки (фича 0479).
+    ///
+    /// ⚠️ Глубина здесь и есть предмет: цель `rust` знала ровно два случая —
+    /// цепочка состояния и цепочка внутри параллели состояния, — и на этой
+    /// форме цепочка `First + Second` тикала параллелью. Вывод оставался
+    /// валидным, `clippy -D warnings` его принимал: расхождение видит только
+    /// потактовая сверка (`conformance_nested_ready_tests`).
+    Deep,
 }
 
 /// Все формы реализации.
-pub(crate) const SHAPES: [Shape; 5] = [
+pub(crate) const SHAPES: [Shape; 6] = [
     Shape::Plain,
     Shape::Single,
     Shape::Parallel,
     Shape::Chain,
     Shape::Nested,
+    Shape::Deep,
 ];
 
 impl Shape {
@@ -736,6 +746,7 @@ impl Shape {
             Shape::Parallel => "parallel",
             Shape::Chain => "chain",
             Shape::Nested => "nested",
+            Shape::Deep => "deep",
         }
     }
 
@@ -746,6 +757,7 @@ impl Shape {
             Shape::Parallel => "First | Second",
             Shape::Chain => "First + Second",
             Shape::Nested => "(First + Second) | Third",
+            Shape::Deep => "((First + Second) | Third) + Fourth",
         }
     }
 }
@@ -934,6 +946,11 @@ pub(crate) fn source(shape: Shape, touch: Touch, kind: Kind) -> String {
         text.push_str(&touching_model("First", touch, kind));
         text.push_str(&plain_child("Second"));
         text.push_str(&plain_child("Third"));
+        // Четвёртый спутник нужен только глубокой форме: лишняя модель в
+        // прочих формах меняла бы их вывод даром.
+        if shape == Shape::Deep {
+            text.push_str(&plain_child("Fourth"));
+        }
         text.push_str(&format!(
             "model Wrap {{\n    start Only = {};\n}}\n\n",
             shape.implementation()
