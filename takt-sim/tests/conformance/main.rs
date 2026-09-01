@@ -67,6 +67,7 @@ mod conformance_invariant_scope_tests;
 mod conformance_literal_left_tests;
 mod conformance_local_decl_tests;
 mod conformance_loop_forms_tests;
+mod conformance_match_forms_tests;
 mod conformance_mixed_arith_tests;
 mod conformance_mixed_sign_tests;
 mod conformance_modulo_tests;

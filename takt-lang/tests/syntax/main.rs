@@ -25,6 +25,7 @@ mod format_comment_before_block_tests;
 mod format_comment_binding_tests;
 mod format_comment_position_tests;
 mod format_formula_assembly_tests;
+mod format_match_patterns_tests;
 mod format_number_form_tests;
 mod format_style_canon_tests;
 mod format_tests;
