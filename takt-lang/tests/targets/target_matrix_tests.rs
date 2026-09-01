@@ -265,6 +265,41 @@ fn check_assertion(text: &str, touch: Touch, marker: &str) -> Result<(), String>
     })
 }
 
+/// Обязано ли ИМЕНОВАННОЕ УСЛОВИЕ быть раскрыто в выводе (фича 0476).
+///
+/// ⚠️ Контроль осмысленности оси: без него перебор был бы зелен и на выводе,
+/// где условие ПОТЕРЯНО, — а именно так класс 0331 и выглядел у цели `c`
+/// (ссылка на неопределённый идентификатор при нулевом коде возврата). Признак
+/// прямой: в выводе стоит значение условия (`200`), а имени `Low` нет вовсе —
+/// ни одна цель его не печатает (замер 2026-09-01).
+fn condition_expanded(touch: Touch) -> bool {
+    matches!(
+        touch,
+        Touch::CondOnEdge | Touch::CondInBody | Touch::CondInGuard | Touch::CondNested
+    )
+}
+
+/// Проверяет раскрытие именованного условия, если ось этого требует.
+///
+/// ⚠️ Цель `st` охранную формулу не печатает (`ST-022`), поэтому вид
+/// `CondInGuard` у неё раскрытия не даёт — и это не потеря, а известная
+/// граница: условие там просто некуда поместить.
+fn check_condition(text: &str, touch: Touch, guard_printed: bool) -> Result<(), String> {
+    if !condition_expanded(touch) {
+        return Ok(());
+    }
+    if touch == Touch::CondInGuard && !guard_printed {
+        return Ok(());
+    }
+    if !text.contains("200") {
+        return Err("именованное условие не раскрыто: значения '200' в выводе нет".to_string());
+    }
+    if text.contains("Low") || text.contains("Nested") {
+        return Err("имя условия попало в вывод: раскрытие не выполнено".to_string());
+    }
+    Ok(())
+}
+
 /// Какой адрес обязан стоять в выводе цели `c-hal` — контроль оси адресации.
 ///
 /// ⚠️ Без него перебор был бы зелен и тогда, когда адрес молча потерян или взят
@@ -332,6 +367,8 @@ fn cc_builds(dir: &Path, out: &Path, touch: Touch) -> Result<(), String> {
     if header.contains("uintptr_t") {
         check_address(&header, touch)?;
     }
+    let body = std::fs::read_to_string(out.join("probe.c")).unwrap_or_default();
+    check_condition(&body, touch, true)?;
     Ok(())
 }
 
@@ -359,7 +396,7 @@ fn st_sweep(target: &str) {
         eprintln!("iec2c недоступен — перебор пропущен");
         return;
     };
-    let check = move |dir: &Path, out: &Path, _touch: Touch| -> Result<(), String> {
+    let check = move |dir: &Path, out: &Path, touch: Touch| -> Result<(), String> {
         let work = dir.join("iec");
         std::fs::create_dir_all(&work).expect("рабочий каталог iec2c");
         let run = Command::new(&iec2c)
@@ -375,7 +412,10 @@ fn st_sweep(target: &str) {
                 String::from_utf8_lossy(&run.stderr)
             ));
         }
-        Ok(())
+        // ⚠️ У цели `st` охранной формулы в выводе нет (`ST-022`), поэтому вид
+        // `CondInGuard` раскрытия не даёт — граница названа в `check_condition`.
+        let text = std::fs::read_to_string(out.join("probe.st")).unwrap_or_default();
+        check_condition(&text, touch, false)
     };
     verdict(target, sweep(target, &check));
 }
@@ -414,7 +454,8 @@ fn target_rust_accepts_every_shape() {
             ));
         }
         let text = std::fs::read_to_string(out.join("probe.rs")).unwrap_or_default();
-        check_assertion(&text, touch, "assert!(")
+        check_assertion(&text, touch, "assert!(")?;
+        check_condition(&text, touch, true)
     };
     verdict("rust", sweep("rust", &check));
 }
@@ -454,7 +495,8 @@ fn sv_sweep(target: &str) {
             }
         }
         let text = std::fs::read_to_string(&module).unwrap_or_default();
-        check_assertion(&text, touch, "assert (")
+        check_assertion(&text, touch, "assert (")?;
+        check_condition(&text, touch, true)
     };
     verdict(target, sweep(target, &check));
 }

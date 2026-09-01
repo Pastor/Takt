@@ -55,6 +55,12 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::LtlInNested
         | Touch::InvariantScoped
         | Touch::InvariantNamed
+        // Именованное условие раскрывается в условие над переменной МОДЕЛИ:
+        // корня ему не нужно (фича 0476).
+        | Touch::CondOnEdge
+        | Touch::CondInBody
+        | Touch::CondInGuard
+        | Touch::CondNested
         // Импортированное объявление — объявление ИМПОРТЁРА (правило 0184):
         // функция, тип и константа приходят к нему, и корня им не нужно.
         | Touch::ImportFunction
