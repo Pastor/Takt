@@ -157,6 +157,13 @@ pub(crate) fn print_statement(
             step,
             body,
         } => {
+            // Заголовок цикла объявляет своё место позицией ИНИЦИАЛИЗАТОРА
+            // (фича 0470): у самого `StatementNode::For` координаты нет, а у
+            // объявления в его заголовке — есть (0386). Без этого отказ
+            // «цикл не разворачивается» печатался без места.
+            if let Some(StatementNode::Variable(_, _, _, loc)) = init.as_deref() {
+                crate::generator::site::enter(*loc);
+            }
             let Some(unrolled) = crate::generator::sv::sv_unroll::unroll(
                 init.as_deref(),
                 cond.as_deref(),

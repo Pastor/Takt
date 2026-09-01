@@ -652,6 +652,9 @@ fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         else {
             continue;
         };
+        // Объявление объявляет своё место (фичи 0468/0470): отказ печати
+        // инициализатора рождается вне операторов и печатался без координаты.
+        crate::generator::site::enter_declaration(*loc);
         let value = match expr {
             crate::semantic::ExpressionNode::None => default_value(ty, model)?,
             other => coerce_to(other, ty, &scope)?,
@@ -663,6 +666,8 @@ fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
                 .nl();
         }
     }
+    // Слой объявления снимается парно входу (фича 0468).
+    crate::generator::site::leave_declaration();
     if is_root {
         emit_shared_new_block(p, map, &union, &shared_inits)?;
     }

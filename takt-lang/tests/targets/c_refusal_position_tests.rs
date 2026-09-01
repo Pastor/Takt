@@ -167,3 +167,48 @@ fn declaration_layer_does_not_leak_into_the_body() {
         "координата обязана указывать на строку оператора, а не на объявление `mem`"
     );
 }
+
+/// **T5.** Отказ о ЯЧЕЙКЕ называет место обращения (фича 0470).
+///
+/// ⚠️ Цель здесь — `st`, а не `c`, и это не прихоть: у `c` отказ приходит из
+/// печатника условий, где место уже объявлено слоем РЕБРА, — координата была
+/// бы верной и без правки. Цель `st` отвергает модель ДО первой строки вывода,
+/// когда носитель позиции пуст: единственный источник координаты —
+/// `AnonPortAccess::loc`. Мутация «ячейка без места» роняет именно этот тест.
+#[test]
+fn anon_cell_refusal_names_the_access_site() {
+    const CELL: &str = "var n: u8 := 0;\n\
+                        \n\
+                        start Run {\n\
+                        \x20   always {\n\
+                        \x20       n := n + 1;\n\
+                        \x20   }\n\
+                        \x20   ref Done: #0x300.0 = 1;\n\
+                        }\n\
+                        state Done;\n";
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0470_anon_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("main")
+                .replace(':', "_")
+        ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог теста");
+    let err = takt_lang::compile_to_st(
+        "anon_cell",
+        CELL,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect_err("цель `st` обязана отказать: адресного пространства она не знает");
+    assert_eq!(err.code.as_deref(), Some("ST-018"), "код отказа");
+    assert_eq!(
+        line_of(CELL, &err),
+        7,
+        "координата обязана указывать на строку обращения к ячейке"
+    );
+}

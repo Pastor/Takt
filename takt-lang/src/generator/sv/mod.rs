@@ -208,7 +208,9 @@ fn generate_program(
     // через все печатники (тот же приём, что у цели `st`).
     if !mmio && let Some(cell) = anon_cells.first() {
         return Err(Diagnostic::error(
-            crate::generator::site::at(Location::Codegen),
+            // Место ОБРАЩЕНИЯ к ячейке (фича 0470): отказ приходит до первой
+            // строки вывода, когда носитель позиции ещё пуст.
+            crate::generator::site::at(cell.loc),
             format!(
                 "обращение к ячейке по адресу ('#0x{:X}') требует адресного \
                  пространства, которого у RTL нет: сигнал приходит на вывод \

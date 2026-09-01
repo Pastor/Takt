@@ -60,6 +60,10 @@ pub(crate) fn emit_functions(
                 continue;
             }
             check_sv_name(name, *loc)?;
+            // Объявление функции объявляет своё место (фичи 0468/0470): отказ
+            // «досрочный возврат» рождается вне операторов и печатался без
+            // координаты — автор не знал, какую функцию переписывать.
+            crate::generator::site::enter_declaration(*loc);
             let ret_ty = sv_type(ret, &format!("возвращаемый тип функции '{}'", name))?;
             let mut sig: Vec<String> = Vec::new();
             // Массив в параметре передаётся ПЛОСКИМ вектором (фича 0369):
@@ -210,6 +214,8 @@ pub(crate) fn emit_functions(
             crate::generator::sv::sv_stmt::emit_local_sinks(p, &locals, &unread);
             p.down();
             p.ident("endfunction").nl().nl();
+            // Слой объявления снимается парно входу (фича 0468).
+            crate::generator::site::leave_declaration();
         }
     }
     Ok(())

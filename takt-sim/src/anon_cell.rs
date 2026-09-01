@@ -70,6 +70,7 @@ mod tests {
             addr: 0x100,
             bit,
             ty,
+            loc: takt_lang::diagnostics::Location::Codegen,
         }
     }
 
