@@ -43,6 +43,12 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::InvariantState
         | Touch::GuardFormula
         | Touch::LtlFormula
+        // Формула в теле читает переменную самой модели либо параметр функции:
+        // корня ей не нужно (фича 0473).
+        | Touch::GuardInBlock
+        | Touch::GuardInFunction
+        | Touch::GuardInNested
+        | Touch::LtlInBlock
         // Импортированное объявление — объявление ИМПОРТЁРА (правило 0184):
         // функция, тип и константа приходят к нему, и корня им не нужно.
         | Touch::ImportFunction

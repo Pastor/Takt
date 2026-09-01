@@ -202,16 +202,47 @@ pub(crate) fn print_statement(
             Ok(())
         }
         StatementNode::If { cond, then_, else_ } => {
+            // Ветви печатаются В БУФЕР: тело, состоящее только из формул, в ST
+            // не транслируется (`ST-022`), и на выходе получался `IF … THEN
+            // END_IF;` — «no statement defined after THEN», то есть отказ
+            // `iec2c` при нулевом коде возврата `taktc` (фича 0473).
+            //
+            // ⚠️ Пустого оператора у MatIEC нет: `;` он отвергает (проба
+            // 2026-09-01). Поэтому пустая конструкция не печатается вовсе —
+            // условие языка побочных эффектов не имеет (присваивание в Takt
+            // оператор, а не выражение), и потерять нечего.
+            let mut then_text = String::new();
+            {
+                let mut buffer = p.fork(&mut then_text);
+                buffer.up();
+                print_statement(then_, model, &mut buffer, out, fn_name)?;
+                buffer.down();
+            }
+            let mut else_text = String::new();
+            if let Some(else_) = else_ {
+                let mut buffer = p.fork(&mut else_text);
+                buffer.up();
+                print_statement(else_, model, &mut buffer, out, fn_name)?;
+                buffer.down();
+            }
+            if then_text.trim().is_empty() && else_text.trim().is_empty() {
+                return Ok(());
+            }
             p.ident(&format!("IF {} THEN", print_expression(cond, model)?))
                 .nl();
-            p.up();
-            print_statement(then_, model, p, out, fn_name)?;
-            p.down();
-            if let Some(else_) = else_ {
-                p.ident("ELSE").nl();
+            // Пустая ветвь `THEN` при непустом `ELSE` невозможна: в ST она
+            // обязана нести оператор, и условие печатается отрицанием.
+            if then_text.trim().is_empty() {
                 p.up();
-                print_statement(else_, model, p, out, fn_name)?;
+                p.ident("(* тело ветви не транслируется в ST — см. ST-022 *)")
+                    .nl();
                 p.down();
+            } else {
+                p.print(&then_text);
+            }
+            if !else_text.trim().is_empty() {
+                p.ident("ELSE").nl();
+                p.print(&else_text);
             }
             p.ident("END_IF;").nl();
             Ok(())

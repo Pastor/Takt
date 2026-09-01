@@ -285,10 +285,19 @@ fn resolve_ast_statement(
                 ast::InlineFormulaDefine::Guard {
                     conditions, loc, ..
                 } => {
-                    let resolved: Vec<Formula> = conditions
+                    // ⚠️ Параметры функции видны и УСЛОВИЮ формулы (фича 0473):
+                    // разрешение условий спрашивает только модель, и
+                    // `: [Guard] v < 200;` в теле `fn bump(v: u8)` давало
+                    // `SE-025` «неразрешённое условие» — тот же класс, что
+                    // 0346 у индексации. Приём — временная регистрация, тот
+                    // же, каким видны локальные переменные блока.
+                    let registered = register_params(&params, &model);
+                    let resolved = conditions
                         .iter()
                         .map(|c| resolve_condition(c, model.clone()))
-                        .collect::<Result<Vec<_>, _>>()?
+                        .collect::<Result<Vec<_>, _>>();
+                    unregister_local_vars(registered, &model);
+                    let resolved: Vec<Formula> = resolved?
                         .iter()
                         // Позиция объявления формулы (фича 0471): прежде
                         // охранная формула тела строилась без места.
@@ -390,6 +399,35 @@ fn register_local_var(
     } else {
         None
     }
+}
+
+/// Временно вносит параметры функции в область видимости модели (фича 0473).
+///
+/// Возвращает список для [`unregister_local_vars`] — восстановление обязано
+/// идти тем же путём, что у локальных переменных блока.
+///
+/// ⚠️ Нужно только разрешению УСЛОВИЙ: выражения получают параметры отдельным
+/// аргументом (`construct_expression`), а условия спрашивают лишь модель.
+fn register_params(
+    params: &[(String, TypeNode)],
+    model: &Rc<RefCell<ModelNode>>,
+) -> Vec<(String, Option<VariableNode>)> {
+    params
+        .iter()
+        .filter(|(name, _)| !name.is_empty())
+        .map(|(name, ty)| {
+            let prev = model.borrow().variables.get(name).cloned();
+            let node = VariableNode::Simple {
+                upper: Some(Rc::downgrade(model)),
+                loc: crate::diagnostics::Location::Implicit,
+                name: name.clone(),
+                ty: ty.clone(),
+                expr: ExpressionNode::None,
+            };
+            model.borrow_mut().variables.insert(name.clone(), node);
+            (name.clone(), prev)
+        })
+        .collect()
 }
 
 /// Восстанавливает состояние модели после выхода из блока.
