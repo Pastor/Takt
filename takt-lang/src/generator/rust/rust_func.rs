@@ -140,11 +140,29 @@ pub(crate) fn emit_functions(
             crate::generator::rust::rust_assigned::collect_assigned(body, &mut assigned);
             let mut locals: Vec<String> = params.iter().map(|(pname, _)| pname.clone()).collect();
             locals.extend(needs.vars.keys().cloned());
+            // Имена, пришедшие по ссылке (фича 0494): признак — тот же
+            // `rust_byref`, которым выбрана форма параметра. Третьего списка
+            // не заводится: разъедься он с сигнатурой, вывод не собрался бы.
+            let by_ref: Vec<String> = params
+                .iter()
+                .filter(|(_, pty)| crate::generator::rust::rust_byref::is_array_by_reference(pty))
+                .map(|(pname, _)| pname.clone())
+                .chain(
+                    needs
+                        .vars
+                        .iter()
+                        .filter(|(_, vty)| {
+                            crate::generator::rust::rust_byref::is_array_by_reference(vty)
+                        })
+                        .map(|(vname, _)| vname.clone()),
+                )
+                .collect();
             let mut scope = Scope {
                 model: &model,
                 shared: Vec::new(),
                 shared_via_self: false,
                 locals,
+                by_ref,
                 assigned,
                 hal: if needs.hal {
                     "hal".to_string()

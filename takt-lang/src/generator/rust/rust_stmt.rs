@@ -35,6 +35,22 @@ pub(crate) struct StmtOutput {
     pub(crate) warnings: Vec<Diagnostic>,
 }
 
+/// Разыменовывает имя, пришедшее по ссылке, в позиции ЗНАЧЕНИЯ (фича 0494).
+///
+/// ⚠️ Только имя целиком: `a[0]` над ссылкой работает само (автоматическое
+/// разыменование), а лишняя звёздочка дала бы `(*a)[0]` — форму, которую
+/// `clippy` отвергает как избыточную.
+fn deref_if_by_ref(expr: &ExpressionNode, printed: &str, scope: &Scope) -> String {
+    let ExpressionNode::Variable(var) = expr else {
+        return printed.to_string();
+    };
+    let name = var.borrow().name().to_string();
+    if scope.by_ref.contains(&name) {
+        return format!("*{printed}");
+    }
+    printed.to_string()
+}
+
 /// Печатает свёрнутое значение объявления (`rust_live::Folded`).
 ///
 /// Ветки печатаются как **выражения** (`if c { a } else { b }`), а не как
@@ -314,6 +330,11 @@ pub(crate) fn print_tail(
                 Some(ty) => crate::generator::rust::rust_expr::coerce_to(expr, ty, scope)?,
                 None => print_expression(expr, scope)?,
             };
+            // Хвост — та же позиция значения, что `return` (фича 0494):
+            // имя, пришедшее по ссылке, разыменовывается. ⚠️ Печатников
+            // возврата ДВА (хвост и явный `return`), и правка одного оставляет
+            // второй — класс 0335.
+            let text = deref_if_by_ref(expr, &text, scope);
             p.ident(unwrap_outer(&text)).nl();
             Ok(true)
         }
@@ -695,6 +716,12 @@ pub(crate) fn print_statement_ctx(
                         Some(ty) => crate::generator::rust::rust_expr::coerce_to(expr, ty, scope)?,
                         None => print_expression(expr, scope)?,
                     };
+                    // Имя, пришедшее ПО ССЫЛКЕ (`&[T; N]`, фича 0389), в
+                    // позиции значения разыменовывается (фича 0494): `return a;`
+                    // при `fn pick(a: [u8; 2]) -> [u8; 2]` давало `E0308`
+                    // при НУЛЕВОМ коде возврата `taktc`. Массив здесь `Copy`,
+                    // поэтому `*a` — копия, а не перемещение.
+                    let printed = deref_if_by_ref(expr, &printed, scope);
                     p.ident(&format!("return {};", unwrap_outer(&printed))).nl();
                 }
                 None => {

@@ -608,6 +608,8 @@ fn emit_new(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         shared: Vec::new(),
         shared_via_self: false,
         locals: Vec::new(),
+        // По ссылке в методах модели ничего не приходит: массивы там — поля.
+        by_ref: Vec::new(),
         assigned: BTreeSet::new(),
         hal: String::new(),
         has_self: false,
@@ -805,6 +807,8 @@ fn emit_init(p: &mut Printer, ctx: &ModelEmit) -> Result<(), Diagnostic> {
         shared: Vec::new(),
         shared_via_self: false,
         locals: Vec::new(),
+        // По ссылке в методах модели ничего не приходит: массивы там — поля.
+        by_ref: Vec::new(),
         assigned: BTreeSet::new(),
         hal: String::new(),
         has_self: false,

@@ -100,6 +100,8 @@ pub(crate) fn emit_tick(
         // получает `Shared` параметром → `shared.x` (фича 0059).
         shared_via_self: is_root,
         locals: Vec::new(),
+        // По ссылке в методах модели ничего не приходит: массивы там — поля.
+        by_ref: Vec::new(),
         assigned,
         hal: hal_access.to_string(),
         has_self: true,
