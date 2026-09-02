@@ -121,7 +121,7 @@ pub fn build_data_kripke(
     // 3. Домены из типов + потолок ДО построения (правила 4, 5; метрика 0145).
     let mut domain = 1u128; // D = Π|домен|
     for decl in tracked.values() {
-        let Some(size) = domain_size(&decl.ty, model) else {
+        let Some(size) = super::domain::of(&decl.ty, model).map(|d| d.size()) else {
             // float/q/массив/структура — домен не перечислим.
             return Err((
                 data_atom_names(&data_atoms),
@@ -147,7 +147,9 @@ pub fn build_data_kripke(
     // 4. Материализация доменов (только после прохождения потолка).
     let mut order: Vec<TrackedVar> = Vec::new();
     for (name, decl) in &tracked {
-        let values = domain_values(&decl.ty, model);
+        let values = super::domain::of(&decl.ty, model)
+            .map(|d| d.values())
+            .unwrap_or_default();
         let Some(init) = fold_expr(&decl.init) else {
             // Инициализатор не сворачивается в константу.
             return Err((
@@ -344,15 +346,21 @@ fn collect_tracked(
             Some(VariableNode::Const { expr, .. }) => fold_expr(expr).is_some(),
             _ => false,
         },
-        AtomExpr::Cond(cond) => collect_tracked_cond(cond, tracked),
+        AtomExpr::Cond(cond) => collect_tracked_cond(cond, model, tracked),
     }
 }
 
 /// Обход условия: сбор `Simple`-переменных + проверка поддержанности подмножества.
-fn collect_tracked_cond(cond: &ConditionNode, tracked: &mut BTreeMap<String, TrackedDecl>) -> bool {
+fn collect_tracked_cond(
+    cond: &ConditionNode,
+    model: &ModelNode,
+    tracked: &mut BTreeMap<String, TrackedDecl>,
+) -> bool {
     match cond {
         ConditionNode::Bool(_) | ConditionNode::Number(_) | ConditionNode::EnumVariant(..) => true,
-        ConditionNode::Parenthesis(c) | ConditionNode::Not(c) => collect_tracked_cond(c, tracked),
+        ConditionNode::Parenthesis(c) | ConditionNode::Not(c) => {
+            collect_tracked_cond(c, model, tracked)
+        }
         ConditionNode::And(l, r)
         | ConditionNode::Or(l, r)
         | ConditionNode::Less(l, r)
@@ -361,13 +369,15 @@ fn collect_tracked_cond(cond: &ConditionNode, tracked: &mut BTreeMap<String, Tra
         | ConditionNode::MoreEqual(l, r)
         | ConditionNode::Equal(l, r)
         | ConditionNode::NotEqual(l, r) => {
-            collect_tracked_cond(l, tracked) && collect_tracked_cond(r, tracked)
+            collect_tracked_cond(l, model, tracked) && collect_tracked_cond(r, model, tracked)
         }
         ConditionNode::Variable(rc, _) => {
             let borrowed = rc.borrow();
             match &*borrowed {
                 VariableNode::Simple { name, ty, expr, .. } => {
-                    if !is_trackable_type(ty) {
+                    // Отслеживаем ровно тот тип, значения которого можно
+                    // перебрать: вопрос ОДИН, и носитель у него один (0498).
+                    if super::domain::of(ty, model).is_none() {
                         return false;
                     }
                     tracked.entry(name.clone()).or_insert_with(|| TrackedDecl {
@@ -385,59 +395,6 @@ fn collect_tracked_cond(cond: &ConditionNode, tracked: &mut BTreeMap<String, Tra
         // Арифметика, функции, битдоступ, срезы, Unresolved — вне подмножества.
         _ => false,
     }
-}
-
-/// Перечислим ли тип для отслеживания (домен конечен и практически мал).
-fn is_trackable_type(ty: &TypeNode) -> bool {
-    matches!(
-        ty,
-        TypeNode::Bit | TypeNode::Bool | TypeNode::Integer { .. } | TypeNode::Enum(_)
-    )
-}
-
-/// Размер домена типа (число значений); `None` — не перечислим (правило 5).
-fn domain_size(ty: &TypeNode, model: &ModelNode) -> Option<u128> {
-    match ty {
-        TypeNode::Bit | TypeNode::Bool => Some(2),
-        TypeNode::Integer { bits, .. } => Some(1u128 << *bits),
-        // ⚠️ Объявление ищется ПОДЪЁМОМ к родителям (`search_enum`), а не в
-        // карте самой модели (фича 0497): перечисление, объявленное на уровне
-        // файла, для вложенной модели «отсутствовало», и предикат над
-        // перечислимой переменной получал «домен не перечислим» — причину,
-        // которую тот же вывод тут же опровергал строкой «в охвате … `enum`».
-        TypeNode::Enum(name) => model
-            .search_enum(name)
-            .map(|e| distinct_variant_values(&e).len() as u128),
-        _ => None,
-    }
-}
-
-/// Материализует значения домена (только после прохождения потолка).
-fn domain_values(ty: &TypeNode, model: &ModelNode) -> Vec<i128> {
-    match ty {
-        TypeNode::Bit | TypeNode::Bool => vec![0, 1],
-        TypeNode::Integer { bits, signed } => {
-            let n = 1i128 << *bits;
-            if *signed {
-                let half = n / 2;
-                (-half..half).collect()
-            } else {
-                (0..n).collect()
-            }
-        }
-        // Подъём к родителям — тот же, что у размера домена (фича 0497).
-        TypeNode::Enum(name) => model
-            .search_enum(name)
-            .map(|e| distinct_variant_values(&e))
-            .unwrap_or_default(),
-        _ => Vec::new(),
-    }
-}
-
-/// Различные значения вариантов перечисления, по возрастанию (детерминизм 0048).
-fn distinct_variant_values(e: &crate::semantic::EnumDefinitionNode) -> Vec<i128> {
-    let set: BTreeSet<i128> = e.variants.iter().map(|(_, v)| *v).collect();
-    set.into_iter().collect()
 }
 
 /// Оценка `j` как отображение имя → значение (одометр по [`TrackedVar`]).
