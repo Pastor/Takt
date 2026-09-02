@@ -62,6 +62,107 @@ pub(super) fn parse_arguments(
     Ok(parsed)
 }
 
+/// Понижает q-литералы аргументов в представление — режим `assign` (0489).
+///
+/// ⚠️ Проход зовётся **только** когда специализации не было. При
+/// `--parameters=specialize` значение аргумента уезжает в инициализатор копии
+/// (`specialize::set_initializer`), и понижает его общий проход объявлений
+/// (0061): понизь мы его здесь тоже, литерал прошёл бы масштабирование
+/// **дважды** — замер 0489 дал `SE-058` на всех восьми целях.
+///
+/// ⚠️ Аргумент — такая же ПОЗИЦИЯ ПРИЁМНИКА, как присваивание и вызов (0381,
+/// 0382): тип параметра известен, и за границей семантики дробного литерала
+/// быть не должно — иначе цели расходятся (`sv` отвечал `SV-002`, прочие
+/// печатали 2 вместо 640).
+pub(crate) fn lower_argument_literals(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let mut visited = std::collections::HashSet::new();
+    lower_in_model(model, &mut visited)
+}
+
+fn lower_in_model(
+    model: &Rc<RefCell<ModelNode>>,
+    visited: &mut std::collections::HashSet<*const RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    if !visited.insert(Rc::as_ptr(model)) {
+        return Ok(());
+    }
+    let nested: Vec<Rc<RefCell<ModelNode>>> =
+        model.borrow().models.values().map(Rc::clone).collect();
+    let states: Vec<String> = model.borrow().states.keys().cloned().collect();
+    for state in states {
+        let extend = {
+            let m = model.borrow();
+            match m.states.get(&state) {
+                Some(crate::semantic::StateNode::Implement { implements, .. }) => {
+                    Some(implements.clone())
+                }
+                _ => None,
+            }
+        };
+        let Some(extend) = extend else { continue };
+        let mut lowered = extend.clone();
+        if lower_in_extend(&mut lowered)? {
+            let mut m = model.borrow_mut();
+            if let Some(crate::semantic::StateNode::Implement { implements, .. }) =
+                m.states.get_mut(&state)
+            {
+                *implements = lowered;
+            }
+        }
+    }
+    for child in &nested {
+        lower_in_model(child, visited)?;
+    }
+    Ok(())
+}
+
+/// Понижает литералы в аргументах одного выражения реализации.
+///
+/// Возвращает `true`, если что-то изменилось.
+fn lower_in_extend(extend: &mut crate::semantic::extend::Extend) -> Result<bool, Diagnostic> {
+    use crate::semantic::extend::Extend;
+    match extend {
+        Extend::Model(target, _, args) => {
+            let mut changed = false;
+            for arg in args.iter_mut() {
+                let Some((m, n)) = parameter_fixed_format(target, &arg.name) else {
+                    continue;
+                };
+                if let Some(repr) = crate::semantic::type_node::type_fixed::lower_fixed_literal(
+                    &arg.value, m, n, arg.loc,
+                )? {
+                    arg.value = crate::semantic::ExpressionNode::Number(repr);
+                    changed = true;
+                }
+            }
+            Ok(changed)
+        }
+        Extend::Parallel(items) | Extend::Concatenation(items) => {
+            let mut changed = false;
+            for item in items.iter_mut() {
+                changed |= lower_in_extend(item)?;
+            }
+            Ok(changed)
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Формат `q(m, n)` параметра `name` целевой модели; `None` — тип иной.
+fn parameter_fixed_format(target: &Rc<RefCell<ModelNode>>, name: &str) -> Option<(u8, u8)> {
+    let model = target.borrow();
+    // Тип параметра живёт при его ОБЪЯВЛЕНИИ (`variables`), а список
+    // `parameters` несёт лишь имя и признак изменяемости.
+    match model.variables.get(name) {
+        Some(crate::semantic::VariableNode::Simple { ty, .. })
+        | Some(crate::semantic::VariableNode::Const { ty, .. }) => match ty {
+            crate::semantic::type_node::TypeNode::Fixed { m, n, .. } => Some((*m, *n)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Разбирает один аргумент в тройку «позиция имени, имя, значение».
 ///
 /// Единственная допустимая форма — `ИМЯ := ВЫРАЖЕНИЕ`. Позиционных аргументов
