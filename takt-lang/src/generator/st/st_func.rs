@@ -40,14 +40,15 @@ use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_expression;
 use crate::generator::st::st_expr::unsupported;
 use crate::generator::st::st_reserved::check_st_name;
+
+// Списки параметров POU живут рядом (фича 0505): контракт держит реэкспорт —
+// пути потребителей (`st_func::state_params`) не меняются (правило 11).
+pub(crate) use crate::generator::st::st_params::{const_params, params_of, state_params};
 use crate::generator::st::st_stmt::{Hoisted, StmtOutput, print_statement};
 use crate::generator::st::st_type::get_st_type;
 use crate::semantic::minimap::Name;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::unused::{UsageSet, usage_from_stmt};
-use crate::semantic::{
-    ExpressionNode, FunctionDefinitionNode, ModelNode, StatementNode, VariableNode,
-};
+use crate::semantic::{ExpressionNode, FunctionDefinitionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -106,141 +107,6 @@ fn pou_name(def: &FunctionDefinitionNode) -> Option<String> {
         FunctionDefinitionNode::Builtin(name, _, _) => Some(name.to_string()),
         FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => None,
     }
-}
-
-/// Параметры функции.
-fn params_of(def: &FunctionDefinitionNode) -> Vec<(String, TypeNode)> {
-    match def {
-        FunctionDefinitionNode::Local { params, .. }
-        | FunctionDefinitionNode::External { params, .. } => params.clone(),
-        FunctionDefinitionNode::Builtin(_, params, _) => params
-            .iter()
-            .map(|(n, t)| (n.to_string(), t.clone()))
-            .collect(),
-        FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => Vec::new(),
-    }
-}
-
-/// Переменные модели, которые функция читает или пишет в своём теле.
-///
-/// **Зачем.** В цели `c` функция получает первым параметром указатель на модель
-/// (`static uint8_t Stacker_travel_time(const Stacker *model, …)`) и читает через
-/// него порты и переменные (`stacker.c:29-56`). В IEC 61131-3 `FUNCTION` —
-/// **чистая**: она видит только свои `VAR_INPUT`/`VAR_IN_OUT` и к переменным
-/// вызывающего `FUNCTION_BLOCK` доступа не имеет. Гейт `iec2c` поймал это на
-/// `travel_time`, который читает порт корня `pos_stack`:
-/// «Ambiguous enumerate value or Variable not declared in this scope».
-///
-/// Поэтому такие переменные передаются функции по ссылке — `VAR_IN_OUT`, форма
-/// проверена пробой (✅). Список — **единый источник истины** для объявления и
-/// для аргументов вызова: разойдись они, ST либо не соберётся, либо свяжет не те
-/// переменные.
-///
-/// Константы сюда **не** попадают: они неизменны и объявляются `VAR CONSTANT`
-/// внутри самой функции (форма тоже проверена пробой).
-pub(crate) fn state_params(
-    def: &FunctionDefinitionNode,
-    model: &ModelNode,
-) -> Vec<(String, TypeNode)> {
-    let FunctionDefinitionNode::Local { body, params, .. } = def else {
-        return Vec::new();
-    };
-    let mut set = UsageSet::default();
-    usage_from_stmt(body, &mut set);
-
-    // Локальные объявления тела — не состояние модели.
-    let mut locals: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
-    collect_locals(body, &mut locals);
-
-    let mut out = Vec::new();
-    let mut names: Vec<&String> = model.variables.keys().collect();
-    names.sort();
-    for name in names {
-        if locals.contains(name) {
-            continue;
-        }
-        if !set.variables.contains(name) && !set.ports.contains(name) {
-            continue;
-        }
-        let (VariableNode::Simple { ty, .. } | VariableNode::Port { ty, .. }) =
-            &model.variables[name]
-        else {
-            continue;
-        };
-        out.push((name.clone(), ty.clone()));
-    }
-    out
-}
-
-/// Собирает имена переменных, объявленных внутри тела.
-fn collect_locals(stmt: &StatementNode, out: &mut Vec<String>) {
-    match stmt {
-        StatementNode::Variable(name, _, _, _) => out.push(name.clone()),
-        // Вставка (0484): цель `st` печатает тело, только если оно адресовано
-        // ей; объявления чужой вставки в вывод не попадают.
-        StatementNode::Assembly { target, body } => {
-            if crate::semantic::target_block::emits_for(target.as_deref(), "st") {
-                collect_locals(body, out);
-            }
-        }
-        StatementNode::Block(items) => items.iter().for_each(|s| collect_locals(s, out)),
-        StatementNode::If { then_, else_, .. } => {
-            collect_locals(then_, out);
-            if let Some(e) = else_ {
-                collect_locals(e, out);
-            }
-        }
-        StatementNode::Loop { body, .. } => collect_locals(body, out),
-        StatementNode::For { init, body, .. } => {
-            if let Some(i) = init {
-                collect_locals(i, out);
-            }
-            collect_locals(body, out);
-        }
-        StatementNode::Match { arms, .. } => arms.iter().for_each(|a| collect_locals(&a.body, out)),
-        StatementNode::None
-        | StatementNode::Unresolved(_)
-        | StatementNode::Expression(_, _)
-        | StatementNode::Return(_)
-        | StatementNode::Continue
-        | StatementNode::Break
-        | StatementNode::Formula(_)
-        | StatementNode::InlineFormula(_) => {}
-    }
-}
-
-/// Константы модели, которые функция использует.
-///
-/// Объявляются `VAR CONSTANT` внутри самой функции: `FUNCTION` чистая, а
-/// константа неизменна — дублировать её дешевле, чем плести через параметры.
-fn const_params(def: &FunctionDefinitionNode, model: &ModelNode) -> Vec<String> {
-    let FunctionDefinitionNode::Local { body, .. } = def else {
-        return Vec::new();
-    };
-    let mut set = UsageSet::default();
-    usage_from_stmt(body, &mut set);
-    // Множество использованных констант ключуется парой (владелец, имя) —
-    // фича 0193, — поэтому отбор идёт **от объявлений модели**: для каждой её
-    // константы строим тот же ключ и спрашиваем множество. Обратный порядок
-    // (взять ключи множества и искать их среди имён) сравнивал бы ключ с именем.
-    // ⚠️ Заодно правится и старая неточность: по голому имени константа
-    // модели-тёзки, использованная в теле, засчитывалась этой модели.
-    let mut names: Vec<String> = model
-        .variables
-        .iter()
-        .filter_map(|(name, var)| match var {
-            VariableNode::Const { upper, .. }
-                if set
-                    .constants
-                    .contains(&crate::semantic::unused::const_key(upper.as_ref(), name)) =>
-            {
-                Some(name.clone())
-            }
-            _ => None,
-        })
-        .collect();
-    names.sort();
-    names
 }
 
 /// Печатает вызов функции как выражение ST.
