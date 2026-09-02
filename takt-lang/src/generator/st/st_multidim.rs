@@ -15,8 +15,9 @@ use crate::diagnostics::Diagnostic;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode, ModelNode};
 
+use super::st_cond::print_condition;
 use super::st_decl::literal_init;
-use super::st_expr::{print_condition, print_expression};
+use super::st_expr::print_expression;
 
 /// Собирает цепочку индексаций в корень и список индексов (фича 0363).
 ///

@@ -81,14 +81,27 @@ pub(super) fn value_in_target(
     target: &TypeNode,
     scope: &Scope,
 ) -> Result<Option<String>, Diagnostic> {
-    if !matches!(value, ExpressionNode::Variable(_)) {
+    // Явное приведение автора приёмника НЕ отменяет (фича 0495): `probe :=
+    // wide as u32;` при `out probe: u8` давало `32'(wide)` в 8-битном
+    // приёмнике, и verilator отвечал `WIDTHTRUNC` — а гейт цели считает
+    // предупреждение ошибкой. Эталон такую запись исполняет: приведение автора
+    // даёт промежуточное значение, присваивание усекает его по приёмнику.
+    if !matches!(
+        value,
+        ExpressionNode::Variable(_) | ExpressionNode::Cast(_, _)
+    ) {
         return Ok(None);
     }
     let TypeNode::Integer { bits, signed } = target else {
         return Ok(None);
     };
-    let Some(from) = crate::generator::mixed_sign::operand_type_expr(value) else {
-        return Ok(None);
+    // Тип значения: у приведения — названный автором, у имени — объявленный.
+    let from = match value {
+        ExpressionNode::Cast(_, cast_ty) => cast_ty.clone(),
+        _ => match crate::generator::mixed_sign::operand_type_expr(value) {
+            Some(ty) => ty,
+            None => return Ok(None),
+        },
     };
     if !matches!(from, TypeNode::Integer { .. }) || from == *target {
         return Ok(None);

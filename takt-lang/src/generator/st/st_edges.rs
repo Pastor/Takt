@@ -19,7 +19,7 @@ use crate::semantic::minimap::Name;
 use crate::semantic::{ConditionNode, ModelNode, ReferenceNode, StateNode};
 
 use crate::generator::st::st_compose::Instance;
-use crate::generator::st::st_expr::print_condition;
+use crate::generator::st::st_cond::print_condition;
 use crate::generator::st::st_model::{BodyOutput, StateTable, emit_transition, unknown_state};
 
 /// Печатает цепочку `IF … ELSIF …` по рёбрам состояния.
