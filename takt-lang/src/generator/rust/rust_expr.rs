@@ -21,6 +21,7 @@
 // Приведение к типу приёмника живёт своим модулем (0335); имя остаётся
 // доступным отсюда — потребителей у него семь.
 pub(crate) use crate::generator::rust::rust_coerce::{coerce_to, enum_variant_literal};
+pub(crate) use crate::generator::rust::rust_text::unwrap_outer;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::rust::rust_fixed::{self, FixedOp};
@@ -80,6 +81,8 @@ pub(crate) struct Scope<'a> {
     pub(crate) shared_via_self: bool,
     /// Локальные имена (параметры `fn`, `var` в теле) → печатаются голым именем.
     pub(crate) locals: Vec<String>,
+    /// Пришедшие ПО ССЫЛКЕ (0389): возврат по значению даёт `E0308` (0494).
+    pub(crate) by_ref: Vec<String>,
     /// Имена, которым в теле присваивают — для выбора `let` против `let mut`.
     ///
     /// В Takt изменяемость не объявляется (`var` изменяем всегда), в Rust лишний
@@ -491,34 +494,6 @@ fn bool_comparison(left: &str, op: &str, right: &str) -> Option<String> {
     } else {
         other.to_string()
     })
-}
-
-/// Снимает внешние скобки, если ими обёрнуто выражение целиком.
-///
-/// Нужен в позиции условия: `if (x != 0) {` даёт `unnecessary parentheses
-/// around 'if' condition` — ошибку под `-D warnings` (проба 2026-07-16).
-/// Внутренние скобки при этом обязаны остаться: именно они и держат приоритет.
-pub(crate) fn unwrap_outer(text: &str) -> &str {
-    let bytes = text.as_bytes();
-    if bytes.first() != Some(&b'(') || bytes.last() != Some(&b')') {
-        return text;
-    }
-    // Первая скобка обязана закрываться ПОСЛЕДНЕЙ, иначе `(a) | (b)` потерял бы
-    // куски.
-    let mut depth = 0usize;
-    for (i, ch) in text.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 && i + ch.len_utf8() != text.len() {
-                    return text;
-                }
-            }
-            _ => {}
-        }
-    }
-    &text[1..text.len() - 1]
 }
 
 /// Транслирует выражение Takt в выражение Rust.

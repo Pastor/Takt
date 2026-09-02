@@ -69,6 +69,7 @@ mod rust_shift;
 mod rust_stmt;
 mod rust_struct;
 mod rust_table;
+mod rust_text;
 mod rust_tick;
 mod rust_time;
 mod rust_type;
