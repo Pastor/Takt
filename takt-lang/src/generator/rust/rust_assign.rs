@@ -18,6 +18,26 @@ use crate::generator::rust::rust_fixed;
 use crate::parser::ast::Member;
 use crate::semantic::ExpressionNode;
 use crate::semantic::VariableNode;
+use crate::semantic::type_node::TypeNode;
+
+/// Тип приёмника, знающий поля структуры (фича 0492).
+///
+/// ⚠️ Общий `expression_type` отвечает на поле `None` осознанно: объявление
+/// структуры лежит в модели, а туда он не смотрит. Здесь модель есть — она в
+/// [`Scope`], — поэтому вопрос решается на месте, а не переписыванием носителя.
+fn target_type_with_fields(target: &ExpressionNode, scope: &Scope) -> Option<TypeNode> {
+    if let ExpressionNode::BitAccess(base, Member::Identifier(field)) = target
+        && let Some(TypeNode::Struct(name)) = target_type_with_fields(base, scope)
+        && let Some(def) = scope.model.search_struct(&name)
+    {
+        return def
+            .fields
+            .iter()
+            .find(|(fname, _)| fname.as_str() == field.name)
+            .map(|(_, ty)| ty.clone());
+    }
+    expression_type(target)
+}
 
 /// Печатает присваивание; запись в порт превращает в вызов HAL.
 pub(crate) fn assign(
@@ -61,7 +81,12 @@ pub(crate) fn assign(
     if let Some(compound) = compound_assign(&target_text, value, scope)? {
         return Ok(compound);
     }
-    let ty = expression_type(target);
+    // Тип приёмника — с учётом ПОЛЕЙ структуры (фича 0492): `conf.mode := Run;`
+    // приходит как `Number(1)`, и без типа поля вариант печатался числом —
+    // `rustc` отвечал `E0308: mismatched types` при НУЛЕВОМ коде возврата
+    // `taktc`. Тот же класс у цели `sv` (`ENUMVALUE`) и у элемента массива
+    // (0368): «тип приёмника известен — значение печатается по нему».
+    let ty = target_type_with_fields(target, scope);
     let printed = match &ty {
         Some(ty) => coerce_to(value, ty, scope)?,
         None => print_expression(value, scope)?,

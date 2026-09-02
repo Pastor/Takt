@@ -263,8 +263,14 @@ fn generate_program(
     // отвечал «Reference to 'pair_t' before declaration». Форма проверена
     // **обоими** инструментами: `typedef` на уровне файла принимают и
     // verilator, и yosys.
-    sv_type::emit_structs(&mut p, &blocks)?;
+    // ⚠️ Перечисления печатаются ПЕРЕД структурами (фича 0492): поле
+    // перечислимого типа делает структуру зависимой от `mode_e`, а обратной
+    // зависимости не бывает — варианты перечисления суть литералы. Прежде
+    // порядок был обратным, и `verilator` отвечал «Reference to 'mode_e'
+    // before declaration» при НУЛЕВОМ коде возврата `taktc` (тот же класс, что
+    // 0341 и 0347: порядок разделов файла).
     sv_enums::emit_enums(&mut p, &blocks)?;
+    sv_type::emit_structs(&mut p, &blocks)?;
 
     sv_module::emit_module_header(&mut p, &module, &ports, mmio_map.as_ref(), time_ms_bits);
 
