@@ -92,38 +92,25 @@ pub(crate) fn port_class(
     // ширины `round_up(N)`: нормализуем к `Integer`, дальше как обычное порт-число
     // (`[bit;8]` ≡ `u8`). N > 64 (массив слов) остаётся `Array` → `RS-016` ниже:
     // HAL-числом слова быть не могут.
-    // Перечисление — СКАЛЯР (фича 0485): знак и ширину даёт общий факт
-    // `enum_facts` (0060), тот же, которым пользуются `c`, `st` и `sv`.
-    // Прежде цель отвечала `RS-016` «порт обязан быть битом или числом» —
-    // при том, что переменную того же перечисления она печатает целым, а
-    // остальные шесть потребителей порт переводят.
-    // Длительность — ЦЕЛОЕ в миллисекундах (0183): ширину задаёт общий носитель
-    // `duration::VALUE_BITS`, тот же, которым её печатают `c`, `st` и `sv`.
-    let from_duration;
-    let ty = match ty {
-        TypeNode::Duration => {
-            from_duration = TypeNode::Integer {
-                bits: crate::semantic::duration::VALUE_BITS,
-                signed: false,
+    // Скалярный тип, у которого есть машинное представление целым, приходит в
+    // HAL целым (фичи 0485, 0487, 0488): перечисление, длительность и `q(m, n)`
+    // — значения на границе, а не составные типы. Ширину и знак даёт ОДИН
+    // носитель `semantic::scalar_port` — тот же, которым размещает порт цель
+    // `st-at`. Прежде каждая цель решала сама, и правило разъезжалось по одному
+    // типу за фичу: `rust` отвечал `RS-016` «порт обязан быть битом или
+    // числом» там, где переменную того же типа печатал целым.
+    //
+    // ⚠️ `bit`/`bool` носитель намеренно НЕ считает целым: у них своя категория
+    // порта (`write_bit`), и подмена сломала бы её.
+    let from_scalar;
+    let ty = match crate::semantic::scalar_port::scalar_repr(ty, model) {
+        Some(repr) if !matches!(ty, TypeNode::Integer { .. }) => {
+            from_scalar = TypeNode::Integer {
+                bits: repr.bits,
+                signed: repr.signed,
             };
-            &from_duration
+            &from_scalar
         }
-        _ => ty,
-    };
-    let from_enum;
-    let ty = match ty {
-        TypeNode::Enum(name) => match model.search_enum(name).and_then(|e| e.facts()) {
-            Some(facts) => {
-                from_enum = TypeNode::Integer {
-                    bits: u8::try_from(facts.machine_bits()).unwrap_or(64),
-                    signed: facts.signed,
-                };
-                &from_enum
-            }
-            // Перечисление без вариантов языку неизвестно (`SE-105`), а
-            // необъявленное имя судит семантика: сюда такой тип не доходит.
-            None => ty,
-        },
         _ => ty,
     };
     let normalized;

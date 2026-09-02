@@ -47,6 +47,7 @@ pub use named_code_block::NamedCodeBlockDefinitionNode;
 pub(crate) mod naming;
 pub(crate) mod parameter_const;
 mod reference;
+pub(crate) mod scalar_port;
 pub use reference::ReferenceNode;
 mod match_node;
 pub(crate) mod slice;
@@ -720,10 +721,8 @@ pub enum StatementNode {
     Break,
     /// Встроенная формула `: условие1[, условие2, …];`
     InlineFormula(Vec<Formula>),
-    /// Блок формул внешнего анализатора: `formula [диалект] { … }` (0484).
-    ///
-    /// Цели и эталон его пропускают. ⚠️ Не [`StatementNode::Unresolved`]: тот
-    /// означает **дефект** понижения и целями отвергается (0236).
+    /// Блок формул внешнего анализатора `formula [диалект] { … }` (0484): цели
+    /// и эталон его пропускают. ⚠️ Не `Unresolved` — тот означает дефект (0236).
     Formula(Box<crate::parser::ast::FormulaBlock>),
     /// Вставка операторов для одной цели: `assembly [«цель»] { … }` (0484).
     Assembly {
