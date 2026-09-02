@@ -39,6 +39,7 @@
 //! `rust_func` (функции) · `rust_model` (автомат) · `rust_map` (снимок карты).
 
 mod rust_assign;
+mod rust_assigned;
 mod rust_bit;
 mod rust_blocks;
 mod rust_byref;

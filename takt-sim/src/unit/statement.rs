@@ -190,6 +190,14 @@ fn default_value(ty: &TypeNode) -> Value {
 fn collect_locals(stmt: &StatementNode, out: &mut Vec<(String, Value)>) {
     match stmt {
         StatementNode::Variable(name, ty, _, _) => out.push((name.clone(), default_value(ty))),
+        // Вставка (0484): эталон исполняет только БЕЗЫМЯННУЮ — он не является
+        // ни одной из целей. Объявления именованной вставки в область не идут:
+        // её тело эталон не исполняет.
+        StatementNode::Assembly { target, body } => {
+            if target.is_none() {
+                collect_locals(body, out);
+            }
+        }
         StatementNode::Block(stmts) => stmts.iter().for_each(|s| collect_locals(s, out)),
         StatementNode::If { then_, else_, .. } => {
             collect_locals(then_, out);
@@ -213,6 +221,7 @@ fn collect_locals(stmt: &StatementNode, out: &mut Vec<(String, Value)>) {
         | StatementNode::Return(_)
         | StatementNode::Break
         | StatementNode::Continue
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_) => {}
     }
 }
@@ -254,6 +263,20 @@ pub(crate) fn exec_statement(
 ) -> Result<Flow, Diagnostic> {
     match stmt {
         StatementNode::None | StatementNode::Unresolved(_) => Ok(Flow::Normal),
+        // Обязательство внешнему анализатору (0484): эталон его не проверяет —
+        // поведение модели блок не меняет, как и у восьми целей.
+        StatementNode::Formula(_) => Ok(Flow::Normal),
+        // Вставка: эталон — не цель, поэтому исполняет только БЕЗЫМЯННУЮ.
+        // Исполни он тело, помеченное `"c"`, сверка `c` ↔ эталон сошлась бы, а
+        // `rust` ↔ эталон разошлась бы: вердикт сверки зависел бы от того,
+        // какую цель ей поручили.
+        StatementNode::Assembly { target, body } => {
+            if target.is_none() {
+                exec_statement(body, ctx)
+            } else {
+                Ok(Flow::Normal)
+            }
+        }
         StatementNode::Block(stmts) => {
             for stmt in stmts {
                 match exec_statement(stmt, ctx)? {

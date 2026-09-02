@@ -639,11 +639,15 @@ fn adopt_stmt(ctx: &mut Adoption, stmt: &mut StatementNode) {
                 adopt_stmt(ctx, &mut arm.body);
             }
         }
+        // Вставка для цели — операторы Takt (0484): обход спускается в тело.
+        // Блок формул адресован внешнему анализатору, операторов Takt в нём нет.
+        StatementNode::Assembly { body, .. } => adopt_stmt(ctx, body),
         StatementNode::None
         | StatementNode::Unresolved(_)
         | StatementNode::Return(None)
         | StatementNode::Continue
         | StatementNode::Break
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_) => {}
     }
 }

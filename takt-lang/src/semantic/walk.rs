@@ -152,11 +152,16 @@ pub(crate) fn walk_stmt_exprs_mut(
                 walk_stmt_exprs_mut(&mut arm.body, f);
             }
         }
-        // Операторы без выражений.
+        // Вставка для цели — обычные операторы Takt (0484): обход обязан
+        // спускаться в неё, иначе выражения тела не увидит ни один проход.
+        StatementNode::Assembly { body, .. } => walk_stmt_exprs_mut(body, f),
+        // Операторы без выражений. Блок формул адресован внешнему анализатору:
+        // выражений Takt в нём нет вовсе (0484).
         StatementNode::None
         | StatementNode::Unresolved(_)
         | StatementNode::Continue
         | StatementNode::Break
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_) => {}
     }
 }

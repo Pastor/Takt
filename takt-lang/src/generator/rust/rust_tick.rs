@@ -81,7 +81,7 @@ pub(crate) fn emit_tick(
         if let Ok(raw) = map.raw_state_at(state_name.clone()) {
             for block in raw.borrow().named_blocks() {
                 if let Some(stmt) = block.statement() {
-                    crate::generator::rust::rust_stmt::collect_assigned(stmt, &mut assigned);
+                    crate::generator::rust::rust_assigned::collect_assigned(stmt, &mut assigned);
                 }
             }
         }
@@ -90,7 +90,7 @@ pub(crate) fn emit_tick(
     // мутабельности локальных `let` (печать потоковая — будущие записи не видны).
     for block in model.get_named_blocks("always") {
         if let Some(stmt) = block.statement() {
-            crate::generator::rust::rust_stmt::collect_assigned(stmt, &mut assigned);
+            crate::generator::rust::rust_assigned::collect_assigned(stmt, &mut assigned);
         }
     }
     let mut scope = Scope {

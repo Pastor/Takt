@@ -112,6 +112,18 @@ pub(in crate::generator::c) fn generate_code_block(
     has_model: bool,
 ) -> Result<(), Diagnostic> {
     match body {
+        // Блок формул адресован ВНЕШНЕМУ анализатору (0484): цель его не
+        // переводит и не проверяет — печатать нечего. ⚠️ Это не пропуск
+        // неразрешённого узла (ниже): у законного блока свой узел, и молчание
+        // здесь — его семантика, а не потеря оператора.
+        StatementNode::Formula(_) => {}
+        // Вставка печатается той целью, чьё имя названо (0484); без имени —
+        // всеми. Язык вывода у `c` и `c-hal` один, поэтому метка у них общая.
+        StatementNode::Assembly { target, body } => {
+            if crate::semantic::target_block::emits_for(target.as_deref(), "c") {
+                generate_code_block(printer, map, owner, params, body, has_model)?;
+            }
+        }
         StatementNode::None => {}
         // ⚠️ Неразрешённый оператор — отказ, а не пропуск (фича 0236). Прежде
         // ветвь была пуста, и оператор исчезал из вывода при рапорте об успехе:

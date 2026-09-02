@@ -41,8 +41,10 @@
 //! этот комментарий и удерживал дефект — его читали вместо кода.
 //!
 //! Законные источники [`StatementNode::Unresolved`] остаются: ветка `_ =>` в
-//! [`resolve_ast_statement`] (`Assembly`, `Formula`, `Args`, `Error`,
-//! `StraySemicolon`) отдаёт его через `Ok`, а не `Err`.
+//! [`resolve_ast_statement`] (`Args`, `Error`, `StraySemicolon`) отдаёт его
+//! через `Ok`, а не `Err`. ⚠️ `Assembly` и `Formula` из этого списка **ушли**
+//! (фича 0484): у них появились свои узлы, потому что законный вход,
+//! приходящий целям неразрешённым, они отвергают как дефект (0236).
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
@@ -355,9 +357,35 @@ fn resolve_ast_statement(
             })
         }
 
+        // ── Блок формул внешнего анализатора (0484) ──────────────────────────
+        //
+        // Обязательство адресовано ВНЕШНЕМУ инструменту: компилятор его не
+        // переводит и не проверяет, цели и эталон пропускают. Собственный узел
+        // здесь обязателен: оставь мы `Unresolved`, печатники целей отвергли бы
+        // законный вход воронкой недостижимости (0236), а разреши мы им
+        // пропускать `Unresolved` — вернулся бы класс 0155 (оператор исчезает
+        // из вывода при рапорте об успехе).
+        ast::Statement::Formula { block, .. } => Ok(StatementNode::Formula(block.clone())),
+
+        // ── Вставка операторов для одной цели (0484) ─────────────────────────
+        //
+        // Тело — обычные операторы Takt, и понижение у него обычное: имена в
+        // нём разрешаются, ошибки диагностируются. Метка — ЯЗЫК ВЫВОДА, её
+        // проверяет `target_block::check_target` (`SE-129`).
+        ast::Statement::Assembly { dialect, block, .. } => {
+            let target = dialect
+                .as_ref()
+                .map(crate::semantic::target_block::check_target)
+                .transpose()?;
+            let body = resolve_ast_statement(block, params.clone(), model.clone())?;
+            Ok(StatementNode::Assembly {
+                target,
+                body: Box::new(body),
+            })
+        }
+
         // ── Прочие варианты: оставляем как Unresolved ─────────────────────────
         //
-        // Assembly и Formula — встроенные низкоуровневые блоки, пропускаются.
         // Args, Error, StraySemicolon — служебные варианты, не требуют разрешения.
         _ => Ok(StatementNode::Unresolved(stmt.clone())),
     }

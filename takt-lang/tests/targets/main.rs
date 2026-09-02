@@ -99,6 +99,7 @@ mod sv_mmio_write_signals_tests;
 mod sv_refusal_text_tests;
 mod sv_terminal_branch_tests;
 mod sv_tick_read_tests;
+mod target_blocks_tests;
 mod target_matrix_tests;
 mod unused_local_tests;
 mod unused_param_targets_tests;

@@ -81,6 +81,18 @@ pub(crate) fn print_statement(
         // Пустой оператор ничего не печатает: в ST лишняя `;` — синтаксическая
         // ошибка (проверено пробой: голая `;` в теле FB не разбирается).
         StatementNode::None => Ok(()),
+        // Блок формул адресован внешнему анализатору (0484): печатать нечего.
+        // ⚠️ Это не тихий пропуск узла (R4): молчание — семантика блока, а
+        // неразрешённый узел по-прежнему даёт `ST-011`.
+        StatementNode::Formula(_) => Ok(()),
+        // Вставка печатается той целью, чьё имя названо; без имени — всеми.
+        // Язык вывода у `st` и `st-at` один, поэтому метка у них общая.
+        StatementNode::Assembly { target, body } => {
+            if crate::semantic::target_block::emits_for(target.as_deref(), "st") {
+                print_statement(body, model, p, out, fn_name)?;
+            }
+            Ok(())
+        }
         StatementNode::Block(items) => {
             for item in items {
                 print_statement(item, model, p, out, fn_name)?;
@@ -489,9 +501,16 @@ fn contains_continue(stmt: &StatementNode) -> bool {
             contains_continue(then_) || else_.as_ref().is_some_and(|e| contains_continue(e))
         }
         StatementNode::Match { arms, .. } => arms.iter().any(|a| contains_continue(&a.body)),
+        // Вставка (0484): `continue` внутри неё считается, если тело печатает
+        // эта цель.
+        StatementNode::Assembly { target, body } => {
+            crate::semantic::target_block::emits_for(target.as_deref(), "st")
+                && contains_continue(body)
+        }
         // Вложенные циклы перехватывают свой `continue` — дальше не смотрим.
         StatementNode::Loop { .. } | StatementNode::For { .. } => false,
-        StatementNode::None
+        StatementNode::Formula(_)
+        | StatementNode::None
         | StatementNode::Unresolved(_)
         | StatementNode::Expression(_, _)
         | StatementNode::Variable(_, _, _, _)

@@ -112,6 +112,7 @@ mod conformance_sv_mmio_tests;
 mod conformance_sv_struct_local_tests;
 mod conformance_sv_tests;
 mod conformance_sv_time_tests;
+mod conformance_target_blocks_tests;
 mod conformance_var_shift_tests;
 mod conformance_wide_bits_tests;
 mod conformance_wider_integer_tests;

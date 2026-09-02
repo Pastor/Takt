@@ -375,6 +375,12 @@ pub(crate) fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
                 usage_from_stmt(&arm.body, set);
             }
         }
+        // Вставка для цели (0484) — употребление наравне с прочими: автор
+        // написал использование, пусть и адресованное одной цели. ⚠️ Обход
+        // идёт ДО отбора вставок (`target_block::prune`), поэтому здесь видны
+        // все; у генераторов дерево уже отфильтровано, и там неиспользуемой
+        // станет ровно та переменная, которую цель не печатает.
+        StatementNode::Assembly { body, .. } => usage_from_stmt(body, set),
         _ => {}
     }
 }
@@ -825,6 +831,12 @@ fn collect_from_stmt(stmt: &StatementNode, used: &mut HashSet<String>) {
                 collect_from_stmt(&arm.body, used);
             }
         }
+        // Вставка для цели (0484): употребление внутри неё — употребление.
+        // ⚠️ Проверка идёт по дереву ДО отбора вставок, поэтому видит все:
+        // переменная, написанная в `assembly "c"`, не «нигде не используется»,
+        // даже когда собирают целью `rust`. Что напечатает конкретная цель,
+        // решает `target_block::prune` уже в её конвейере.
+        StatementNode::Assembly { body, .. } => collect_from_stmt(body, used),
         _ => {}
     }
 }
