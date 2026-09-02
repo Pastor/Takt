@@ -82,6 +82,7 @@ mod conformance_param_modes_tests;
 mod conformance_port_aggregate_init_tests;
 mod conformance_port_array_tests;
 mod conformance_port_init_tests;
+mod conformance_port_read_in_write_tests;
 mod conformance_port_split_tests;
 mod conformance_postfix_index_tests;
 mod conformance_power_tests;

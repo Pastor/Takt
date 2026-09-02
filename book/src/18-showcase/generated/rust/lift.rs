@@ -125,7 +125,7 @@ impl<H: Hal> Lift<H> {
                 }
             }
             LiftState::GoingDown => {
-                self.hal.write_u8(OutU8Port::Display, self.hal.read_u8(InU8Port::AtFloor));
+                { let takt_value = self.hal.read_u8(InU8Port::AtFloor); self.hal.write_u8(OutU8Port::Display, takt_value) };
                 if self.hal.read_u8(InU8Port::AtFloor) <= self.hal.read_u8(InU8Port::Call) {
                     self.moving = false;
                     self.hal.write_bit(OutBitPort::MotorUp, false);
@@ -135,7 +135,7 @@ impl<H: Hal> Lift<H> {
                 }
             }
             LiftState::GoingUp => {
-                self.hal.write_u8(OutU8Port::Display, self.hal.read_u8(InU8Port::AtFloor));
+                { let takt_value = self.hal.read_u8(InU8Port::AtFloor); self.hal.write_u8(OutU8Port::Display, takt_value) };
                 if self.hal.read_u8(InU8Port::AtFloor) >= self.hal.read_u8(InU8Port::Call) {
                     self.moving = false;
                     self.hal.write_bit(OutBitPort::MotorUp, false);
@@ -160,7 +160,7 @@ impl<H: Hal> Lift<H> {
                 self.state = LiftState::Boarding;
             }
             LiftState::Waiting => {
-                self.hal.write_u8(OutU8Port::Display, self.hal.read_u8(InU8Port::AtFloor));
+                { let takt_value = self.hal.read_u8(InU8Port::AtFloor); self.hal.write_u8(OutU8Port::Display, takt_value) };
                 if self.hal.read_u8(InU8Port::Call) == self.hal.read_u8(InU8Port::AtFloor) {
                     self.doors = true;
                     self.hal.write_bit(OutBitPort::DoorsOpen, true);

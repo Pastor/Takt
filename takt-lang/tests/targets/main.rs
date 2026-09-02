@@ -83,6 +83,7 @@ mod rust_field_name_clash_tests;
 mod rust_index_cast_tests;
 mod rust_live_tests;
 mod rust_non_ascii_name_tests;
+mod rust_port_read_in_write_tests;
 mod rust_power_operands_tests;
 mod rust_printers_tests;
 mod rust_shift_width_tests;
