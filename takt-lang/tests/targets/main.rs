@@ -21,6 +21,7 @@ mod address_map_roundtrip_tests;
 mod address_map_tests;
 mod aggregate_assign_targets_tests;
 mod anon_port_tests;
+mod array_copy_tests;
 mod array_slice_tests;
 mod array_struct_init_tests;
 mod bit_value_targets_tests;

@@ -196,6 +196,34 @@ pub(crate) fn print_statement(
                 }
                 return Ok(());
             }
+            // Массив копируется ПОЭЛЕМЕНТНО и тогда, когда справа не литерал
+            // (фича 0490): `seen := src;` печаталось как есть, и `iec2c`
+            // отвечал «Incompatible data types for ':=' operation» — массив в
+            // IEC целиком не присваивается. Замер 2026-09-02: тот же вход
+            // отвергала цель `c` («array type is not assignable»), а `rust` и
+            // `sv` переводили — потребители расходились.
+            //
+            // ⚠️ Структура из объёма исключена: её IEC присваивает целиком
+            // (замер: `iec2c` принимает), и разворот был бы лишней работой.
+            if let ExpressionNode::Assign(lhs, rhs) = expr.as_ref()
+                && let ExpressionNode::Variable(var) = lhs.as_ref()
+                && let Some(ty @ TypeNode::Array(count, _)) = assign_target_type(&var.borrow())
+                && crate::semantic::bit_vector::is_bit_vector(&ty).is_none()
+                // ⚠️ Справа обязана стоять ПЕРЕМЕННАЯ (или константа): только её
+                // можно индексировать. Результат вызова индексации в IEC не
+                // допускает — его поднимает во временную свой проход (0431), и
+                // разворот здесь ломал бы уже починенное (замер: `iec2c`
+                // отвечал «';' missing» на `got[0] := pair(k)[0];`).
+                && matches!(rhs.as_ref(), ExpressionNode::Variable(_))
+            {
+                let name = variable_ident(&var.borrow());
+                let source = print_expression(rhs, model)?;
+                for index in 0..count {
+                    p.ident(&format!("{name}[{index}] := {source}[{index}];"))
+                        .nl();
+                }
+                return Ok(());
+            }
             // Присваивание печатается по ЦЕЛЕВОМУ типу (фича 0066): литерал
             // bool/enum восстанавливается в `FALSE`/`TRUE` / имя константы.
             // Покрывает и тела `enter`/`exit`/`always` — они идут сюда же через

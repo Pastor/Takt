@@ -39,6 +39,21 @@ pub(in crate::generator::c) fn emit(
             printer, map, owner, params, target, src, *from, *to, has_model,
         );
     }
+    // Массив копируется ПОЭЛЕМЕНТНО и тогда, когда справа не литерал (0490):
+    // `seen := src;` при массивах печаталось как `model->seen = model->src;` —
+    // в C массив не присваивается вовсе, и `cc` отвечает «array type … is not
+    // assignable» при НУЛЕВОМ коде возврата `taktc`. Замер 2026-09-02: тот же
+    // вход отвергают `st` и `st-at` (`iec2c`: «Incompatible data types»), а
+    // `rust` и `sv` переводят — то есть потребители расходились.
+    //
+    // ⚠️ Структура из объёма исключена намеренно: в C она присваивается, и
+    // замер это подтверждает (её принимают все восемь потребителей).
+    // ⚠️ Справа обязана стоять ПЕРЕМЕННАЯ: только её можно индексировать.
+    // Результат вызова поднимает во временную свой проход (0431/0432), и
+    // разворот здесь ломал бы уже починенное.
+    if matches!(value.as_ref(), ExpressionNode::Variable(_)) {
+        return emit_array_copy(printer, map, owner, params, target, value, has_model);
+    }
     let (ExpressionNode::Initializer(items) | ExpressionNode::Array(items)) = value.as_ref() else {
         return Ok(false);
     };
@@ -96,6 +111,55 @@ pub(in crate::generator::c) fn emit(
         }
         let suffix = crate::generator::aggregate::c_like_suffix(&leaf.path);
         printer.ident(&format!("{base}{suffix} = {rhs};")).nl();
+    }
+    Ok(true)
+}
+
+/// Копирует массив поэлементно, когда справа не литерал (фича 0490).
+///
+/// Возвращает `false`, если приёмник массивом не является: тогда печатает
+/// вызывающий обычным путём.
+///
+/// ⚠️ Бит-вектор `[bit;N≤64]` — упакованный СКАЛЯР (0078), он присваивается
+/// целиком; поэлементная печать сделала бы из него массив, которого в выводе
+/// нет.
+fn emit_array_copy(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    target: &ExpressionNode,
+    value: &ExpressionNode,
+    has_model: bool,
+) -> Result<bool, Diagnostic> {
+    let ExpressionNode::Variable(var) = target else {
+        return Ok(false);
+    };
+    let ty = match &*var.borrow() {
+        VariableNode::Simple { ty, .. } => ty.clone(),
+        _ => return Ok(false),
+    };
+    let TypeNode::Array(count, _) = &ty else {
+        return Ok(false);
+    };
+    if crate::semantic::bit_vector::is_bit_vector(&ty).is_some() {
+        return Ok(false);
+    }
+    let count = *count as usize;
+    let mut base = String::new();
+    {
+        let mut tmp = Printer::new(4, &mut base);
+        generate_expr(&mut tmp, map, owner, params.clone(), target, 0, has_model)?;
+    }
+    let mut rhs = String::new();
+    {
+        let mut tmp = Printer::new(4, &mut rhs);
+        generate_expr(&mut tmp, map, owner, params.clone(), value, 0, has_model)?;
+    }
+    for place in crate::generator::aggregate::places(None, Some(&ty), count) {
+        printer
+            .ident(&format!("{base}{} = {rhs}{};", place.suffix, place.suffix))
+            .nl();
     }
     Ok(true)
 }
