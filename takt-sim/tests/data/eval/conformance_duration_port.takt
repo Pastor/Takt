@@ -1,0 +1,30 @@
+// Порт типа duration (фича 0487).
+//
+// Длительность в целях — целое в МИЛЛИСЕКУНДАХ (0183), и порт такого типа
+// обязан переводиться так же, как переменная: значение на границе — число мс.
+model DurationPort {
+    var hold: duration := 2s;
+
+    var step: u8 := 0;
+
+    out sig: duration;
+
+    out probe: u8;
+
+    start Cycle {
+        always {
+            step := step + 1;
+
+            if step = 2 {
+                hold := 500ms;
+            }
+
+            sig := hold;
+            probe := step;
+        }
+
+        ref Cycle: step < 200;
+    }
+}
+
+start Main = DurationPort;

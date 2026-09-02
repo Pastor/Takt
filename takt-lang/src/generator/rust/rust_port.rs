@@ -97,6 +97,19 @@ pub(crate) fn port_class(
     // Прежде цель отвечала `RS-016` «порт обязан быть битом или числом» —
     // при том, что переменную того же перечисления она печатает целым, а
     // остальные шесть потребителей порт переводят.
+    // Длительность — ЦЕЛОЕ в миллисекундах (0183): ширину задаёт общий носитель
+    // `duration::VALUE_BITS`, тот же, которым её печатают `c`, `st` и `sv`.
+    let from_duration;
+    let ty = match ty {
+        TypeNode::Duration => {
+            from_duration = TypeNode::Integer {
+                bits: crate::semantic::duration::VALUE_BITS,
+                signed: false,
+            };
+            &from_duration
+        }
+        _ => ty,
+    };
     let from_enum;
     let ty = match ty {
         TypeNode::Enum(name) => match model.search_enum(name).and_then(|e| e.facts()) {
