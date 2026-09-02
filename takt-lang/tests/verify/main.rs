@@ -16,6 +16,7 @@
 //! ⚠️ Набор, строящий временный каталог по имени потока (инвариант фичи 0190),
 //! обязан вычищать из него `:` — после слияния имя потока несёт префикс модуля.
 
+mod bit_vector_domain_tests;
 mod enum_predicate_tests;
 mod ltl_tests;
 mod unsupported_reason_tests;
