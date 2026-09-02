@@ -110,6 +110,13 @@ pub(crate) fn construct_stages_within(
         // стадии 2 потребовал бы мутировать оба представления переменной
         // (засада 0096) и опоздал бы к `after PARAM`/адресу порта.
         crate::semantic::parameter_const::constify_parameters(&model);
+    } else {
+        // Режим `assign`: значение аргумента остаётся при инстанцировании, и
+        // q-литерал обязан быть понижен здесь — приёмник известен (0489).
+        // ⚠️ Под специализацией этого прохода быть НЕ должно: там значение
+        // уезжает в инициализатор копии и понижается общим проходом
+        // объявлений; двойное масштабирование даёт `SE-058`.
+        crate::semantic::extend_args::lower_argument_literals(&model).map_err(one)?;
     }
     let model = construct_model_stage2(model).map_err(one)?;
     let model = construct_model_stage3(model).map_err(one)?;

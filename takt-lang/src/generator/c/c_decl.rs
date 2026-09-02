@@ -26,6 +26,19 @@ fn const_expr_string(expr: &ExpressionNode, name: &str) -> Result<String, Diagno
         format!("\"{}\"", value.join(""))
     } else if let ExpressionNode::Rational(value, _) = expr {
         value.clone()
+    } else if let ExpressionNode::Duration(nanos) = expr {
+        // Длительность — целое в МИЛЛИСЕКУНДАХ (0183), как и её тип
+        // (`uint32_t`). ⚠️ Без этой ветви `const HOLD: duration := 2s;`
+        // отвергался воронкой недостижимости (`CC-023` «невычисленное значение
+        // константы») — при том, что шесть прочих потребителей константу
+        // переводят, а эталон исполняет (замер 0489). Пересчёт делает общий
+        // носитель, а не своя формула.
+        crate::semantic::duration::value_millis(
+            *nanos,
+            crate::diagnostics::Location::Codegen,
+            &format!("значение константы '{name}'"),
+        )?
+        .to_string()
     } else if let ExpressionNode::Initializer(value) = expr {
         let mut parts = Vec::new();
         for v in value.iter() {
