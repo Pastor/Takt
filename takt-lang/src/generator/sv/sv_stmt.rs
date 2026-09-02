@@ -19,7 +19,7 @@
 //! `always_ff` защёлкнет по фронту. Отображение имени делает
 //! [`Scope`](super::sv_expr::Scope) — здесь только выбор стороны.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
@@ -481,6 +481,45 @@ pub(crate) fn index_only_variables(body: &StatementNode, names: &[String], out: 
             out.push(name.clone());
         }
     }
+}
+
+/// Поля СТРУКТУРНОГО имени, которые тело читает, — если оно читает его
+/// только по полям (фича 0506).
+///
+/// `None` — имя упомянуто как ЦЕЛОЕ (передано дальше, возвращено, присвоено):
+/// тогда читаются все разряды, и поглощать нечего.
+///
+/// ⚠️ Признак по ДЕРЕВУ, как у `index_only_variables` (0466) и по той же
+/// причине: объявление поглотителя обязано встать до операторов, то есть до
+/// того, как тело напечатано.
+pub(crate) fn field_only_reads(body: &StatementNode, name: &str) -> Option<BTreeSet<String>> {
+    // Обход идёт по КОПИИ: изменяемый обход — единственный, который спускается
+    // внутрь выражения (носитель `semantic::walk`).
+    let mut copy = body.clone();
+    let mut total = 0usize;
+    let mut under = 0usize;
+    let mut fields: BTreeSet<String> = BTreeSet::new();
+    crate::semantic::walk::walk_stmt_exprs_mut(&mut copy, &mut |node| match node {
+        ExpressionNode::Variable(cell) => {
+            if cell.borrow().name() == name {
+                total += 1;
+            }
+        }
+        ExpressionNode::BitAccess(base, member) => {
+            let ExpressionNode::Variable(cell) = &**base else {
+                return;
+            };
+            if cell.borrow().name() != name {
+                return;
+            }
+            if let crate::parser::ast::Member::Identifier(field) = member {
+                under += 1;
+                fields.insert(field.name.clone());
+            }
+        }
+        _ => {}
+    });
+    (total > 0 && total == under).then_some(fields)
 }
 
 pub(crate) fn emit_local_sinks(p: &mut Printer, locals: &[(&str, &TypeNode)], unread: &[String]) {

@@ -149,6 +149,31 @@ pub(crate) fn emit_functions(
             for param in &narrow_params {
                 p.ident(&format!("logic _unused_{param};")).nl();
             }
+            // Параметр-СТРУКТУРА, прочитанный только по полям: поля, которых
+            // тело не читает, гасит тот же поглотитель (фича 0506). Гранула —
+            // поле ВЕРХНЕГО уровня: непрочитанный лист глубже `verilator` не
+            // считает (замер), а гасить лишнее нельзя (урок 0486).
+            let mut unread_fields: Vec<(String, String)> = Vec::new();
+            for (param, ty) in params {
+                let crate::semantic::type_node::TypeNode::Struct(struct_name) = ty else {
+                    continue;
+                };
+                let Some(fields) = fsm.structs.get(struct_name) else {
+                    continue;
+                };
+                let Some(read) = crate::generator::sv::sv_stmt::field_only_reads(body, param)
+                else {
+                    continue;
+                };
+                for (field, _) in fields {
+                    if !read.contains(field) {
+                        unread_fields.push((param.clone(), field.clone()));
+                    }
+                }
+            }
+            for (param, field) in &unread_fields {
+                p.ident(&format!("logic _unused_{param}_{field};")).nl();
+            }
             // Пролог распаковки (фичи 0369, 0372) — у носителя раскладки.
             for (param, ty, flat_param) in &unpack {
                 crate::generator::sv::sv_array::emit_unpack_prologue(
@@ -209,6 +234,12 @@ pub(crate) fn emit_functions(
             for param in &narrow_params {
                 p.ident(&format!("_unused_{param} = &{{1'b0, {param}}};"))
                     .nl();
+            }
+            for (param, field) in &unread_fields {
+                p.ident(&format!(
+                    "_unused_{param}_{field} = &{{1'b0, {param}.{field}}};"
+                ))
+                .nl();
             }
             // Поглотитель локальной, которую тело только пишет (фича 0387) —
             // ПОСЛЕ тела: чтение до записи verilator встречает `ALWCOMBORDER`.
