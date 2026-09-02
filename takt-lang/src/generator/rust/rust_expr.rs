@@ -280,15 +280,40 @@ pub(crate) fn write_port(
         TypeNode::Enum(_) => format!("{value} as {}", class.value_type()),
         _ => value.to_string(),
     };
-    Ok(format!(
+    let receiver = scope.hal_receiver(&format!("запись в порт '{}'", name))?;
+    let call = format!(
         "{}.{}({}::{}, {})",
-        scope.hal_receiver(&format!("запись в порт '{}'", name))?,
+        receiver,
         class.write_fn(),
         class.out_enum(),
         rust_type_name(name, loc)?,
         value
-    ))
+    );
+    // ⚠️ Значение, ЧИТАЮЩЕЕ порт, поднимается во временную (фича 0499): методы
+    // HAL-трейта берут `&mut self`, и `hal.write_u8(p, hal.read_u8(q))` — это
+    // два изменяемых заимствования сразу, `E0499`. Прочие сочетания законны, и
+    // это ЗАМЕР, а не осторожность: два чтения подряд (`raw1 + raw2`) и чтение
+    // в аргументе функции, которой сам `hal` передаётся, `rustc` принимает —
+    // их разводит two-phase borrow. Поднимать нечего и там, где значение порта
+    // не читает, поэтому форма печатается ПО НУЖДЕ.
+    //
+    // Признак берётся у НАПЕЧАТАННОГО текста (урок 0337): чтение приходит и из
+    // условия, и из арифметики, и из аргумента вызова — обходить дерево значило
+    // бы перечислять формы, а печатнику важно одно, есть ли обращение к HAL.
+    if value.contains(&format!("{receiver}.")) {
+        return Ok(format!(
+            "{{ let {TEMP} = {value}; {call_temp} }}",
+            call_temp = call.replace(&value, TEMP)
+        ));
+    }
+    Ok(call)
 }
+
+/// Имя временной под значение, читающее порт (фича 0499).
+///
+/// ⚠️ Имя занято компилятором и с авторским столкнуться не может: `takt_`
+/// запрещён каноном именования, а `RS-026` сторожит поля структуры модели.
+const TEMP: &str = "takt_value";
 
 /// Печатает обращение к переменной/константе/порту.
 pub(crate) fn variable(var: &VariableNode, scope: &Scope) -> Result<String, Diagnostic> {
