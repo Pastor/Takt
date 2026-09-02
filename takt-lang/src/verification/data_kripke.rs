@@ -400,10 +400,14 @@ fn domain_size(ty: &TypeNode, model: &ModelNode) -> Option<u128> {
     match ty {
         TypeNode::Bit | TypeNode::Bool => Some(2),
         TypeNode::Integer { bits, .. } => Some(1u128 << *bits),
+        // ⚠️ Объявление ищется ПОДЪЁМОМ к родителям (`search_enum`), а не в
+        // карте самой модели (фича 0497): перечисление, объявленное на уровне
+        // файла, для вложенной модели «отсутствовало», и предикат над
+        // перечислимой переменной получал «домен не перечислим» — причину,
+        // которую тот же вывод тут же опровергал строкой «в охвате … `enum`».
         TypeNode::Enum(name) => model
-            .enums
-            .get(name)
-            .map(|e| distinct_variant_values(e).len() as u128),
+            .search_enum(name)
+            .map(|e| distinct_variant_values(&e).len() as u128),
         _ => None,
     }
 }
@@ -421,10 +425,10 @@ fn domain_values(ty: &TypeNode, model: &ModelNode) -> Vec<i128> {
                 (0..n).collect()
             }
         }
+        // Подъём к родителям — тот же, что у размера домена (фича 0497).
         TypeNode::Enum(name) => model
-            .enums
-            .get(name)
-            .map(distinct_variant_values)
+            .search_enum(name)
+            .map(|e| distinct_variant_values(&e))
             .unwrap_or_default(),
         _ => Vec::new(),
     }
