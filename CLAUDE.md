@@ -1509,11 +1509,12 @@ cargo test <имя>                                # один тест по им
   стандартной библиотекой IEC.
 - **Каждая конструкция языка показана примером, и это считает машина**
   ([0403](docs/features/0403-language-coverage-gate.md),
-  [0404](docs/features/0404-language-coverage-debt.md)): счёт — по **видам узлов АСД**,
-  области две (`examples/`, `book/src/**`), долг —
-  `scripts/language-coverage-baseline.txt`. ⚠️ Обход не свой, классификатор под
-  `deny(wildcard_enum_match_arm)`; требовать можно только достижимое (18 вариантов
-  разбор не строит); примеры языка — в `examples/language/`.
+  [0404](docs/features/0404-language-coverage-debt.md),
+  [0481](docs/features/0481-language-examples-coverage.md)): счёт — по **видам узлов
+  АСД**, области три (`examples/`, `examples/language/`, `book/src/**`), долг —
+  `scripts/language-coverage-baseline.txt`. ⚠️ Требовать можно только достижимое
+  (18 вариантов разбор не строит). ⚠️ Область `language` не заменяет `examples`:
+  гейты целей гоняют лишь **верхний уровень** `examples/*.takt`.
 - **Примеры документа `book/` проверяются гейтом**
   ([0133](docs/features/0133-book-examples-gate.md)): компиляция целью `c` +
   `takt-sim -n 10`. ⚠️ Библиотечный пример пропускается по построению; гейт доказывает
