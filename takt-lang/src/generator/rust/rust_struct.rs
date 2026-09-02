@@ -64,6 +64,28 @@ pub(crate) fn struct_literal(
 /// цели: `clippy::derivable_impls` под `-D warnings` — отказ сборки. Там, где
 /// `derive` не выводится, линт молчит по построению.
 pub(crate) fn derives_default(ty: &TypeNode, model: &ModelNode) -> bool {
+    // Вопрос «выводится ли derive У ЭТОЙ структуры» решают её ПОЛЯ, и каждое
+    // поле спрашивается о другом — «есть ли у типа `Default`» (фича 0496).
+    if let TypeNode::Struct(name) = ty {
+        return match model.search_struct(name) {
+            Some(def) => def.fields.iter().all(|(_, ty)| has_default(ty)),
+            // Структура не объявлена: отказ придёт из печати объявления,
+            // выбирать форму умолчания уже незачем.
+            None => true,
+        };
+    }
+    has_default(ty)
+}
+
+/// Есть ли у типа реализация `Default` — любая, не обязательно выводимая.
+///
+/// ⚠️ Разница с [`derives_default`] и есть предмет фичи 0496: структура
+/// получает `Default` ВСЕГДА (цель печатает ей либо `derive`, либо ручной
+/// `impl`), поэтому поле-структура выводу `derive` у владельца не мешает.
+/// Прежде вопрос был один на оба случая, и структура с полем-структурой, чьё
+/// поле — перечисление, получала ручной `impl`, эквивалентный выводимому:
+/// `clippy::derivable_impls` отвергал вывод при НУЛЕВОМ коде возврата `taktc`.
+fn has_default(ty: &TypeNode) -> bool {
     match ty {
         // У перечисления `Default` не выводится вовсе.
         TypeNode::Enum(_) => false,
@@ -77,14 +99,10 @@ pub(crate) fn derives_default(ty: &TypeNode, model: &ModelNode) -> bool {
             if crate::semantic::bit_vector::is_bit_vector(ty).is_some() {
                 return true;
             }
-            *n <= ARRAY_DEFAULT_LIMIT && derives_default(elem, model)
+            *n <= ARRAY_DEFAULT_LIMIT && has_default(elem)
         }
-        TypeNode::Struct(name) => match model.search_struct(name) {
-            Some(def) => def.fields.iter().all(|(_, ty)| derives_default(ty, model)),
-            // Структура не объявлена: отказ придёт из печати объявления,
-            // выбирать форму умолчания уже незачем.
-            None => true,
-        },
+        // Структура `Default` имеет всегда — см. шапку функции.
+        TypeNode::Struct(_) => true,
         _ => true,
     }
 }

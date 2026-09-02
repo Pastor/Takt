@@ -551,12 +551,22 @@ fn struct_init(items: &[ExpressionNode], name: &str, model: &ModelNode) -> Optio
     Some(format!("({})", parts.join(", ")))
 }
 
-/// Поле структуры, которое объявление IEC выразить не может (фича 0422).
+/// Поле структуры, которое объявление IEC выразить не может (фичи 0422, 0496).
 ///
 /// ⚠️ `[bit;N≤64]` сюда НЕ входит: по правилу 0078 это упакованный скаляр, и
 /// печатается он числом — признак берётся из того же слоя, что и печать типа.
+///
+/// ⚠️ Поле-СТРУКТУРА отложено по той же причине, что поле-массив (замер 0496):
+/// `conf : Outer := (head := (mode := 0, hold := 2000));` `iec2c` отвергает —
+/// «Initialization element identifier (mode) is not declared in referenced
+/// structure/FB scope» — при НУЛЕВОМ коде возврата `taktc`, тогда как эталон и
+/// остальные семь потребителей вход исполняют.
 pub(crate) fn field_is_deferred(ty: &TypeNode) -> bool {
-    matches!(ty, TypeNode::Array(..)) && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+    match ty {
+        TypeNode::Array(..) => crate::semantic::bit_vector::is_bit_vector(ty).is_none(),
+        TypeNode::Struct(_) => true,
+        _ => false,
+    }
 }
 
 /// Возвращает инициализатор, если выражение — литерал, а тип — скалярный.

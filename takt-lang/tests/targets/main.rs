@@ -67,6 +67,7 @@ mod matrix_corpus_export_tests;
 mod matrix_probes;
 mod mixed_arith_tests;
 mod mixed_sign_tests;
+mod nested_aggregate_init_tests;
 mod nested_struct_targets_tests;
 mod operand_type_carrier_tests;
 mod parameter_value_tests;
