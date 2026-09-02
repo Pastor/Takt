@@ -140,6 +140,7 @@ pub(crate) fn check_st_field_name(name: &str) -> Result<(), Diagnostic> {
     if let Some(ch) = non_ascii_char(name) {
         return Err(st020(name, ch, loc));
     }
+    check_underscores(name, loc)?;
     Ok(())
 }
 
@@ -157,7 +158,41 @@ pub(crate) fn check_st_name(name: &str, loc: Location) -> Result<(), Diagnostic>
     if let Some(ch) = non_ascii_char(name) {
         return Err(st020(name, ch, loc));
     }
+    check_underscores(name, loc)?;
     Ok(())
+}
+
+/// Расположение подчёркивания в имени — диагностика `ST-026` (фича 0504).
+///
+/// Правило снято **прогоном `iec2c`**, а не чтением стандарта (приём 0342):
+/// хвостовое подчёркивание и два подряд инструмент отвергает, ведущее —
+/// принимает, хотя стандарт запрещает и его. Отказ за то, что арбитр
+/// принимает, был бы ложным.
+///
+/// ⚠️ Прежде такое имя доезжало до вывода как есть: `taktc` возвращал **ноль**,
+/// а `iec2c` отвечал «invalid located variable declaration» — сообщением, по
+/// которому исходную причину не опознать (тот же обман, что у `ST-023`).
+fn check_underscores(name: &str, loc: Location) -> Result<(), Diagnostic> {
+    let trailing = name.ends_with('_');
+    let doubled = name.contains("__");
+    if !trailing && !doubled {
+        return Ok(());
+    }
+    let what = if trailing {
+        "подчёркивание в конце имени"
+    } else {
+        "два подчёркивания подряд"
+    };
+    Err(Diagnostic::error(
+        loc,
+        format!(
+            "имя '{name}': {what} — идентификатор IEC 61131-3 такой формы не \
+             принимает. Это НЕ ограничение языка Takt — модель остаётся \
+             валидной для целей 'c', 'c-hal', 'rust', 'sv', 'sv-mmio' и \
+             'plantuml'. Переименуйте объявление, если модель нужна для ПЛК"
+        ),
+    )
+    .with_code("ST-026"))
 }
 
 /// Первый символ имени вне алфавита идентификатора IEC 61131-3 (или `None`).
