@@ -96,6 +96,7 @@ mod slice_argument_tests;
 mod st_call_order_tests;
 mod st_global_name_clash_tests;
 mod st_helper_order_tests;
+mod st_identifier_form_tests;
 mod st_local_array_argument_tests;
 mod st_local_name_clash_tests;
 mod st_reserved_names_tests;
