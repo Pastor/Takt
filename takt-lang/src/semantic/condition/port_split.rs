@@ -43,19 +43,52 @@ use crate::semantic::{
     StatementNode, VariableNode,
 };
 
+use super::port_subtree;
+
 /// Шаг пути к листу: поле структуры либо элемент массива (фича 0417).
 ///
 /// ⚠️ Путь ШАГАМИ, а не готовой строкой: форма обращения у поля и у элемента
 /// разная (`po.lo` против `bus[0]`), и различать их обязан разворот — тот же
 /// приём, что у носителя вложенных агрегатов (0366).
 #[derive(Clone, PartialEq)]
-enum Step {
+pub(super) enum Step {
     Field(String),
     Index(i128),
 }
 
-/// Карта разворота: имя исходного порта → его листы `(путь, ячейка порта)`.
-type LeafCells = BTreeMap<String, Vec<(Vec<Step>, Rc<RefCell<VariableNode>>)>>;
+/// Лист в карте разворота: путь, позиции пути и ячейка порта.
+pub(super) struct LeafRef {
+    pub(super) path: Vec<Step>,
+    /// Позиции шагов в ПОЗИЦИОННОМ агрегате (правило 0034) — ими значение
+    /// агрегата раздаётся листьям.
+    pub(super) positions: Vec<usize>,
+    pub(super) cell: Rc<RefCell<VariableNode>>,
+}
+
+/// Разворот ОДНОГО порта: листья и типы всех узлов пути.
+pub(super) struct Split {
+    /// Листья порта.
+    pub(super) leaves: Vec<LeafRef>,
+    /// Тип КАЖДОГО узла пути, включая промежуточные (фича 0501).
+    ///
+    /// ⚠️ Листьев для подъёма узла-поддерева мало: временная объявляется типом
+    /// самого узла (`Inner`, `[u8;2]`), а по набору листьев имя структуры не
+    /// восстановить. Тип запоминается при сборе — там он уже в руках.
+    pub(super) nodes: Vec<(Vec<Step>, TypeNode)>,
+}
+
+/// Карта разворота: имя исходного порта → его разворот.
+pub(super) type LeafCells = BTreeMap<String, Split>;
+
+/// Собранное обходом объявления: листья и типы всех узлов пути.
+///
+/// Одной структурой, а не парой выходных параметров: у сборщика их стало бы
+/// восемь, и `clippy` справедливо считает это перебором.
+#[derive(Default)]
+struct Collected {
+    leaves: Vec<Leaf>,
+    nodes: Vec<(Vec<Step>, TypeNode)>,
+}
 
 /// Лист развёрнутого порта: имя, путь, тип и смещение адреса в байтах.
 struct Leaf {
@@ -92,27 +125,37 @@ pub(crate) fn split_composite_ports(
     what: PortSplit,
 ) -> Result<(), Diagnostic> {
     let mut visited = HashSet::new();
-    split_model(root, what, &mut visited)
+    // Занятые имена собираются по ВСЕМУ дереву и один раз: временная узла
+    // (фича 0501) не вправе затенить авторское имя, а второй сборщик разошёлся
+    // бы с первым молча (общий носитель — `semantic::fresh`, приём 0400).
+    let taken = crate::semantic::fresh::taken_names(root);
+    let mut lift = port_subtree::Lift::new(&taken, root);
+    split_model(root, what, &mut visited, &mut lift)
 }
 
 fn split_model(
     model: &Rc<RefCell<ModelNode>>,
     what: PortSplit,
     visited: &mut HashSet<*const RefCell<ModelNode>>,
+    lift: &mut port_subtree::Lift<'_>,
 ) -> Result<(), Diagnostic> {
     if !visited.insert(Rc::as_ptr(model)) {
         return Ok(());
     }
     let nested: Vec<Rc<RefCell<ModelNode>>> = model.borrow().models.values().cloned().collect();
-    split_here(model, what)?;
+    split_here(model, what, lift)?;
     for child in &nested {
-        split_model(child, what, visited)?;
+        split_model(child, what, visited, lift)?;
     }
     Ok(())
 }
 
 /// Разворачивает порты ОДНОЙ модели и переписывает её тела.
-fn split_here(model: &Rc<RefCell<ModelNode>>, what: PortSplit) -> Result<(), Diagnostic> {
+fn split_here(
+    model: &Rc<RefCell<ModelNode>>,
+    what: PortSplit,
+    lift: &mut port_subtree::Lift<'_>,
+) -> Result<(), Diagnostic> {
     // Какие порты разворачивать — решается до правки: обход тел спрашивает
     // готовую карту, а не ищет объявление заново.
     let targets: Vec<(String, VariableNode)> = model
@@ -139,8 +182,9 @@ fn split_here(model: &Rc<RefCell<ModelNode>>, what: PortSplit) -> Result<(), Dia
         else {
             continue;
         };
-        let mut leaves = Vec::new();
-        collect_leaves(name, &[], &[], ty, 0, &model.borrow(), &mut leaves)?;
+        let mut collected = Collected::default();
+        collect_leaves(name, &[], &[], ty, 0, &model.borrow(), &mut collected)?;
+        let Collected { leaves, nodes } = collected;
         let base = literal_address(address);
         let mut made = Vec::new();
         for leaf in &leaves {
@@ -167,14 +211,25 @@ fn split_here(model: &Rc<RefCell<ModelNode>>, what: PortSplit) -> Result<(), Dia
                 .borrow_mut()
                 .variables
                 .insert(leaf.name.clone(), port.clone());
-            made.push((leaf.path.clone(), Rc::new(RefCell::new(port))));
+            made.push(LeafRef {
+                path: leaf.path.clone(),
+                positions: leaf.positions.clone(),
+                cell: Rc::new(RefCell::new(port)),
+            });
         }
-        cells.insert(name.clone(), made);
+        cells.insert(
+            name.clone(),
+            Split {
+                leaves: made,
+                nodes,
+            },
+        );
         model.borrow_mut().variables.remove(name);
     }
 
-    rewrite_bodies(model, &cells);
-    Ok(())
+    // Владелец временных — та модель, чьи тела переписываются.
+    lift.set_owner(model);
+    rewrite_bodies(model, &cells, lift)
 }
 
 /// Составной ли тип порта: структура или массив (фича 0417).
@@ -190,6 +245,9 @@ fn is_composite(ty: &TypeNode, what: PortSplit) -> bool {
 }
 
 /// Листья структуры: имя `<порт>_<поле>`, тип и смещение в байтах.
+///
+/// Попутно записывает тип КАЖДОГО пройденного узла (`nodes`): узел ветвления
+/// нужен подъёму во временную (фича 0501), а знать его тип можно только здесь.
 fn collect_leaves(
     prefix: &str,
     path: &[Step],
@@ -197,8 +255,9 @@ fn collect_leaves(
     ty: &TypeNode,
     offset: i128,
     model: &ModelNode,
-    out: &mut Vec<Leaf>,
+    out: &mut Collected,
 ) -> Result<(), Diagnostic> {
+    out.nodes.push((path.to_vec(), ty.clone()));
     // Массив раскрывается по элементам: имя `<порт>_<индекс>` (фича 0417).
     // Бит-вектор сюда не попадает — он скаляр (правило 0078).
     if let TypeNode::Array(size, elem) = ty
@@ -223,7 +282,7 @@ fn collect_leaves(
         return Ok(());
     }
     let TypeNode::Struct(name) = ty else {
-        out.push(Leaf {
+        out.leaves.push(Leaf {
             name: prefix.to_string(),
             path: path.to_vec(),
             positions: positions.to_vec(),
@@ -296,7 +355,11 @@ fn literal_address(expr: &ExpressionNode) -> Option<i128> {
 /// обращением к исчезнувшему порту: цели печатали невалидный вывод при нулевом
 /// коде возврата, причём уже на ОДНОМ шаге пути. Появится новое место обращения
 /// — добавлять его нужно здесь, иначе оно молча выпадет (класс 0084/0193/0195).
-fn rewrite_bodies(model: &Rc<RefCell<ModelNode>>, cells: &LeafCells) {
+fn rewrite_bodies(
+    model: &Rc<RefCell<ModelNode>>,
+    cells: &LeafCells,
+    lift: &mut port_subtree::Lift<'_>,
+) -> Result<(), Diagnostic> {
     let (mut functions, mut named_blocks, mut states, mut conditions, mut formulas) = {
         let mut b = model.borrow_mut();
         (
@@ -307,33 +370,43 @@ fn rewrite_bodies(model: &Rc<RefCell<ModelNode>>, cells: &LeafCells) {
             std::mem::take(&mut b.formulas),
         )
     };
-    for func in functions.values_mut() {
-        if let crate::semantic::FunctionDefinitionNode::Local { body, .. } = func {
-            rewrite_stmt(body, cells);
+    // Тела возвращаются на место в ЛЮБОМ случае: при отказе дерево обязано
+    // остаться целым — его ещё читает печать диагностики.
+    let outcome = (|| -> Result<(), Diagnostic> {
+        for func in functions.values_mut() {
+            if let crate::semantic::FunctionDefinitionNode::Local { body, .. } = func {
+                rewrite_stmt(body, cells, lift, None)?;
+            }
         }
-    }
-    for blk in named_blocks.iter_mut() {
-        rewrite_block(blk, cells);
-    }
-    for cond in conditions.values_mut() {
-        rewrite_cond(&mut cond.value, cells);
-    }
-    for formula in formulas.iter_mut() {
-        rewrite_formula(formula, cells);
-    }
-    for state in states.values_mut() {
-        rewrite_state(state, cells);
-    }
+        for blk in named_blocks.iter_mut() {
+            rewrite_block(blk, cells, lift)?;
+        }
+        for cond in conditions.values_mut() {
+            rewrite_cond(&mut cond.value, cells)?;
+        }
+        for formula in formulas.iter_mut() {
+            rewrite_formula(formula, cells)?;
+        }
+        for state in states.values_mut() {
+            rewrite_state(state, cells, lift)?;
+        }
+        Ok(())
+    })();
     let mut b = model.borrow_mut();
     b.functions = functions;
     b.named_blocks = named_blocks;
     b.states = states;
     b.conditions = conditions;
     b.formulas = formulas;
+    outcome
 }
 
 /// Места обращения ОДНОГО состояния: блоки, условия рёбер, `next`, формулы.
-fn rewrite_state(state: &mut StateNode, cells: &LeafCells) {
+fn rewrite_state(
+    state: &mut StateNode,
+    cells: &LeafCells,
+    lift: &mut port_subtree::Lift<'_>,
+) -> Result<(), Diagnostic> {
     // Поля берутся у варианта напрямую: методов-доступов у `StateNode` нет, а
     // заводить их значило бы растить `semantic/mod.rs` — он в реестре долга по
     // размеру (тот же довод, что у обхода 0397).
@@ -351,54 +424,62 @@ fn rewrite_state(state: &mut StateNode, cells: &LeafCells) {
             next,
             ..
         } => (named_blocks, references, formulas, next.as_mut()),
-        StateNode::Unresolved => return,
+        StateNode::Unresolved => return Ok(()),
     };
     for blk in named_blocks.iter_mut() {
-        rewrite_block(blk, cells);
+        rewrite_block(blk, cells, lift)?;
     }
     for reference in references.iter_mut() {
-        rewrite_cond(&mut reference.cond, cells);
+        rewrite_cond(&mut reference.cond, cells)?;
     }
     if let Some(reference) = next {
-        rewrite_cond(&mut reference.cond, cells);
+        rewrite_cond(&mut reference.cond, cells)?;
     }
     for formula in formulas.iter_mut() {
-        rewrite_formula(formula, cells);
+        rewrite_formula(formula, cells)?;
     }
+    Ok(())
 }
 
 /// Формула: охранная несёт условие, темпоральная говорит о СОСТОЯНИЯХ.
 ///
 /// ⚠️ `Formula::LTL` в объём не входит: её атомы — имена состояний и предикаты
 /// верификатора, до целей она не доезжает вовсе (0235, 0472).
-fn rewrite_formula(formula: &mut Formula, cells: &LeafCells) {
+fn rewrite_formula(formula: &mut Formula, cells: &LeafCells) -> Result<(), Diagnostic> {
     match formula {
-        Formula::Guard(cond, _, _) => rewrite_cond(cond, cells),
+        Formula::Guard(cond, _, _) => rewrite_cond(cond, cells)?,
         Formula::Formulas(items) => {
             for item in items.iter_mut() {
-                rewrite_formula(item, cells);
+                rewrite_formula(item, cells)?;
             }
         }
         Formula::None | Formula::LTL(_, _) => {}
     }
+    Ok(())
 }
 
 /// `cfg.tail.b` в УСЛОВИИ → порт листа; прочее — рекурсия.
-fn rewrite_cond(cond: &mut ConditionNode, cells: &LeafCells) {
+///
+/// ⚠️ Узел-ПОДДЕРЕВО здесь отвергается `SE-130` (фича 0501): условию неоткуда
+/// взять временную, из которой узел собирается, а печать обращения к
+/// исчезнувшему порту дала бы невалидный вывод при нулевом коде возврата.
+fn rewrite_cond(cond: &mut ConditionNode, cells: &LeafCells) -> Result<(), Diagnostic> {
     // Замена вычисляется ОТДЕЛЬНО: заимствование `cond` живо, пока в нём ищут
     // лист, и присвоение внутри `if let` компилятор не пропустит.
-    let replacement = cond_path(cond).and_then(|(name, path, loc)| {
-        leaf_cell(cells, &name, &path).map(|cell| ConditionNode::Variable(cell, loc))
-    });
-    if let Some(new_cond) = replacement {
-        *cond = new_cond;
-        return;
+    if let Some((name, path, loc)) = cond_path(cond) {
+        if let Some(cell) = leaf_cell(cells, &name, &path) {
+            *cond = ConditionNode::Variable(cell, loc);
+            return Ok(());
+        }
+        if port_subtree::subtree_type(cells, &name, &path).is_some() {
+            return Err(port_subtree::refuse(&name, &path, loc));
+        }
     }
     match cond {
         ConditionNode::Parenthesis(inner)
         | ConditionNode::Not(inner)
         | ConditionNode::AfterExpr(inner)
-        | ConditionNode::BitAccess(inner, _) => rewrite_cond(inner, cells),
+        | ConditionNode::BitAccess(inner, _) => rewrite_cond(inner, cells)?,
         ConditionNode::ArraySubscript(l, r)
         | ConditionNode::Add(l, r)
         | ConditionNode::Subtract(l, r)
@@ -410,36 +491,58 @@ fn rewrite_cond(cond: &mut ConditionNode, cells: &LeafCells) {
         | ConditionNode::MoreEqual(l, r)
         | ConditionNode::Equal(l, r)
         | ConditionNode::NotEqual(l, r) => {
-            rewrite_cond(l, cells);
-            rewrite_cond(r, cells);
+            rewrite_cond(l, cells)?;
+            rewrite_cond(r, cells)?;
         }
         ConditionNode::Function(_, args, _) => {
             for arg in args.iter_mut() {
-                rewrite_cond(arg, cells);
+                rewrite_cond(arg, cells)?;
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
-fn rewrite_block(blk: &mut NamedCodeBlockDefinitionNode, cells: &LeafCells) {
+fn rewrite_block(
+    blk: &mut NamedCodeBlockDefinitionNode,
+    cells: &LeafCells,
+    lift: &mut port_subtree::Lift<'_>,
+) -> Result<(), Diagnostic> {
     match blk {
         NamedCodeBlockDefinitionNode::Enter { body, .. }
         | NamedCodeBlockDefinitionNode::Exit { body, .. }
         | NamedCodeBlockDefinitionNode::Always { body, .. }
         | NamedCodeBlockDefinitionNode::Unknown { body, .. }
-        | NamedCodeBlockDefinitionNode::Every { body, .. } => rewrite_stmt(body, cells),
-        NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {}
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => rewrite_stmt(body, cells, lift, None),
+        NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {
+            Ok(())
+        }
     }
 }
 
-fn rewrite_stmt(stmt: &mut StatementNode, cells: &LeafCells) {
+/// Обходит оператор.
+///
+/// `prelude` — куда класть объявление и присваивания временной при подъёме
+/// узла-поддерева (фича 0501). `None` означает «объявить негде»: такие позиции
+/// отвечают `SE-130`, а не печатают обращение к исчезнувшему порту.
+fn rewrite_stmt(
+    stmt: &mut StatementNode,
+    cells: &LeafCells,
+    lift: &mut port_subtree::Lift<'_>,
+    mut prelude: Option<&mut Vec<StatementNode>>,
+) -> Result<(), Diagnostic> {
     match stmt {
         StatementNode::Block(items) => {
             let mut out = Vec::with_capacity(items.len());
             for mut item in std::mem::take(items) {
-                rewrite_stmt(&mut item, cells);
-                match split_aggregate_assign(&item, cells) {
+                // Пролог принадлежит ОПЕРАТОРУ и встаёт перед ним: объявление
+                // временной живёт в том же блоке, что и её употребление.
+                let mut own: Vec<StatementNode> = Vec::new();
+                rewrite_stmt(&mut item, cells, lift, Some(&mut own))?;
+                let parts = split_aggregate_assign(&item, cells, lift, Some(&mut own))?;
+                out.extend(own);
+                match parts {
                     Some(parts) => out.extend(parts),
                     None => out.push(item),
                 }
@@ -449,118 +552,181 @@ fn rewrite_stmt(stmt: &mut StatementNode, cells: &LeafCells) {
         StatementNode::Expression(..) => {
             // Агрегатное присваивание порту разворачивается в блок по листам;
             // прочее — обычный обход выражения.
-            if let Some(parts) = split_aggregate_assign(stmt, cells) {
+            if let Some(parts) = split_aggregate_assign(stmt, cells, lift, prelude.as_deref_mut())?
+            {
                 *stmt = StatementNode::Block(parts);
-                return;
+                return Ok(());
             }
-            if let StatementNode::Expression(expr, _) = stmt {
-                rewrite_expr(expr, cells);
+            if let StatementNode::Expression(expr, loc) = stmt {
+                let at = *loc;
+                rewrite_expr(expr, cells, lift, prelude.as_deref_mut(), at)?;
             }
         }
         // ⚠️ Условие оператора — тоже место обращения (фича 0500): прежде
         // обходилось только ТЕЛО, и `if cfg.lo > 1 { … }` доезжало до цели с
         // обращением к развёрнутому порту.
         StatementNode::If { cond, then_, else_ } => {
-            rewrite_expr(cond, cells);
-            rewrite_stmt(then_, cells);
+            // Условие `if` вычисляется ОДИН раз, поэтому пролог перед
+            // оператором точен — в отличие от условия цикла (см. ниже).
+            rewrite_expr(
+                cond,
+                cells,
+                lift,
+                prelude.as_deref_mut(),
+                Location::Implicit,
+            )?;
+            rewrite_stmt(then_, cells, lift, None)?;
             if let Some(alt) = else_ {
-                rewrite_stmt(alt, cells);
+                rewrite_stmt(alt, cells, lift, None)?;
             }
         }
+        // ⚠️ У цикла пролога нет и быть не может: он встал бы ПЕРЕД циклом, и
+        // значение узла перестало бы обновляться по итерациям — молчаливое
+        // расхождение вместо громкого отказа (фича 0501).
         StatementNode::Loop { cond, body } => {
             if let Some(c) = cond {
-                rewrite_expr(c, cells);
+                rewrite_expr(c, cells, lift, None, Location::Implicit)?;
             }
-            rewrite_stmt(body, cells);
+            rewrite_stmt(body, cells, lift, None)?;
         }
         StatementNode::For {
             init,
             cond,
             step,
             body,
-            ..
+            loc,
         } => {
+            let at = *loc;
             if let Some(i) = init {
-                rewrite_stmt(i, cells);
+                rewrite_stmt(i, cells, lift, None)?;
             }
             if let Some(c) = cond {
-                rewrite_expr(c, cells);
+                rewrite_expr(c, cells, lift, None, at)?;
             }
             if let Some(st) = step {
-                rewrite_expr(st, cells);
+                rewrite_expr(st, cells, lift, None, at)?;
             }
-            rewrite_stmt(body, cells);
+            rewrite_stmt(body, cells, lift, None)?;
         }
         StatementNode::Match { expr, arms } => {
-            rewrite_expr(expr, cells);
+            rewrite_expr(
+                expr,
+                cells,
+                lift,
+                prelude.as_deref_mut(),
+                Location::Implicit,
+            )?;
             for arm in arms.iter_mut() {
                 for pattern in arm.patterns.iter_mut() {
                     if let crate::semantic::MatchPatternNode::Value(value) = pattern {
-                        rewrite_expr(value, cells);
+                        rewrite_expr(value, cells, lift, None, Location::Implicit)?;
                     }
                 }
-                rewrite_stmt(&mut arm.body, cells);
+                rewrite_stmt(&mut arm.body, cells, lift, None)?;
             }
         }
         // Вставка для одной цели (0484) — обычные операторы Takt: обращение к
         // порту в ней такое же, как в любом теле.
-        StatementNode::Assembly { body, .. } => rewrite_stmt(body, cells),
+        StatementNode::Assembly { body, .. } => rewrite_stmt(body, cells, lift, None)?,
         StatementNode::InlineFormula(formulas) => {
             for formula in formulas.iter_mut() {
-                rewrite_formula(formula, cells);
+                rewrite_formula(formula, cells)?;
             }
         }
-        StatementNode::Return(Some(expr)) => rewrite_expr(expr, cells),
-        StatementNode::Variable(_, _, Some(init), _) => rewrite_expr(init, cells),
+        StatementNode::Return(Some(expr)) => {
+            rewrite_expr(
+                expr,
+                cells,
+                lift,
+                prelude.as_deref_mut(),
+                Location::Implicit,
+            )?;
+        }
+        StatementNode::Variable(_, _, Some(init), loc) => {
+            let at = *loc;
+            rewrite_expr(init, cells, lift, prelude, at)?;
+        }
         _ => {}
     }
+    Ok(())
 }
 
-/// `po := {a, b};` → по присваиванию на лист. `None` — не тот случай.
-fn split_aggregate_assign(stmt: &StatementNode, cells: &LeafCells) -> Option<Vec<StatementNode>> {
+/// `порт.узел := значение;` → по присваиванию на КАЖДЫЙ лист под узлом.
+///
+/// `None` — не тот случай: цель записи не ведёт к развёрнутому порту, адресует
+/// сам лист (его переписывает `rewrite_expr`) либо агрегат справа до листьев не
+/// раздаётся (длину судит `SE-123` — второй проверки здесь нет).
+///
+/// ⚠️ Узлом записи бывает не только порт целиком (фича 0501): `res.tail := v;`
+/// и `res := {1, {2, 3}};` прежде доезжали до целей нетронутыми — `cc` отвечал
+/// «use of undeclared identifier» при НУЛЕВОМ коде возврата. Правая часть
+/// раздаётся листьям по ПОЗИЦИЯМ (агрегат) либо доступом по остатку пути
+/// (значение), и вложенность обеим формам безразлична.
+fn split_aggregate_assign(
+    stmt: &StatementNode,
+    cells: &LeafCells,
+    lift: &mut port_subtree::Lift<'_>,
+    mut prelude: Option<&mut Vec<StatementNode>>,
+) -> Result<Option<Vec<StatementNode>>, Diagnostic> {
     let StatementNode::Expression(expr, loc) = stmt else {
-        return None;
+        return Ok(None);
     };
     let ExpressionNode::Assign(target, value) = &**expr else {
-        return None;
+        return Ok(None);
     };
-    let ExpressionNode::Variable(var) = &**target else {
-        return None;
+    let Some((name, path)) = expr_path(target) else {
+        return Ok(None);
     };
-    let name = var.borrow().name().to_string();
-    let leaves = cells.get(&name)?;
+    let Some(split) = cells.get(&name) else {
+        return Ok(None);
+    };
+    if split.leaves.iter().any(|leaf| leaf.path == path) {
+        return Ok(None); // адресован сам лист — обычная запись в скалярный порт
+    }
+    let under: Vec<&LeafRef> = split
+        .leaves
+        .iter()
+        .filter(|leaf| leaf.path.starts_with(&path))
+        .collect();
+    if under.is_empty() {
+        return Ok(None);
+    }
     // Правая часть бывает двух видов, и оба штатны: агрегат (`po := {1, 2};`)
-    // и значение структурного типа (`po := v;`). Второй раскладывается
-    // доступом к полю — иначе цель получала бы структуру в скалярном колбэке.
-    let parts: Vec<ExpressionNode> = match &**value {
-        ExpressionNode::Initializer(items) | ExpressionNode::Array(items) => {
-            if items.len() != leaves.len() {
-                return None; // длину судит `SE-123` — второй проверки здесь нет
+    // и значение составного типа (`po := v;`). Второй раскладывается доступом
+    // к части — иначе цель получала бы структуру в скалярном колбэке.
+    let aggregate = matches!(
+        &**value,
+        ExpressionNode::Initializer(_) | ExpressionNode::Array(_)
+    );
+    let parts: Vec<ExpressionNode> = under
+        .iter()
+        .map(|leaf| {
+            if aggregate {
+                leaf_initializer(value, &leaf.positions[path.len()..])
+            } else {
+                access_by_path(value, &leaf.path[path.len()..], *loc)
             }
-            items.to_vec()
-        }
-        other => leaves
-            .iter()
-            .map(|(path, _)| access_by_path(other, path, *loc))
-            .collect(),
-    };
-    Some(
-        leaves
-            .iter()
-            .zip(parts)
-            .map(|((_, cell), item)| {
-                let mut value = item;
-                rewrite_expr(&mut value, cells);
-                StatementNode::Expression(
-                    Box::new(ExpressionNode::Assign(
-                        Box::new(ExpressionNode::Variable(Rc::clone(cell))),
-                        Box::new(value),
-                    )),
-                    *loc,
-                )
-            })
-            .collect(),
-    )
+        })
+        .collect();
+    if parts
+        .iter()
+        .any(|part| matches!(part, ExpressionNode::None))
+    {
+        return Ok(None);
+    }
+    let mut out = Vec::with_capacity(under.len());
+    for (leaf, item) in under.iter().zip(parts) {
+        let mut value = item;
+        rewrite_expr(&mut value, cells, lift, prelude.as_deref_mut(), *loc)?;
+        out.push(StatementNode::Expression(
+            Box::new(ExpressionNode::Assign(
+                Box::new(ExpressionNode::Variable(Rc::clone(&leaf.cell))),
+                Box::new(value),
+            )),
+            *loc,
+        ));
+    }
+    Ok(Some(out))
 }
 
 /// Ячейка листа по ПОЛНОМУ пути от имени порта.
@@ -576,8 +742,13 @@ fn leaf_cell(cells: &LeafCells, name: &str, path: &[Step]) -> Option<Rc<RefCell<
     }
     cells
         .get(name)
-        .and_then(|leaves| leaves.iter().find(|(leaf, _)| leaf.as_slice() == path))
-        .map(|(_, cell)| Rc::clone(cell))
+        .and_then(|split| {
+            split
+                .leaves
+                .iter()
+                .find(|leaf| leaf.path.as_slice() == path)
+        })
+        .map(|leaf| Rc::clone(&leaf.cell))
 }
 
 /// Путь обращения к части порта: имя порта и шаги от него.
@@ -660,7 +831,11 @@ fn leaf_initializer(init: &ExpressionNode, positions: &[usize]) -> ExpressionNod
 }
 
 /// Обращение к части значения по пути листа: поле — точкой, элемент — индексом.
-fn access_by_path(value: &ExpressionNode, path: &[Step], loc: Location) -> ExpressionNode {
+pub(super) fn access_by_path(
+    value: &ExpressionNode,
+    path: &[Step],
+    loc: Location,
+) -> ExpressionNode {
     let mut expr = value.clone();
     for step in path {
         expr = match step {
@@ -681,27 +856,47 @@ fn access_by_path(value: &ExpressionNode, path: &[Step], loc: Location) -> Expre
 }
 
 /// `po.lo` → порт листа; прочее — рекурсия.
-fn rewrite_expr(expr: &mut ExpressionNode, cells: &LeafCells) {
+/// `cfg.tail.b` → порт листа; узел-поддерево → временная; прочее — рекурсия.
+fn rewrite_expr(
+    expr: &mut ExpressionNode,
+    cells: &LeafCells,
+    lift: &mut port_subtree::Lift<'_>,
+    mut prelude: Option<&mut Vec<StatementNode>>,
+    loc: Location,
+) -> Result<(), Diagnostic> {
     // Замена вычисляется ОТДЕЛЬНО: заимствование `expr` живо, пока в нём
     // ищут лист, и присвоение внутри `if let` компилятор не пропустит.
-    let replacement = expr_path(expr)
-        .and_then(|(name, path)| leaf_cell(cells, &name, &path))
-        .map(ExpressionNode::Variable);
-    if let Some(new_expr) = replacement {
-        *expr = new_expr;
-        return;
+    if let Some((name, path)) = expr_path(expr) {
+        if let Some(cell) = leaf_cell(cells, &name, &path) {
+            *expr = ExpressionNode::Variable(cell);
+            return Ok(());
+        }
+        // Узел ветвления собирается из листьев во временную (фича 0501). Там,
+        // где её объявить негде, отказ называет обход — печать обращения к
+        // исчезнувшему порту дала бы невалидный вывод при нулевом коде возврата.
+        if let Some(ty) = port_subtree::subtree_type(cells, &name, &path) {
+            let Some(prelude) = prelude.as_deref_mut() else {
+                return Err(port_subtree::refuse(&name, &path, loc));
+            };
+            *expr = port_subtree::lift(cells, &name, &path, ty, lift, prelude, loc);
+            return Ok(());
+        }
     }
     match expr {
         ExpressionNode::Assign(l, r) => {
-            rewrite_expr(l, cells);
-            rewrite_expr(r, cells);
+            // Левая часть — МЕСТО ЗАПИСИ: узел там раздаётся листьям
+            // (`split_aggregate_assign`), а не поднимается во временную.
+            rewrite_expr(l, cells, lift, None, loc)?;
+            rewrite_expr(r, cells, lift, prelude.as_deref_mut(), loc)?;
         }
         ExpressionNode::Parenthesis(inner)
         | ExpressionNode::Not(inner)
         | ExpressionNode::Negate(inner)
         | ExpressionNode::BitwiseNot(inner)
         | ExpressionNode::UnaryPlus(inner)
-        | ExpressionNode::Cast(inner, _) => rewrite_expr(inner, cells),
+        | ExpressionNode::Cast(inner, _) => {
+            rewrite_expr(inner, cells, lift, prelude.as_deref_mut(), loc)?;
+        }
         ExpressionNode::Add(l, r)
         | ExpressionNode::Subtract(l, r)
         | ExpressionNode::Multiply(l, r)
@@ -721,21 +916,22 @@ fn rewrite_expr(expr: &mut ExpressionNode, cells: &LeafCells) {
         | ExpressionNode::MoreEqual(l, r)
         | ExpressionNode::And(l, r)
         | ExpressionNode::Or(l, r) => {
-            rewrite_expr(l, cells);
-            rewrite_expr(r, cells);
+            rewrite_expr(l, cells, lift, prelude.as_deref_mut(), loc)?;
+            rewrite_expr(r, cells, lift, prelude.as_deref_mut(), loc)?;
         }
         ExpressionNode::Function(_, args)
         | ExpressionNode::Array(args)
         | ExpressionNode::Initializer(args) => {
             for a in args.iter_mut() {
-                rewrite_expr(a, cells);
+                rewrite_expr(a, cells, lift, prelude.as_deref_mut(), loc)?;
             }
         }
         // Именованное условие живёт в ДВУХ представлениях: значением в карте
         // модели и разделяемой ячейкой в теле (класс 0184). Правки карты мало —
         // печатник берёт ячейку, и `if hot { … }` доезжал до цели с обращением
         // к развёрнутому порту.
-        ExpressionNode::Condition(cell) => rewrite_cond(&mut cell.borrow_mut().value, cells),
+        ExpressionNode::Condition(cell) => rewrite_cond(&mut cell.borrow_mut().value, cells)?,
         _ => {}
     }
+    Ok(())
 }

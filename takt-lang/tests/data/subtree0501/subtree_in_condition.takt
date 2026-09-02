@@ -1,0 +1,44 @@
+// Узел-поддерево составного порта в УСЛОВИИ ребра (фича 0501).
+//
+// Обещание фикстуры: цель, разворачивающая порт по листьям, отвечает `SE-130`
+// — временную, из которой узел собирается, в условии объявить негде. Цели
+// `st` и `sv` структурный порт печатают сами (0390), и для них вход законен.
+//
+// Сторож обещания — `port_subtree_tests::subtree_in_condition_is_refused`.
+struct Inner {
+    a: u8,
+    b: u8
+}
+
+struct Outer {
+    head: u8,
+    tail: Inner
+}
+
+in cfg: Outer at 0x1000;
+out sum: u8 at 0x2000;
+
+var ticks: u8 := 0;
+
+fn pick(v: Inner) -> u8 {
+    return v.a + v.b;
+}
+
+start Run {
+    always {
+        ticks := ticks + 1;
+        sum := ticks;
+    }
+
+    ref Hot: pick(cfg.tail) > 3;
+
+    ref Run;
+}
+
+state Hot {
+    always {
+        sum := 9;
+    }
+
+    ref Hot;
+}

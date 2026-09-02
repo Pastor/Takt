@@ -74,6 +74,7 @@ mod parameter_value_tests;
 mod port_composite_tests;
 mod port_initial_value_hdl_tests;
 mod port_split_sites_tests;
+mod port_subtree_tests;
 mod root_pointer_implementations_tests;
 mod root_pointer_matrix_tests;
 mod rust_default_impl_tests;

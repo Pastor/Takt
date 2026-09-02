@@ -51,8 +51,7 @@ pub fn compile_to_sv_mmio(
     // Порт составного типа разворачивается в скалярные (фича 0390): у
     // регистрового файла поле ложится в своё слово, и `SV-002` о «ширине, не
     // определённой в битах» становится недостижим.
-    crate::semantic::condition::observe::lower_for_target(
-        &unit.model,
+    unit.lower_for_target(
         crate::semantic::condition::port_split::PortSplit::All,
         false,
     )?;
