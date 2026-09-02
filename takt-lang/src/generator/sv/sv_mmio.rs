@@ -457,14 +457,16 @@ fn bit_width(
     what: &str,
 ) -> Option<u32> {
     match ty {
-        TypeNode::Bit | TypeNode::Bool => Some(1),
-        TypeNode::Integer { bits, .. } if *bits > 0 => Some(u32::from(*bits)),
-        TypeNode::Fixed { m, n, .. } => Some(u32::from(*m) + u32::from(*n)),
+        // Перечисление ширины не имеет само по себе — её задаёт набор вариантов.
         TypeNode::Enum(name) => {
             let variants = enums.get(name)?;
             enum_width(variants, what).ok().map(|(w, _)| w)
         }
-        _ => None,
+        // ⚠️ Прочие скаляры считает ОБЩИЙ носитель `sv_type::scalar_width`, а
+        // не вторая копия таблицы (фича 0487): копия отстала на `duration` —
+        // цель `sv` порт такого типа печатала, а `sv-mmio` отвечала `SV-002`
+        // «ширина не определена», хотя длительность — целое в миллисекундах.
+        _ => crate::generator::sv::sv_type::scalar_width(ty).filter(|w| *w > 0),
     }
 }
 

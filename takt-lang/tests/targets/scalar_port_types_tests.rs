@@ -1,4 +1,4 @@
-//! Порт перечислимого типа у восьми целей (фича 0485).
+//! Скалярные типы, которые цели считали непредставимыми у порта (0485, 0487).
 //!
 //! # Что было
 //!
@@ -19,7 +19,9 @@
 //! - `from_repr` печатается **по нужде** — при выходном порте её быть не
 //!   должно, иначе `-D warnings` отвергнет неиспользуемую функцию;
 //! - контроль: составной порт по-прежнему разворачивается по листам (его
-//!   разворачивает `port_split`, до классификации портов он не доходит).
+//!   разворачивает `port_split`, до классификации портов он не доходит);
+//! - то же для типа `duration` (фича 0487): он тоже скаляр — целое в
+//!   миллисекундах, — и его порт переводят все восемь целей.
 
 use takt_lang::generator::GenerateOptions;
 
@@ -27,6 +29,51 @@ use takt_lang::generator::GenerateOptions;
 const TARGETS: &[&str] = &[
     "c", "c-hal", "st", "st-at", "rust", "sv", "sv-mmio", "plantuml",
 ];
+
+/// Модель с портом типа `duration` заданного направления (фича 0487).
+///
+/// ⚠️ Длительность — тот же класс, что перечисление: скаляр, чью ширину задаёт
+/// общий носитель (`duration::VALUE_BITS`). Замер 2026-09-02: её порт
+/// переводили пять целей, а `rust`, `st-at` и `sv-mmio` отвечали `RS-016`,
+/// `ST-004` и `SV-002`.
+fn duration_source(direction: &str) -> String {
+    let body = if direction == "in" {
+        "in hold: duration at 0x300;\n\
+         \x20   out level: u8 at 0x304;\n\
+         \x20   start Cycle {\n\
+         \x20       always { seen := hold; level := 1; }\n\
+         \x20       ref Cycle: seen > 1s;\n\
+         \x20   }\n"
+    } else {
+        "out hold: duration at 0x300;\n\
+         \x20   start Cycle {\n\
+         \x20       always { hold := seen; }\n\
+         \x20       ref Cycle: seen > 1s;\n\
+         \x20   }\n"
+    };
+    format!(
+        "model Probe {{\n\
+         \x20   var seen: duration := 2s;\n\
+         \x20   {body}\
+         }}\n\
+         start Main = Probe;\n"
+    )
+}
+
+/// Порт длительности переводят все восемь целей — в обоих направлениях.
+#[test]
+fn every_target_translates_duration_port() {
+    let mut failed = Vec::new();
+    for direction in ["in", "out"] {
+        for target in TARGETS {
+            let tag = format!("dur_{direction}_{target}");
+            if let Err(err) = emit(target, &duration_source(direction), &tag) {
+                failed.push(format!("{target} ({direction}): отказ {:?}", err.code));
+            }
+        }
+    }
+    assert!(failed.is_empty(), "не переведено:\n{}", failed.join("\n"));
+}
 
 /// Модель с перечислимым портом заданного направления.
 fn source(direction: &str) -> String {

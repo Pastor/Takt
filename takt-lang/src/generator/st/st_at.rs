@@ -136,6 +136,14 @@ fn size_of(ty: &TypeNode, model: &crate::semantic::ModelNode) -> Option<&'static
         TypeNode::Integer { bits: 64, .. } => "L",
         // `LREAL` — 64 бита (0041-02, T11).
         TypeNode::Rational => "L",
+        // Длительность — целое в миллисекундах (0183), и локация даётся именно
+        // целому (фича 0487): ширину берёт общий носитель `duration`.
+        TypeNode::Duration => match crate::semantic::duration::VALUE_BITS {
+            8 => "B",
+            16 => "W",
+            32 => "D",
+            _ => "L",
+        },
         // Перечисление цель печатает ЦЕЛЫМ (`USINT` и шире), а локация даётся
         // именно целому (фича 0485): ширину берёт общий факт `enum_facts`
         // (0060) — тот же, которым цель выбирает тип переменной.
