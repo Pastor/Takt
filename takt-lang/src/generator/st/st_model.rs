@@ -462,12 +462,20 @@ fn emit_deferred_inits(p: &mut Printer, model: &ModelNode) -> Result<(), Diagnos
                 else {
                     continue;
                 };
-                let TypeNode::Array(_, elem_ty) = field_ty else {
-                    continue;
-                };
-                for (index, item) in inner.iter().enumerate() {
-                    let text = crate::generator::st::st_expr::coerce_to(item, elem_ty, model)?;
-                    p.ident(&format!("{name}.{field}[{index}] := {text};")).nl();
+                // Агрегат раскрывается ДО ЛИСТЬЕВ общим носителем (0366):
+                // отложенным бывает и поле-массив (0422), и поле-СТРУКТУРА
+                // (0496) — у второго путь длиннее одного шага, и своя
+                // одноуровневая печать теряла бы вложенные значения молча.
+                let fields_of = |sname: &str| model.search_struct(sname).map(|d| d.fields);
+                for leaf in crate::generator::aggregate::leaves(Some(field_ty), inner, &fields_of) {
+                    let text = match &leaf.ty {
+                        Some(ty) => {
+                            crate::generator::st::st_expr::coerce_to(leaf.value, ty, model)?
+                        }
+                        None => crate::generator::st::st_expr::print_expression(leaf.value, model)?,
+                    };
+                    let suffix = crate::generator::st::st_multidim::iec_suffix(&leaf.path);
+                    p.ident(&format!("{name}.{field}{suffix} := {text};")).nl();
                 }
             }
             continue;
