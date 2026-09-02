@@ -110,19 +110,37 @@ pub(super) fn emit_struct_fields(
     model: &ModelNode,
     enum_name: &str,
 ) -> Result<(), Diagnostic> {
-    if needs_dwell(map, model) {
-        let bits = dwell_bits(map, model)?;
-        p.ident(&format!("{DWELL_FIELD}: u{bits},")).nl();
-    }
-    if needs_entry_ms(map, model) {
+    for field in field_names(map, model) {
         // Метка — фиксированный u64: `now_ms` отдаёт u64, а обёртка `wrapping_sub`
         // верна на любой ширине (сужать ради байтов здесь не стоит риска рассинхрона).
-        p.ident(&format!("{ENTRY_MS_FIELD}: u64,")).nl();
-    }
-    if needs_dwell(map, model) || needs_entry_ms(map, model) {
-        p.ident(&format!("{PREV_STATE_FIELD}: {enum_name},")).nl();
+        let ty = match field {
+            f if f == DWELL_FIELD => format!("u{}", dwell_bits(map, model)?),
+            f if f == ENTRY_MS_FIELD => "u64".to_string(),
+            _ => enum_name.to_string(),
+        };
+        p.ident(&format!("{field}: {ty},")).nl();
     }
     Ok(())
+}
+
+/// Имена полей времени, которые модель получит, — в порядке печати.
+///
+/// ⚠️ Условия эмиссии живут ЗДЕСЬ и только здесь: их читает и печать полей, и
+/// набор занятых имён цели (фича 0483). Вторая копия условий разошлась бы с
+/// печатью молча — и отказ `RS-026` перестал бы срабатывать ровно там, где
+/// поле всё-таки печатается.
+pub(super) fn field_names(map: &RustMap, model: &ModelNode) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if needs_dwell(map, model) {
+        out.push(DWELL_FIELD);
+    }
+    if needs_entry_ms(map, model) {
+        out.push(ENTRY_MS_FIELD);
+    }
+    if needs_dwell(map, model) || needs_entry_ms(map, model) {
+        out.push(PREV_STATE_FIELD);
+    }
+    out
 }
 
 /// Печатает начальные значения полей времени в литерале `Self { … }` (`fn new`).

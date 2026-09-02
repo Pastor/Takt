@@ -26,6 +26,7 @@ use crate::generator::rust::rust_chain::{Chain, model_concats, seq_enum_name, se
 use crate::generator::rust::rust_ctx::ModelEmit;
 use crate::generator::rust::rust_decl::{PortSet, default_value, model_fields};
 use crate::generator::rust::rust_expr::{Scope, coerce_to};
+use crate::generator::rust::rust_fields;
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::{check_name_collisions, rust_type_name, rust_value_name};
 use crate::generator::rust::rust_port_init;
@@ -316,6 +317,21 @@ pub(crate) fn emit_model(
         .nl();
     let _ = &type_args;
     p.up();
+    // Имена, которые цель напечатает в эту структуру САМА (фича 0483). Набор
+    // строится ДО печати переменных: отказ обязан нести координату объявления,
+    // а у служебного поля позиции нет. Порядок печати не меняется — снимки
+    // `examples/generated/` сверяются побайтно.
+    let mut fields = rust_fields::Fields::service(
+        map,
+        model,
+        &instances
+            .iter()
+            .flat_map(|(_, list)| list)
+            .collect::<Vec<_>>(),
+        &concats,
+        is_root && !shared.is_empty(),
+        is_root && uses_hal,
+    )?;
     for (_, var) in model_fields(model, map) {
         let VariableNode::Simple {
             name: vname,
@@ -330,9 +346,11 @@ pub(crate) fn emit_model(
         if union_names.contains(vname) {
             continue;
         }
+        let field = rust_value_name(vname, *loc)?;
+        fields.claim(vname, &field, *loc)?;
         p.ident(&format!(
             "{}: {},",
-            rust_value_name(vname, *loc)?,
+            field,
             rust_type(ty, &format!("переменная '{}'", vname))?
         ))
         .nl();

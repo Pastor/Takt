@@ -49,6 +49,7 @@ mod rust_ctx;
 mod rust_decl;
 mod rust_every;
 mod rust_expr;
+mod rust_fields;
 mod rust_fixed;
 mod rust_func;
 mod rust_live;
