@@ -321,9 +321,20 @@ mod tests {
     }
 
     /// Составной тип локации не имеет → `ST-004`, а не выдумка.
+    ///
+    /// ⚠️ Прежде здесь стоял `[bit;4]`, и это было неверно: бит-вектор до слова
+    /// — упакованный СКАЛЯР (0078), и с фикса 0488-01 он размещается наравне с
+    /// целым. Настоящий составной тип — массив целых: его цель разворачивает
+    /// по листам либо отвергает, но локации у него нет.
     #[test]
     fn test_composite_port_has_no_location_st004() {
-        let ty = TypeNode::Array(4, Box::new(TypeNode::Bit));
+        let ty = TypeNode::Array(
+            4,
+            Box::new(TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            }),
+        );
         let err = location_of(
             "arr",
             &ty,
