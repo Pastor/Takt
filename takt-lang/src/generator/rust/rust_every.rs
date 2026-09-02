@@ -61,6 +61,17 @@ fn field_ty(map: &RustMap, model: &ModelNode) -> Result<String, Diagnostic> {
     })
 }
 
+/// Имена аккумуляторов `every`, которые модель получит, — в порядке печати.
+///
+/// ⚠️ Перечень блоков берётся у того же `every_blocks`, что и печать: набор
+/// занятых имён цели (фича 0483) обязан видеть ровно те поля, что печатаются.
+pub(super) fn field_names(model: &ModelNode) -> Vec<String> {
+    every_blocks(model)
+        .into_iter()
+        .map(|e| field(e.idx))
+        .collect()
+}
+
 /// Печатает поля-аккумуляторы `every` в объявление `struct`.
 pub(super) fn emit_struct_fields(
     p: &mut Printer,

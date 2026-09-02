@@ -61,6 +61,21 @@ fn rs004(original: &str, produced: &str, loc: Location) -> Diagnostic {
 }
 
 /// Строит диагностику `RS-005` — два имени слиплись после приведения регистра.
+///
+/// ⚠️ Отдана наружу для полей структуры модели (фича 0483): там столкновение
+/// ловится **накопительно**, по одному объявлению за раз, чтобы отказ нёс
+/// координату этого объявления, — а не списком пар, как у портов и состояний.
+pub(super) fn name_collision(
+    first: &str,
+    second: &str,
+    produced: &str,
+    kind: &str,
+    loc: Location,
+) -> Diagnostic {
+    rs005(first, second, produced, kind, loc)
+}
+
+/// Строит диагностику `RS-005` — два имени слиплись после приведения регистра.
 fn rs005(first: &str, second: &str, produced: &str, kind: &str, loc: Location) -> Diagnostic {
     Diagnostic::error(
         loc,
