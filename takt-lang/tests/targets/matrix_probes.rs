@@ -10,120 +10,15 @@
 //! Разъехавшись, два генератора дали бы двум сторожам разные входы, и таблица
 //! ожиданий одного перестала бы говорить о другом.
 //!
+//! ⚠️ Ось «форма объявления» (`Kind`) живёт рядом — в `matrix_kind`: там знание
+//! о том, как выглядят объявление, чтение и запись каждой формы, здесь — сборка
+//! исходника пробы.
+//!
 //! ⚠️ Порты объявляются **с адресом**: он нужен целям `c-hal` и `st-at` (иначе
 //! `SE-052`), а прочим безразличен — проверено прогоном (сигнатуры цели `c` от
 //! адреса не меняются).
 
-/// Форма ОБЪЯВЛЕНИЯ того, к чему идёт обращение (фича 0451).
-///
-/// Ось заведена потому, что тип меняет и путь печати, и границы целей:
-/// массив и структура в порту **разворачиваются по листам** (фичи 0350, 0417),
-/// перечисление в порту `rust` и `st-at` не размещают вовсе, а инициализатор
-/// массива от другой переменной цель `c` не выражает.
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) enum Kind {
-    /// Скаляр `u8`.
-    Scalar,
-    /// Массив `[u8; 3]`.
-    Array,
-    /// Структура из двух полей.
-    Struct,
-    /// Перечисление из двух вариантов.
-    Enum,
-}
-
-/// Формы объявления — перебор идёт по ним целиком.
-pub(crate) const KINDS: [Kind; 4] = [Kind::Scalar, Kind::Array, Kind::Struct, Kind::Enum];
-
-impl Kind {
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Kind::Scalar => "scalar",
-            Kind::Array => "array",
-            Kind::Struct => "struct",
-            Kind::Enum => "enum",
-        }
-    }
-
-    /// Имя типа в объявлении.
-    fn type_name(self) -> &'static str {
-        match self {
-            Kind::Scalar => "u8",
-            Kind::Array => "[u8; 3]",
-            Kind::Struct => "Pair",
-            Kind::Enum => "Mode",
-        }
-    }
-
-    /// Объявление типа, если оно нужно.
-    fn type_declaration(self) -> &'static str {
-        match self {
-            Kind::Struct => "struct Pair {\n    lo: u8,\n    hi: u8\n}\n\n",
-            Kind::Enum => "enum Mode {\n    Idle = 1,\n    Work = 2\n}\n\n",
-            _ => "",
-        }
-    }
-
-    /// Значение для инициализатора.
-    fn literal(self) -> &'static str {
-        match self {
-            Kind::Scalar => "7",
-            Kind::Array => "{4, 5, 6}",
-            Kind::Struct => "{4, 5}",
-            Kind::Enum => "Work",
-        }
-    }
-
-    /// Начальное значение объявления в корне.
-    fn root_literal(self) -> &'static str {
-        match self {
-            Kind::Scalar => "3",
-            Kind::Array => "{1, 2, 3}",
-            Kind::Struct => "{1, 2}",
-            Kind::Enum => "Idle",
-        }
-    }
-
-    /// Оператор, читающий значение `name` и прибавляющий его к `k`.
-    fn read_statement(self, name: &str) -> String {
-        match self {
-            Kind::Scalar => format!("            k := k + {name};\n"),
-            Kind::Array => format!("            k := k + {name}[1];\n"),
-            // ⚠️ Читаются ОБА поля: у цели `sv` структурный порт остаётся
-            // одним сигналом (0390), и `verilator` под `-Wall` считает
-            // непрочитанные биты ошибкой. Проба проверяет транспорт значения,
-            // а не частичное использование (замер 0452 — тот класс вынесен
-            // кандидатом).
-            Kind::Struct => format!("            k := k + {name}.hi + {name}.lo;\n"),
-            // У перечисления арифметики нет: читается СРАВНЕНИЕМ.
-            Kind::Enum => {
-                format!(
-                    "            if {name} = Work {{\n                k := k + 2;\n            }}\n"
-                )
-            }
-        }
-    }
-
-    /// Оператор, читающий ОДНУ часть значения (фича 0453).
-    fn partial_read_statement(self, name: &str) -> String {
-        match self {
-            Kind::Struct => format!("            k := k + {name}.hi;\n"),
-            Kind::Array => format!("            k := k + {name}[0];\n"),
-            // У скаляра и перечисления частей нет: чтение полное.
-            _ => self.read_statement(name),
-        }
-    }
-
-    /// Оператор, пишущий в `name` значение, зависящее от такта.
-    fn write_statement(self, name: &str) -> String {
-        match self {
-            Kind::Scalar => format!("            {name} := k;\n"),
-            Kind::Array => format!("            {name}[1] := k;\n"),
-            Kind::Struct => format!("            {name}.hi := k;\n"),
-            Kind::Enum => format!("            {name} := Work;\n"),
-        }
-    }
-}
+pub(crate) use super::matrix_kind::{KINDS, Kind};
 
 /// Вид обращения к корню — то, ради чего указатель и печатается.
 #[derive(Clone, Copy, PartialEq)]
@@ -301,10 +196,17 @@ pub(crate) enum Touch {
     /// одним сигналом (0390) — непрочитанные биты `verilator` под `-Wall`
     /// считает ошибкой. Вид заведён именно ради этого случая.
     PortReadPartial,
+    /// Вызов функции ИЗ УСЛОВИЯ ребра: функция состояния не касается, и
+    /// указателя на него получать не должна — ни в сигнатуре, ни в вызове.
+    ///
+    /// ⚠️ Вид заведён фичей 0502: печатников вызова у цели `c` два, и второй
+    /// передавал указатель безусловно — `cc` отвечал «too many arguments» при
+    /// нулевом коде возврата. Перебор этого места не знал.
+    FnCallOnEdge,
 }
 
 /// Все виды обращения — перебор идёт по ним целиком.
-pub(crate) const TOUCHES: [Touch; 61] = [
+pub(crate) const TOUCHES: [Touch; 62] = [
     Touch::None,
     Touch::PortWrite,
     Touch::SharedRead,
@@ -317,6 +219,7 @@ pub(crate) const TOUCHES: [Touch; 61] = [
     Touch::InoutRead,
     Touch::InoutWrite,
     Touch::PortReadPartial,
+    Touch::FnCallOnEdge,
     Touch::InvariantModel,
     Touch::InvariantState,
     Touch::GuardFormula,
@@ -383,6 +286,7 @@ impl Touch {
             Touch::InoutRead => "inout_read",
             Touch::InoutWrite => "inout_write",
             Touch::PortReadPartial => "port_read_partial",
+            Touch::FnCallOnEdge => "fn_call_on_edge",
             Touch::InvariantModel => "invariant_model",
             Touch::InvariantState => "invariant_state",
             Touch::GuardFormula => "guard_formula",
@@ -551,6 +455,9 @@ impl Touch {
             Touch::None
             | Touch::SharedRead
             | Touch::ClockAfter
+            // Функция объявлена рядом (`functions`), а объявлений уровня
+            // модели виду не нужно.
+            | Touch::FnCallOnEdge
             | Touch::InvariantState
             | Touch::ImportFunction
             | Touch::ImportSelective
@@ -589,6 +496,11 @@ impl Touch {
             Touch::LtlInFunction => {
                 "    fn bump(v: u8) -> u8 {\n        : [LTL] G Low;\n        return v + 1;\n    }\n"
                     .to_string()
+            }
+            // Чистая функция: состояния не касается — по ней и судится
+            // признак нужды в указателе (фича 0502).
+            Touch::FnCallOnEdge => {
+                "    fn twice(v: u8) -> u8 {\n        return v + v;\n    }\n".to_string()
             }
             Touch::Transitive => format!(
                 "    fn bump(v: u8) -> u8 {{\n{}        return v + 1;\n    }}\n",
@@ -699,6 +611,8 @@ impl Touch {
             // штатно, а `Nested` — то же через второе условие.
             Touch::CondOnEdge => "        ref Done: Low;\n",
             Touch::CondNested => "        ref Done: Nested;\n",
+            // Вызов стоит В УСЛОВИИ — это и есть предмет вида (фича 0502).
+            Touch::FnCallOnEdge => "        ref Done: twice(k) > 3;\n",
             _ => "        next Done;\n",
         }
     }

@@ -33,6 +33,9 @@ use takt_lang::lsp::{
 // ⚠️ `dead_code` глушится осознанно: генератор общий, а этому набору нужна
 // лишь часть его API — файлы библиотек и ключи CLI спрашивает перебор целей.
 #[allow(dead_code)]
+#[path = "../targets/matrix_kind.rs"]
+mod matrix_kind;
+#[allow(dead_code)]
 #[path = "../targets/matrix_probes.rs"]
 mod matrix_probes;
 

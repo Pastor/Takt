@@ -146,3 +146,95 @@ fn submodel_without_root_access_has_no_main() {
         "вызов обязан согласоваться с сигнатурой:\n{text}"
     );
 }
+
+// ─── Вызов из УСЛОВИЯ (фича 0502) ───────────────────────────────────────────
+//
+// Признак нужды один, а печатников вызова у цели `c` **два**: выражения и
+// условия. Второй передавал указатель безусловно, и функция без обращения к
+// состоянию объявлялась без него, а из условия ребра звалась с ним — `cc`
+// отвечал «too many arguments to function call» при НУЛЕВОМ коде возврата
+// `taktc`. Гейт цели класса не видел: в корпусе такого вызова нет.
+
+/// Вход: обе функции зовутся ТОЛЬКО из условий рёбер.
+const COND_SRC: &str = "out probe: u8 at 0;\nvar ticks: u8 := 0;\n\
+     fn twice(v: u8) -> u8 { return v + v; }\n\
+     fn accumulated() -> u8 { return ticks + 1; }\n\
+     start Run {\n    always { ticks := ticks + 1; probe := ticks; }\n\
+     \x20   ref Hot: twice(ticks) > 3;\n    ref Run: accumulated() < 100;\n}\n\
+     state Hot { always { probe := 9; } ref Hot; }\n";
+
+/// Предмет: вызов из условия не передаёт указатель, которого нет в сигнатуре.
+#[test]
+fn condition_call_omits_pointer_when_unused() {
+    let (_, text) = generate("cp0502", COND_SRC);
+    assert!(
+        text.contains("Cp0502_twice(model->ticks)"),
+        "вызов из условия обязан согласоваться с сигнатурой:\n{text}"
+    );
+}
+
+/// **Контроль:** функция, читающая переменную модели, указатель получает и в
+/// условии — иначе правка читалась бы как «в условиях не передавать никогда».
+#[test]
+fn condition_call_keeps_pointer_when_needed() {
+    let (_, text) = generate("cp0502c", COND_SRC);
+    assert!(
+        text.contains("Cp0502c_accumulated(model)"),
+        "функция, читающая состояние, обязана получить указатель:\n{text}"
+    );
+}
+
+/// Вывод принимает `cc` флагами гейта цели — главный сторож класса.
+#[test]
+fn condition_call_output_compiles() {
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] `cc` не найден; форма вывода проверена отдельно");
+        return;
+    }
+    let (dir, _) = generate("cp0502cc", COND_SRC);
+    let out = Command::new("cc")
+        .args([
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Wno-unused-parameter",
+            "-Werror",
+            "-c",
+        ])
+        .arg("-I")
+        .arg(&dir)
+        .arg(dir.join("cp0502cc.c"))
+        .arg("-o")
+        .arg(dir.join("cp0502cc.o"))
+        .output()
+        .expect("запуск cc");
+    assert!(
+        out.status.success(),
+        "порождённый C обязан собираться (прежде — «too many arguments»):\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// У ПОД-МОДЕЛИ работает то же правило, и указатель зовётся `main`.
+#[test]
+fn submodel_condition_call_follows_the_need() {
+    let src = "out probe: u8 at 0;\nvar shared: u8 := 0;\n\
+         model Worker {\n    var step: u8 := 0;\n\
+         \x20   fn pure_twice(v: u8) -> u8 { return v + v; }\n\
+         \x20   fn read_shared() -> u8 { return shared + 1; }\n\
+         \x20   start Busy {\n\
+         \x20       always { step := step + 1; shared := step; probe := step; }\n\
+         \x20       ref Done: pure_twice(step) > 4;\n\
+         \x20       ref Busy: read_shared() < 100;\n    }\n\
+         \x20   state Done { always { probe := 99; } ref Done; }\n}\n\
+         start Main = Worker;\n";
+    let (_, text) = generate("cp0502s", src);
+    assert!(
+        text.contains("Worker_pure_twice(model->step)"),
+        "чистая функция под-модели зовётся без указателя:\n{text}"
+    );
+    assert!(
+        text.contains("Worker_read_shared(main)"),
+        "функция, читающая общее объявление корня, получает `main`:\n{text}"
+    );
+}
