@@ -75,6 +75,53 @@ fn every_target_translates_duration_port() {
     assert!(failed.is_empty(), "не переведено:\n{}", failed.join("\n"));
 }
 
+/// Модель с портом-битвектором заданной ширины (фикс 0488-01).
+fn bitvector_source(width: u16) -> String {
+    format!(
+        "model Probe {{\n\
+         \x20   var mask: [bit; {width}] := 0;\n\
+         \x20   var ticks: u8 := 0;\n\
+         \x20   out sig: [bit; {width}] at 0x300;\n\
+         \x20   start Cycle {{\n\
+         \x20       always {{ ticks := ticks + 1; sig := mask; }}\n\
+         \x20       ref Cycle: ticks < 200;\n\
+         \x20   }}\n\
+         }}\n\
+         start Main = Probe;\n"
+    )
+}
+
+/// Бит-вектор ДО слова — скаляр: его порт переводят все восемь целей.
+///
+/// ⚠️ Эту ветвь носитель 0488 пропустил, и `st-at` отвечал `ST-004` там, где
+/// прочие семь потребителей переводят (фикс 0488-01).
+#[test]
+fn every_target_translates_packed_bitvector_port() {
+    let mut failed = Vec::new();
+    for target in TARGETS {
+        if let Err(err) = emit(target, &bitvector_source(12), &format!("bv_{target}")) {
+            failed.push(format!("{target}: отказ {:?}", err.code));
+        }
+    }
+    assert!(failed.is_empty(), "не переведено:\n{}", failed.join("\n"));
+}
+
+/// **Контроль:** бит-вектор ШИРЕ слова скаляром не является.
+///
+/// Массив слов портом быть не может, и цели отвечают своими кодами — правило
+/// не менялось. Без этого контроля «бит-вектор разрешён» читалось бы как
+/// «разрешён любой», а `[bit;96]` в HAL-колбэк не ложится.
+#[test]
+fn wide_bitvector_port_is_still_refused() {
+    let mut wrong = Vec::new();
+    for target in ["c", "rust", "st-at"] {
+        if emit(target, &bitvector_source(96), &format!("bv96_{target}")).is_ok() {
+            wrong.push(format!("{target} принял порт [bit;96]"));
+        }
+    }
+    assert!(wrong.is_empty(), "контроль:\n{}", wrong.join("\n"));
+}
+
 /// Модель с портом типа `q(m, n)` заданного направления (фича 0488).
 ///
 /// ⚠️ Третий тип на той же оси: `q` хранится знаковым целым **машинной**

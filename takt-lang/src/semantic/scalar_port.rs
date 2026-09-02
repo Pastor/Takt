@@ -54,6 +54,25 @@ pub(crate) fn scalar_repr(ty: &TypeNode, model: &ModelNode) -> Option<ScalarRepr
             bits: crate::semantic::type_node::type_fixed::fixed_storage_bits(m + n),
             signed: true,
         }),
+        // Бит-вектор `[bit;N]`, N ≤ 64 — УПАКОВАННОЕ беззнаковое целое родной
+        // ширины (0078): `[bit;12]` ≡ `u16`. N > 64 — массив слов, и целым он
+        // не представим: там `None` (у `rust` это `RS-016`, и отказ верен).
+        //
+        // ⚠️ Пропуск этой ветви и был дефектом 0488: носитель обещал «скаляр»,
+        // а цель `st-at` отвечала `ST-004` на порту `[bit;12]`, который прочие
+        // семь потребителей переводят (фикс 0488-01).
+        ty if crate::semantic::bit_vector::is_bit_vector(ty).is_some() => {
+            let n = crate::semantic::bit_vector::is_bit_vector(ty)?;
+            match crate::semantic::bit_vector::layout(n) {
+                crate::semantic::bit_vector::BitVectorLayout::Scalar { width } => {
+                    Some(ScalarRepr {
+                        bits: u8::try_from(width).unwrap_or(64),
+                        signed: false,
+                    })
+                }
+                crate::semantic::bit_vector::BitVectorLayout::Words { .. } => None,
+            }
+        }
         // Перечисление: знак и ширину задаёт набор вариантов (0060).
         TypeNode::Enum(name) => {
             let facts = model.search_enum(name).and_then(|e| e.facts())?;
@@ -131,6 +150,29 @@ mod tests {
     fn bit_is_not_an_integer() {
         assert!(scalar_repr(&TypeNode::Bit, &model()).is_none());
         assert!(scalar_repr(&TypeNode::Bool, &model()).is_none());
+    }
+
+    /// Бит-вектор до слова — упакованное беззнаковое целое родной ширины.
+    ///
+    /// ⚠️ Ровно эту ветвь пропустила фича 0488, и `st-at` отвечал `ST-004` на
+    /// порту `[bit;12]`, который переводят семь прочих потребителей.
+    #[test]
+    fn packed_bit_vector_is_unsigned_integer() {
+        let vector = TypeNode::Array(12, Box::new(TypeNode::Bit));
+        assert_eq!(
+            scalar_repr(&vector, &model()),
+            Some(ScalarRepr {
+                bits: 16,
+                signed: false
+            })
+        );
+    }
+
+    /// Бит-вектор ШИРЕ слова — массив слов, а не скаляр.
+    #[test]
+    fn wide_bit_vector_is_not_scalar() {
+        let words = TypeNode::Array(96, Box::new(TypeNode::Bit));
+        assert!(scalar_repr(&words, &model()).is_none());
     }
 
     /// Составной тип скалярного представления не имеет.
