@@ -112,10 +112,34 @@ pub(super) fn generate_constants_and_ports_and_enums(
                     // литерал вне объявления). `static const Type X = {…};`
                     // делает `X.field` корректным. Скаляр/массив — прежним
                     // `#define` (массив с полевым доступом — территория 0078).
+                    // Массив — то же самое и по той же причине (фича 0490):
+                    // `#define X {1, 2}` при `a[0] = X[0];` разворачивается в
+                    // `{1, 2}[0]`, и `cc` отвечает «expected expression» при
+                    // НУЛЕВОМ коде возврата `taktc`. Замер 2026-09-02: тот же
+                    // вход отвергают `st`/`st-at` и не синтезирует `yosys`.
+                    //
+                    // ⚠️ Бит-вектор `[bit;N≤64]` — упакованный СКАЛЯР (0078):
+                    // ему `#define` верен, и трогать его нельзя.
+                    let array_const = matches!(ty, TypeNode::Array(..))
+                        && crate::semantic::bit_vector::is_bit_vector(ty).is_none();
                     if let TypeNode::Struct(struct_name) = ty {
                         lines.push(format!(
                             "static const {} CONST_{} = {};",
                             struct_name, name, value
+                        ));
+                    } else if array_const {
+                        let (len, elem) = match ty {
+                            TypeNode::Array(len, elem) => (*len, elem.as_ref()),
+                            _ => unreachable!("проверено `array_const`"),
+                        };
+                        let elem_ty = c_type_or_diagnostic(
+                            elem,
+                            model,
+                            map.float_width(),
+                            &format!("константа '{name}'"),
+                        )?;
+                        lines.push(format!(
+                            "static const {elem_ty} CONST_{name}[{len}] = {value};"
                         ));
                     } else {
                         lines.push(format!("#define CONST_{} {}", name, value));
