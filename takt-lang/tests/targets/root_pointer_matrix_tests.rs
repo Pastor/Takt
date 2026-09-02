@@ -55,6 +55,9 @@ fn expects(touch: Touch, _kind: Kind) -> (bool, bool) {
         | Touch::LtlInNested
         | Touch::InvariantScoped
         | Touch::InvariantNamed
+        // Вызов из условия зовёт функцию, состояния не касающуюся: корня ей
+        // не нужно ни в сигнатуре, ни в вызове (фича 0502).
+        | Touch::FnCallOnEdge
         // Именованное условие раскрывается в условие над переменной МОДЕЛИ:
         // корня ему не нужно (фича 0476).
         | Touch::CondOnEdge

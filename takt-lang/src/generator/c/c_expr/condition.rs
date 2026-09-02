@@ -411,14 +411,32 @@ pub(in crate::generator::c) fn generate_condition_expr(
                 .map(|a| generate_condition_expr(a, map, owner))
                 .collect();
             let args_strs = args_strs?;
-            // Локальная функция в C принимает main/model как первый аргумент
-            if matches!(*fun, FunctionDefinitionNode::Local { .. }) {
-                let first_arg = if owner.name().eq(&map.root_name()) {
-                    "model"
-                } else {
-                    "main"
+            // Локальная функция принимает указатель на состояние первым
+            // аргументом — но ПО НУЖДЕ (фичи 0396, 0419, 0502): тем же
+            // признаком, по которому он попал (или не попал) в сигнатуру.
+            //
+            // ⚠️ Признак спрашивается у ОБЩЕГО носителя, а не считается здесь
+            // заново: печатников вызова у цели два (выражения и условия), и
+            // прежде второй передавал указатель безусловно — функция без
+            // обращения к состоянию объявлялась без него, а из условия ребра
+            // звалась с ним, и `cc` отвечал «too many arguments» при нулевом
+            // коде возврата `taktc`.
+            if let FunctionDefinitionNode::Local { upper, .. } = &*fun {
+                let owner_rc = upper.as_ref().and_then(|w| w.upgrade());
+                let wants_state = match &owner_rc {
+                    Some(rc) => crate::generator::c::c_needs::needs_state(&fun, &rc.borrow())?,
+                    // Владельца нет — судить не о чем; прежнее поведение.
+                    None => true,
                 };
-                let mut all_args = vec![first_arg.to_string()];
+                let mut all_args = Vec::new();
+                if wants_state {
+                    let first_arg = if owner.name().eq(&map.root_name()) {
+                        "model"
+                    } else {
+                        "main"
+                    };
+                    all_args.push(first_arg.to_string());
+                }
                 all_args.extend(args_strs);
                 Ok(format!("{}({})", fn_name, all_args.join(", ")))
             } else {

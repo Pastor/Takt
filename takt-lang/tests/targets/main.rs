@@ -64,6 +64,7 @@ mod hal_bit_range_tests;
 mod local_aggregate_tests;
 mod ltl_site_matrix_tests;
 mod matrix_corpus_export_tests;
+mod matrix_kind;
 mod matrix_probes;
 mod mixed_arith_tests;
 mod mixed_sign_tests;
