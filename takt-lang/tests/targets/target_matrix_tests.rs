@@ -62,28 +62,12 @@ pub(crate) fn refusal(target: &str, touch: Touch, kind: Kind) -> Option<&'static
         // В IEC 61131-3 есть `EXIT` (аналог `break`), а продолжения итерации
         // нет вовсе: `continue` целью `st` не выражается (замер 0477).
         ("st" | "st-at", Touch::LoopContinue, _) => Some("ST-011"),
-        // Порт перечислимого типа: HAL-трейт `rust` знает бит и число, а
-        // размещение `st-at` — только скаляры IEC. Направление роли не играет.
-        (
-            "rust",
-            Touch::PortWrite
-            | Touch::PortInit
-            | Touch::PortRead
-            | Touch::PortReadPartial
-            | Touch::InoutRead
-            | Touch::InoutWrite,
-            Kind::Enum,
-        ) => Some("RS-016"),
-        (
-            "st-at",
-            Touch::PortWrite
-            | Touch::PortInit
-            | Touch::PortRead
-            | Touch::PortReadPartial
-            | Touch::InoutRead
-            | Touch::InoutWrite,
-            Kind::Enum,
-        ) => Some("ST-004"),
+        // ⚠️ Порт перечислимого типа прежде отвергали `rust` (`RS-016`) и
+        // `st-at` (`ST-004`) — записи здесь и стояли. Фича 0485 обе границы
+        // сняла: перечисление — скаляр, его ширину и знак даёт `enum_facts`, и
+        // порт ложится на метод HAL-трейта либо на локацию `AT %QB`. Записи
+        // удалены, а не помечены пропуском: ожидание отказа, которого больше
+        // нет, — то же расхождение с фактом, ради которого заведён этот набор.
         // Двунаправленный порт в регистровом файле: у шины сторона одна, и
         // выразить `inout` ею нельзя (фича 0428).
         ("sv-mmio", Touch::InoutRead | Touch::InoutWrite, _) => Some("SV-006"),

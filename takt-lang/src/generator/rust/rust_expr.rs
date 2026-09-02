@@ -228,14 +228,25 @@ fn read_port(
         )
         .with_code("RS-018"));
     }
-    let class = port_class(ty, name, loc)?;
-    Ok(format!(
+    let class = port_class(ty, name, loc, scope.model)?;
+    let read = format!(
         "{}.{}({}::{})",
         scope.hal_receiver(&format!("чтение порта '{}'", name))?,
         class.read_fn(),
         class.in_enum(),
         rust_type_name(name, loc)?
-    ))
+    );
+    // Порт перечислимого типа приходит с HAL ЦЕЛЫМ (фича 0485), а приёмник —
+    // вариант: значение восстанавливается функцией перечисления. Она
+    // печатается по нужде — только при наличии входного порта этого типа.
+    if let TypeNode::Enum(enum_name) = ty {
+        return Ok(format!(
+            "{}::{}({read})",
+            rust_type_name(enum_name, loc)?,
+            crate::generator::rust::rust_decl::FROM_REPR
+        ));
+    }
+    Ok(read)
 }
 
 /// Печатает запись в порт: `hal.write_bit(OutBitPort::Name, value)`.
@@ -258,7 +269,14 @@ pub(crate) fn write_port(
         )
         .with_code("RS-018"));
     }
-    let class = port_class(ty, name, loc)?;
+    let class = port_class(ty, name, loc, scope.model)?;
+    // Значение перечислимого типа уходит в HAL ЦЕЛЫМ (фича 0485): в структуре
+    // модели оно хранится вариантом, а метод трейта принимает число.
+    // `#[repr(…)]` у перечисления цель печатает всегда, поэтому `as` законен.
+    let value = match ty {
+        TypeNode::Enum(_) => format!("{value} as {}", class.value_type()),
+        _ => value.to_string(),
+    };
     Ok(format!(
         "{}.{}({}::{}, {})",
         scope.hal_receiver(&format!("запись в порт '{}'", name))?,

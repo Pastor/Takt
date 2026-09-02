@@ -43,6 +43,7 @@ pub(crate) fn location_of(
     ty: &TypeNode,
     direction: PortDirection,
     resolved: &ResolvedAddress,
+    model: &crate::semantic::ModelNode,
 ) -> Result<(String, String, Vec<Diagnostic>), Diagnostic> {
     let mut warnings = Vec::new();
 
@@ -62,10 +63,10 @@ pub(crate) fn location_of(
     };
 
     let is_bool = matches!(ty, TypeNode::Bit | TypeNode::Bool);
-    let size = size_of(ty).ok_or_else(|| {
+    let size = size_of(ty, model).ok_or_else(|| {
         no_location(&format!(
             "порт '{}' типа '{}' не имеет локации: размещаются только скаляры \
-             (BOOL, целые, LREAL), а не массивы, перечисления и структуры",
+             (BOOL, целые, LREAL), а не массивы и структуры",
             name, ty
         ))
     })?;
@@ -126,7 +127,7 @@ pub(crate) fn location_of(
 /// Размер берётся из `TypeNode`, а **не** из C-типа: цель `c` для `bit` печатает
 /// `int` (дефект Д2 фичи 0029), и наследовать эту ошибку в адресацию нельзя —
 /// `%IX` и `%ID` указывают на разные ячейки.
-fn size_of(ty: &TypeNode) -> Option<&'static str> {
+fn size_of(ty: &TypeNode, model: &crate::semantic::ModelNode) -> Option<&'static str> {
     Some(match ty {
         TypeNode::Bit | TypeNode::Bool => "X",
         TypeNode::Integer { bits: 8, .. } => "B",
@@ -135,6 +136,18 @@ fn size_of(ty: &TypeNode) -> Option<&'static str> {
         TypeNode::Integer { bits: 64, .. } => "L",
         // `LREAL` — 64 бита (0041-02, T11).
         TypeNode::Rational => "L",
+        // Перечисление цель печатает ЦЕЛЫМ (`USINT` и шире), а локация даётся
+        // именно целому (фича 0485): ширину берёт общий факт `enum_facts`
+        // (0060) — тот же, которым цель выбирает тип переменной.
+        TypeNode::Enum(name) => {
+            let facts = model.search_enum(name).and_then(|e| e.facts())?;
+            match facts.machine_bits() {
+                8 => "B",
+                16 => "W",
+                32 => "D",
+                _ => "L",
+            }
+        }
         _ => return None,
     })
 }
@@ -162,6 +175,14 @@ fn no_location(what: &str) -> Diagnostic {
 mod tests {
     use super::*;
 
+    /// Пустая модель: перечислений в ней нет, и `size_of` их не ищет.
+    ///
+    /// ⚠️ Тесты размещения проверяют СКАЛЯРЫ; перечислимый порт — предмет
+    /// отдельного набора, где модель несёт объявление (фича 0485).
+    fn model() -> crate::semantic::ModelNode {
+        crate::semantic::ModelNode::default()
+    }
+
     fn resolved(addr: i64, bit: Option<i64>) -> ResolvedAddress {
         ResolvedAddress {
             addr,
@@ -184,6 +205,7 @@ mod tests {
             &TypeNode::Bit,
             PortDirection::In,
             &resolved(256, Some(0)),
+            &model(),
         )
         .unwrap();
         assert_eq!(loc, "%IX256.0");
@@ -198,6 +220,7 @@ mod tests {
             &TypeNode::Bit,
             PortDirection::Out,
             &resolved(1280, Some(0)),
+            &model(),
         )
         .unwrap();
         assert_eq!(loc, "%QX1280.0");
@@ -211,6 +234,7 @@ mod tests {
             &TypeNode::Bit,
             PortDirection::In,
             &resolved(256, Some(0)),
+            &model(),
         )
         .unwrap();
         assert!(loc.contains("256"), "адрес обязан быть десятичным: {loc}");
@@ -232,7 +256,7 @@ mod tests {
                 signed: false,
             };
             let (loc, _, _) =
-                location_of("p", &ty, PortDirection::In, &resolved(512, None)).unwrap();
+                location_of("p", &ty, PortDirection::In, &resolved(512, None), &model()).unwrap();
             assert_eq!(loc, format!("%I{}512", letter), "разрядность {bits}");
         }
     }
@@ -247,8 +271,14 @@ mod tests {
             bits: 8,
             signed: false,
         };
-        let (loc, _, w) =
-            location_of("pos_stack", &ty, PortDirection::In, &resolved(512, Some(0))).unwrap();
+        let (loc, _, w) = location_of(
+            "pos_stack",
+            &ty,
+            PortDirection::In,
+            &resolved(512, Some(0)),
+            &model(),
+        )
+        .unwrap();
         assert_eq!(loc, "%IB512", "у байтовой локации бита нет");
         assert_eq!(w.len(), 1, "игнорирование бита обязано быть громким");
         assert_eq!(w[0].code.as_deref(), Some("ST-006"));
@@ -269,6 +299,7 @@ mod tests {
             &TypeNode::Bool,
             PortDirection::In,
             &resolved(256, None),
+            &model(),
         )
         .unwrap();
         assert_eq!(loc, "%IX256.0");
@@ -286,6 +317,7 @@ mod tests {
             &TypeNode::Bit,
             PortDirection::InOut,
             &resolved(16, Some(1)),
+            &model(),
         )
         .unwrap();
         assert_eq!(loc, "%MX16.1");
@@ -295,8 +327,14 @@ mod tests {
     #[test]
     fn test_composite_port_has_no_location_st004() {
         let ty = TypeNode::Array(4, Box::new(TypeNode::Bit));
-        let err = location_of("arr", &ty, PortDirection::In, &resolved(768, None))
-            .expect_err("массив не размещается");
+        let err = location_of(
+            "arr",
+            &ty,
+            PortDirection::In,
+            &resolved(768, None),
+            &model(),
+        )
+        .expect_err("массив не размещается");
         assert_eq!(err.code.as_deref(), Some("ST-004"));
     }
 
@@ -308,6 +346,7 @@ mod tests {
             &TypeNode::Bit,
             PortDirection::In,
             &resolved(-1, Some(0)),
+            &model(),
         )
         .expect_err("отрицательный адрес обязан отвергаться");
         assert_eq!(err.code.as_deref(), Some("ST-004"));
