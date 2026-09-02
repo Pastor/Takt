@@ -76,6 +76,7 @@ mod conformance_modulo_tests;
 mod conformance_named_cond_tests;
 mod conformance_nested_chain_targets_tests;
 mod conformance_nested_composition_tests;
+mod conformance_nested_port_tests;
 mod conformance_nested_ready_tests;
 mod conformance_param_apply_tests;
 mod conformance_param_modes_tests;

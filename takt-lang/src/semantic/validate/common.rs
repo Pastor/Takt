@@ -222,6 +222,25 @@ fn is_out_port(var: &Rc<RefCell<VariableNode>>) -> bool {
     )
 }
 
+/// Объявление, к части которого обращается МЕСТО ЗАПИСИ: `res.tail.b`,
+/// `bus[1].lo`, `led.0` — всё это обращения к `res`, `bus`, `led`.
+///
+/// ⚠️ Спуск идёт по ЦЕПОЧКЕ любой длины (фича 0500). Прежде оба судьи
+/// направления порта разбирали ровно один шаг, и вложенная форма расходилась с
+/// одноуровневой в обе стороны: `res.tail.b := v` при `out res` отвергалось
+/// ложным `SE-027` («чтение выходного порта» на записи), а `cfg.tail.b := v`
+/// при `in cfg` принималось **молча** — цель печатала присваивание результату
+/// чтения, и вывод отвергал уже `cc`.
+fn place_base(expr: &ExpressionNode) -> Option<Rc<RefCell<VariableNode>>> {
+    match expr {
+        ExpressionNode::Variable(var) => Some(var.clone()),
+        ExpressionNode::BitAccess(inner, _)
+        | ExpressionNode::ArraySubscript(inner, _)
+        | ExpressionNode::Parenthesis(inner) => place_base(inner),
+        _ => None,
+    }
+}
+
 pub(super) fn validate_expression(
     expr: &ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
@@ -266,19 +285,9 @@ pub(super) fn validate_expression(
             validate_expression(right, model.clone())?;
         }
         ExpressionNode::Assign(left, right) => {
-            // Запись в `in`-порт запрещена (SE-026)
-            let check_port = |expr: &ExpressionNode| {
-                if let ExpressionNode::Variable(v) = expr {
-                    return Some(v.clone());
-                }
-                if let ExpressionNode::BitAccess(inner, _) = expr
-                    && let ExpressionNode::Variable(v) = inner.as_ref()
-                {
-                    return Some(v.clone());
-                }
-                None
-            };
-            if let Some(var_rc) = check_port(left)
+            // Запись в `in`-порт запрещена (SE-026). Место записи — вся
+            // цепочка обращения, а не её первый шаг (фича 0500).
+            if let Some(var_rc) = place_base(left)
                 && let VariableNode::Port {
                     direction: PortDirection::In,
                     name,
@@ -301,14 +310,10 @@ pub(super) fn validate_expression(
             // присваиваний не бывает. Фича 0188 распространила её на тела блоков
             // — и форма `led := 1;` стала достижимой, поэтому исключение
             // обобщено на обе формы цели записи.
-            let target_is_out_port = match left.as_ref() {
-                ExpressionNode::Variable(v) => is_out_port(v),
-                ExpressionNode::BitAccess(inner, _) => match inner.as_ref() {
-                    ExpressionNode::Variable(v) => is_out_port(v),
-                    _ => false,
-                },
-                _ => false,
-            };
+            //
+            // ⚠️ Цепочка обращения бывает длиннее одного шага (фича 0500):
+            // `res.tail.b := v` и `bus[1] := v` — тоже записи в выходной порт.
+            let target_is_out_port = place_base(left).as_ref().is_some_and(is_out_port);
             if !target_is_out_port {
                 validate_expression(left, model.clone())?;
             }

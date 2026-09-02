@@ -36,9 +36,11 @@ use std::rc::Rc;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast::Member;
+use crate::semantic::formula::Formula;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode, StatementNode, VariableNode,
+    ConditionNode, ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode,
+    StatementNode, VariableNode,
 };
 
 /// Шаг пути к листу: поле структуры либо элемент массива (фича 0417).
@@ -286,14 +288,23 @@ fn literal_address(expr: &ExpressionNode) -> Option<i128> {
     }
 }
 
-/// Переписывает тела модели: агрегат — по листам, поле — прямым обращением.
+/// Переписывает ВСЕ места обращения модели: агрегат — по листам, часть порта —
+/// прямым обращением к листу.
+///
+/// ⚠️ Список мест — **один** (фича 0500). Прежде обходились только тела блоков
+/// и функций, а условия — именованные, рёбер, `next` и формул — оставались с
+/// обращением к исчезнувшему порту: цели печатали невалидный вывод при нулевом
+/// коде возврата, причём уже на ОДНОМ шаге пути. Появится новое место обращения
+/// — добавлять его нужно здесь, иначе оно молча выпадет (класс 0084/0193/0195).
 fn rewrite_bodies(model: &Rc<RefCell<ModelNode>>, cells: &LeafCells) {
-    let (mut functions, mut named_blocks, mut states) = {
+    let (mut functions, mut named_blocks, mut states, mut conditions, mut formulas) = {
         let mut b = model.borrow_mut();
         (
             std::mem::take(&mut b.functions),
             std::mem::take(&mut b.named_blocks),
             std::mem::take(&mut b.states),
+            std::mem::take(&mut b.conditions),
+            std::mem::take(&mut b.formulas),
         )
     };
     for func in functions.values_mut() {
@@ -304,19 +315,111 @@ fn rewrite_bodies(model: &Rc<RefCell<ModelNode>>, cells: &LeafCells) {
     for blk in named_blocks.iter_mut() {
         rewrite_block(blk, cells);
     }
+    for cond in conditions.values_mut() {
+        rewrite_cond(&mut cond.value, cells);
+    }
+    for formula in formulas.iter_mut() {
+        rewrite_formula(formula, cells);
+    }
     for state in states.values_mut() {
-        if let StateNode::Simple { named_blocks, .. } | StateNode::Implement { named_blocks, .. } =
-            state
-        {
-            for blk in named_blocks.iter_mut() {
-                rewrite_block(blk, cells);
-            }
-        }
+        rewrite_state(state, cells);
     }
     let mut b = model.borrow_mut();
     b.functions = functions;
     b.named_blocks = named_blocks;
     b.states = states;
+    b.conditions = conditions;
+    b.formulas = formulas;
+}
+
+/// Места обращения ОДНОГО состояния: блоки, условия рёбер, `next`, формулы.
+fn rewrite_state(state: &mut StateNode, cells: &LeafCells) {
+    // Поля берутся у варианта напрямую: методов-доступов у `StateNode` нет, а
+    // заводить их значило бы растить `semantic/mod.rs` — он в реестре долга по
+    // размеру (тот же довод, что у обхода 0397).
+    let (named_blocks, references, formulas, next) = match state {
+        StateNode::Simple {
+            named_blocks,
+            references,
+            formulas,
+            ..
+        } => (named_blocks, references, formulas, None),
+        StateNode::Implement {
+            named_blocks,
+            references,
+            formulas,
+            next,
+            ..
+        } => (named_blocks, references, formulas, next.as_mut()),
+        StateNode::Unresolved => return,
+    };
+    for blk in named_blocks.iter_mut() {
+        rewrite_block(blk, cells);
+    }
+    for reference in references.iter_mut() {
+        rewrite_cond(&mut reference.cond, cells);
+    }
+    if let Some(reference) = next {
+        rewrite_cond(&mut reference.cond, cells);
+    }
+    for formula in formulas.iter_mut() {
+        rewrite_formula(formula, cells);
+    }
+}
+
+/// Формула: охранная несёт условие, темпоральная говорит о СОСТОЯНИЯХ.
+///
+/// ⚠️ `Formula::LTL` в объём не входит: её атомы — имена состояний и предикаты
+/// верификатора, до целей она не доезжает вовсе (0235, 0472).
+fn rewrite_formula(formula: &mut Formula, cells: &LeafCells) {
+    match formula {
+        Formula::Guard(cond, _, _) => rewrite_cond(cond, cells),
+        Formula::Formulas(items) => {
+            for item in items.iter_mut() {
+                rewrite_formula(item, cells);
+            }
+        }
+        Formula::None | Formula::LTL(_, _) => {}
+    }
+}
+
+/// `cfg.tail.b` в УСЛОВИИ → порт листа; прочее — рекурсия.
+fn rewrite_cond(cond: &mut ConditionNode, cells: &LeafCells) {
+    // Замена вычисляется ОТДЕЛЬНО: заимствование `cond` живо, пока в нём ищут
+    // лист, и присвоение внутри `if let` компилятор не пропустит.
+    let replacement = cond_path(cond).and_then(|(name, path, loc)| {
+        leaf_cell(cells, &name, &path).map(|cell| ConditionNode::Variable(cell, loc))
+    });
+    if let Some(new_cond) = replacement {
+        *cond = new_cond;
+        return;
+    }
+    match cond {
+        ConditionNode::Parenthesis(inner)
+        | ConditionNode::Not(inner)
+        | ConditionNode::AfterExpr(inner)
+        | ConditionNode::BitAccess(inner, _) => rewrite_cond(inner, cells),
+        ConditionNode::ArraySubscript(l, r)
+        | ConditionNode::Add(l, r)
+        | ConditionNode::Subtract(l, r)
+        | ConditionNode::And(l, r)
+        | ConditionNode::Or(l, r)
+        | ConditionNode::Less(l, r)
+        | ConditionNode::More(l, r)
+        | ConditionNode::LessEqual(l, r)
+        | ConditionNode::MoreEqual(l, r)
+        | ConditionNode::Equal(l, r)
+        | ConditionNode::NotEqual(l, r) => {
+            rewrite_cond(l, cells);
+            rewrite_cond(r, cells);
+        }
+        ConditionNode::Function(_, args, _) => {
+            for arg in args.iter_mut() {
+                rewrite_cond(arg, cells);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn rewrite_block(blk: &mut NamedCodeBlockDefinitionNode, cells: &LeafCells) {
@@ -354,22 +457,57 @@ fn rewrite_stmt(stmt: &mut StatementNode, cells: &LeafCells) {
                 rewrite_expr(expr, cells);
             }
         }
-        StatementNode::If { then_, else_, .. } => {
+        // ⚠️ Условие оператора — тоже место обращения (фича 0500): прежде
+        // обходилось только ТЕЛО, и `if cfg.lo > 1 { … }` доезжало до цели с
+        // обращением к развёрнутому порту.
+        StatementNode::If { cond, then_, else_ } => {
+            rewrite_expr(cond, cells);
             rewrite_stmt(then_, cells);
             if let Some(alt) = else_ {
                 rewrite_stmt(alt, cells);
             }
         }
-        StatementNode::Loop { body, .. } => rewrite_stmt(body, cells),
-        StatementNode::For { init, body, .. } => {
-            if let Some(i) = init {
-                rewrite_stmt(i, cells);
+        StatementNode::Loop { cond, body } => {
+            if let Some(c) = cond {
+                rewrite_expr(c, cells);
             }
             rewrite_stmt(body, cells);
         }
-        StatementNode::Match { arms, .. } => {
+        StatementNode::For {
+            init,
+            cond,
+            step,
+            body,
+            ..
+        } => {
+            if let Some(i) = init {
+                rewrite_stmt(i, cells);
+            }
+            if let Some(c) = cond {
+                rewrite_expr(c, cells);
+            }
+            if let Some(st) = step {
+                rewrite_expr(st, cells);
+            }
+            rewrite_stmt(body, cells);
+        }
+        StatementNode::Match { expr, arms } => {
+            rewrite_expr(expr, cells);
             for arm in arms.iter_mut() {
+                for pattern in arm.patterns.iter_mut() {
+                    if let crate::semantic::MatchPatternNode::Value(value) = pattern {
+                        rewrite_expr(value, cells);
+                    }
+                }
                 rewrite_stmt(&mut arm.body, cells);
+            }
+        }
+        // Вставка для одной цели (0484) — обычные операторы Takt: обращение к
+        // порту в ней такое же, как в любом теле.
+        StatementNode::Assembly { body, .. } => rewrite_stmt(body, cells),
+        StatementNode::InlineFormula(formulas) => {
+            for formula in formulas.iter_mut() {
+                rewrite_formula(formula, cells);
             }
         }
         StatementNode::Return(Some(expr)) => rewrite_expr(expr, cells),
@@ -425,19 +563,74 @@ fn split_aggregate_assign(stmt: &StatementNode, cells: &LeafCells) -> Option<Vec
     )
 }
 
-/// Ячейка листа по одному шагу от имени порта.
-fn leaf_of(base: &ExpressionNode, step: &Step, cells: &LeafCells) -> Option<ExpressionNode> {
-    let ExpressionNode::Variable(var) = base else {
+/// Ячейка листа по ПОЛНОМУ пути от имени порта.
+///
+/// ⚠️ Путь сопоставляется целиком (фича 0500). Прежде сравнивался один шаг —
+/// и `cfg.tail.b` промахивался мимо листа `[Field(tail), Field(b)]`: обращение
+/// оставалось на исходном порте, которого в дереве уже нет. Цели печатали
+/// ссылку на несуществующее имя при НУЛЕВОМ коде возврата (`cc`, `iec2c` и
+/// `verilator` отвергали вывод).
+fn leaf_cell(cells: &LeafCells, name: &str, path: &[Step]) -> Option<Rc<RefCell<VariableNode>>> {
+    if path.is_empty() {
         return None;
-    };
+    }
     cells
-        .get(var.borrow().name())
-        .and_then(|leaves| {
-            leaves
-                .iter()
-                .find(|(path, _)| path.as_slice() == [step.clone()])
-        })
-        .map(|(_, cell)| ExpressionNode::Variable(Rc::clone(cell)))
+        .get(name)
+        .and_then(|leaves| leaves.iter().find(|(leaf, _)| leaf.as_slice() == path))
+        .map(|(_, cell)| Rc::clone(cell))
+}
+
+/// Путь обращения к части порта: имя порта и шаги от него.
+///
+/// ⚠️ Индекс обязан быть ЛИТЕРАЛОМ: при переменном лист неизвестен, и такой
+/// вход уходит прежним путём — к отказу цели, а не к молчаливо неверному
+/// обращению (правило 0417).
+fn expr_path(expr: &ExpressionNode) -> Option<(String, Vec<Step>)> {
+    match expr {
+        ExpressionNode::Variable(var) => Some((var.borrow().name().to_string(), Vec::new())),
+        ExpressionNode::BitAccess(base, Member::Identifier(field)) => {
+            let (name, mut path) = expr_path(base)?;
+            path.push(Step::Field(field.name.clone()));
+            Some((name, path))
+        }
+        ExpressionNode::ArraySubscript(base, index) => {
+            let ExpressionNode::Number(value) = &**index else {
+                return None;
+            };
+            let (name, mut path) = expr_path(base)?;
+            path.push(Step::Index(*value));
+            Some((name, path))
+        }
+        _ => None,
+    }
+}
+
+/// Путь обращения к части порта в УСЛОВИИ: имя, шаги и позиция использования.
+///
+/// Условие — своё дерево (инвариант «`Condition` и `Expression` не
+/// унифицировать»), поэтому сбор пути здесь свой. Позиция берётся у базы: у
+/// листа своей позиции использования нет, а терять её нельзя — по ней индекс
+/// LSP находит узел под курсором (фича 0056).
+fn cond_path(cond: &ConditionNode) -> Option<(String, Vec<Step>, Location)> {
+    match cond {
+        ConditionNode::Variable(var, loc) => {
+            Some((var.borrow().name().to_string(), Vec::new(), *loc))
+        }
+        ConditionNode::BitAccess(base, Member::Identifier(field)) => {
+            let (name, mut path, loc) = cond_path(base)?;
+            path.push(Step::Field(field.name.clone()));
+            Some((name, path, loc))
+        }
+        ConditionNode::ArraySubscript(base, index) => {
+            let ConditionNode::Number(value) = &**index else {
+                return None;
+            };
+            let (name, mut path, loc) = cond_path(base)?;
+            path.push(Step::Index(*value));
+            Some((name, path, loc))
+        }
+        _ => None,
+    }
 }
 
 /// Начальное значение листа: часть агрегата по позициям пути (фича 0451).
@@ -491,19 +684,9 @@ fn access_by_path(value: &ExpressionNode, path: &[Step], loc: Location) -> Expre
 fn rewrite_expr(expr: &mut ExpressionNode, cells: &LeafCells) {
     // Замена вычисляется ОТДЕЛЬНО: заимствование `expr` живо, пока в нём
     // ищут лист, и присвоение внутри `if let` компилятор не пропустит.
-    let replacement = match expr {
-        ExpressionNode::BitAccess(base, Member::Identifier(field)) => {
-            leaf_of(base, &Step::Field(field.name.clone()), cells)
-        }
-        // Элемент массива-порта (фича 0417). Индекс обязан быть ЛИТЕРАЛОМ:
-        // при переменном лист неизвестен, и такой вход уходит прежним путём —
-        // к отказу цели, а не к молчаливо неверному обращению.
-        ExpressionNode::ArraySubscript(base, index) => match &**index {
-            ExpressionNode::Number(value) => leaf_of(base, &Step::Index(*value), cells),
-            _ => None,
-        },
-        _ => None,
-    };
+    let replacement = expr_path(expr)
+        .and_then(|(name, path)| leaf_cell(cells, &name, &path))
+        .map(ExpressionNode::Variable);
     if let Some(new_expr) = replacement {
         *expr = new_expr;
         return;
@@ -548,6 +731,11 @@ fn rewrite_expr(expr: &mut ExpressionNode, cells: &LeafCells) {
                 rewrite_expr(a, cells);
             }
         }
+        // Именованное условие живёт в ДВУХ представлениях: значением в карте
+        // модели и разделяемой ячейкой в теле (класс 0184). Правки карты мало —
+        // печатник берёт ячейку, и `if hot { … }` доезжал до цели с обращением
+        // к развёрнутому порту.
+        ExpressionNode::Condition(cell) => rewrite_cond(&mut cell.borrow_mut().value, cells),
         _ => {}
     }
 }
