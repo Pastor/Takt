@@ -145,6 +145,19 @@ pub(crate) fn coerce_to(
             let name = crate::generator::rust::rust_type::rust_type(target, "приёмник значения")?;
             Ok(format!("({} as {name})", print_expression(value, scope)?))
         }
+        // Явное приведение НЕ ОТМЕНЯЕТ приведения к приёмнику (фича 0495):
+        // `probe := wide as u32;` при `out probe: u8` печаталось
+        // `write_u8(…, self.wide as u32)` — `rustc` отвечает `E0308` при
+        // НУЛЕВОМ коде возврата `taktc`. Эталон такую запись исполняет:
+        // приведение автора даёт промежуточное значение, а присваивание
+        // усекает его по типу приёмника (правило 0127). Тот же вход отвергает
+        // `iec2c`, а `c` и `sv` печатают усечение сами.
+        (TypeNode::Integer { .. }, ExpressionNode::Cast(_, cast_ty))
+            if matches!(cast_ty, TypeNode::Integer { .. }) && cast_ty != target =>
+        {
+            let name = crate::generator::rust::rust_type::rust_type(target, "приёмник значения")?;
+            Ok(format!("({} as {name})", print_expression(value, scope)?))
+        }
         // Целая степень печатается С ОГЛЯДКОЙ НА ПРИЁМНИК (фича 0415): тип
         // кладётся в контекст, а печать идёт ОБЫЧНЫМ путём — арифметика вокруг
         // степени сохраняет свою обёртку (`wrapping_add`, правило 0127).

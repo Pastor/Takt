@@ -40,7 +40,7 @@
 
 // Тип операнда живёт своим модулем (0349); имена доступны отсюда — их зовут
 // печатники выражений, операторов и фиксированной точки.
-use crate::generator::st::st_operand_type::{inner_cond_type, variable_type};
+use crate::generator::st::st_operand_type::variable_type;
 pub(crate) use crate::generator::st::st_operand_type::{inner_expr_type, inner_expr_type_in};
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -216,7 +216,9 @@ pub(crate) fn print_expression(
         ExpressionNode::Model(_) => Err(unsupported("модель как выражение")),
         // Именованное условие печатается печатником условий (фича 0331).
         // Прежний текст обещал «часть 2 задачи 0041-04» — работу, которой нет.
-        ExpressionNode::Condition(cond) => print_condition(&cond.borrow().value, model),
+        ExpressionNode::Condition(cond) => {
+            crate::generator::st::st_cond::print_condition(&cond.borrow().value, model)
+        }
         ExpressionNode::List(_) => Err(unsupported("список параметров как выражение")),
         // Агрегат в позиции ЗНАЧЕНИЯ (фича 0332). Присваивание агрегата
         // печатается поэлементно печатником операторов (фича 0330), а сюда
@@ -315,6 +317,33 @@ pub(crate) fn coerce_to(
         {
             crate::generator::st::st_sign::value_in_target(value, target, model)
         }
+        // Явное приведение автора приёмника НЕ отменяет (фича 0495):
+        // `probe := wide as u32;` при `out probe: u8` печаталось
+        // `UINT_TO_UDINT(wide)` в приёмник `USINT`, и `iec2c` отвечал
+        // «Incompatible data types for ':=' operation» при НУЛЕВОМ коде
+        // возврата `taktc`. Эталон запись исполняет: приведение автора даёт
+        // промежуточное значение, присваивание усекает его по приёмнику.
+        (TypeNode::Integer { bits, signed }, ExpressionNode::Cast(_, cast_ty))
+            if matches!(cast_ty, TypeNode::Integer { .. }) && *cast_ty != *target =>
+        {
+            let printed = print_expression(value, model)?;
+            let TypeNode::Integer {
+                bits: from_bits,
+                signed: from_signed,
+            } = cast_ty
+            else {
+                return Ok(printed);
+            };
+            match (
+                crate::generator::st::st_type::iec_integer_name(*bits, *signed),
+                crate::generator::st::st_type::iec_integer_name(*from_bits, *from_signed),
+            ) {
+                (Some(to), Some(from)) => Ok(format!("{from}_TO_{to}({printed})")),
+                // Тип, который цель не печатает, отвергается своим отказом там,
+                // где объявляется приёмник; здесь ничего не выдумываем.
+                _ => Ok(printed),
+            }
+        }
         _ => print_expression(value, model),
     }
 }
@@ -329,132 +358,6 @@ pub(crate) fn variable_ident(var: &VariableNode) -> String {
     variable_name(var)
 }
 
-/// Печатает условие Takt в текст ST.
-///
-/// Отдельный печатник — инвариант ADR 0019: в условии `=` это **равенство**,
-/// а не присваивание.
-///
-/// # Ошибки
-/// `ST-011` — узел не имеет представления в ST.
-pub(crate) fn print_condition(
-    cond: &ConditionNode,
-    model: &ModelNode,
-) -> Result<String, Diagnostic> {
-    match cond {
-        // Литерал длительности в условии (фича 0183) — миллисекунды, как и
-        // значение. ⚠️ Выдержка `after` здесь **не** обрабатывается: её печатает
-        // `st_model` (у него есть доступ к полю времени и профилю), и попадание
-        // сюда означало бы, что условие разбирают в обход того пути.
-        ConditionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
-            *nanos,
-            Location::Codegen,
-            "литерал длительности в условии",
-        )?
-        .to_string()),
-        // Выдержка (константная и вычисляемая, фича 0183) печатается `st_model`:
-        // только у него есть поле времени и профиль. Попадание сюда означает
-        // разбор в обход того пути.
-        ConditionNode::After(_) | ConditionNode::AfterTicks(_) | ConditionNode::AfterExpr(_) => {
-            Err(Diagnostic::error(
-                Location::Codegen,
-                "выдержка 'after' обязана печататься через st_model, а не как условие".to_string(),
-            )
-            .with_code("ST-015"))
-        }
-        ConditionNode::Number(n) => Ok(n.to_string()),
-        ConditionNode::Bool(b) => Ok(bool_literal(*b)),
-        ConditionNode::Rational(text, negative) => {
-            Ok(format!("{}{}", if *negative { "-" } else { "" }, text))
-        }
-        ConditionNode::Variable(var, _) => Ok(variable_name(&var.borrow())),
-        ConditionNode::Parenthesis(inner) => Ok(format!("({})", print_condition(inner, model)?)),
-        ConditionNode::Not(a) => Ok(format!("NOT {}", wrap_cond(a, model)?)),
-        ConditionNode::And(a, b) => binary_cond(a, "AND", b, model),
-        ConditionNode::Or(a, b) => binary_cond(a, "OR", b, model),
-        ConditionNode::Add(a, b) => binary_cond(a, "+", b, model),
-        ConditionNode::Subtract(a, b) => binary_cond(a, "-", b, model),
-        // Ключевое отличие от цели `c`: там печатается `==`, здесь `=`.
-        ConditionNode::Equal(a, b) => crate::generator::st::st_sign::compare_cond(a, "=", b, model),
-        ConditionNode::NotEqual(a, b) => {
-            crate::generator::st::st_sign::compare_cond(a, "<>", b, model)
-        }
-        ConditionNode::Less(a, b) => crate::generator::st::st_sign::compare_cond(a, "<", b, model),
-        ConditionNode::More(a, b) => crate::generator::st::st_sign::compare_cond(a, ">", b, model),
-        ConditionNode::LessEqual(a, b) => {
-            crate::generator::st::st_sign::compare_cond(a, "<=", b, model)
-        }
-        ConditionNode::MoreEqual(a, b) => {
-            crate::generator::st::st_sign::compare_cond(a, ">=", b, model)
-        }
-        ConditionNode::BitAccess(inner, member) => bit_access(
-            &|| print_condition(inner, model),
-            inner_cond_type(inner),
-            member,
-            model,
-        ),
-        // Цепочка индексаций схлопывается в одну (фича 0363) — то же правило,
-        // что у печатника выражений: печатников ДВА, и правка одного чинит
-        // половину входов (урок 0359).
-        ConditionNode::ArraySubscript(_, _) => {
-            let (root, indices) = super::st_multidim::condition_subscript_chain(cond, model)?;
-            Ok(format!("{}[{}]", root, indices.join(", ")))
-        }
-        // Вариант перечисления → именованная константа, которую объявляет
-        // `st_decl` (откат Option C: перечислимых типов MatIEC не знает).
-        ConditionNode::EnumVariant(enum_node, variant, _) => {
-            Ok(format!("{}_{}", enum_node.borrow().name, variant))
-        }
-        // Узлы без представления в ST — поимённо, без ветки `_`.
-        ConditionNode::None => Err(unsupported("пустое условие")),
-        ConditionNode::Unresolved(_) => Err(unsupported(
-            "условие не прошло семантическое понижение (Unresolved)",
-        )),
-        // Вызов функции в условии — тот же печатник, что и в выражении:
-        // аргументы приходят условиями, поэтому печатаются печатником условий.
-        ConditionNode::Function(def, args, _) => {
-            let mut printed = Vec::new();
-            for arg in args {
-                printed.push(print_condition(arg, model)?);
-            }
-            super::st_func::print_call_texts(def, &printed, model)
-        }
-        ConditionNode::String(_) => Err(unsupported(
-            "строковый литерал: цель ST строк не поддерживает",
-        )),
-        // Форма `S(Модель) = Состояние` (фича 0267). Причина отказа названа:
-        // прежний текст «модель как условие» объяснял неверно — цель отвергает
-        // запись не потому, что не понимает модель в условии, а потому, что
-        // экземпляры под-моделей суть поля РОДИТЕЛЬСКОГО `FUNCTION_BLOCK`, и из
-        // соседнего блока доступа к ним нет. Дать его значило бы завести
-        // параметр-указатель на корень, которого в цели нет (у `c` это `main`).
-        ConditionNode::Model(_, _) => Err(unsupported(
-            "проверка состояния модели: экземпляры под-моделей — поля родительского \
-FUNCTION_BLOCK, и соседний блок их не видит. Проверяйте состояние из \
-модели-родителя композиции либо свяжите модели общей переменной корня; ту же \
-запись переводят цели 'c' и 'sv'",
-        )),
-        // ⚠️ Ветвь недостижима из корректной программы (фича 0332): форму
-        // `S(Модель) = Состояние` перехватывает ветвь выше — с текстом,
-        // называющим обход (фича 0267). Отказ оставлен страховкой; прежний
-        // текст обещал «задачу 0041-03», давно закрытую.
-        ConditionNode::State(..) => Err(unsupported(
-            "состояние в позиции условия: сравнивать состояние можно формой \
-             'S(Модель) = Состояние' — она разбирается отдельно",
-        )),
-        // Анонимное обращение (фича 0189) — см. оговорку у печатника выражений.
-        ConditionNode::AnonPort(access) => Ok(access.synthetic_name()),
-    }
-}
-
-/// Строит диагностику `ST-011` — узел без представления в ST.
-/// Строит диагностику `ST-011` — конструкция не транслируется в ST.
-///
-/// ⚠️ **Носитель один на цель** (фича 0308): прежде эта функция была скопирована
-/// в три модуля дословно, и координату пришлось бы вносить трижды — класс
-/// 0084/0193/0195.
-///
-/// Координата — у **оператора**, который печатается сейчас: своей позиции у
-/// выражения нет (решение 0056), а `Location::Codegen` печатается вовсе без
 /// префикса — автор искал место сам.
 pub(crate) fn unsupported(what: &str) -> Diagnostic {
     Diagnostic::error(
@@ -469,7 +372,7 @@ pub(crate) fn unsupported(what: &str) -> Diagnostic {
 /// MatIEC принимает и числовые `0`/`1` для `BOOL` (проверено пробой — вопреки
 /// ожиданию плана), но `2` уже отвергает. Печатаем всегда `FALSE`/`TRUE`:
 /// это стандартная форма и она читается однозначно.
-fn bool_literal(value: bool) -> String {
+pub(super) fn bool_literal(value: bool) -> String {
     if value { "TRUE" } else { "FALSE" }.to_string()
 }
 
@@ -477,7 +380,7 @@ fn bool_literal(value: bool) -> String {
 ///
 /// В ST порт — **обычная переменная**, поэтому слой косвенности цели `c`
 /// (`(*main->read_numeric)(…)`) здесь исчезает: печатается просто имя.
-fn variable_name(var: &VariableNode) -> String {
+pub(super) fn variable_name(var: &VariableNode) -> String {
     match var {
         VariableNode::Simple { name, .. }
         | VariableNode::Port { name, .. }
@@ -509,7 +412,7 @@ pub(super) fn binary(
 
 /// Q-путь бинарной операции (0061): `Some` тогда и только тогда, когда `expr`
 /// имеет тип `q(m, n)` — иначе вызывающий печатает обычную арифметику.
-fn fixed_binary(
+pub(super) fn fixed_binary(
     expr: &ExpressionNode,
     op: st_fixed::FixedOp,
     a: &ExpressionNode,
@@ -531,7 +434,7 @@ pub(super) fn wrap_expr(expr: &ExpressionNode, model: &ModelNode) -> Result<Stri
 }
 
 /// Атом — то, чей разбор не зависит от окружения: литерал, имя, вызов, скобки.
-fn is_atom_expr(expr: &ExpressionNode) -> bool {
+pub(super) fn is_atom_expr(expr: &ExpressionNode) -> bool {
     matches!(
         expr,
         ExpressionNode::Number(_)
@@ -561,7 +464,7 @@ pub(super) fn binary_cond(
 
 /// Печатает операнд-условие, заключая составное в скобки.
 pub(super) fn wrap_cond(cond: &ConditionNode, model: &ModelNode) -> Result<String, Diagnostic> {
-    let text = print_condition(cond, model)?;
+    let text = crate::generator::st::st_cond::print_condition(cond, model)?;
     Ok(if is_atom_cond(cond) {
         text
     } else {
@@ -570,7 +473,7 @@ pub(super) fn wrap_cond(cond: &ConditionNode, model: &ModelNode) -> Result<Strin
 }
 
 /// Атом-условие: литерал, имя, вызов, скобки, вариант перечисления.
-fn is_atom_cond(cond: &ConditionNode) -> bool {
+pub(super) fn is_atom_cond(cond: &ConditionNode) -> bool {
     matches!(
         cond,
         ConditionNode::Number(_)
@@ -638,7 +541,10 @@ pub(crate) fn bit_string_of_type(ty: &TypeNode) -> Option<BitString> {
 }
 
 /// Подбирает битовую строку для операнда выражения.
-fn bit_string_of_expr(expr: &ExpressionNode, _model: &ModelNode) -> Result<BitString, Diagnostic> {
+pub(super) fn bit_string_of_expr(
+    expr: &ExpressionNode,
+    _model: &ModelNode,
+) -> Result<BitString, Diagnostic> {
     inner_expr_type(expr)
         .as_ref()
         .and_then(bit_string_of_type)
@@ -655,7 +561,7 @@ fn bit_string_of_expr(expr: &ExpressionNode, _model: &ModelNode) -> Result<BitSt
 ///
 /// `n & m` → `BYTE_TO_USINT(USINT_TO_BYTE(n) AND USINT_TO_BYTE(m))`: прямое
 /// `n AND m` MatIEC отвергает («Data type mismatch for 'AND' expression»).
-fn bitwise(
+pub(super) fn bitwise(
     a: &ExpressionNode,
     op: &str,
     b: &ExpressionNode,
@@ -716,7 +622,7 @@ fn is_signed_expr(expr: &ExpressionNode) -> bool {
 /// Битовый доступ разворачивается в маску — формы `x.0` в MatIEC **нет вовсе**
 /// (ни `n.0`, ни `w.0`, ни `w.%X0`):
 /// `sensors_cab.0` → `(USINT_TO_BYTE(sensors_cab) AND 16#01) <> 16#00`.
-fn bit_access(
+pub(super) fn bit_access(
     print_inner: &dyn Fn() -> Result<String, Diagnostic>,
     inner_ty: Option<TypeNode>,
     member: &Member,
@@ -816,7 +722,8 @@ mod tests {
         let model = rc.borrow();
         let node = model.conditions.get("C").expect("нет условия C").clone();
         let value = node.value.clone();
-        print_condition(&value, &model).expect("условие должно печататься")
+        crate::generator::st::st_cond::print_condition(&value, &model)
+            .expect("условие должно печататься")
     }
 
     /// Печатает выражение, записанное **в теле блока**.

@@ -43,6 +43,7 @@
 mod st_arith;
 mod st_at;
 mod st_compose;
+mod st_cond;
 mod st_decl;
 mod st_decl_types;
 mod st_edges;
