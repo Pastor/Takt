@@ -63,3 +63,4 @@
 | 0190-01 | 0190 | Временные каталоги тестов могут пересекаться | [0190-01-test-temp-dir-collision.md](0190-01-test-temp-dir-collision.md) |
 | 0446-01 | 0446 | collapsible_if на обёртке выхода | [0446-01-inline-early-return.md](0446-01-inline-early-return.md) |
 | 0429-01 | 0429 | Сборка verilator падала при параллельном прогоне | [0429-01-sv-conformance-flake.md](0429-01-sv-conformance-flake.md) |
+| 0484-01 | 0484 | Документ называл уровень состояния местом блока `formula`, которого там нет (`SY-002`); у `assembly` мест ещё меньше — только тела — **ИСПРАВЛЕН** (обе оговорки внесены по замеру пяти позиций; асимметрия мест вынесена кандидатом) | [0484-01-target-block-sites.md](0484-01-target-block-sites.md) |
