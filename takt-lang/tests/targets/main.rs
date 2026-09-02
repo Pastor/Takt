@@ -101,6 +101,7 @@ mod st_local_array_argument_tests;
 mod st_local_name_clash_tests;
 mod st_reserved_names_tests;
 mod st_tests;
+mod st_transitive_params_tests;
 mod st_type_clash_tests;
 mod st_unused_function_tests;
 mod statement_site_tests;

@@ -54,6 +54,7 @@ mod st_map;
 mod st_model;
 mod st_multidim;
 mod st_operand_type;
+mod st_params;
 mod st_reserved;
 mod st_sign;
 mod st_stmt;
