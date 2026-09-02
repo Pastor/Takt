@@ -84,7 +84,7 @@ pub(crate) struct Scope<'a> {
     ///
     /// В Takt изменяемость не объявляется (`var` изменяем всегда), в Rust лишний
     /// `mut` — это `unused_mut`, то есть отказ гейта. Заполняется обходом тела
-    /// до печати (`rust_stmt::collect_assigned`).
+    /// до печати (`rust_assigned::collect_assigned`).
     pub(crate) assigned: std::collections::BTreeSet<String>,
     /// Выражение доступа к HAL: `self.hal` в корне, `hal` в под-модели.
     pub(crate) hal: String,

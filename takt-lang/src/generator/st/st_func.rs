@@ -176,6 +176,13 @@ pub(crate) fn state_params(
 fn collect_locals(stmt: &StatementNode, out: &mut Vec<String>) {
     match stmt {
         StatementNode::Variable(name, _, _, _) => out.push(name.clone()),
+        // Вставка (0484): цель `st` печатает тело, только если оно адресовано
+        // ей; объявления чужой вставки в вывод не попадают.
+        StatementNode::Assembly { target, body } => {
+            if crate::semantic::target_block::emits_for(target.as_deref(), "st") {
+                collect_locals(body, out);
+            }
+        }
         StatementNode::Block(items) => items.iter().for_each(|s| collect_locals(s, out)),
         StatementNode::If { then_, else_, .. } => {
             collect_locals(then_, out);
@@ -197,6 +204,7 @@ fn collect_locals(stmt: &StatementNode, out: &mut Vec<String>) {
         | StatementNode::Return(_)
         | StatementNode::Continue
         | StatementNode::Break
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_) => {}
     }
 }

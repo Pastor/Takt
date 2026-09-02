@@ -42,16 +42,19 @@ pub mod ltl_check;
 pub mod minimap;
 mod named_block;
 mod named_code_block;
+pub use match_node::{MatchArmNode, MatchPatternNode};
 pub use named_code_block::NamedCodeBlockDefinitionNode;
 pub(crate) mod naming;
 pub(crate) mod parameter_const;
 mod reference;
 pub use reference::ReferenceNode;
+mod match_node;
 pub(crate) mod slice;
 pub(crate) mod specialize;
 pub(crate) mod stages;
 mod statement;
 pub mod struct_node;
+pub(crate) mod target_block;
 pub(crate) mod test_constants;
 pub mod tree;
 pub(crate) mod type_inference;
@@ -717,6 +720,18 @@ pub enum StatementNode {
     Break,
     /// Встроенная формула `: условие1[, условие2, …];`
     InlineFormula(Vec<Formula>),
+    /// Блок формул внешнего анализатора: `formula [диалект] { … }` (0484).
+    ///
+    /// Цели и эталон его пропускают. ⚠️ Не [`StatementNode::Unresolved`]: тот
+    /// означает **дефект** понижения и целями отвергается (0236).
+    Formula(Box<crate::parser::ast::FormulaBlock>),
+    /// Вставка операторов для одной цели: `assembly [«цель»] { … }` (0484).
+    Assembly {
+        /// Язык вывода, чья печать включает тело; `None` — все цели и эталон.
+        target: Option<String>,
+        /// Тело вставки — обычные операторы Takt.
+        body: Box<StatementNode>,
+    },
     /// Оператор `match`: `match expr { patterns => body, … }`.
     Match {
         /// Разбираемое выражение.
@@ -724,25 +739,6 @@ pub enum StatementNode {
         /// Ветки оператора.
         arms: Vec<MatchArmNode>,
     },
-}
-
-/// Семантическая ветка оператора `match`.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct MatchArmNode {
-    /// Образцы (хотя бы один).
-    pub patterns: Vec<MatchPatternNode>,
-    /// Тело ветки.
-    pub body: Box<StatementNode>,
-}
-
-/// Семантический образец ветки `match`.
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub enum MatchPatternNode {
-    /// Конкретное значение.
-    Value(Box<ExpressionNode>),
-    /// Подстановочный образец `_`.
-    #[default]
-    Wildcard,
 }
 
 // ─── Ce4: Перечисления ────────────────────────────────────────────────────────

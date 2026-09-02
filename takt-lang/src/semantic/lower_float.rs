@@ -402,11 +402,15 @@ fn lower_stmt(stmt: &mut StatementNode, m: u8, n: u8) -> Result<(), Diagnostic> 
                 lower_stmt(&mut arm.body, m, n)?;
             }
         }
+        // Вставка для цели — операторы Takt (0484): обход спускается в тело.
+        // Блок формул адресован внешнему анализатору, операторов Takt в нём нет.
+        StatementNode::Assembly { body, .. } => lower_stmt(body, m, n)?,
         StatementNode::None
         | StatementNode::Unresolved(_)
         | StatementNode::Return(None)
         | StatementNode::Continue
         | StatementNode::Break
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_) => {}
     }
     Ok(())

@@ -205,9 +205,16 @@ fn walk_statement(
             }
         }
         StatementNode::Return(Some(expr)) => walk_expression(expr, model, locals, needs, seen)?,
+        // Вставка (0484): нужды создаёт лишь тело, которое ЭТА цель печатает.
+        StatementNode::Assembly { target, body } => {
+            if crate::semantic::target_block::emits_for(target.as_deref(), "rust") {
+                walk_statement(body, model, locals, needs, seen)?;
+            }
+        }
         StatementNode::Return(None)
         | StatementNode::Continue
         | StatementNode::Break
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_)
         | StatementNode::None
         | StatementNode::Unresolved(_) => {}

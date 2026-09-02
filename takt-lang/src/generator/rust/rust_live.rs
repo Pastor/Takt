@@ -411,9 +411,20 @@ fn verdict_of(name: &str, stmt: &StatementNode) -> Verdict {
                 Verdict::Unknown
             }
         }
+        // Вставка (0484): вердикт даёт её тело, но лишь когда ЭТА цель его
+        // печатает. Тело, адресованное другой цели, в вывод не попадает —
+        // значит и переменную оно здесь не читает.
+        StatementNode::Assembly { target, body } => {
+            if crate::semantic::target_block::emits_for(target.as_deref(), "rust") {
+                verdict_of(name, body)
+            } else {
+                Verdict::Unknown
+            }
+        }
         StatementNode::Return(None)
         | StatementNode::Continue
         | StatementNode::Break
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_)
         | StatementNode::None
         | StatementNode::Unresolved(_) => Verdict::Unknown,

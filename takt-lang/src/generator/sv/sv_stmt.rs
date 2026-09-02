@@ -43,6 +43,16 @@ pub(crate) fn print_statement(
     match stmt {
         // Пустой оператор — не ошибка: `enter { }` законен и означает «ничего».
         StatementNode::None => Ok(()),
+        // Блок формул адресован внешнему анализатору (0484): печатать нечего.
+        StatementNode::Formula(_) => Ok(()),
+        // Вставка печатается той целью, чьё имя названо; без имени — всеми.
+        // Язык вывода у `sv` и `sv-mmio` один, поэтому метка у них общая.
+        StatementNode::Assembly { target, body } => {
+            if crate::semantic::target_block::emits_for(target.as_deref(), "sv") {
+                print_statement(p, body, scope)?;
+            }
+            Ok(())
+        }
         StatementNode::Block(stmts) => {
             for s in stmts {
                 print_statement(p, s, scope)?;

@@ -137,7 +137,7 @@ pub(crate) fn emit_functions(
             // `self` у свободной функции нет, поэтому `has_self: false` — и это
             // не ограничение, а следствие: всё нужное уже в параметрах.
             let mut assigned = BTreeSet::new();
-            crate::generator::rust::rust_stmt::collect_assigned(body, &mut assigned);
+            crate::generator::rust::rust_assigned::collect_assigned(body, &mut assigned);
             let mut locals: Vec<String> = params.iter().map(|(pname, _)| pname.clone()).collect();
             locals.extend(needs.vars.keys().cloned());
             let mut scope = Scope {

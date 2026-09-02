@@ -138,12 +138,16 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>) -> Result<()
                 check_stmt(&arm.body, model)?;
             }
         }
+        // Вставка для цели — операторы Takt (0484): обход спускается в тело.
+        // Блок формул адресован внешнему анализатору, операторов Takt в нём нет.
+        StatementNode::Assembly { body, .. } => check_stmt(body, model)?,
         StatementNode::None
         | StatementNode::Unresolved(_)
         | StatementNode::Variable(_, _, None, _)
         | StatementNode::Return(None)
         | StatementNode::Continue
         | StatementNode::Break
+        | StatementNode::Formula(_)
         | StatementNode::InlineFormula(_) => {}
     }
     Ok(())

@@ -151,6 +151,13 @@ impl Compilation {
         output_path: &str,
         options: &crate::generator::GenerateOptions,
     ) -> Result<Vec<Diagnostic>, Diagnostic> {
+        // Отбор вставок `assembly` (фича 0484) — здесь, в единой точке эмиссии:
+        // дальше считается признак использования переменных, и он обязан видеть
+        // ровно то, что цель напечатает, — не больше и не меньше.
+        crate::semantic::target_block::prune(
+            &self.model,
+            crate::semantic::target_block::label_of(&language),
+        );
         crate::generator::generate(language, &self.model.borrow(), output_path, options)
             .map_err(|d| stamp_file(d, &self.files))
     }
