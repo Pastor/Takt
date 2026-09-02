@@ -102,13 +102,23 @@ fn collect_from(
         if !seen.insert(name.clone()) {
             continue;
         }
-        let class = port_class(ty, name, *loc)?;
+        let class = port_class(ty, name, *loc, scope.model)?;
+        // Начальное значение перечислимого порта уходит в HAL ЦЕЛЫМ — тем же
+        // правилом, что и запись в такте (фича 0485). Путей печати записи ДВА,
+        // и правка одного оставляет `rustc: mismatched types` во втором:
+        // класс поймала матрица целей (0450).
+        let value = match ty {
+            crate::semantic::type_node::TypeNode::Enum(_) => {
+                format!("{} as {}", coerce_to(init, ty, scope)?, class.value_type())
+            }
+            _ => coerce_to(init, ty, scope)?,
+        };
         out.push(format!(
             "{}({}::{}, {});",
             class.write_fn(),
             class.out_enum(),
             rust_type_name(name, *loc)?,
-            coerce_to(init, ty, scope)?
+            value
         ));
     }
     Ok(())

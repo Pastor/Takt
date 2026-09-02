@@ -47,6 +47,7 @@ mod conformance_default_init_tests;
 mod conformance_default_value_tests;
 mod conformance_duration_default_tests;
 mod conformance_enum_default_tests;
+mod conformance_enum_port_tests;
 mod conformance_fixed_cast_const_tests;
 mod conformance_fixed_cast_literal_tests;
 mod conformance_fixed_literal_body_tests;

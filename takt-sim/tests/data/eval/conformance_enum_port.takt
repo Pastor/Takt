@@ -1,0 +1,36 @@
+// Порт перечислимого типа (фича 0485).
+//
+// Значение уходит в HAL целым и возвращается вариантом: и то, и другое —
+// граница цели, а поведение модели обязано совпасть с эталоном.
+enum Mode {
+    Idle,
+    Run,
+    Halt
+}
+
+model EnumPortConf {
+    var seen: Mode := Idle;
+    var tick: u8 := 0;
+
+    out mode: Mode;
+
+    out step: u8;
+
+    start Cycle {
+        always {
+            if seen = Idle {
+                seen := Run;
+            } else {
+                seen := Halt;
+            }
+
+            mode := seen;
+            tick := tick + 1;
+            step := tick;
+        }
+
+        ref Cycle: seen != Halt;
+    }
+}
+
+start Main = EnumPortConf;

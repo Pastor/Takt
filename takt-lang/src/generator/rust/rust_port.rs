@@ -86,11 +86,33 @@ pub(crate) fn port_class(
     ty: &TypeNode,
     port: &str,
     loc: Location,
+    model: &crate::semantic::ModelNode,
 ) -> Result<PortClass, Diagnostic> {
     // Бит-вектор `[bit;N]`, N ≤ 64 (фича 0078) — упакованное беззнаковое число
     // ширины `round_up(N)`: нормализуем к `Integer`, дальше как обычное порт-число
     // (`[bit;8]` ≡ `u8`). N > 64 (массив слов) остаётся `Array` → `RS-016` ниже:
     // HAL-числом слова быть не могут.
+    // Перечисление — СКАЛЯР (фича 0485): знак и ширину даёт общий факт
+    // `enum_facts` (0060), тот же, которым пользуются `c`, `st` и `sv`.
+    // Прежде цель отвечала `RS-016` «порт обязан быть битом или числом» —
+    // при том, что переменную того же перечисления она печатает целым, а
+    // остальные шесть потребителей порт переводят.
+    let from_enum;
+    let ty = match ty {
+        TypeNode::Enum(name) => match model.search_enum(name).and_then(|e| e.facts()) {
+            Some(facts) => {
+                from_enum = TypeNode::Integer {
+                    bits: u8::try_from(facts.machine_bits()).unwrap_or(64),
+                    signed: facts.signed,
+                };
+                &from_enum
+            }
+            // Перечисление без вариантов языку неизвестно (`SE-105`), а
+            // необъявленное имя судит семантика: сюда такой тип не доходит.
+            None => ty,
+        },
+        _ => ty,
+    };
     let normalized;
     let ty = match bit_vector::is_bit_vector(ty).map(bit_vector::layout) {
         Some(BitVectorLayout::Scalar { width }) => {
@@ -137,6 +159,11 @@ pub(crate) fn port_class(
 mod tests {
     use super::*;
 
+    /// Пустая модель: перечислений в ней нет — их разбирает свой набор (0485).
+    fn model() -> crate::semantic::ModelNode {
+        crate::semantic::ModelNode::default()
+    }
+
     fn loc() -> Location {
         Location::Codegen
     }
@@ -144,7 +171,7 @@ mod tests {
     /// Битовый порт даёт категорию `Bit`: `read_bit`/`write_bit`, значение `bool`.
     #[test]
     fn bit_port_gives_bit_class() {
-        let class = port_class(&TypeNode::Bit, "P", loc()).unwrap();
+        let class = port_class(&TypeNode::Bit, "P", loc(), &model()).unwrap();
         assert_eq!(class.in_enum(), "InBitPort");
         assert_eq!(class.out_enum(), "OutBitPort");
         assert_eq!(class.read_fn(), "read_bit");
@@ -155,8 +182,8 @@ mod tests {
     /// `bool`-порт неотличим от `bit`-порта: обе категории дают `bool`.
     #[test]
     fn bool_port_shares_bit_class() {
-        let a = port_class(&TypeNode::Bit, "P", loc()).unwrap();
-        let b = port_class(&TypeNode::Bool, "P", loc()).unwrap();
+        let a = port_class(&TypeNode::Bit, "P", loc(), &model()).unwrap();
+        let b = port_class(&TypeNode::Bool, "P", loc(), &model()).unwrap();
         assert_eq!(a, b);
     }
 
@@ -170,6 +197,7 @@ mod tests {
             },
             "P",
             loc(),
+            &model(),
         )
         .unwrap();
         assert_eq!(class.in_enum(), "InU8Port");
@@ -180,7 +208,7 @@ mod tests {
     /// Вещественный порт даёт `f64` — как в симуляторе.
     #[test]
     fn rational_port_gives_f64_class() {
-        let class = port_class(&TypeNode::Rational, "P", loc()).unwrap();
+        let class = port_class(&TypeNode::Rational, "P", loc(), &model()).unwrap();
         assert_eq!(class.read_fn(), "read_f64");
         assert_eq!(class.value_type(), "f64");
     }
@@ -189,9 +217,21 @@ mod tests {
     /// (`[bit;12]` → `u16`), а не `RS-016`: упаковка делает его скаляром.
     #[test]
     fn bit_vector_port_is_packed_number() {
-        let class = port_class(&TypeNode::Array(12, Box::new(TypeNode::Bit)), "R", loc()).unwrap();
+        let class = port_class(
+            &TypeNode::Array(12, Box::new(TypeNode::Bit)),
+            "R",
+            loc(),
+            &model(),
+        )
+        .unwrap();
         assert_eq!(class.value_type(), "u16");
-        let byte = port_class(&TypeNode::Array(8, Box::new(TypeNode::Bit)), "R", loc()).unwrap();
+        let byte = port_class(
+            &TypeNode::Array(8, Box::new(TypeNode::Bit)),
+            "R",
+            loc(),
+            &model(),
+        )
+        .unwrap();
         assert_eq!(byte.value_type(), "u8");
     }
 
@@ -207,7 +247,7 @@ mod tests {
                 signed: false,
             }),
         );
-        let err = port_class(&real_array, "DATA", loc()).unwrap_err();
+        let err = port_class(&real_array, "DATA", loc(), &model()).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("RS-016"));
         assert!(
             err.message.contains("DATA"),
@@ -218,7 +258,10 @@ mod tests {
         // Бит-вектор N > 64 — массив слов, не HAL-число.
         let words = TypeNode::Array(128, Box::new(TypeNode::Bit));
         assert_eq!(
-            port_class(&words, "W", loc()).unwrap_err().code.as_deref(),
+            port_class(&words, "W", loc(), &model())
+                .unwrap_err()
+                .code
+                .as_deref(),
             Some("RS-016")
         );
     }

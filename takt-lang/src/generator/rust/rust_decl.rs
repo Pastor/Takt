@@ -88,7 +88,7 @@ pub(crate) fn collect_ports(
             if !map.usage().ports.contains(name) || !seen.insert(name.clone()) {
                 continue;
             }
-            let class = port_class(ty, name, *loc)?;
+            let class = port_class(ty, name, *loc, &model)?;
             let port = Port {
                 raw: raw.clone(),
                 variant: rust_type_name(name, *loc)?,
@@ -264,10 +264,49 @@ pub(crate) fn emit_hal(p: &mut Printer, set: &PortSet) -> Result<(), Diagnostic>
 /// существует по воле автора, а не по решению генератора. Перечисления
 /// состояний, наоборот, приватны — их придумывает генератор, и там `dead_code`
 /// остаётся сторожем (см. `rust_model`).
+/// Имя функции «значение с порта → вариант» (фича 0485).
+pub(crate) const FROM_REPR: &str = "from_repr";
+
+/// Перечисления, значения которых модель ЧИТАЕТ с портов.
+///
+/// ⚠️ Признак — **факт чтения**, а не направление порта (тот же носитель, что у
+/// сторон `inout` в фиче 0452). Направление обмануло: `inout`, который модель
+/// только пишет, объявлен читаемым, и [`FROM_REPR`] печаталась впустую —
+/// `clippy` под `-D warnings` отвечает «associated function is never used».
+/// Класс поймала матрица целей (0450).
+fn enums_read_from_ports(
+    blocks: &[(Name, std::rc::Rc<std::cell::RefCell<ModelNode>>)],
+) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let reads = crate::semantic::usage_tree::reads_with_implementations(model_rc);
+        let model = model_rc.borrow();
+        for var in model.variables.values() {
+            let VariableNode::Port {
+                name,
+                ty,
+                direction,
+                ..
+            } = var
+            else {
+                continue;
+            };
+            if matches!(direction, PortDirection::Out) || !reads.ports.contains(name) {
+                continue;
+            }
+            if let TypeNode::Enum(enum_name) = ty {
+                out.insert(enum_name.clone());
+            }
+        }
+    }
+    out
+}
+
 pub(crate) fn emit_enums(
     p: &mut Printer,
     blocks: &[(Name, std::rc::Rc<std::cell::RefCell<ModelNode>>)],
 ) -> Result<(), Diagnostic> {
+    let read_from_ports = enums_read_from_ports(blocks);
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for (_, model_rc) in blocks {
         let model = model_rc.borrow();
@@ -301,8 +340,54 @@ pub(crate) fn emit_enums(
             }
             p.down();
             p.ident("}").nl().nl();
+
+            if read_from_ports.contains(&def.name) {
+                emit_from_repr(p, &name, def, &variants)?;
+            }
         }
     }
+    Ok(())
+}
+
+/// Печатает восстановление варианта из значения порта (фича 0485).
+///
+/// ⚠️ Функция **тотальна**: значение вне набора даёт умолчание перечисления —
+/// первый по тексту вариант (правило 0391). Паника здесь недопустима: число на
+/// входном порту приходит от железа, и модель обязана продолжать работу.
+fn emit_from_repr(
+    p: &mut Printer,
+    name: &str,
+    def: &crate::semantic::EnumDefinitionNode,
+    variants: &[(String, String)],
+) -> Result<(), Diagnostic> {
+    let repr = enum_repr(&def.variants);
+    let default = variants.first().map(|(_, v)| v.clone()).ok_or_else(|| {
+        Diagnostic::error(def.loc, "перечисление без вариантов".to_string()).with_code("RS-016")
+    })?;
+    p.ident(&format!("impl {name} {{")).nl();
+    p.up();
+    p.ident("/// Значение со входного порта — в вариант перечисления.")
+        .nl();
+    p.ident("///").nl();
+    p.ident("/// Значение вне набора даёт первый по тексту вариант: число")
+        .nl();
+    p.ident("/// приходит от железа, и останавливать модель из-за него нельзя.")
+        .nl();
+    p.ident(&format!("fn {FROM_REPR}(value: {repr}) -> Self {{"))
+        .nl();
+    p.up();
+    p.ident("match value {").nl();
+    p.up();
+    for ((_, value), (_, variant)) in def.variants.iter().zip(variants.iter()) {
+        p.ident(&format!("{value} => Self::{variant},")).nl();
+    }
+    p.ident(&format!("_ => Self::{default},")).nl();
+    p.down();
+    p.ident("}").nl();
+    p.down();
+    p.ident("}").nl();
+    p.down();
+    p.ident("}").nl().nl();
     Ok(())
 }
 

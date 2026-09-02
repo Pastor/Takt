@@ -324,8 +324,13 @@ fn anon_global(cell: &crate::semantic::AnonPortAccess) -> Result<String, Diagnos
         name: cell.synthetic_name(),
     };
     let name = cell.synthetic_name();
-    let (location, comment, _warnings) =
-        st_at::location_of(&name, &cell.ty, PortDirection::InOut, &resolved)?;
+    let (location, comment, _warnings) = st_at::location_of(
+        &name,
+        &cell.ty,
+        PortDirection::InOut,
+        &resolved,
+        &ModelNode::default(),
+    )?;
     let ty_name = st_type::get_st_type(&cell.ty, &ModelNode::default())?;
     Ok(format!(
         "{} AT {} : {}; {}",
@@ -417,7 +422,8 @@ fn emit_configuration(
             // предупреждение размещения рождаются вне операторов, и без слоя
             // печатались без координаты — автор не знал, какой порт назван.
             crate::generator::site::enter_declaration(port_loc(&root.variables[name]));
-            let (location, comment, mut w) = st_at::location_of(pname, ty, *direction, resolved)?;
+            let (location, comment, mut w) =
+                st_at::location_of(pname, ty, *direction, resolved, root)?;
             warnings.append(&mut w);
             let ty_name = st_type::get_st_type(ty, root)?;
             // Начальное значение порта (фича 0187, задача 04) — на размещённой
