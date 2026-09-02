@@ -31,6 +31,7 @@ use base::{cond_base_is_array, cond_base_label};
 /// генератор переводит.
 pub(crate) mod observe;
 pub(crate) mod port_split;
+mod port_subtree;
 pub mod state_of;
 
 use crate::diagnostics::Diagnostic;

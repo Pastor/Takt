@@ -144,6 +144,20 @@ impl Compilation {
         stamp_file(diagnostic, &self.files)
     }
 
+    /// Понижения, зависящие от ЦЕЛИ, — с путём файла в диагностике.
+    ///
+    /// ⚠️ Отдельный метод по той же причине, что [`Compilation::stamp`]: отказ
+    /// разворота составного порта (`SE-130`, фича 0501) рождается ВНЕ
+    /// генерации, и без стампа печатался бы без координаты — класс 0467.
+    pub(crate) fn lower_for_target(
+        &self,
+        split: semantic::condition::port_split::PortSplit,
+        fold_state_observe: bool,
+    ) -> Result<(), Diagnostic> {
+        semantic::condition::observe::lower_for_target(&self.model, split, fold_state_observe)
+            .map_err(|d| self.stamp(d))
+    }
+
     /// Генерирует цель, проставляя диагностике путь её файла.
     pub(crate) fn emit(
         &self,

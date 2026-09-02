@@ -26,7 +26,7 @@
 extern crate core;
 
 use crate::parser::ast;
-use crate::semantic::condition::{observe::lower_for_target, port_split::PortSplit};
+use crate::semantic::condition::port_split::PortSplit;
 use diagnostics::Diagnostic;
 use std::path::Path;
 
@@ -192,7 +192,7 @@ pub fn compile_to_c(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-    lower_for_target(&unit.model, PortSplit::All, false)?;
+    unit.lower_for_target(PortSplit::All, false)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-as-q` +
     // `--float-embedded` (иначе `float` остаётся нативным `double`).
@@ -229,7 +229,7 @@ pub fn compile_to_c_hal(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-    lower_for_target(&unit.model, PortSplit::All, false)?;
+    unit.lower_for_target(PortSplit::All, false)?;
 
     // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
 
@@ -291,7 +291,7 @@ pub fn compile_to_st(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-    lower_for_target(&unit.model, PortSplit::ArraysOnly, true)?;
+    unit.lower_for_target(PortSplit::ArraysOnly, true)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -357,7 +357,7 @@ pub fn compile_to_rust(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-    lower_for_target(&unit.model, PortSplit::All, true)?;
+    unit.lower_for_target(PortSplit::All, true)?;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&unit.model, options, true)?;
@@ -426,7 +426,7 @@ pub fn compile_to_sv(
     // Фича 0096: при `--float-as-q=m.n` понижаем `float → q(m, n)` (снимая
     // `SV-003`). Для `sv` флаг применяется всегда (без `--float-embedded`).
     apply_float_lowering(&unit.model, options, false)?;
-    lower_for_target(&unit.model, PortSplit::ArraysOnly, false)?; // 0417: порт-массив
+    unit.lower_for_target(PortSplit::ArraysOnly, false)?; // 0417: порт-массив
 
     unit.emit(generator::Language::SV, output_path, options)
 }
@@ -459,7 +459,7 @@ pub fn compile_to_st_at(
             .unwrap_or_else(|| "Root".to_owned());
         unit.model.borrow_mut().name = Some(stem);
     }
-    lower_for_target(&unit.model, PortSplit::All, true)?;
+    unit.lower_for_target(PortSplit::All, true)?;
 
     let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
     // Путь ставит ТИП, а не вызов (0212, 0467): иначе `SE-052` без координаты.
