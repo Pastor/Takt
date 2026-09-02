@@ -271,7 +271,7 @@ fn generate_program(
     p.up();
     // Константы — после типов (фича 0347): `localparam cell_t …` ссылается на
     // `typedef struct packed … cell_t`.
-    sv_const::emit_constants(&mut p, map, &blocks)?;
+    let array_consts = sv_const::emit_constants(&mut p, map, &blocks)?;
     sv_enums::emit_state_enums(&mut p, map, &blocks)?;
     sv_enums::emit_step_enums(&mut p, &fsm)?;
     // Таблица переходов (фича 0441) — ПОСЛЕ перечислений состояний: её векторы
@@ -289,7 +289,7 @@ fn generate_program(
     sv_module::emit_port_sinks(&mut p, &fsm.structs, &ports, &blocks);
     sv_func::emit_functions(&mut p, map, &fsm, &blocks)?;
     sv_fsm::emit_comb(&mut p, map, &fsm, &root_name, &models)?;
-    sv_fsm::emit_ff(&mut p, map, &fsm, &blocks)?;
+    sv_fsm::emit_ff(&mut p, map, &fsm, &blocks, &array_consts)?;
     // Регистровый файл (фича 0062): объявление входных регистров, их защёлкивание
     // шиной (`reg_wen`) и комбинационное чтение (`reg_rdata`). Выходные адресуемые
     // порты — уже регистры автомата (защёлкнуты в `always_ff` выше), их только

@@ -160,3 +160,65 @@ fn struct_assignment_stays_whole() {
         "структура присваивается целиком:\n{text}"
     );
 }
+
+/// Цель `sv`: константа-массив — сигнал, а константа перечисления подставляется.
+///
+/// ⚠️ Оба класса нашёл **второй инструмент гейта**: `verilator` принимал
+/// `localparam logic [7:0] X [0:1]` и `localparam mode_e X`, а `yosys`
+/// отвечал «syntax error, unexpected '['» и «Non-constant width range on
+/// parameter decl» (замер 0491). Проверка текстовая: линт и синтез сами по
+/// себе форму не различают, а прогон обоих инструментов идёт в гейте цели.
+#[test]
+fn sv_constants_avoid_unsynthesizable_localparam() {
+    let dir = out_dir("sv_const");
+    takt_lang::compile_to_sv(
+        "probe",
+        &from_constant(),
+        dir.to_str().expect("путь"),
+        &[],
+        &GenerateOptions::default(),
+    )
+    .expect("цель `sv` переводит");
+    let text = std::fs::read_to_string(dir.join("probe.sv")).expect("вывод читается");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        !text.contains("localparam logic [7:0] probe_probe_SETTING [0:1]"),
+        "массив-константа не может быть localparam — yosys такого не принимает:\n{text}"
+    );
+    assert!(
+        text.contains("probe_probe_SETTING <= '{8'd1, 8'd2};"),
+        "значение задаётся в цепи сброса:\n{text}"
+    );
+
+    let enum_src = "enum Mode { Idle, Run }\n\
+                    model Probe {\n\
+                    \x20   const SETTING: Mode := Run;\n\
+                    \x20   var seen: Mode := Idle;\n\
+                    \x20   var ticks: u8 := 0;\n\
+                    \x20   out ticks_out: u8 at 0x300;\n\
+                    \x20   start Cycle {\n\
+                    \x20       always { ticks := ticks + 1; seen := SETTING; ticks_out := ticks; }\n\
+                    \x20       ref Cycle: ticks < 200;\n\
+                    \x20   }\n\
+                    }\n\
+                    start Main = Probe;\n";
+    let dir = out_dir("sv_enum_const");
+    takt_lang::compile_to_sv(
+        "probe",
+        enum_src,
+        dir.to_str().expect("путь"),
+        &[],
+        &GenerateOptions::default(),
+    )
+    .expect("цель `sv` переводит");
+    let text = std::fs::read_to_string(dir.join("probe.sv")).expect("вывод читается");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        !text.contains("localparam mode_e"),
+        "типизированного localparam у перечисления быть не должно:\n{text}"
+    );
+    assert!(
+        text.contains("= MODE_RUN;"),
+        "обращение печатается именем варианта:\n{text}"
+    );
+}

@@ -859,6 +859,7 @@ pub(crate) fn emit_ff(
     map: &SvMap,
     fsm: &Fsm,
     blocks: &[Block],
+    array_consts: &[(String, String)],
 ) -> Result<(), Diagnostic> {
     // Блоки `enter` стартовых состояний исполняются цепью сброса — поэтому
     // обязаны быть константными (`SV-008`).
@@ -901,6 +902,11 @@ pub(crate) fn emit_ff(
                 p.ident(&format!("{}{suffix} <= {value};", reg.name)).nl();
             }
         }
+    }
+    // Константы-массивы (фича 0491): значение постоянно, но задаётся здесь —
+    // `localparam` распакованного массива не синтезируется.
+    for (signal, value) in array_consts {
+        p.ident(&format!("{signal} <= {value};")).nl();
     }
     // Блоки `enter` стартовых состояний — после умолчаний: они их уточняют.
     for (signal, value) in &enter_resets {

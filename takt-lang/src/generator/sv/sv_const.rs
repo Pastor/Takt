@@ -162,11 +162,22 @@ pub(crate) fn constant_enter_assignments(
 
 /// Печатает `localparam`-константы модуля (по всем уровням), пригодные для
 /// синтеза: значение обязано быть известно на этапе компиляции.
+/// Печатает `localparam`-константы и возвращает сбросы констант-массивов.
+///
+/// ⚠️ Массив-константа `localparam`ом быть НЕ может: `localparam logic [7:0] X
+/// [0:1] = '{…}` не принимает **yosys** («syntax error, unexpected '['»), хотя
+/// verilator принимает (замер 0491). Форма, которую принимают оба, — сигнал,
+/// заполняемый в цепи сброса: значение постоянно, и синтезатор сводит его к
+/// константам сам. Пары `(имя, значение)` уезжают в [`emit_ff`], где стоит эта
+/// цепь.
+///
+/// [`emit_ff`]: crate::generator::sv::sv_fsm::emit_ff
 pub(crate) fn emit_constants(
     p: &mut Printer,
     map: &SvMap,
     blocks: &[Block],
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<(String, String)>, Diagnostic> {
+    let mut array_resets: Vec<(String, String)> = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut emitted = false;
     for (_, model_rc) in blocks {
@@ -195,6 +206,15 @@ pub(crate) fn emit_constants(
             if !map.usage().constants.contains(&used) || !seen.insert(signal.clone()) {
                 continue;
             }
+            // ⚠️ Константа ПЕРЕЧИСЛИМОГО типа объявления не получает (0491):
+            // типизированный `localparam mode_e X` не принимает **yosys**, а
+            // нетипизированный — verilator (приёмник строго типизирован).
+            // Обращения к ней печатаются именем варианта — `sv_names`.
+            if crate::generator::sv::sv_names::enum_constant_literal(upper.as_ref(), ty, expr)
+                .is_some()
+            {
+                continue;
+            }
             check_sv_name(&signal, *loc)?;
             let decl = sv_type(ty, &format!("константа '{}'", name))?;
             // Значение печатается тем же носителем, что и цепь сброса (фича
@@ -220,19 +240,31 @@ pub(crate) fn emit_constants(
                     name
                 ))
             })?;
-            p.ident(&format!(
-                "localparam {} = {};",
-                decl.declare(&signal),
-                value
-            ))
-            .nl();
+            // Массив — сигналом (см. шапку функции): `localparam` такого вида
+            // не синтезируется. Значение уходит в цепь сброса.
+            //
+            // ⚠️ Бит-вектор `[bit;N≤64]` — упакованный СКАЛЯР (0078), ему
+            // `localparam` верен и трогать его нельзя.
+            let array_const = matches!(ty, TypeNode::Array(..))
+                && crate::semantic::bit_vector::is_bit_vector(ty).is_none();
+            if array_const {
+                p.ident(&format!("{};", decl.declare(&signal))).nl();
+                array_resets.push((signal.clone(), value));
+            } else {
+                p.ident(&format!(
+                    "localparam {} = {};",
+                    decl.declare(&signal),
+                    value
+                ))
+                .nl();
+            }
             emitted = true;
         }
     }
     if emitted {
         p.nl();
     }
-    Ok(())
+    Ok(array_resets)
 }
 
 /// Отказ `SV-002`: инициализатор в цепи сброса невычислим.

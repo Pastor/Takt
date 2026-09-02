@@ -167,10 +167,44 @@ pub(crate) fn signal_of(var: &std::rc::Rc<std::cell::RefCell<VariableNode>>) -> 
         // (`collect_ports` дедуплицирует). Константа — `localparam` уровня
         // модуля: префикс ей не нужен и только мешал бы читать — **кроме**
         // константы, выведенной из параметра модели (фича 0185).
-        VariableNode::Const { upper, name, .. } => Some(const_signal(upper.as_ref(), name)),
+        // ⚠️ Константа ПЕРЕЧИСЛИМОГО типа печатается именем варианта, а не
+        // именем `localparam` (фича 0491): типизированный `localparam mode_e X`
+        // не принимает **yosys** («Non-constant width range on parameter
+        // decl»), а нетипизированный ломает verilator — приёмник строго
+        // типизирован (`ENUMVALUE`). Имя варианта верно обоим: оно само несёт
+        // свой тип.
+        VariableNode::Const {
+            upper,
+            name,
+            ty,
+            expr,
+            ..
+        } => enum_constant_literal(upper.as_ref(), ty, expr)
+            .or_else(|| Some(const_signal(upper.as_ref(), name))),
         VariableNode::Port { name, .. } => Some(name.clone()),
         VariableNode::Unresolved => None,
     }
+}
+
+/// Имя перечислителя для константы перечислимого типа (фича 0491).
+///
+/// `None`, если тип не перечислимый либо значение не совпало ни с одним
+/// вариантом: тогда обращение печатается прежним именем `localparam`.
+pub(crate) fn enum_constant_literal(
+    upper: Option<&std::rc::Weak<std::cell::RefCell<crate::semantic::ModelNode>>>,
+    ty: &crate::semantic::type_node::TypeNode,
+    expr: &crate::semantic::ExpressionNode,
+) -> Option<String> {
+    let crate::semantic::type_node::TypeNode::Enum(enum_name) = ty else {
+        return None;
+    };
+    let crate::semantic::ExpressionNode::Number(value) = expr else {
+        return None;
+    };
+    let owner = upper?.upgrade()?;
+    let def = owner.borrow().search_enum(enum_name)?;
+    let (variant, _) = def.variants.iter().find(|(_, v)| v == value)?;
+    Some(sv_enum_variant_name(enum_name, variant))
 }
 
 /// Имя `localparam` константы — **с префиксом владельца** (фича 0193; форма
