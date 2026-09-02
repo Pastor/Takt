@@ -610,7 +610,7 @@ fn print_expression_statement(
             // перечисления число восстанавливается в имя варианта. Узла варианта
             // `ExpressionNode` не имеет — `command := Up` приходит как
             // `Number(2)`, — а перечисления SV строго типизированы.
-            let rhs = match target_type(target) {
+            let rhs = match target_type_in(target, Some(scope.structs)) {
                 Some(ty) => scope.coerce(&ty, value)?,
                 None => print_expression(value, scope)?,
             };
@@ -648,6 +648,35 @@ fn print_expression_statement(
 /// Нужен для восстановления варианта перечисления по значению: без целевого типа
 /// `Number(2)` неотличимо от обычного числа.
 fn target_type(target: &ExpressionNode) -> Option<TypeNode> {
+    target_type_in(target, None)
+}
+
+/// Тип приёмника с учётом ПОЛЕЙ структуры (фича 0492).
+///
+/// ⚠️ Поле перечислимого типа — тот же класс, что элемент массива (0368):
+/// `conf.mode := Run;` печаталось `conf_next.mode = 1;`, и verilator отвечал
+/// **ошибкой** `ENUMVALUE`, хотя та же запись скаляром работает у всех
+/// потребителей. Объявления структур приходят снимком карты: носитель типа
+/// сам их не ищет.
+fn target_type_in(
+    target: &ExpressionNode,
+    structs: Option<&std::collections::BTreeMap<String, Vec<(String, TypeNode)>>>,
+) -> Option<TypeNode> {
+    if let ExpressionNode::BitAccess(base, crate::parser::ast::Member::Identifier(field)) = target
+        && let Some(structs) = structs
+        && let Some(TypeNode::Struct(name)) = target_type_in(base, Some(structs))
+        && let Some(fields) = structs.get(&name)
+    {
+        return fields
+            .iter()
+            .find(|(fname, _)| fname.as_str() == field.name)
+            .map(|(_, ty)| ty.clone());
+    }
+    target_type_scalar(target)
+}
+
+/// Тип приёмника без учёта полей — прежнее правило.
+fn target_type_scalar(target: &ExpressionNode) -> Option<TypeNode> {
     // Элемент массива несёт ТИП ЭЛЕМЕНТА (фича 0368): прежде здесь стоял
     // `None`, и `modes[0] := Work;` печаталось `modes_next[0] = 1;` —
     // verilator отвечает **ошибкой** `ENUMVALUE` («Implicit conversion to enum
