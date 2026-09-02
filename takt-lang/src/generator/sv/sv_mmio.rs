@@ -386,6 +386,47 @@ impl Mmio {
         self.data_width
     }
 
+    /// Диапазоны `reg_wdata`, которые не занимает ни один входной порт.
+    ///
+    /// ⚠️ Ширина слова считается по **всем** портам, а `reg_wdata` читают лишь
+    /// **входные** (`out`-биты запись игнорируют, R5). Поэтому модель, где
+    /// входной порт уже выходного, оставляла старшие биты входа висящими:
+    /// `verilator -Wall` отвечал `UNUSEDSIGNAL: Bits of signal are not used`
+    /// при **нулевом** коде возврата `taktc` (замер 0486; тот же класс, что
+    /// 0214, но про биты, а не про сигнал целиком).
+    ///
+    /// Возвращает пары `(hi, lo)` — в форме среза SystemVerilog.
+    fn unused_wdata_ranges(&self) -> Vec<(u32, u32)> {
+        let mut used = vec![false; self.data_width as usize];
+        for port in &self.ports {
+            if !matches!(port.direction, PortDirection::In) {
+                continue;
+            }
+            let from = usize::try_from(port.bit.max(0)).unwrap_or(0);
+            let to = (from + port.width as usize).min(used.len());
+            for slot in used.iter_mut().take(to).skip(from) {
+                *slot = true;
+            }
+        }
+        let mut ranges = Vec::new();
+        let mut start: Option<u32> = None;
+        for (idx, taken) in used.iter().enumerate() {
+            let idx = idx as u32;
+            match (taken, start) {
+                (false, None) => start = Some(idx),
+                (true, Some(lo)) => {
+                    ranges.push((idx - 1, lo));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+        if let Some(lo) = start {
+            ranges.push((self.data_width - 1, lo));
+        }
+        ranges
+    }
+
     /// Группировка портов по адресу (адреса — по возрастанию, детерминизм).
     fn by_address(&self) -> BTreeMap<i64, Vec<&MmioPort>> {
         let mut groups: BTreeMap<i64, Vec<&MmioPort>> = BTreeMap::new();
@@ -492,6 +533,47 @@ pub(crate) fn emit_reg_iface_lines(p: &mut Printer, mmio: &Mmio) {
     .nl();
 }
 
+/// Печатает поглотитель битов `reg_wdata`, которых не занимает ни один вход.
+///
+/// ⚠️ Идиома та же, что у обёртки APB и у неиспользуемого параметра функции
+/// (фичи 0169, 0337): редукция с константой `1'b0`. Биты честно
+/// **используются**, а синтезатор эту логику выбрасывает сам —
+/// `lint_off` правило проекта запрещает (0169): прагма гасит сторожа, а не
+/// причину.
+///
+/// ⚠️ Гасятся **только непокрытые** диапазоны, а не сигнал целиком: покрытие
+/// считается по объявленным портам, поэтому сломайся печать среза — бит
+/// останется неиспользованным в тексте, и `verilator` об этом скажет.
+fn emit_wdata_guard(p: &mut Printer, mmio: &Mmio) {
+    if !mmio.has_writable() {
+        return;
+    }
+    let ranges = mmio.unused_wdata_ranges();
+    if ranges.is_empty() {
+        return;
+    }
+    let slices: Vec<String> = ranges
+        .iter()
+        .map(|(hi, lo)| {
+            if hi == lo {
+                format!("reg_wdata[{hi}]")
+            } else {
+                format!("reg_wdata[{hi}:{lo}]")
+            }
+        })
+        .collect();
+    p.ident("// Биты слова данных, которых не занимает ни один входной порт:")
+        .nl();
+    p.ident("// шина их приносит, а читать некому — поглощаем редукцией (0486).")
+        .nl();
+    p.ident(&format!(
+        "wire _unused_wdata = &{{1'b0, {}}};",
+        slices.join(", ")
+    ))
+    .nl()
+    .nl();
+}
+
 /// Печатает регистровый файл: объявление входных регистров, их защёлкивание
 /// шиной и комбинационное чтение.
 ///
@@ -501,6 +583,7 @@ pub(crate) fn emit_register_file(p: &mut Printer, mmio: &Mmio) {
     if mmio.is_empty() {
         return;
     }
+    emit_wdata_guard(p, mmio);
     let aw = mmio.addr_width;
     let inputs: Vec<&MmioPort> = mmio
         .ports
