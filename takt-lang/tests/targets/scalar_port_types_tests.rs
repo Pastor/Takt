@@ -75,6 +75,50 @@ fn every_target_translates_duration_port() {
     assert!(failed.is_empty(), "не переведено:\n{}", failed.join("\n"));
 }
 
+/// Модель с портом типа `q(m, n)` заданного направления (фича 0488).
+///
+/// ⚠️ Третий тип на той же оси: `q` хранится знаковым целым **машинной**
+/// ширины (`q(6, 6)` — это 12 бит, а типа `i12` нет ни у одной цели).
+fn fixed_source(direction: &str) -> String {
+    let body = if direction == "in" {
+        "in gain: q(8, 8) at 0x300;\n\
+         \x20   out level: u8 at 0x304;\n\
+         \x20   start Cycle {\n\
+         \x20       always { seen := gain; level := 1; }\n\
+         \x20       ref Cycle: ticks < 200;\n\
+         \x20   }\n"
+    } else {
+        "out gain: q(8, 8) at 0x300;\n\
+         \x20   start Cycle {\n\
+         \x20       always { gain := seen; }\n\
+         \x20       ref Cycle: ticks < 200;\n\
+         \x20   }\n"
+    };
+    format!(
+        "model Probe {{\n\
+         \x20   var seen: q(8, 8) := 1.5;\n\
+         \x20   var ticks: u8 := 0;\n\
+         \x20   {body}\
+         }}\n\
+         start Main = Probe;\n"
+    )
+}
+
+/// Порт `q(m, n)` переводят все восемь целей — в обоих направлениях.
+#[test]
+fn every_target_translates_fixed_port() {
+    let mut failed = Vec::new();
+    for direction in ["in", "out"] {
+        for target in TARGETS {
+            let tag = format!("q_{direction}_{target}");
+            if let Err(err) = emit(target, &fixed_source(direction), &tag) {
+                failed.push(format!("{target} ({direction}): отказ {:?}", err.code));
+            }
+        }
+    }
+    assert!(failed.is_empty(), "не переведено:\n{}", failed.join("\n"));
+}
+
 /// Модель с перечислимым портом заданного направления.
 fn source(direction: &str) -> String {
     let body = if direction == "in" {

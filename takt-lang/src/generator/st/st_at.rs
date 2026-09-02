@@ -136,27 +136,16 @@ fn size_of(ty: &TypeNode, model: &crate::semantic::ModelNode) -> Option<&'static
         TypeNode::Integer { bits: 64, .. } => "L",
         // `LREAL` — 64 бита (0041-02, T11).
         TypeNode::Rational => "L",
-        // Длительность — целое в миллисекундах (0183), и локация даётся именно
-        // целому (фича 0487): ширину берёт общий носитель `duration`.
-        TypeNode::Duration => match crate::semantic::duration::VALUE_BITS {
+        // Прочие скаляры цель печатает ЦЕЛЫМ, и локация даётся именно целому
+        // (фичи 0485, 0487, 0488): перечисление, длительность и `q(m, n)`.
+        // Ширину даёт ОДИН носитель `semantic::scalar_port` — тот же, которым
+        // цель `rust` выбирает метод HAL-трейта.
+        _ => match crate::semantic::scalar_port::scalar_repr(ty, model)?.bits {
             8 => "B",
             16 => "W",
             32 => "D",
             _ => "L",
         },
-        // Перечисление цель печатает ЦЕЛЫМ (`USINT` и шире), а локация даётся
-        // именно целому (фича 0485): ширину берёт общий факт `enum_facts`
-        // (0060) — тот же, которым цель выбирает тип переменной.
-        TypeNode::Enum(name) => {
-            let facts = model.search_enum(name).and_then(|e| e.facts())?;
-            match facts.machine_bits() {
-                8 => "B",
-                16 => "W",
-                32 => "D",
-                _ => "L",
-            }
-        }
-        _ => return None,
     })
 }
 
