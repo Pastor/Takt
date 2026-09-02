@@ -247,14 +247,28 @@ fn lift_in_expr(
     loc: Location,
 ) {
     match expr {
-        ExpressionNode::Function(_, args) => {
-            for arg in args.iter_mut() {
+        ExpressionNode::Function(func, args) => {
+            // Типы параметров — для подъёма агрегата-литерала (фича 0493):
+            // тип временной берётся у ОБЪЯВЛЕНИЯ, а не угадывается по литералу.
+            let params: Vec<TypeNode> = match &*func.borrow() {
+                FunctionDefinitionNode::Local { params, .. }
+                | FunctionDefinitionNode::External { params, .. } => {
+                    params.iter().map(|(_, ty)| ty.clone()).collect()
+                }
+                _ => Vec::new(),
+            };
+            for (index, arg) in args.iter_mut().enumerate() {
                 // Сперва вложенные вызовы: `outer(inner(src[0:2]))`.
                 lift_in_expr(arg, model, owner, ctx, prelude, loc);
-                let Some(replacement) = lift_slice(arg, model, owner, ctx, prelude, loc) else {
+                if let Some(replacement) = lift_slice(arg, model, owner, ctx, prelude, loc) {
+                    *arg = replacement;
                     continue;
-                };
-                *arg = replacement;
+                }
+                if let Some(ty) = params.get(index)
+                    && let Some(replacement) = lift_aggregate(arg, ty, owner, ctx, prelude, loc)
+                {
+                    *arg = replacement;
+                }
             }
         }
         ExpressionNode::Assign(target, value) => {
@@ -340,6 +354,62 @@ fn lift_slice(
         loc: Location::Implicit,
         name: name.clone(),
         ty,
+        expr: ExpressionNode::None,
+    }));
+    prelude.push(StatementNode::Expression(
+        Box::new(ExpressionNode::Assign(
+            Box::new(ExpressionNode::Variable(Rc::clone(&cell))),
+            Box::new(arg.clone()),
+        )),
+        loc,
+    ));
+    Some(ExpressionNode::Variable(cell))
+}
+
+/// Поднимает агрегат-ЛИТЕРАЛ аргумента во временную переменную (фича 0493).
+///
+/// `None` — аргумент литералом не является либо тип параметра не составной:
+/// пусть отвечает прежний путь.
+///
+/// ⚠️ Замер 2026-09-02: `pick({1, 2})` при `fn pick(a: Pair)` цель `c`
+/// печатала как `Fnstruct_pick({1, 2})` — `cc` отвечает «expected expression»
+/// при НУЛЕВОМ коде возврата `taktc`; `st` и `sv` отказывали (`ST-011`,
+/// `SV-002`), а эталон и `rust` запись исполняли. Тот же приём, что у среза:
+/// за границей семантики агрегата в аргументе не существует.
+///
+/// ⚠️ Объявление идёт БЕЗ инициализатора, а значение — присваиванием: агрегат
+/// в инициализаторе локального объявления переводят не все цели, а
+/// присваивание — все (0345, 0330). Форма та же, что у среза, и по той же
+/// причине.
+fn lift_aggregate(
+    arg: &ExpressionNode,
+    ty: &TypeNode,
+    owner: &Rc<RefCell<ModelNode>>,
+    ctx: &mut Ctx<'_>,
+    prelude: &mut Vec<StatementNode>,
+    loc: Location,
+) -> Option<ExpressionNode> {
+    if !matches!(
+        arg,
+        ExpressionNode::Initializer(_) | ExpressionNode::Array(_)
+    ) {
+        return None;
+    }
+    if !matches!(ty, TypeNode::Array(..) | TypeNode::Struct(_)) {
+        return None;
+    }
+    let name = ctx.fresh_name();
+    prelude.push(StatementNode::Variable(
+        name.clone(),
+        ty.clone(),
+        None,
+        Location::Implicit,
+    ));
+    let cell = Rc::new(RefCell::new(VariableNode::Simple {
+        upper: Some(Rc::downgrade(owner)),
+        loc: Location::Implicit,
+        name,
+        ty: ty.clone(),
         expr: ExpressionNode::None,
     }));
     prelude.push(StatementNode::Expression(
