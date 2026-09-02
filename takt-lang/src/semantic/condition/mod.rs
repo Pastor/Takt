@@ -32,6 +32,7 @@ use base::{cond_base_is_array, cond_base_label};
 pub(crate) mod observe;
 pub(crate) mod port_split;
 mod port_subtree;
+pub(crate) mod relink;
 pub mod state_of;
 
 use crate::diagnostics::Diagnostic;

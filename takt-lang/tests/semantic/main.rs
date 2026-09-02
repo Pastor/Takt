@@ -26,6 +26,7 @@ mod bare_state_condition_tests;
 mod bit_width_contract_tests;
 mod body_judge_position_tests;
 mod call_arity_tests;
+mod cond_call_relink_tests;
 mod const_eval_tests;
 mod const_index_bounds_tests;
 mod const_init_fold_tests;

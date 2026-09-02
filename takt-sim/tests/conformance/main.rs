@@ -42,6 +42,7 @@ mod conformance_call_result_field_tests;
 mod conformance_composite_param_tests;
 mod conformance_composition_blocks_tests;
 mod conformance_composition_edge_tests;
+mod conformance_cond_call_tests;
 mod conformance_const_param_tests;
 mod conformance_default_init_tests;
 mod conformance_default_value_tests;
