@@ -118,21 +118,19 @@ pub(crate) fn coerce_to(
             | ExpressionNode::Divide(l, r)
             | ExpressionNode::Modulo(l, r),
         ) if operands_need_cast(l, r, target) => {
-            let op = match value {
-                ExpressionNode::Add(..) => "+",
-                ExpressionNode::Subtract(..) => "-",
-                ExpressionNode::Multiply(..) => "*",
-                ExpressionNode::Divide(..) => "/",
-                _ => "%",
-            };
-            let name = crate::generator::rust::rust_type::rust_type(target, "приёмник арифметики")?;
-            // Обёртка по правилу 0127 сохраняется: печатник арифметики её и
-            // ставит, поэтому операнды приводятся, а операция печатается им же.
-            Ok(format!(
-                "({} {op} {})",
-                cast_operand(l, &name, scope)?,
-                cast_operand(r, &name, scope)?
-            ))
+            // Операнды приводятся, а ОПЕРАЦИЮ печатает обычный печатник
+            // арифметики (фича 0507). Прежде эта ветвь печатала `({l} {op} {r})`
+            // сама, и вывод терял ДВА свойства сразу: обёртку правила 0127
+            // (`wrapping_add` вырождался в `+`, то есть паника в отладочной
+            // сборке там, где эталон переносит) и правило «приведение по нужде»
+            // — операнд, уже имеющий тип приёмника, получал `x as u16` при
+            // `x: u16`, а это `clippy::unnecessary_cast`, отказ гейта самой цели
+            // при НУЛЕВОМ коде возврата `taktc`.
+            //
+            // ⚠️ Лишнее приведение снимает существующий носитель
+            // (`rust_type::same_printed_type` в печати `Cast`, фичи 0361/0374):
+            // второго знания о нужде здесь не заводится.
+            print_expression(&cast_operands(value, l, r, target), scope)
         }
         // Именованное значение ИНОГО целого типа приводится к приёмнику
         // (фича 0360): `rr := r;` при `r: i16` и `rr: u16` давало `E0308` —
@@ -191,16 +189,29 @@ fn operands_need_cast(l: &ExpressionNode, r: &ExpressionNode, target: &TypeNode)
         && (lt != *target || rt != *target)
 }
 
-/// Печатает операнд с приведением к типу приёмника, если он иного типа.
-fn cast_operand(
-    node: &ExpressionNode,
-    target_name: &str,
-    scope: &Scope,
-) -> Result<String, Diagnostic> {
-    Ok(format!(
-        "({} as {target_name})",
-        print_expression(node, scope)?
-    ))
+/// Тот же арифметический узел, но с операндами, приведёнными к приёмнику.
+///
+/// Приведение выражается УЗЛОМ `Cast`, а не строкой: дальше его печатает общий
+/// путь, который и ставит обёртку правила 0127, и опускает приведение к тому же
+/// типу (`same_printed_type`). Строковая печать здесь означала бы третью копию
+/// обоих правил.
+fn cast_operands(
+    value: &ExpressionNode,
+    l: &ExpressionNode,
+    r: &ExpressionNode,
+    target: &TypeNode,
+) -> ExpressionNode {
+    let cast = |node: &ExpressionNode| {
+        Box::new(ExpressionNode::Cast(Box::new(node.clone()), target.clone()))
+    };
+    let (lc, rc) = (cast(l), cast(r));
+    match value {
+        ExpressionNode::Add(..) => ExpressionNode::Add(lc, rc),
+        ExpressionNode::Subtract(..) => ExpressionNode::Subtract(lc, rc),
+        ExpressionNode::Multiply(..) => ExpressionNode::Multiply(lc, rc),
+        ExpressionNode::Divide(..) => ExpressionNode::Divide(lc, rc),
+        _ => ExpressionNode::Modulo(lc, rc),
+    }
 }
 
 /// Целочисленные типы Rust, у которых есть `From<bool>` (фича 0335).
