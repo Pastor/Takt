@@ -296,14 +296,6 @@ fn print_result(result: &RunResult) {
         RunResult::StepsReached { steps } => {
             println!("Выполнено {steps} шагов (лимит достигнут).");
         }
-        RunResult::StepsExhausted {
-            completed,
-            requested,
-        } => {
-            println!(
-                "Предупреждение: выполнено {completed} из {requested} запрошенных шагов (JSON исчерпан)."
-            );
-        }
         RunResult::GuardFailed { step, details } => {
             eprintln!("ОШИБКА guard на шаге {step}: {details}");
         }

@@ -1,0 +1,5 @@
+[
+  { "in_ports": { "light": 1 } },
+  { "in_ports": { "light": 1 } },
+  { "in_ports": { "light": 0 } }
+]
