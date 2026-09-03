@@ -121,6 +121,11 @@ pub fn build_data_kripke(
     // 3. Домены из типов + потолок ДО построения (правила 4, 5; метрика 0145).
     let mut domain = 1u128; // D = Π|домен|
     for decl in tracked.values() {
+        // Постоянная величина даёт домен из одного значения — она не растит
+        // задачу и не порождает контрпримеров «параметр вдруг стал другим».
+        if decl.fixed {
+            continue;
+        }
         let Some(size) = super::domain::of(&decl.ty, model).map(|d| d.size()) else {
             // float/q/массив/структура — домен не перечислим.
             return Err((
@@ -147,9 +152,15 @@ pub fn build_data_kripke(
     // 4. Материализация доменов (только после прохождения потолка).
     let mut order: Vec<TrackedVar> = Vec::new();
     for (name, decl) in &tracked {
-        let values = super::domain::of(&decl.ty, model)
-            .map(|d| d.values())
-            .unwrap_or_default();
+        let values = if decl.fixed {
+            // Домен постоянной величины — её собственное значение. Если оно не
+            // сворачивается, ниже придёт `InitialValueUnknown`, как у переменной.
+            fold_expr(&decl.init).map(|v| vec![v]).unwrap_or_default()
+        } else {
+            super::domain::of(&decl.ty, model)
+                .map(|d| d.values())
+                .unwrap_or_default()
+        };
         let Some(init) = fold_expr(&decl.init) else {
             // Инициализатор не сворачивается в константу.
             return Err((
@@ -266,6 +277,14 @@ struct DataAtom {
 struct TrackedDecl {
     ty: TypeNode,
     init: ExpressionNode,
+    /// Значение постоянно на всём прогоне — домен из ОДНОГО значения (0517).
+    ///
+    /// Так трактуется **параметр модели**, которому не присваивают в теле:
+    /// параметр есть величина сборки, от такта к такту он не меняется, а
+    /// абстракция позволяла ему скакать каждый такт — отсюда квадрат в размере
+    /// задачи и лишние контрпримеры (решение заказчика 2026-09-03: проверять
+    /// значение по умолчанию модели).
+    fixed: bool,
 }
 
 /// Отслеживаемая переменная с материализованным доменом и индексом нач. значения.
@@ -336,9 +355,11 @@ fn collect_tracked(
     match expr {
         AtomExpr::BoolVar(name) => match model.variables.get(name) {
             Some(VariableNode::Simple { ty, expr, .. }) => {
+                let fixed = is_fixed_parameter(model, name);
                 tracked.entry(name.clone()).or_insert_with(|| TrackedDecl {
                     ty: ty.clone(),
                     init: expr.clone(),
+                    fixed,
                 });
                 true
             }
@@ -348,6 +369,18 @@ fn collect_tracked(
         },
         AtomExpr::Cond(cond) => collect_tracked_cond(cond, model, tracked),
     }
+}
+
+/// Постоянен ли `name` на прогоне: параметр модели, которому не присваивают.
+///
+/// ⚠️ Признак `mutated` заполняет анализ изменяемости (0185), и его умолчание —
+/// «изменяемый»: не размеченный параметр обязан вести себя как переменная.
+/// Здесь то же самое — постоянным считается только явно неизменяемый.
+fn is_fixed_parameter(model: &ModelNode, name: &str) -> bool {
+    model
+        .parameters
+        .iter()
+        .any(|p| p.name == name && !p.mutated)
 }
 
 /// Обход условия: сбор `Simple`-переменных + проверка поддержанности подмножества.
@@ -380,9 +413,11 @@ fn collect_tracked_cond(
                     if super::domain::of(ty, model).is_none() {
                         return false;
                     }
+                    let fixed = is_fixed_parameter(model, name);
                     tracked.entry(name.clone()).or_insert_with(|| TrackedDecl {
                         ty: ty.clone(),
                         init: expr.clone(),
+                        fixed,
                     });
                     true
                 }
