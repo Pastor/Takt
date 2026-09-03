@@ -90,9 +90,12 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
             Some(text) => Ok(text),
             None => match boolean_comparison(a, "==", b, scope)? {
                 Some(text) => Ok(text),
-                None => match enum_comparison(a, "==", b, scope)? {
+                None => match variant_as_value(a, "==", b, scope)? {
                     Some(text) => Ok(text),
-                    None => cond_binary(a, "==", b, scope),
+                    None => match enum_comparison(a, "==", b, scope)? {
+                        Some(text) => Ok(text),
+                        None => cond_binary(a, "==", b, scope),
+                    },
                 },
             },
         },
@@ -100,9 +103,12 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
             Some(text) => Ok(text),
             None => match boolean_comparison(a, "!=", b, scope)? {
                 Some(text) => Ok(text),
-                None => match enum_comparison(a, "!=", b, scope)? {
+                None => match variant_as_value(a, "!=", b, scope)? {
                     Some(text) => Ok(text),
-                    None => cond_binary(a, "!=", b, scope),
+                    None => match enum_comparison(a, "!=", b, scope)? {
+                        Some(text) => Ok(text),
+                        None => cond_binary(a, "!=", b, scope),
+                    },
                 },
             },
         },
@@ -302,6 +308,11 @@ fn cond_compare(
     b: &ConditionNode,
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
+    // Порядковое сравнение с именем варианта (`op < Hlt`) — та же пара, что и
+    // равенство (0508): у переменной целый тип, у имени в Rust его нет.
+    if let Some(text) = variant_as_value(a, op, b, scope)? {
+        return Ok(text);
+    }
     match crate::generator::mixed_sign::plan(
         crate::generator::mixed_sign::operand_type_cond(a).as_ref(),
         crate::generator::mixed_sign::operand_type_cond(b).as_ref(),
@@ -395,6 +406,39 @@ fn boolean_comparison(
     } else {
         format!("(!{})", printed)
     }))
+}
+
+/// Печатает сравнение ЦЕЛОГО операнда с ИМЕНЕМ варианта — фича 0508.
+///
+/// Возвращает `None`, если пара иная: тогда печать идёт прежним путём.
+///
+/// ## Зачем ветвь
+///
+/// `ref Halted: op = Hlt;` при `var op: u8` — обычная запись Takt (вариант там
+/// есть число), и её исполняет эталон, а цели `c` и `st` переводят. Дословный
+/// перевод даёт `self.op == Op::Hlt` — **`E0308`** при НУЛЕВОМ коде возврата
+/// `taktc`; на модели, где перечисление больше нигде не названо типом, к нему
+/// добавляется `E0433` («cannot find type `Op`»), потому что типа в модуле нет.
+///
+/// ⚠️ Это ЗЕРКАЛО ветви 0281: там число рядом с перечислимым операндом
+/// поднимается до варианта, здесь имя рядом с целым — опускается до значения.
+/// Обе смотрят на тип СОСЕДА, и признак у второй общий с целью `sv`
+/// (`generator::enum_compare`).
+fn variant_as_value(
+    a: &ConditionNode,
+    op: &str,
+    b: &ConditionNode,
+    scope: &Scope,
+) -> Result<Option<String>, Diagnostic> {
+    let Some(low) = crate::generator::enum_compare::lowered(a, b) else {
+        return Ok(None);
+    };
+    let (left, right) = if low.variant_is_left {
+        (low.value.to_string(), print_condition(b, scope)?)
+    } else {
+        (print_condition(a, scope)?, low.value.to_string())
+    };
+    Ok(Some(format!("({left} {op} {right})")))
 }
 
 /// Печатает сравнение перечислимого операнда с ЧИСЛОМ — фича 0281.
