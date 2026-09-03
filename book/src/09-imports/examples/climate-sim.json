@@ -1,0 +1,7 @@
+[
+  { "in_ports": { "temp": 18 } },
+  { "in_ports": { "temp": 20 } },
+  { "in_ports": { "temp": 22 } },
+  { "in_ports": { "temp": 23 } },
+  { "in_ports": { "temp": 19 } }
+]

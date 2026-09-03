@@ -1,4 +1,4 @@
-#import "../template.typ": example
+#import "../template.typ": code, example
 
 = Симуляция <sec-15-simulation>
 Модель на Takt — не только описание, но и #strong[исполнимая
@@ -30,8 +30,15 @@
 
 #example(read("examples/watchdog.takt"))
 
-Подадим `kick` только на первом такте, а дальше — тишину. Прогон
-показывает, как растёт скрытое состояние:
+Подадим `kick` только на первом такте, а дальше — тишину:
+
+#code(read("examples/watchdog-sim.json"), "json")
+
+```bash
+takt-sim watchdog.takt -s watchdog-sim.json
+```
+
+Прогон показывает, как растёт скрытое состояние:
 ```text
 Шаг 1: [Watching]  kick=1  alarm=0  idle=0
 Шаг 2: [Watching]  kick=0  alarm=0  idle=1

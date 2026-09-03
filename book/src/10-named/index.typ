@@ -1,4 +1,4 @@
-#import "../template.typ": example
+#import "../template.typ": code, example
 
 = Именованные условия и блоки <sec-10-named>
 Логику состояния удобно раскладывать на понятные, переиспользуемые
@@ -82,8 +82,15 @@ exit { cycles := cycles + 1; }
 счётчик `cycles` увеличивается — так фиксируется завершённый цикл
 откачки (это счёт #strong[событий], а не тактов).
 
-Прогон (симулятор играет окружение и двигает датчик `level`) показывает
-счёт циклов:
+Сценарий играет окружение и двигает датчик `level`:
+
+#code(read("examples/tank-sim.json"), "json")
+
+```bash
+takt-sim tank.takt -s tank-sim.json
+```
+
+Прогон показывает счёт циклов:
 ```text
 Шаг 1: [Filling]   level=50  valve=1 pump=0  display=50  cycles=0
 Шаг 2: [Filling]   level=70  valve=1 pump=0  display=70  cycles=0
