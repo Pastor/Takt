@@ -233,6 +233,11 @@ fn generate_program(
     let ports = sv_module::collect_ports(map, &blocks, &addressed)?;
     let fsm = sv_fsm::Fsm::build(map, &blocks, &root_name, &ports, mmio_map.as_ref())?;
     let module = normalize_lowercase_snakecase(root_name.unique().replace(':', "_"));
+    // Имя порта не должно совпадать с именем модуля (фича 0515): `verilator`
+    // отвечает `VARHIDDEN`, а гейт цели считает предупреждение ошибкой.
+    // Проверка стоит здесь, а не в `check_sv_name`: имя модуля известно только
+    // сейчас — оно строится из имени модели, а у корневой из имени файла.
+    sv_module::check_module_name_clash(&module, map, &blocks)?;
 
     let mut out = String::new();
     let mut p = Printer::new(INDENT, &mut out);
