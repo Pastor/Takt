@@ -1,0 +1,8 @@
+[
+  { "in_ports": { "level": 50 } },
+  { "in_ports": { "level": 70 } },
+  { "in_ports": { "level": 90 } },
+  { "in_ports": { "level": 70 } },
+  { "in_ports": { "level": 30 } },
+  { "in_ports": { "level": 10 } }
+]

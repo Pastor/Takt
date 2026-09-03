@@ -124,6 +124,9 @@ start Machine = Core(id := 0, base := 0) | Cache(serves := 0, enabled := 1)
 Кеш прямого отображения: номер строки — младшая часть адреса, тег —
 старшая. Попадание он обслуживает #strong[тем же тактом], промах уходит
 на шину и стоит ожидания. Счётчики `hits` и `misses` видны в трассе:
+```bash
+takt-sim cache.takt -n 97
+```
 ```text
 Шаг   1: [Fetch, Miss, Free, Serve]     hits=0 misses=0
 Шаг   8: [Fetch, Fill, Grant, Serve]    hits=0 misses=0
@@ -169,12 +172,16 @@ start Machine = StageExecute | StageDecode | StageFetch | Memory(latency := 0, p
 ]
 
 В трассе видно, как конвейер заполняется и работает: `if_pc`, `id_pc` и
-`ex_pc` — номера команд, занимающих стадии.
+`ex_pc` — номера команд, занимающих стадии, а `*_valid` говорит, занята
+ли стадия вообще.
+```bash
+takt-sim pipeline.takt -n 6
+```
 ```text
-Шаг 3: if_pc=1 id_pc=0 ex_pc=0  заняты=110
-Шаг 4: if_pc=2 id_pc=1 ex_pc=0  заняты=111
-Шаг 5: if_pc=3 id_pc=2 ex_pc=1  заняты=111
-Шаг 6: if_pc=4 id_pc=3 ex_pc=2  заняты=111
+Шаг 3: if_pc=1 id_pc=0 ex_pc=0  if_valid=1 id_valid=1 ex_valid=0
+Шаг 4: if_pc=2 id_pc=1 ex_pc=0  if_valid=1 id_valid=1 ex_valid=1
+Шаг 5: if_pc=3 id_pc=2 ex_pc=1  if_valid=1 id_valid=1 ex_valid=1
+Шаг 6: if_pc=4 id_pc=3 ex_pc=2  if_valid=1 id_valid=1 ex_valid=1
 ```
 
 Начиная с четвёртого такта в машине #strong[одновременно] идут три
@@ -202,6 +209,9 @@ start Machine = Core(id := 0, base := 0) | Core(id := 1, base := 4)
 
 Ожидание видно с третьего такта — счётчик `waits` считает, сколько
 тактов ядро простояло в очереди:
+```bash
+takt-sim dual_core.takt -n 4
+```
 ```text
 Шаг 2: [Fetch, Fetch, Miss, Miss, Grant, Serve]  waits=[0,0]
 Шаг 3: [Fetch, Fetch, Miss, Miss, Grant, Serve]  waits=[0,1]
