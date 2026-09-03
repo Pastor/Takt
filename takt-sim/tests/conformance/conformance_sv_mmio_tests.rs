@@ -74,9 +74,18 @@ fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i128>> {
 
 /// Каталог сборки под конкретный тест.
 fn build_dir(tag: &str) -> PathBuf {
+    // Имя ПОТОКА в имени каталога (фича 0516): тесты идут параллельно (0190), и
+    // два набора, собирающие в один каталог, вычищают файлы друг друга —
+    // покраснение при этом невоспроизводимо (класс 0429). Соседние `sv`-наборы
+    // имя потока несут; здесь его не было, и один прогон 2026-09-02 покраснел
+    // без объяснения.
+    let thread = std::thread::current()
+        .name()
+        .unwrap_or("single")
+        .replace(':', "_");
     let dir = std::env::temp_dir()
         .join(format!("takt_pid{}", std::process::id()))
-        .join(format!("takt_conformance_sv_mmio_{tag}"));
+        .join(format!("takt_conformance_sv_mmio_{tag}_{thread}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     dir
