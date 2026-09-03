@@ -32,10 +32,14 @@ pub(crate) fn print_match(
     let mut first = true;
     let mut wildcard: Option<&StatementNode> = None;
     for arm in arms {
-        if arm
-            .patterns
-            .iter()
-            .any(|p| matches!(p, MatchPatternNode::Wildcard))
+        // ⚠️ Берётся ПЕРВАЯ `_`-ветвь: вторая недостижима (фича 0514), а
+        // прежде цепочка печаталась по последней — то есть исполнялось не то,
+        // что считает эталон.
+        if wildcard.is_none()
+            && arm
+                .patterns
+                .iter()
+                .any(|p| matches!(p, MatchPatternNode::Wildcard))
         {
             wildcard = Some(&arm.body);
         }
@@ -72,6 +76,13 @@ pub(crate) fn print_match(
         {
             continue;
         }
+        // Ветвь, чей образец повторяет более ранний, НЕДОСТИЖИМА: `match`
+        // берёт первое совпадение. `clippy` под `-D warnings` отвечает «these
+        // `if` branches have the same condition» — отказ гейта самой цели при
+        // нулевом коде возврата `taktc` (фича 0514).
+        if crate::semantic::match_arms::pattern_repeats_above(arms, index) {
+            continue;
+        }
         let mut tests = Vec::new();
         for pattern in &arm.patterns {
             let MatchPatternNode::Value(value) = pattern else {
@@ -106,12 +117,24 @@ pub(crate) fn print_match(
                 guard = format!("{guard} && {}", print_as_bool(cond, scope)?);
             }
         }
+        // Тело печатается В БУФЕР: пустая ветвь образца даёт `if x { }`, а
+        // `clippy` под `-D warnings` отвечает «this `if` branch is empty»
+        // (фича 0514). Прежде класс был невидим: пустая ветвь стояла рядом с
+        // непустыми, и цепочка `else if` линт устраивала.
+        let mut body_text = String::new();
+        {
+            let mut buffer = p.fork(&mut body_text);
+            buffer.up();
+            print_statement(body, scope, &mut buffer, out)?;
+            buffer.down();
+        }
+        if body_text.trim().is_empty() {
+            continue;
+        }
         let head = if first { "if" } else { "} else if" };
         first = false;
         p.ident(&format!("{head} {guard} {{")).nl();
-        p.up();
-        print_statement(body, scope, p, out)?;
-        p.down();
+        p.print(&body_text);
     }
     match (wildcard_text.trim().is_empty(), first) {
         // Только `_`-ветка: цепочки нет, тело печатается как есть.

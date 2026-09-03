@@ -487,13 +487,21 @@ fn print_match(
     };
 
     for (index, arm) in arms.iter().enumerate() {
+        // Ветвь, чей образец повторяет более ранний, НЕДОСТИЖИМА: `match`
+        // берёт первое совпадение (фича 0514). Печатать её незачем, а её
+        // отсутствие снимает и оговорку о пустой ветви ниже.
+        if crate::semantic::match_arms::pattern_repeats_above(arms, index) {
+            continue;
+        }
         // Ветка `_` печатается последней как `ELSE`, где бы она ни стояла.
         if arm
             .patterns
             .iter()
             .any(|p| matches!(p, MatchPatternNode::Wildcard))
         {
-            wildcard = Some(&arm.body);
+            if wildcard.is_none() {
+                wildcard = Some(&arm.body);
+            }
             continue;
         }
         let mut tests = Vec::new();
@@ -507,12 +515,11 @@ fn print_match(
             continue;
         }
         let text = body_text(&arm.body, p, out)?;
-        // ⚠️ Опустить пустую ветвь можно, только если её образец не
-        // повторяется ниже: `match` берёт ПЕРВОЕ совпадение, и при дубле
-        // пустая ветвь его поглощает (общий признак 0509).
-        if text.trim().is_empty()
-            && !crate::generator::match_arms::pattern_repeats_below(arms, index)
-        {
+        // Пустая ветвь не печатается (0509): пустого оператора в IEC нет
+        // вовсе. ⚠️ Прежде опущение сторожил признак «образец повторяется
+        // ниже» — при дубле пустая ветвь поглощала совпадение. С фичи 0514
+        // дубли до печати не доходят вовсе, и оговорка стала не нужна.
+        if text.trim().is_empty() {
             continue;
         }
         let guard = tests.join(" OR ");

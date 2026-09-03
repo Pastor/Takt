@@ -151,18 +151,22 @@ fn non_empty_default_arm_is_kept() {
     assert!(st.contains("ELSE"), "ветвь непуста:\n{st}");
 }
 
-/// **T5. Контроль:** при ДУБЛЕ образца пустая ветвь сохраняется.
+/// **T5.** При ДУБЛЕ образца недостижимая ветвь исчезает вместе с пустой.
 ///
-/// `match` берёт ПЕРВОЕ совпадение: опустив пустую ветвь, цель исполнила бы
-/// следующую — валидный вывод и другой автомат. Такой вход и без того невалиден
-/// у цели `c` («duplicate case value»), но менять на нём поведение нельзя.
+/// До фичи 0514 пустая ветвь при дубле СОХРАНЯЛАСЬ: опустить её значило
+/// отдать совпадение нижней ветви, то есть поменять автомат. С 0514 нижняя
+/// ветвь не печатается вовсе (она недостижима), и оговорка стала не нужна —
+/// исчезают обе, а поведение остаётся прежним: первая ветвь пуста.
+///
+/// ⚠️ Прежняя редакция теста закрепляла форму, которую `iec2c` отвергал
+/// («no statement defined after 'THEN'»), — класс 0191 в миниатюре.
 #[test]
-fn duplicate_pattern_keeps_empty_arm() {
+fn duplicate_pattern_drops_both_arms() {
     let (_d, text) = generate("dup", "st", DUPLICATE);
     assert_eq!(
         text.matches("op = 1").count(),
-        2,
-        "обе ветви обязаны остаться на месте:\n{text}"
+        0,
+        "первая ветвь пуста, вторая недостижима — печатать нечего:\n{text}"
     );
 }
 
@@ -247,4 +251,65 @@ fn generated_output_passes_target_tools() {
             String::from_utf8_lossy(&out.stdout)
         );
     }
+}
+
+/// **T8 (фича 0514).** Недостижимая ветвь не печатается целями `c`, `rust`, `sv`.
+///
+/// `match` берёт ПЕРВОЕ совпадение, поэтому ветвь с повторяющимся образцом не
+/// сработает никогда. Замер 2026-09-03: `cc` отвечал «duplicate case value»,
+/// `clippy` — «these `if` branches have the same condition», а две ветви `_`
+/// давали у `verilator` «Multiple default statements» — всё при НУЛЕВОМ коде
+/// возврата `taktc`.
+#[test]
+fn unreachable_arm_is_not_printed() {
+    const DUP_VALUE: &str = "var op: u8 := 0; var acc: u8 := 0;\n\
+                             out probe: u8 at 0x100;\n\
+                             start Run {\n\
+                                 always {\n\
+                                     op := op + 1;\n\
+                                     match op { 1 => { acc := acc + 1; } 1 => { acc := acc + 10; } }\n\
+                                     probe := acc;\n\
+                                 }\n\
+                                 ref Run;\n\
+                             }\n";
+    const DUP_DEFAULT: &str = "var op: u8 := 0; var acc: u8 := 0;\n\
+                               out probe: u8 at 0x100;\n\
+                               start Run {\n\
+                                   always {\n\
+                                       op := op + 1;\n\
+                                       match op { 1 => { acc := acc + 1; } _ => { acc := acc + 10; } _ => { acc := acc + 100; } }\n\
+                                       probe := acc;\n\
+                                   }\n\
+                                   ref Run;\n\
+                               }\n";
+
+    let (_d, c) = generate("dup_value", "c", DUP_VALUE);
+    assert_eq!(
+        c.matches("case 1:").count(),
+        1,
+        "в C две одинаковые метки — ошибка компиляции:\n{c}"
+    );
+    let (_d, rust) = generate("dup_value", "rust", DUP_VALUE);
+    assert_eq!(
+        rust.matches("self.op == 1").count(),
+        1,
+        "вторая ветвь недостижима, а `clippy` её не принимает:\n{rust}"
+    );
+    let (_d, sv) = generate("dup_default", "sv", DUP_DEFAULT);
+    assert_eq!(
+        sv.matches("default:").count(),
+        1,
+        "второй `default` — «Multiple default statements» у verilator:\n{sv}"
+    );
+
+    // ⚠️ Печатается ПЕРВАЯ ветвь: эталон исполняет её, и подмена на последнюю
+    // дала бы валидный вывод с другим поведением (сторож — потактовая сверка).
+    assert!(
+        rust.contains("wrapping_add(1)") && !rust.contains("wrapping_add(10)"),
+        "остаться обязана первая ветвь:\n{rust}"
+    );
+    assert!(
+        sv.contains("+ 10") && !sv.contains("+ 100"),
+        "у `_`-ветвей остаться обязана первая:\n{sv}"
+    );
 }

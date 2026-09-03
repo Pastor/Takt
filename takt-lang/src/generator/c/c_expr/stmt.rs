@@ -469,7 +469,15 @@ pub(in crate::generator::c) fn generate_code_block(
             printer.ident("switch (");
             generate_stmt_expression(printer, map, owner, params.clone(), expr, has_model)?;
             printer.print(") {").nl();
-            for MatchArmNode { patterns, body } in arms {
+            for (index, MatchArmNode { patterns, body, .. }) in arms.iter().enumerate() {
+                // Ветвь, чей образец уже встречался выше, НЕДОСТИЖИМА: `match`
+                // берёт первое совпадение. В C две одинаковые метки — ошибка
+                // компиляции («duplicate case value»), то есть невалидный вывод
+                // при нулевом коде возврата `taktc` (фича 0514). Автор об этом
+                // узнаёт из `SE-131`.
+                if crate::semantic::match_arms::pattern_repeats_above(arms, index) {
+                    continue;
+                }
                 let has_wildcard = patterns
                     .iter()
                     .any(|p| matches!(p, MatchPatternNode::Wildcard));
