@@ -25,7 +25,7 @@ use crate::generator::rust::rust_live::{
 };
 use crate::generator::rust::rust_name::rust_value_name;
 use crate::generator::rust::rust_type::rust_type;
-use crate::semantic::{ExpressionNode, MatchPatternNode, StatementNode};
+use crate::semantic::{ExpressionNode, StatementNode};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Побочный результат печати тела: предупреждения, которые обязан увидеть автор.
@@ -599,6 +599,19 @@ pub(crate) fn print_statement_ctx(
             Ok(0)
         }
         StatementNode::If { cond, then_, else_ } => {
+            // Вложенный `if`, составляющий ВСЁ тело, сливается с внешним
+            // (фича 0510): `clippy` под `-D warnings` отвечает «this `if`
+            // statement can be collapsed» — отказ гейта самой цели при нулевом
+            // коде возврата `taktc`. Условие языка побочных эффектов не имеет
+            // (присваивание — оператор), поэтому слияние поведение не меняет;
+            // тот же приём применён к обёртке раннего возврата (фикс 0446-01).
+            //
+            // ⚠️ Правило узкое, и границы ЗАМЕРЕНЫ (2026-09-03): `else` у
+            // внешнего либо у внутреннего, а также лишний оператор рядом —
+            // `clippy` принимает, и такие формы не трогаются.
+            let (conds, then_, else_) =
+                crate::generator::rust::rust_match::collapse_nested_if(cond, then_, else_);
+
             // Ветви печатаются В БУФЕР: тело, состоящее только из темпоральной
             // формулы, до цели не доезжает по существу (её место — `taktc
             // verify`), и оставался `if … { }` — «this `if` branch is empty»,
@@ -625,11 +638,19 @@ pub(crate) fn print_statement_ctx(
             if then_text.trim().is_empty() && else_text.trim().is_empty() {
                 return Ok(0);
             }
-            p.ident(&format!(
-                "if {} {{",
-                unwrap_outer(&print_as_bool(cond, scope)?)
-            ))
-            .nl();
+            // Одно условие печатается как прежде (внешние скобки снимаются —
+            // `if (x) {` это `unused_parens`); слитые — конъюнкцией, где скобки
+            // подвыражений обязаны остаться.
+            let head = if conds.len() == 1 {
+                unwrap_outer(&print_as_bool(conds[0], scope)?).to_string()
+            } else {
+                let mut parts = Vec::with_capacity(conds.len());
+                for c in &conds {
+                    parts.push(print_as_bool(c, scope)?);
+                }
+                parts.join(" && ")
+            };
+            p.ident(&format!("if {head} {{")).nl();
             if then_text.trim().is_empty() {
                 // Пустая ветвь `then` при непустом `else` в Rust законна, но
                 // `clippy` её не принимает — печатаем комментарий-заполнитель.
@@ -739,77 +760,10 @@ pub(crate) fn print_statement_ctx(
             Ok(0)
         }
         // Образцы Takt — произвольные выражения, а `match x { y => … }` в Rust
-        // СВЯЗАЛ БЫ `y` как новое имя вместо сравнения с ним. Молчаливое
-        // связывание дало бы всегда-истинную первую ветку — то есть тихо
-        // неверный автомат. Поэтому цепочка `if`/`else if`.
+        // СВЯЗАЛ БЫ `y` как новое имя вместо сравнения с ним (печать — свой
+        // модуль `rust_match`, фича 0510).
         StatementNode::Match { expr, arms } => {
-            let subject = print_expression(expr, scope)?;
-            // Образец сравнивается с ТИПОМ разбираемого выражения: `match mode
-            // { 0 => … }` при `mode : Mode` приходит числом, и без обратного
-            // отображения получилось бы `self.mode == 0` — сравнение
-            // перечисления с целым.
-            let subject_type = crate::generator::rust::rust_expr::expression_type(expr);
-            let mut first = true;
-            let mut wildcard: Option<&StatementNode> = None;
-            for arm in arms {
-                if arm
-                    .patterns
-                    .iter()
-                    .any(|p| matches!(p, MatchPatternNode::Wildcard))
-                {
-                    wildcard = Some(&arm.body);
-                    continue;
-                }
-                let mut tests = Vec::new();
-                for pattern in &arm.patterns {
-                    let MatchPatternNode::Value(value) = pattern else {
-                        continue;
-                    };
-                    let printed = match &subject_type {
-                        Some(ty) => crate::generator::rust::rust_expr::coerce_to(value, ty, scope)?,
-                        None => print_expression(value, scope)?,
-                    };
-                    tests.push(format!("{} == {}", subject, printed));
-                }
-                if tests.is_empty() {
-                    continue;
-                }
-                let head = if first { "if" } else { "} else if" };
-                first = false;
-                p.ident(&format!("{} {} {{", head, tests.join(" || "))).nl();
-                p.up();
-                print_statement(&arm.body, scope, p, out)?;
-                p.down();
-            }
-            // Тело `_`-ветки печатается В БУФЕР: пустая ветвь (`_ => {}` —
-            // «прочие значения ничего не делают», запись из практики) давала
-            // `} else { }`, а `clippy` под `-D warnings` отвечает «this `else`
-            // branch is empty» — отказ гейта самой цели при нулевом коде
-            // возврата `taktc` (фича 0509). Тот же приём, что у пустого `if`
-            // (0474).
-            let mut wildcard_text = String::new();
-            if let Some(body) = wildcard {
-                let mut buffer = p.fork(&mut wildcard_text);
-                buffer.up();
-                print_statement(body, scope, &mut buffer, out)?;
-                buffer.down();
-            }
-            match (wildcard_text.trim().is_empty(), first) {
-                // Только `_`-ветка: цепочки нет, тело печатается как есть.
-                (false, true) => {
-                    p.print(&wildcard_text);
-                }
-                (false, false) => {
-                    p.ident("} else {").nl();
-                    p.print(&wildcard_text);
-                    p.ident("}").nl();
-                }
-                (true, false) => {
-                    p.ident("}").nl();
-                }
-                (true, true) => {}
-            }
-            Ok(0)
+            crate::generator::rust::rust_match::print_match(expr, arms, scope, p, out)
         }
         // Формула в теле блока: ОХРАННАЯ печатается `assert!`, темпоральная —
         // предмет `taktc verify` (фича 0472).
