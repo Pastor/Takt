@@ -20,7 +20,7 @@ var direction: Direction := Idle;
 var current: Floor := 1; // (5) псевдоним `Floor` — то же целое
 var target: u8 := 5;
 var speed: q(4, 4) := 0.0; // (6) фикс-точка: доля номинала
-var log: [u8; 3] := {1, 1, 1}; // (7) массив последних этажей
+var trail: [u8; 3] := {1, 1, 1}; // (7) массив последних этажей
 var last: Trip := {1, 1};
 
 start Waiting {
@@ -42,7 +42,7 @@ state Moving {
     }
     always {
         current := floor_sensor;
-        log[0] := current;
+        trail[0] := current;
     }
     ref Waiting: current = target;
 }

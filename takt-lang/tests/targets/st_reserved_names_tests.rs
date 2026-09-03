@@ -287,3 +287,55 @@ fn names_accepted_by_iec2c_are_not_refused() {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// **Контроль (фикс 0511-01):** имя СОСТОЯНИЯ занятость не судит.
+///
+/// В выводе цели `st` автомат печатается числами, а имя состояния попадает
+/// только в комментарий (`state := 2; (* On *)`). Значит занятость имени
+/// стандартной библиотекой IEC его не касается, и отказ был бы ложным: модель
+/// с состоянием `On` законна и переводится.
+///
+/// ⚠️ Дефект был внесён пополнением списка (0511) и найден прогоном ВСЕХ
+/// примеров документа: гейт `book/` компилирует целью `c`, а отказ цели `st` в
+/// предкоммите не жёсткий — то есть машина об этом молчала.
+#[test]
+fn state_name_is_not_judged_by_reservation() {
+    const SOURCE: &str = "out led: u8 at 0x100;\n\
+                          var t: u8 := 0;\n\
+                          start Off { always { t := t + 1; led := 0; } ref On: t > 2; }\n\
+                          state On { always { led := 1; } ref Off; }\n";
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0511_01_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("t")
+                .replace(':', "_")
+        ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог");
+    takt_lang::compile_to_st(
+        "probe",
+        SOURCE,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("состояние `On` — законная модель: в ST его имя лишь комментарий");
+
+    // Контроль обратного: та же строка ИМЕНЕМ ПЕРЕМЕННОЙ по-прежнему отвергается.
+    const AS_VARIABLE: &str = "var on: u8 := 1;\n\
+                               out probe: u8 at 0x100;\n\
+                               start Run { always { probe := on; } ref Run; }\n";
+    let err = takt_lang::compile_to_st(
+        "probe_var",
+        AS_VARIABLE,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect_err("имя переменной `on` арбитр отвергает");
+    assert_eq!(err.code.as_deref(), Some("ST-014"), "{err:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

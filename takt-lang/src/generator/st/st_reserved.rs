@@ -265,6 +265,23 @@ pub(crate) fn check_st_field_name(name: &str) -> Result<(), Diagnostic> {
 ///
 /// # Ошибки
 /// [`ST-014`](st014) — имя занято стандартной библиотекой или ключевым словом IEC.
+/// Проверяет имя СОСТОЯНИЯ (фикс 0511-01).
+///
+/// Имя состояния в выводе цели `st` — **комментарий**: автомат печатается
+/// числами (`state := 2; (* Idle *)`), и идентификатором это имя нигде не
+/// становится. Поэтому занятость имени стандартной библиотекой IEC его не
+/// касается: состояние `On`, `Exit` или `Step` — законная модель, а отказ на
+/// неё был бы ложным (урок фикса 0378-01).
+///
+/// ⚠️ Алфавит проверяется по-прежнему (`ST-020`, фича 0200): не-ASCII попадает
+/// в комментарий и в разбор `CASE`, и до `iec2c` доезжать не должен.
+pub(crate) fn check_st_state_name(name: &str, loc: Location) -> Result<(), Diagnostic> {
+    if let Some(ch) = non_ascii_char(name) {
+        return Err(st020(name, ch, loc));
+    }
+    Ok(())
+}
+
 pub(crate) fn check_st_name(name: &str, loc: Location) -> Result<(), Diagnostic> {
     if IEC_RESERVED.iter().any(|kw| kw.eq_ignore_ascii_case(name)) {
         return Err(st014(name, loc));

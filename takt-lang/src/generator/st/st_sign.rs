@@ -29,6 +29,21 @@ pub(super) fn compare_cond(
     b: &ConditionNode,
     model: &ModelNode,
 ) -> Result<String, Diagnostic> {
+    // Имя варианта рядом с ЦЕЛЫМ операндом печатается ЗНАЧЕНИЕМ (0508, 0512).
+    // У цели `st` мнемонику объявляет `VAR CONSTANT` того же POU (0338), но
+    // перечисление, пришедшее из библиотеки ВМЕСТЕ С МОДЕЛЬЮ и не названное в
+    // списке импорта, до дерева импортёра не доезжает — и `iec2c` отвечал
+    // «Ambiguous enumerate value or Variable not declared in this scope» при
+    // НУЛЕВОМ коде возврата `taktc`. Значение доезжает всегда: оно лежит в
+    // самом узле.
+    if let Some(low) = crate::generator::enum_compare::lowered(a, b) {
+        let (lt, rt) = if low.variant_is_left {
+            (low.value.to_string(), wrap_cond(b, model)?)
+        } else {
+            (wrap_cond(a, model)?, low.value.to_string())
+        };
+        return Ok(format!("{lt} {op} {rt}"));
+    }
     let (ta, tb) = (
         crate::generator::mixed_sign::operand_type_cond(a),
         crate::generator::mixed_sign::operand_type_cond(b),
