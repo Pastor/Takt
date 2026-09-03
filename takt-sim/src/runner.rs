@@ -52,8 +52,6 @@ pub enum RunResult {
     Terminated { steps: usize },
     /// Выполнено заданное количество шагов.
     StepsReached { steps: usize },
-    /// Шагов в JSON меньше, чем запрошено — симуляция прервана.
-    StepsExhausted { completed: usize, requested: usize },
     /// Guard не выполнен на шаге `step` (нумерация с 1).
     GuardFailed { step: usize, details: String },
     /// Ошибка вычисления на шаге `step` (нумерация с 1): симуляция недостоверна.
@@ -187,14 +185,18 @@ impl SimulationRunner {
     /// Запускает главный цикл симуляции.
     pub fn run(&mut self) -> Result<RunResult, String> {
         self.warn_about_ambiguous_names();
-        // Если загружен файл сценария, он определяет лимит шагов;
-        // -n может только уменьшить это число, но не увеличить.
+        // Длину прогона задаёт `-n`, а сценарий задаёт ВХОДЫ (фича 0523).
+        // Когда шаги сценария кончились, прогон продолжается: значения входных
+        // портов удерживаются — ровно как они удерживаются между тактами внутри
+        // сценария (фича 0132). Прежде сценарий обрывал прогон на своём
+        // последнем шаге, и выдержку в 180 000 тактов нельзя было показать, не
+        // заведя файл той же длины.
+        // Без `-n` длину по-прежнему задаёт сценарий, а без сценария — приход в
+        // терминальное состояние.
         let sim_len = self.sim_steps.len();
-        let limit = if sim_len > 0 {
-            self.max_steps.map_or(sim_len, |n| n.min(sim_len))
-        } else {
-            self.max_steps.unwrap_or(usize::MAX)
-        };
+        let limit = self
+            .max_steps
+            .unwrap_or(if sim_len > 0 { sim_len } else { usize::MAX });
         let mut completed = 0usize;
         // Фича 0087: накопленные нарушения инвариантов мягкого режима, с шагом.
         let mut soft_violations: Vec<(usize, String)> = Vec::new();

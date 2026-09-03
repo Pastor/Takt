@@ -27,6 +27,7 @@ mod inference_chain_tests;
 mod inferred_width_tests;
 mod library_entry_tests;
 mod named_port_scenario_tests;
+mod scenario_run_length_tests;
 mod sequential_composition_tests;
 mod state_io_tests;
 mod state_of_model_tests;
