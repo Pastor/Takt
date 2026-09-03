@@ -49,7 +49,7 @@ model Control {
                 0 => {
                     total := total_of(window);
                 }
-                1 | 2 => {
+                1, 2 => {
                     total := 0;
                 }
                 _ => {
