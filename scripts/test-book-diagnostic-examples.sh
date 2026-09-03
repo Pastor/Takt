@@ -104,7 +104,45 @@ grep -q "протухла" "$TMP/log" || {
 }
 echo "  OK: протухшая запись долга ловится"
 
-# 5. Приложение без пар — отказ, а не тривиальный успех.
+# 5. Разбор `SIM` проверяется прогоном ЭТАЛОНА, а не компилятора.
+cat > "$TREE/book/src/appendix-errors/index.typ" <<'SIMCASE'
+= Ошибки и предупреждения
+
+=== `SIM-001` — деление на ноль
+Делитель оказался нулём.
+```takt
+var a: u8 := 1;
+var b: u8 := 0;
+var c: u8 := 0;
+
+start Run {
+    always { c := a / b; }
+    ref Run;
+}
+```
+```text
+ОШИБКА вычисления на шаге 1: деление на ноль (SIM-001)
+```
+SIMCASE
+: > "$TREE/scripts/book-diagnostic-examples-baseline.txt"
+if run_gate; then
+    echo '  OK: разбор SIM проверяется прогоном эталона'
+else
+    echo "  ОШИБКА: гейт отверг разбор SIM, который воспроизводится:" >&2
+    sed 's/^/    /' "$TMP/log" >&2
+    exit 1
+fi
+
+sed -i.bak 's/деление на ноль (SIM-001)/деление на ноль (SIM-018)/' \
+    "$TREE/book/src/appendix-errors/index.typ"
+rm -f "$TREE/book/src/appendix-errors/index.typ.bak"
+if run_gate; then
+    echo "  ОШИБКА: гейт принял разбор SIM с чужим кодом" >&2
+    exit 1
+fi
+echo '  OK: чужой код в разборе SIM ловится'
+
+# 6. Приложение без пар — отказ, а не тривиальный успех.
 : > "$TREE/scripts/book-diagnostic-examples-baseline.txt"
 cat > "$TREE/book/src/appendix-errors/index.typ" <<'EMPTY'
 = Ошибки и предупреждения
