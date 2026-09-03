@@ -297,7 +297,7 @@ pub(super) fn validate_expression(
             {
                 return Err(Diagnostic::error(
                     *loc,
-                    format!("Запись в входной порт '{}' запрещена", name),
+                    format!("Запись во входной порт '{}' запрещена", name),
                 )
                 .with_code("SE-026"));
             }

@@ -213,7 +213,7 @@
 | `SE-022` | При определении функция должна иметь имя | `takt-lang/src/semantic/function.rs:39` |
 | `SE-023` | Порт должен иметь конкретный тип | `takt-lang/src/semantic/tree.rs:473` |
 | `SE-025` | Неразрешённое условие перехода | `takt-lang/src/semantic/validate/common.rs:51` |
-| `SE-026` | Запись в входной порт '…' запрещена | `takt-lang/src/semantic/validate/common.rs:207` |
+| `SE-026` | Запись во входной порт '…' запрещена | `takt-lang/src/semantic/validate/common.rs:207` |
 | `SE-027` | Чтение из выходного порта '…' запрещено | `takt-lang/src/semantic/validate/common.rs:129` |
 | `SE-028` | Индекс массива вне границ | `takt-lang/src/semantic/expression.rs:129` |
 | `SE-029` | Начало среза … выходит за границы массива '…' (размер …) | `takt-lang/src/semantic/expression.rs:414` |
