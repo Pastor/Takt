@@ -181,6 +181,9 @@ fn collect_state_element(element: &ast::StateElement, out: &mut Vec<Diagnostic>)
         | ast::StateElement::NamedBlockCode(_)
         | ast::StateElement::StraySemicolon(_)
         | ast::StateElement::InlineFormula(_)
+        // Обязательство и вставка уровня состояния (0518) имён не объявляют.
+        | ast::StateElement::Formula(_)
+        | ast::StateElement::Assembly(_)
         | ast::StateElement::Every(_) => {}
     }
 }

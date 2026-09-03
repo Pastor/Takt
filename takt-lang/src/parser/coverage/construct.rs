@@ -95,6 +95,7 @@ fn element_kind(element: &ast::ModelElement, out: &mut Vec<&'static str>) {
         ast::ModelElement::Import(_) => "ModelElement::Import",
         ast::ModelElement::Function(_) => "ModelElement::Function",
         ast::ModelElement::Formula(_) => "ModelElement::Formula",
+        ast::ModelElement::Assembly(_) => "ModelElement::Assembly",
         ast::ModelElement::Condition(_) => "ModelElement::Condition",
         ast::ModelElement::Invariant(_) => "ModelElement::Invariant",
         ast::ModelElement::Variable(_) => "ModelElement::Variable",
@@ -153,6 +154,8 @@ fn state_element_kind(element: &ast::StateElement) -> &'static str {
         ast::StateElement::NamedBlockCode(_) => "StateElement::NamedBlockCode",
         ast::StateElement::StraySemicolon(_) => "StateElement::StraySemicolon",
         ast::StateElement::InlineFormula(_) => "StateElement::InlineFormula",
+        ast::StateElement::Formula(_) => "StateElement::Formula",
+        ast::StateElement::Assembly(_) => "StateElement::Assembly",
         ast::StateElement::Invariant(_) => "StateElement::Invariant",
         ast::StateElement::Every(_) => "StateElement::Every",
     }

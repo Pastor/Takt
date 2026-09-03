@@ -10,9 +10,7 @@
 use crate::diagnostics::{Diagnostic, FileTable, Location};
 use crate::parse;
 use crate::parser::ast;
-use crate::parser::ast::{
-    Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, StateKind,
-};
+use crate::parser::ast::{Identifier, ImportDefine, Model, ModelElement, StateElement, StateKind};
 use crate::semantic::condition::{extract_conditions, resolve_condition};
 use crate::semantic::declaration;
 use crate::semantic::extend::Extend;
@@ -36,7 +34,6 @@ use crate::semantic::{
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
-use std::rc::Weak;
 
 /// Извлекает имя из опционального [`Identifier`].
 ///
@@ -545,6 +542,20 @@ pub(super) fn construct_model_stage0(
                 },
             };
             named_blocks.push(block);
+        } else if let ModelElement::Assembly(block) = element {
+            // Вставка уровня МОДЕЛИ (0518) разворачивается в блок `always`
+            // уровня модели, то есть исполняется КАЖДЫЙ ТАКТ до диспетчеризации
+            // состояния (инвариант 0083). Сырой оператор сохраняется рядом —
+            // он нужен индексации локальных переменных (I8), как у обычного
+            // именованного блока.
+            model_node
+                .borrow_mut()
+                .named_block_raw
+                .push(("always".to_string(), (**block).clone()));
+            named_blocks.push(NamedCodeBlockDefinitionNode::Always {
+                upper: Some(Rc::downgrade(&model_node)),
+                body: StatementNode::Unresolved((**block).clone()),
+            });
         } else if let ModelElement::Function(def) = element {
             let name = def
                 .clone()
@@ -1140,7 +1151,10 @@ pub fn construct_states(
                 StateNode::Implement {
                     upper: Some(Rc::downgrade(&upper)),
                     loc: state_loc,
-                    named_blocks: construct_named_blocks(def, Some(Rc::downgrade(&upper)))?,
+                    named_blocks: crate::semantic::named_blocks::construct_named_blocks(
+                        def,
+                        Some(Rc::downgrade(&upper)),
+                    )?,
                     name: name.clone(),
                     references,
                     implements: Extend::Unresolved(expr),
@@ -1152,7 +1166,10 @@ pub fn construct_states(
                 StateNode::Simple {
                     upper: Some(Rc::downgrade(&upper)),
                     loc: state_loc,
-                    named_blocks: construct_named_blocks(def, Some(Rc::downgrade(&upper)))?,
+                    named_blocks: crate::semantic::named_blocks::construct_named_blocks(
+                        def,
+                        Some(Rc::downgrade(&upper)),
+                    )?,
                     name: name.clone(),
                     references,
                     kind,
@@ -1274,60 +1291,6 @@ fn resolve_references(
             }
         })
         .collect()
-}
-
-/// Извлекает именованные блоки (`enter`/`exit`/`always`/`every`) состояния как
-/// `Statement::Unresolved`; разрешение — в стадии 4. Одноимённые блоки (напр. два
-/// `always`) сохраняются все и доступны через `get_named_blocks`.
-fn construct_named_blocks(
-    state: &StateDefine,
-    upper: Option<Weak<RefCell<ModelNode>>>,
-) -> Result<Vec<NamedCodeBlockDefinitionNode>, Diagnostic> {
-    let mut named_blocks = Vec::new();
-    for element in state.elements.iter() {
-        if let StateElement::NamedBlockCode(def) = element {
-            let name = def
-                .name
-                .as_ref()
-                .ok_or_else(|| {
-                    Diagnostic::error(
-                        def.loc,
-                        "Именованный блок кода при определении должен иметь имя".to_string(),
-                    )
-                    .with_code("SE-018")
-                })?
-                .name
-                .clone();
-            let block = match name.as_str() {
-                "enter" => NamedCodeBlockDefinitionNode::Enter {
-                    upper: upper.clone(),
-                    body: StatementNode::Unresolved(def.statement.clone()),
-                },
-                "exit" => NamedCodeBlockDefinitionNode::Exit {
-                    upper: upper.clone(),
-                    body: StatementNode::Unresolved(def.statement.clone()),
-                },
-                "always" => NamedCodeBlockDefinitionNode::Always {
-                    upper: upper.clone(),
-                    body: StatementNode::Unresolved(def.statement.clone()),
-                },
-                name => NamedCodeBlockDefinitionNode::Unknown {
-                    upper: upper.clone(),
-                    name: name.to_string(),
-                    body: StatementNode::Unresolved(def.statement.clone()),
-                },
-            };
-            named_blocks.push(block);
-        } else if let StateElement::Every(def) = element {
-            named_blocks.push(NamedCodeBlockDefinitionNode::Every {
-                upper: upper.clone(),
-                period_nanos: def.nanos,
-                text: def.text.clone(),
-                body: StatementNode::Unresolved(def.body.clone()),
-            });
-        }
-    }
-    Ok(named_blocks)
 }
 
 #[cfg(test)]

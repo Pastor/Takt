@@ -133,6 +133,7 @@ fn take_element(element: ast::ModelElement, out: &mut Vec<Owned>) {
     match element {
         ast::ModelElement::Function(function) => out.push(Owned::Function(*function)),
         ast::ModelElement::Formula(formula) => out.push(Owned::FormulaBlock(formula.formula)),
+        ast::ModelElement::Assembly(block) => out.push(Owned::Statement(*block)),
         ast::ModelElement::Condition(condition) => out.push(Owned::Condition(condition.value)),
         ast::ModelElement::Invariant(invariant) => out.push(Owned::Condition(invariant.value)),
         ast::ModelElement::Variable(variable) => out.push(Owned::Variable(*variable)),
@@ -168,6 +169,9 @@ fn take_state_element(element: ast::StateElement, out: &mut Vec<Owned>) {
         }
         ast::StateElement::NamedBlockCode(block) => out.push(Owned::Statement(block.statement)),
         ast::StateElement::InlineFormula(formula) => out.push(Owned::InlineFormula(*formula)),
+        // Обязательство и вставка уровня состояния (0518).
+        ast::StateElement::Formula(formula) => out.push(Owned::FormulaBlock(formula.formula)),
+        ast::StateElement::Assembly(block) => out.push(Owned::Statement(*block)),
         ast::StateElement::Invariant(invariant) => out.push(Owned::Condition(invariant.value)),
         ast::StateElement::Every(every) => out.push(Owned::Statement(every.body)),
         // Листовые.

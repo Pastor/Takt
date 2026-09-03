@@ -398,6 +398,8 @@ fn element_loc(element: &ast::ModelElement) -> crate::diagnostics::Location {
     use ast::ModelElement as M;
     match element {
         M::StraySemicolon(loc) => *loc,
+        // Вставка уровня модели (0518): позиция — у самого оператора.
+        M::Assembly(a) => a.loc(),
         M::Variable(v) => variable_loc(v),
         M::Type(t) => t.loc,
         M::State(s) => s.loc,
@@ -492,6 +494,9 @@ fn print_element_inner(
         }
         ast::ModelElement::Function(f) => print_function(out, f),
         ast::ModelElement::Formula(f) => formula::print_block(out, f.dialect.as_ref(), &f.formula),
+        // Вставка уровня модели печатается тем же печатником, что оператор
+        // тела (0518): форма записи у них одна.
+        ast::ModelElement::Assembly(a) => stmt::print(out, a),
         ast::ModelElement::Condition(c) => {
             // `cond Имя = условие;` — печатается ПЕЧАТЬЮ УСЛОВИЙ, а не выражений:
             // `=` здесь равенство (инвариант ADR 0019).
@@ -781,6 +786,9 @@ fn state_element_loc(element: &ast::StateElement) -> crate::diagnostics::Locatio
         S::InlineFormula(f) => expr::inline_formula_loc(f),
         S::Invariant(i) => i.loc,
         S::Every(e) => e.loc,
+        // Обязательство и вставка уровня состояния (0518).
+        S::Formula(f) => f.loc,
+        S::Assembly(a) => a.loc(),
     }
 }
 
@@ -806,6 +814,10 @@ fn print_state_element_inner(
         ast::StateElement::Every(e) => {
             stmt::block_with_head(out, &format!("every {} ", e.text), &e.body)
         }
+        // Обязательство и вставка уровня состояния (0518) печатаются теми же
+        // печатниками, что и на уровне модели: форма записи у них одна.
+        ast::StateElement::Formula(f) => formula::print_block(out, f.dialect.as_ref(), &f.formula),
+        ast::StateElement::Assembly(a) => stmt::print(out, a),
         ast::StateElement::InlineFormula(f) => {
             let loc = expr::inline_formula_loc(f);
             out.node_line(&loc, &expr::inline_formula(f)?);

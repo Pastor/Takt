@@ -79,6 +79,8 @@ fn element_start(element: &ModelElement) -> Option<usize> {
         ModelElement::Function(f) => Some(f.loc.start()),
         ModelElement::Condition(c) => Some(c.loc.start()),
         ModelElement::Invariant(i) => Some(i.loc.start()),
+        // Вставка уровня модели (0518): позиция — у самого оператора.
+        ModelElement::Assembly(a) => Some(a.loc().start()),
         ModelElement::Type(t) => Some(t.loc.start()),
         ModelElement::Import(imp) => Some(import_loc(imp).start()),
         ModelElement::NamedBlockCode(nb) => Some(nb.loc.start()),

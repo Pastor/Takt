@@ -44,6 +44,8 @@ ModelElement: ModelElement = {
     Model => ModelElement::Model(<>),
     StateDefine => ModelElement::State(<>),
     FormulaDefine=> ModelElement::Formula(<>),
+    // Вставка уровня модели (0518): места `formula` и `assembly` выровнены.
+    AssemblyDefine => ModelElement::Assembly(<>),
     InlineFormulaDefine => ModelElement::InlineFormula(<>),
     ConditionDefine => ModelElement::Condition(Box::new(<>)),
     InvariantDefine => ModelElement::Invariant(Box::new(<>)),
@@ -82,6 +84,25 @@ StateElement: StateElement = {
     InlineFormulaDefine => StateElement::InlineFormula(<>),
     InvariantDefine => StateElement::Invariant(Box::new(<>)),
     EveryDefine => StateElement::Every(Box::new(<>)),
+    // Обязательство и вставка уровня СОСТОЯНИЯ (0518): рядом с `invariant` и
+    // охранной формулой `:`, которые уровень состояния имели всегда.
+    FormulaDefine => StateElement::Formula(<>),
+    AssemblyDefine => StateElement::Assembly(<>),
+}
+
+/// Вставка `assembly [«цель»] { … }` как ЭЛЕМЕНТ (модели либо состояния).
+///
+/// Тот же узел, что у оператора тела: семантика разворачивает элемент в блок
+/// `always` своего уровня, поэтому второго представления не заводится.
+AssemblyDefine: Box<Statement> = {
+    <l:@L> "assembly" <dialect:StringLiteral?> <block:BlockStatement> <r:@R> => {
+        Box::new(Statement::Assembly {
+            loc: Location::source(file_no, l, r),
+            dialect: dialect.map(|dialect| dialect.to_owned()),
+            flags: None,
+            block: Box::new(block)
+        })
+    },
 }
 
 // Частота тактирования модели и периодическое действие (фича 0134).

@@ -248,3 +248,90 @@ fn control_model_without_blocks_is_translated() {
     }
     assert!(failed.is_empty(), "контроль:\n{}", failed.join("\n"));
 }
+
+// ── Места блоков выровнены (фича 0518) ──────────────────────────────────────
+
+/// Модель, где обе конструкции стоят на уровне МОДЕЛИ и на уровне СОСТОЯНИЯ.
+///
+/// Замер 2026-09-02 (пять позиций × две конструкции) показал асимметрию:
+/// `formula` писалась на уровне модели и в любом теле, `assembly` — только в
+/// теле, а уровень состояния не принимал ни одной (`SY-002`), хотя рядом
+/// `invariant` и охранная формула `:` уровень состояния имели. Решением
+/// заказчика 2026-09-03 места выровнены.
+fn source_all_places(label: &str) -> String {
+    format!(
+        "model Probe {{\n\
+         \x20   var level: u8 := 0;\n\
+         \x20   out sig: u8 at 0x300;\n\
+         \x20   formula {{ holds(level) }}\n\
+         \x20   assembly \"{label}\" {{ level := level + 37; }}\n\
+         \x20   start Fill {{\n\
+         \x20       always {{ sig := level; }}\n\
+         \x20       formula {{ reachable(level) }}\n\
+         \x20       assembly \"{label}\" {{ level := level + 41; }}\n\
+         \x20       ref Fill: level < 200;\n\
+         \x20   }}\n\
+         }}\n\
+         start Main = Probe;\n"
+    )
+}
+
+/// **T5.** Вставка уровня МОДЕЛИ и уровня СОСТОЯНИЯ доезжает до своей цели.
+///
+/// Тест падает списком: цель, потерявшая одно из мест, названа поимённо.
+#[test]
+fn assembly_reaches_target_from_model_and_state_level() {
+    let mut lost = Vec::new();
+    for target in TARGETS {
+        let text = match emit(
+            target.name,
+            &source_all_places(target.label),
+            &format!("places_{}", target.name),
+        ) {
+            Ok(text) => text,
+            Err(d) => {
+                lost.push(format!("{}: отказ {:?}", target.name, d.code));
+                continue;
+            }
+        };
+        // `plantuml` тел не печатает вовсе — у него сравнивать нечего.
+        if target.name == "plantuml" {
+            continue;
+        }
+        // Признак — ЧИСЛА приращений: 1 и 40 в выводе иначе не встречаются, а
+        // форма записи у целей разная (`+ 40` у C, `wrapping_add(40)` у Rust).
+        // Признак — ЧИСЛА приращений: 37 и 41 в выводе иначе не встречаются, а
+        // форма записи у целей разная (`+ 41` у C, `wrapping_add(41)` у Rust).
+        if !text.contains("37") {
+            lost.push(format!("{}: вставка уровня модели потеряна", target.name));
+        }
+        if !text.contains("41") {
+            lost.push(format!(
+                "{}: вставка уровня состояния потеряна",
+                target.name
+            ));
+        }
+    }
+    assert!(lost.is_empty(), "места вставки потеряны: {lost:?}");
+}
+
+/// **T6.** Блок формул на обоих уровнях в вывод не попадает.
+#[test]
+fn formula_block_at_new_places_is_skipped() {
+    let mut leaked = Vec::new();
+    for target in TARGETS {
+        let text = emit(
+            target.name,
+            &source_all_places(target.label),
+            &format!("places_f_{}", target.name),
+        )
+        .unwrap_or_else(|d| panic!("{}: {d:?}", target.name));
+        if text.contains("holds") || text.contains("reachable") {
+            leaked.push(target.name);
+        }
+    }
+    assert!(
+        leaked.is_empty(),
+        "формула — обязательство внешнему анализатору, в вывод она не идёт: {leaked:?}"
+    );
+}
