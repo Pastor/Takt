@@ -100,7 +100,10 @@ a + b := 1;         // ОШИБКА SE-111: слева арифметика
 ```takt
 const LIMIT: u8 := 5;
 
-LIMIT := 7;         // ОШИБКА SE-112: писать можно в 'var', не в 'const'
+start Run {
+    always { LIMIT := 7; }   // ОШИБКА SE-112: писать можно в 'var', не в 'const'
+    ref Run;
+}
 ```
 
 #quote(block: true)[
