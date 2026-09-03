@@ -114,6 +114,7 @@ mod sv_loop_variable_tests;
 mod sv_mmio_tests;
 mod sv_mmio_wdata_guard_tests;
 mod sv_mmio_write_signals_tests;
+mod sv_module_name_clash_tests;
 mod sv_partial_param_tests;
 mod sv_refusal_text_tests;
 mod sv_terminal_branch_tests;

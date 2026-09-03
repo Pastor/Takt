@@ -2,8 +2,8 @@
 //!
 //! # Что было
 //!
-//! `probe := wide as u32;` при `out probe: u8` и `var wide: u16 := 300;` —
-//! запись, которую эталон исполняет (`probe = 44`: приведение автора даёт
+//! `out_value := wide as u32;` при `out probe: u8` и `var wide: u16 := 300;` —
+//! запись, которую эталон исполняет (`out_value = 44`: приведение автора даёт
 //! промежуточное значение, присваивание усекает его по типу приёмника,
 //! правило 0127). Замер 2026-09-02 показал три цели с невалидным выводом при
 //! **нулевом** коде возврата `taktc`:
@@ -27,9 +27,9 @@ use takt_lang::GenerateOptions;
 const WIDER: &str = "model Probe {\n\
      \x20   var wide: u16 := 300;\n\
      \x20   var ticks: u8 := 0;\n\
-     \x20   out probe: u8 at 0x300;\n\
+     \x20   out out_value: u8 at 0x300;\n\
      \x20   start Cycle {\n\
-     \x20       always { ticks := ticks + 1; probe := wide as u32; }\n\
+     \x20       always { ticks := ticks + 1; out_value := wide as u32; }\n\
      \x20       ref Cycle: ticks < 200;\n\
      \x20   }\n\
      }\n\
@@ -39,9 +39,9 @@ const WIDER: &str = "model Probe {\n\
 const EXACT: &str = "model Probe {\n\
      \x20   var wide: u16 := 300;\n\
      \x20   var ticks: u8 := 0;\n\
-     \x20   out probe: u8 at 0x300;\n\
+     \x20   out out_value: u8 at 0x300;\n\
      \x20   start Cycle {\n\
-     \x20       always { ticks := ticks + 1; probe := wide as u8; }\n\
+     \x20       always { ticks := ticks + 1; out_value := wide as u8; }\n\
      \x20       ref Cycle: ticks < 200;\n\
      \x20   }\n\
      }\n\
