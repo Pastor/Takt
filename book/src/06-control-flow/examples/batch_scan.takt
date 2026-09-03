@@ -42,7 +42,7 @@ model BatchScan {
                 0 => {
                     reject := 0;
                 }
-                1 | 2 => {
+                1, 2 => {
                     reject := 1;
                 }
                 _ => {
