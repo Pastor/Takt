@@ -70,7 +70,7 @@ model Memory {
 
     // Какую из двух программ исполнять: 0 — цикл, 1 — прямолинейная. Это тоже
     // настройка сборки: конвейерной ступени нужна программа без переходов.
-    parameter program: u8 := 0;
+    parameter prog_sel: u8 := 0;
 
     // Программа 0, «умножение сложением»: sum := x * n — складываем x n раз.
     //     0: LDA 0   ; acc := sum        4: SUB 3   ; acc -= 1
@@ -110,7 +110,7 @@ model Memory {
                     wait := wait - 1;
                     bus_ready := 0;
                 } else {
-                    if program = 0 {
+                    if prog_sel = 0 {
                         bus_op := loop_op[bus_addr];
                         bus_arg := loop_arg[bus_addr];
                     } else {

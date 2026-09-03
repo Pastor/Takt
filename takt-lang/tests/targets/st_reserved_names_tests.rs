@@ -215,3 +215,75 @@ fn every_reserved_field_name_is_rejected_by_iec2c() {
         "эти имена `iec2c` ПРИНИМАЕТ полем — цель отказывает на них зря: {extra:#?}"
     );
 }
+
+/// Ключевое слово ЯЗЫКА ST в имени переменной — отказ `ST-014` (фича 0511).
+///
+/// `var program: u8;` — имя из практики (выбор загружаемой программы у модели
+/// процессора). Замер 2026-09-03: цель печатала его как есть, `iec2c` отвечал
+/// «invalid variable(s) declaration» и «invalid test expression defined for ST
+/// 'IF' statement» при НУЛЕВОМ коде возврата `taktc`. Прежний список знал
+/// функции и типы IEC, но не структуру программы.
+#[test]
+fn st_keyword_in_variable_name_is_refused() {
+    const SOURCE: &str = "var program: u8 := 1;\n\
+                          out probe: u8 at 0x100;\n\
+                          start Run { always { probe := program; } ref Run; }\n";
+    let dir = std::env::temp_dir()
+        .join(format!("takt_pid{}", std::process::id()))
+        .join(format!(
+            "takt_0511_{}",
+            std::thread::current()
+                .name()
+                .unwrap_or("t")
+                .replace(':', "_")
+        ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let path = dir.to_str().expect("путь в UTF-8");
+    let opts = takt_lang::generator::GenerateOptions::default();
+
+    let err = takt_lang::compile_to_st("probe", SOURCE, path, &[], &opts)
+        .expect_err("ключевое слово ST идентификатором быть не может");
+    assert_eq!(err.code.as_deref(), Some("ST-014"), "{err:?}");
+
+    // Контроль: прочие цели ту же модель переводят — отказ принадлежит цели,
+    // а не языку.
+    takt_lang::compile_to_c("probe", SOURCE, path, &[], &opts).expect("цель `c` переводит");
+    takt_lang::compile_to_rust("probe", SOURCE, path, &[], &opts).expect("цель `rust` переводит");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **Контроль:** имя, которое `iec2c` ПРИНИМАЕТ, в список не внесено.
+///
+/// Замер 2026-09-03 прогнал 44 ключевых слова ST: три из них (`single`,
+/// `interval`, `priority`) инструмент принимает — отказ на них был бы ложным
+/// (урок 0342), и цель обязана их переводить.
+#[test]
+fn names_accepted_by_iec2c_are_not_refused() {
+    for name in ["single", "interval", "priority"] {
+        let source = format!(
+            "var {name}: u8 := 1;\nout probe: u8 at 0x100;\n\
+             start Run {{ always {{ probe := {name}; }} ref Run; }}\n"
+        );
+        let dir = std::env::temp_dir()
+            .join(format!("takt_pid{}", std::process::id()))
+            .join(format!(
+                "takt_0511_ok_{name}_{}",
+                std::thread::current()
+                    .name()
+                    .unwrap_or("t")
+                    .replace(':', "_")
+            ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("каталог");
+        takt_lang::compile_to_st(
+            "probe",
+            &source,
+            dir.to_str().expect("путь в UTF-8"),
+            &[],
+            &takt_lang::generator::GenerateOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("`{name}` арбитр принимает — отказ был бы ложным: {e:?}"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
