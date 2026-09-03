@@ -46,6 +46,8 @@
 //! (фича 0484): у них появились свои узлы, потому что законный вход,
 //! приходящий целям неразрешённым, они отвергают как дефект (0236).
 
+pub mod loop_context;
+
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::condition::resolve_condition;
@@ -161,7 +163,10 @@ fn resolve_ast_statement(
                 .map(|c| construct_expression(c.clone(), params.clone(), model.clone()))
                 .transpose()?
                 .map(Box::new);
-            let body = resolve_ast_statement(body, params.clone(), model)?;
+            let body = {
+                let _inside = loop_context::enter();
+                resolve_ast_statement(body, params.clone(), model)?
+            };
             Ok(StatementNode::Loop {
                 cond,
                 body: Box::new(body),
@@ -205,12 +210,14 @@ fn resolve_ast_statement(
                     .map(|e| construct_expression(*e.clone(), params.clone(), model.clone()))
                     .transpose()?
                     .map(Box::new);
-                let body = body
-                    .as_ref()
-                    .map(|s| resolve_ast_statement(s, params.clone(), model.clone()))
-                    .transpose()?
-                    .map(Box::new)
-                    .unwrap_or_else(|| Box::new(StatementNode::None));
+                let body = {
+                    let _inside = loop_context::enter();
+                    body.as_ref()
+                        .map(|s| resolve_ast_statement(s, params.clone(), model.clone()))
+                        .transpose()?
+                        .map(Box::new)
+                        .unwrap_or_else(|| Box::new(StatementNode::None))
+                };
                 Ok::<_, Diagnostic>((cond, step, body))
             })();
 
@@ -278,8 +285,22 @@ fn resolve_ast_statement(
         }
 
         // ── Простые операторы без выражений ───────────────────────────────────
-        ast::Statement::Continue(_) => Ok(StatementNode::Continue),
-        ast::Statement::Break(_) => Ok(StatementNode::Break),
+        // ⚠️ Прерывание вне цикла — отказ `SE-132` (фича 0530): эталон и цель
+        // `c` расходились на нём МОЛЧА, а поведения у такой записи язык не
+        // обещает. Признак ведёт `loop_context`, страж которого живёт ровно на
+        // построении тела цикла.
+        ast::Statement::Continue(loc) => {
+            if !loop_context::inside() {
+                return Err(loop_context::refuse("continue", *loc));
+            }
+            Ok(StatementNode::Continue)
+        }
+        ast::Statement::Break(loc) => {
+            if !loop_context::inside() {
+                return Err(loop_context::refuse("break", *loc));
+            }
+            Ok(StatementNode::Break)
+        }
 
         // ── Встроенная формула ─────────────────────────────────────────────────
         ast::Statement::InlineFormula(inline) => {

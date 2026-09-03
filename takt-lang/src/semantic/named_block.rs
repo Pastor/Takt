@@ -126,8 +126,15 @@ mod tests {
 
     // ── NamedCodeBlock::Unresolved → разрешение ───────────────────────────────
 
+    /// Безвредный оператор-заглушка: `continue` здесь не годится — вне цикла
+    /// он отвергается `SE-132` (фича 0530), а предмет этих тестов — разбор имён
+    /// блоков, а не место прерывания.
     fn noop_stmt() -> ast::Statement {
-        ast::Statement::Continue(Location::default())
+        ast::Statement::Block {
+            loc: Location::default(),
+            unchecked: false,
+            statements: Vec::new(),
+        }
     }
 
     /// `Unresolved("enter", ...)` → `NamedCodeBlock::Enter`.
