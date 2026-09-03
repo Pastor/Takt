@@ -206,8 +206,10 @@ model Fan {
 const BASE := 2m;
 const TRIM := 30s;
 
-ref Idle: after (BASE + TRIM);    // две с половиной минуты
-ref Stop: after ((BASE + TRIM) - 30s);
+state Wait {
+    ref Idle: after (BASE + TRIM);    // две с половиной минуты
+    ref Stop: after ((BASE + TRIM) - 30s);
+}
 ```
 
 Скобки здесь #strong[обязательны]: `after` связывает крепче арифметики,
