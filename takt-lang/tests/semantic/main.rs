@@ -62,6 +62,7 @@ mod init_port_read_tests;
 mod int_cast_tests;
 mod library_entry_tests;
 mod literal_range_tests;
+mod loop_control_tests;
 mod model_always_tests;
 mod model_implement_form_tests;
 mod model_parameter_apply_tests;

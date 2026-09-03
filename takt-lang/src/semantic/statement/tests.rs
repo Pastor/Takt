@@ -142,9 +142,13 @@ fn return_statement_resolves() {
     );
 }
 
-/// `continue` и `break` разрешаются в соответствующие варианты.
+/// `continue` и `break` разрешаются в соответствующие варианты — В ЦИКЛЕ.
+///
+/// Вне цикла оба отвергаются `SE-132` (фича 0530), поэтому признак взводится
+/// стражем: тест проверяет понижение, а не место, где оно разрешено.
 #[test]
 fn continue_break_resolve() {
+    let _inside = crate::semantic::statement::loop_context::enter();
     let ast_continue = ast::Statement::Continue(crate::diagnostics::Location::default());
     let ast_break = ast::Statement::Break(crate::diagnostics::Location::default());
     let m = Rc::new(RefCell::new(ModelNode::default()));
