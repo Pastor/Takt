@@ -781,20 +781,33 @@ pub(crate) fn print_statement_ctx(
                 print_statement(&arm.body, scope, p, out)?;
                 p.down();
             }
-            match (wildcard, first) {
+            // Тело `_`-ветки печатается В БУФЕР: пустая ветвь (`_ => {}` —
+            // «прочие значения ничего не делают», запись из практики) давала
+            // `} else { }`, а `clippy` под `-D warnings` отвечает «this `else`
+            // branch is empty» — отказ гейта самой цели при нулевом коде
+            // возврата `taktc` (фича 0509). Тот же приём, что у пустого `if`
+            // (0474).
+            let mut wildcard_text = String::new();
+            if let Some(body) = wildcard {
+                let mut buffer = p.fork(&mut wildcard_text);
+                buffer.up();
+                print_statement(body, scope, &mut buffer, out)?;
+                buffer.down();
+            }
+            match (wildcard_text.trim().is_empty(), first) {
                 // Только `_`-ветка: цепочки нет, тело печатается как есть.
-                (Some(body), true) => print_statement(body, scope, p, out)?,
-                (Some(body), false) => {
+                (false, true) => {
+                    p.print(&wildcard_text);
+                }
+                (false, false) => {
                     p.ident("} else {").nl();
-                    p.up();
-                    print_statement(body, scope, p, out)?;
-                    p.down();
+                    p.print(&wildcard_text);
                     p.ident("}").nl();
                 }
-                (None, false) => {
+                (true, false) => {
                     p.ident("}").nl();
                 }
-                (None, true) => {}
+                (true, true) => {}
             }
             Ok(0)
         }
