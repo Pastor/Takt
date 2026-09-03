@@ -68,7 +68,9 @@ APPENDIX = os.path.join(ROOT, "book", "src", "appendix-errors", "index.typ")
 # на копии (`BDE_ROOT`), и долг там должен быть свой.
 BASELINE = os.path.join(ROOT, "scripts", "book-diagnostic-examples-baseline.txt")
 
-CODE_RE = re.compile(r"\[([A-Z]{2,4}-[0-9]{3})\]")
+# Компилятор печатает код в скобках `[SE-034]`, симулятор — в круглых после
+# текста: `… (SIM-001)`. Разбираем обе формы: предмет один — обещанный код.
+CODE_RE = re.compile(r"\[([A-Z]{2,4}-[0-9]{3})\]|\((SIM-[0-9]{3})\)")
 # Цитата документа несёт голое имя файла, вывод инструмента — путь прогона:
 # позицию ищем одинаково, а имя сводим к basename.
 POS_RE = re.compile(r"^(\S+\.takt):(\d+):(\d+): ")
@@ -82,8 +84,9 @@ TARGETS = {
     "PU": ("plantuml",),
 }
 COMMON_TARGETS = ("c", "c-hal")
-# Инструменты, чей вход этот гейт не строит (симулятор, форматтер).
-FOREIGN = ("SIM", "CS", "FM")
+# Инструменты, чей вход этот гейт не строит (форматтер и канон стиля: у них
+# свой вызов и свой формат вывода).
+FOREIGN = ("CS", "FM")
 FLAG_SETS = ((), ("--parameters=specialize",))
 
 
@@ -139,10 +142,10 @@ def keyed(found):
     seen = {}
     out = []
     for line, source, expected in found:
-        match = CODE_RE.search(expected)
-        if not match:
+        found = codes_in(expected)
+        if not found:
             continue
-        code = match.group(1)
+        code = sorted(found)[0]
         if code.split("-")[0] in FOREIGN:
             out.append((None, code, line, source, expected))
             continue
@@ -166,6 +169,28 @@ def read_baseline():
     return known
 
 
+def codes_in(text):
+    """Коды из текста — обе формы записи."""
+    return {compiler or simulator for compiler, simulator in CODE_RE.findall(text)} - {""}
+
+
+def run_simulator(work, name, source):
+    """Прогон эталона: у примеров `SIM` предмет — исполнение, а не перевод."""
+    path = os.path.join(work, name)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(source + "\n")
+    simulator = os.path.join(os.path.dirname(taktc_path()), "takt-sim")
+    if not os.access(simulator, os.X_OK):
+        return ""
+    try:
+        done = subprocess.run(
+            [simulator, path, "-n", "5"], capture_output=True, text=True, timeout=60
+        )
+    except subprocess.TimeoutExpired:
+        return ""
+    return done.stdout + done.stderr
+
+
 def run(taktc, work, name, source, target, flags):
     path = os.path.join(work, name)
     with open(path, "w", encoding="utf-8") as handle:
@@ -186,13 +211,15 @@ def run(taktc, work, name, source, target, flags):
 
 def attempt(taktc, work, name, source, code):
     """Прогон комбинаций до первой, где обещанный код пришёл."""
+    if code.startswith("SIM-"):
+        text = run_simulator(work, name, source)
+        return (code in codes_in(text)), text, codes_in(text)
     targets = TARGETS.get(code.split("-")[0], COMMON_TARGETS)
     seen = set()
     for target in targets:
         for flags in FLAG_SETS:
             text = run(taktc, work, name, source, target, flags)
-            for other in CODE_RE.findall(text):
-                seen.add(other)
+            seen |= codes_in(text)
             if f"[{code}]" in text:
                 return True, text, seen
     return False, "", seen
