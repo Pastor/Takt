@@ -50,6 +50,7 @@ mod codegen_tests;
 mod const_aggregate_tests;
 mod duration_field_tests;
 mod duration_targets_tests;
+mod empty_match_arm_tests;
 mod enum_in_function_tests;
 mod enum_in_struct_tests;
 mod enum_variant_value_tests;

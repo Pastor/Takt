@@ -468,7 +468,25 @@ fn print_match(
     let mut printed_if = false;
     let mut wildcard: Option<&StatementNode> = None;
 
-    for arm in arms {
+    // Тело ветви печатается В БУФЕР: пустого оператора в IEC нет вовсе, и
+    // `IF c THEN END_IF` арбитр отвергает («no statement defined after
+    // 'THEN'»). Пустая ветвь ОПУСКАЕТСЯ — тот же приём, что у пустого `IF`
+    // (0473) и у пустой ветви цели `rust` (0474).
+    let body_text = |body: &StatementNode,
+                     p: &mut Printer,
+                     out: &mut StmtOutput|
+     -> Result<String, Diagnostic> {
+        let mut text = String::new();
+        {
+            let mut buffer = p.fork(&mut text);
+            buffer.up();
+            print_statement(body, model, &mut buffer, out, fn_name)?;
+            buffer.down();
+        }
+        Ok(text)
+    };
+
+    for (index, arm) in arms.iter().enumerate() {
         // Ветка `_` печатается последней как `ELSE`, где бы она ни стояла.
         if arm
             .patterns
@@ -488,6 +506,15 @@ fn print_match(
         if tests.is_empty() {
             continue;
         }
+        let text = body_text(&arm.body, p, out)?;
+        // ⚠️ Опустить пустую ветвь можно, только если её образец не
+        // повторяется ниже: `match` берёт ПЕРВОЕ совпадение, и при дубле
+        // пустая ветвь его поглощает (общий признак 0509).
+        if text.trim().is_empty()
+            && !crate::generator::match_arms::pattern_repeats_below(arms, index)
+        {
+            continue;
+        }
         let guard = tests.join(" OR ");
         p.ident(&format!(
             "{} {} THEN",
@@ -495,27 +522,29 @@ fn print_match(
             guard
         ))
         .nl();
-        p.up();
-        print_statement(&arm.body, model, p, out, fn_name)?;
-        p.down();
+        p.print(&text);
         printed_if = true;
     }
 
-    match (printed_if, wildcard) {
-        // Есть ветви и есть `_` → обычный ELSE.
-        (true, Some(body)) => {
+    let wildcard_text = match wildcard {
+        Some(body) => body_text(body, p, out)?,
+        None => String::new(),
+    };
+    match (printed_if, wildcard_text.trim().is_empty()) {
+        // Есть ветви и есть НЕПУСТАЯ `_` → обычный ELSE.
+        (true, false) => {
             p.ident("ELSE").nl();
-            p.up();
-            print_statement(body, model, p, out, fn_name)?;
-            p.down();
+            p.print(&wildcard_text);
             p.ident("END_IF;").nl();
         }
-        (true, None) => {
+        (true, true) => {
             p.ident("END_IF;").nl();
         }
         // Только `_` → тело исполняется безусловно; `IF` не нужен.
-        (false, Some(body)) => print_statement(body, model, p, out, fn_name)?,
-        (false, None) => {}
+        (false, false) => {
+            p.print(&wildcard_text);
+        }
+        (false, true) => {}
     }
     Ok(())
 }

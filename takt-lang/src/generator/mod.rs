@@ -5,6 +5,7 @@ mod chain_site;
 pub(crate) mod enum_compare;
 mod indent;
 pub(crate) mod local_stub;
+mod match_arms;
 pub(crate) mod mixed_sign;
 mod plantuml;
 mod rust;
