@@ -151,18 +151,16 @@ fn enum_variable_still_compares_by_name() {
     );
 }
 
-/// **T5. Контроль:** цели `c` и `st` не затронуты — их вывод принимали и до.
+/// **T5. Контроль:** цель `c` не затронута — её вывод принимали и до.
+///
+/// В C перечисление есть целое, мнемонику читает человек (0167), и объявление
+/// константы цель печатает всегда — `cc` такой вход принимает.
 #[test]
-fn c_and_st_are_untouched() {
+fn c_is_untouched() {
     let (_d, c) = generate("int_name", "c", INT_VS_NAME);
     assert!(
         c.contains("ENUM_INT_NAME_OP_HLT"),
         "в C перечисление есть целое, и имя константы читает человек (0167):\n{c}"
-    );
-    let (_d, st) = generate("int_name", "st", INT_VS_NAME);
-    assert!(
-        st.contains("Hlt"),
-        "цель `st` печатает мнемонику IEC:\n{st}"
     );
 }
 
@@ -222,5 +220,25 @@ fn generated_output_passes_target_tools() {
         out.status.success(),
         "гейт цели `sv` считает предупреждение ошибкой:\n{}",
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// **T7 (фича 0512).** Цель `st`: имя варианта рядом с целым — тоже ЗНАЧЕНИЕ.
+///
+/// У `st` мнемонику объявляет `VAR CONSTANT` того же POU (0338). Но
+/// перечисление, пришедшее из библиотеки ВМЕСТЕ С МОДЕЛЬЮ и не названное в
+/// списке импорта, до дерева импортёра не доезжает: `iec2c` отвечал «Ambiguous
+/// enumerate value or Variable not declared in this scope» при НУЛЕВОМ коде
+/// возврата `taktc`. Значение лежит в самом узле и доезжает всегда.
+#[test]
+fn st_prints_variant_value_against_integer() {
+    let (_d, text) = generate("int_name", "st", INT_VS_NAME);
+    assert!(
+        text.contains("op = 3"),
+        "у `op: u8` перечислимого типа нет — сравнивать надо со значением:\n{text}"
+    );
+    assert!(
+        !text.contains("= Op_Hlt"),
+        "мнемоника требует объявления, которого в этом POU может не быть:\n{text}"
     );
 }

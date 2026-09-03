@@ -625,7 +625,7 @@ fn emit_function_block(
             | crate::semantic::StateNode::Implement { name, loc, .. } => (name, *loc),
             crate::semantic::StateNode::Unresolved => continue,
         };
-        st_reserved::check_st_name(state_name, loc)?;
+        st_reserved::check_st_state_name(state_name, loc)?;
     }
     let mut header = String::new();
     let _ = write!(header, "FUNCTION_BLOCK {}", fb_name);
