@@ -161,7 +161,8 @@ fn each_declaration<'a>(
             }
             ast::ModelElement::Import(def) => each_import_binding(def, f),
             // Объявлений не вводят — разбираются вторым проходом.
-            ast::ModelElement::Formula(_)
+            ast::ModelElement::Assembly(_)
+            | ast::ModelElement::Formula(_)
             | ast::ModelElement::NamedBlockCode(_)
             | ast::ModelElement::InlineFormula(_)
             | ast::ModelElement::Address(_)
@@ -180,6 +181,9 @@ fn walk_element(element: &ast::ModelElement, scopes: &mut Scopes, table: &mut Us
             }
         }
         ast::ModelElement::Function(def) => walk_function(def, scopes, table),
+        // Вставка уровня модели (0518): её операторы — обычные тела, и имена в
+        // них обязаны попасть в слой использований (иначе поедет `rename`).
+        ast::ModelElement::Assembly(block) => walk_statement(block, scopes, table),
         ast::ModelElement::Condition(def) => walk_condition(&def.value, scopes, table),
         ast::ModelElement::Invariant(def) => walk_condition(&def.value, scopes, table),
         ast::ModelElement::State(def) => walk_state(def, scopes, table),
@@ -256,7 +260,17 @@ fn walk_state(state: &ast::StateDefine, scopes: &mut Scopes, table: &mut UsageTa
                 walk_statement(&def.body, scopes, table);
                 scopes.pop_local();
             }
-            ast::StateElement::StraySemicolon(_) => {}
+            // Вставка уровня состояния (0518) — тело со своей областью, как
+            // у именованного блока: имена в ней обязаны попасть в слой
+            // использований, иначе `rename` их не увидит.
+            ast::StateElement::Assembly(block) => {
+                scopes.push_local();
+                walk_statement(block, scopes, table);
+                scopes.pop_local();
+            }
+            // Формула — обязательство внешнему анализатору (0484): её текст
+            // компилятор не разбирает и имён в нём не связывает.
+            ast::StateElement::Formula(_) | ast::StateElement::StraySemicolon(_) => {}
         }
     }
 }

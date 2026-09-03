@@ -349,7 +349,13 @@ fn walk(ast: &Model, found: &mut Option<u64>) -> Result<(), Diagnostic> {
                             reject_after(&def.value, "инварианте состояния")?;
                         }
                         StateElement::InlineFormula(def) => reject_after_in_formula(def)?,
-                        StateElement::Next(_)
+                        // Вставка уровня состояния (0518) — тело, а не
+                        // условие: `after` в нём судится общим правилом тел.
+                        StateElement::Assembly(_)
+                        // Формула — обязательство внешнему анализатору (0484),
+                        // компилятор её не переводит.
+                        | StateElement::Formula(_)
+                        | StateElement::Next(_)
                         | StateElement::NamedBlockCode(_)
                         | StateElement::StraySemicolon(_) => {}
                     }

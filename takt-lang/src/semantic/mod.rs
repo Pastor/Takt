@@ -41,6 +41,7 @@ pub mod ltl_check;
 /// Снимок достижимых состояний и моделей — плоская карта [`Map`](minimap::Map).
 pub mod minimap;
 mod named_block;
+pub(crate) mod named_blocks;
 mod named_code_block;
 pub use match_node::{MatchArmNode, MatchPatternNode};
 pub use {named_code_block::NamedCodeBlockDefinitionNode, reference::ReferenceNode};
@@ -84,9 +85,8 @@ use std::fmt::Debug;
 use std::rc::{Rc, Weak};
 use type_node::TypeNode;
 
-/// Семантический узел модели (конечного автомата).
-///
-/// Контекст модели, имя, словарь состояний и реализация (`implements`).
+/// Семантический узел модели (конечного автомата): контекст, имя, словарь
+/// состояний и реализация (`implements`).
 ///
 /// Поля [`doc`](ModelNode::doc) и [`docs`](ModelNode::docs) заполняет
 /// [`construct_model_with_docs`](tree::construct_model_with_docs) — строками `///`.

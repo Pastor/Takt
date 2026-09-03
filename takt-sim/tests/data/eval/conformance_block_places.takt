@@ -1,0 +1,32 @@
+// Сверка 0518: места блоков `assembly` выровнены.
+//
+// Вставка уровня МОДЕЛИ исполняется каждый такт — в том числе после ухода в
+// терминальное состояние (инвариант 0083). Вставка уровня СОСТОЯНИЯ работает
+// только пока автомат в нём: печатай её цель уровнем выше — трасса разошлась бы
+// на четвёртом такте, а компиляция этого не видит.
+var model_ticks: u8 := 0;
+var state_ticks: u8 := 0;
+
+out probe: u8 at 0x100;
+
+assembly {
+    model_ticks := model_ticks + 1;
+}
+
+start Run {
+    always {
+        probe := model_ticks * 10 + state_ticks;
+    }
+
+    assembly {
+        state_ticks := state_ticks + 1;
+    }
+
+    ref Done: model_ticks > 2;
+}
+
+state Done {
+    always {
+        probe := model_ticks * 10 + state_ticks;
+    }
+}

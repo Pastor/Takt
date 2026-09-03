@@ -121,6 +121,9 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                         // идентификатор, и `selection_range` пришлось бы
                         // подставлять синтетический.
                         StateElement::Every(_) => None,
+                        // Обязательство и вставка уровня состояния (0518) имён
+                        // не объявляют — символа у них нет.
+                        StateElement::Formula(_) | StateElement::Assembly(_) => None,
                         // `: [Guard] …;` / `: [LTL] …;` — тоже без имени.
                         StateElement::InlineFormula(_) => None,
                         // `next Имя` и `ref Имя: …` — ССЫЛКИ на чужое имя, а не
@@ -259,6 +262,8 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                 ));
             }
             ModelElement::Import(_)
+            // Вставка уровня модели (0518) имени не объявляет.
+            | ModelElement::Assembly(_)
             | ModelElement::Formula(_)
             | ModelElement::Address(_)
             // `clock 1kHz;` — свойство модели, а не именованный символ.

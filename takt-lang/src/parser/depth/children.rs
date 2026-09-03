@@ -96,6 +96,7 @@ fn push_element<'a>(element: &'a ast::ModelElement, out: &mut Vec<NodeRef<'a>>) 
     match element {
         ast::ModelElement::Function(function) => out.push(NodeRef::Function(function)),
         ast::ModelElement::Formula(formula) => out.push(NodeRef::FormulaBlock(&formula.formula)),
+        ast::ModelElement::Assembly(block) => out.push(NodeRef::Statement(block)),
         ast::ModelElement::Condition(condition) => out.push(NodeRef::Condition(&condition.value)),
         ast::ModelElement::Invariant(invariant) => out.push(NodeRef::Condition(&invariant.value)),
         ast::ModelElement::Variable(variable) => out.push(NodeRef::Variable(variable)),
@@ -130,6 +131,9 @@ fn push_state_element<'a>(element: &'a ast::StateElement, out: &mut Vec<NodeRef<
             }
         }
         ast::StateElement::NamedBlockCode(block) => out.push(NodeRef::Statement(&block.statement)),
+        // Обязательство и вставка уровня состояния (0518).
+        ast::StateElement::Formula(formula) => out.push(NodeRef::FormulaBlock(&formula.formula)),
+        ast::StateElement::Assembly(block) => out.push(NodeRef::Statement(block)),
         ast::StateElement::InlineFormula(formula) => out.push(NodeRef::InlineFormula(formula)),
         ast::StateElement::Invariant(invariant) => out.push(NodeRef::Condition(&invariant.value)),
         ast::StateElement::Every(every) => out.push(NodeRef::Statement(&every.body)),

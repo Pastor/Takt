@@ -183,6 +183,9 @@ fn scan_model(model: &ast::Model, scan: &mut Scan) {
 
 fn scan_element(element: &ast::ModelElement, scan: &mut Scan) {
     match element {
+        // Вставка уровня модели (0518) — обычные операторы Takt: присваивание в
+        // ней делает параметр изменяемым так же, как в любом теле.
+        ast::ModelElement::Assembly(block) => scan_statement(block, scan),
         ast::ModelElement::Variable(def) => {
             if let Some(init) = variable_initializer(def) {
                 scan_expression(init, scan);
@@ -227,10 +230,15 @@ fn scan_state(state: &ast::StateDefine, scan: &mut Scan) {
         match element {
             ast::StateElement::NamedBlockCode(def) => scan_statement(&def.statement, scan),
             ast::StateElement::Every(def) => scan_statement(&def.body, scan),
+            // Вставка уровня состояния (0518) — те же операторы Takt.
+            ast::StateElement::Assembly(block) => scan_statement(block, scan),
             ast::StateElement::Next(_)
             | ast::StateElement::Reference(_, _, _)
             | ast::StateElement::InlineFormula(_)
             | ast::StateElement::Invariant(_)
+            // Формула — обязательство внешнему анализатору (0484): операторов
+            // в ней нет, и параметра она не меняет.
+            | ast::StateElement::Formula(_)
             | ast::StateElement::StraySemicolon(_) => {}
         }
     }
