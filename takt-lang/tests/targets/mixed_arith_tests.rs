@@ -35,6 +35,12 @@ const MIXED: &str = "var s: i8 := -1; var u: u8 := 200; var r: i16 := 0; \
                      start Run { always { r := s + u; o := 1; rr := r; } \
                      ref Done: r > 0; } state Done { }";
 
+/// Накопление: ЛЕВЫЙ операнд уже типа приёмника, правый — уже (фича 0507).
+const KEEP: &str = "var total: u16 := 0; var step: u8 := 3; \
+                    out o: u16 at 0x100; \
+                    start Run { always { total := total + step; o := total; } \
+                    ref Done: total > 60000; } state Done { }";
+
 /// **Контрпример:** операнды того же типа, что приёмник, — печать прежняя.
 const SAME: &str = "var a: u8 := 1; var b: u8 := 2; var r: u8 := 0; \
                     out o: u8 at 0x100; \
@@ -75,7 +81,7 @@ fn generate(tag: &str, target: &str, source: &str) -> (std::path::PathBuf, Strin
 fn widening_casts_operands() {
     let (_d, rust) = generate("widen", "rust", WIDEN);
     assert!(
-        rust.contains("as u16) + (") && rust.contains("as u16)"),
+        rust.contains("(self.a as u16).wrapping_add(self.b as u16)"),
         "цель `rust`: `u8 + u8` не присвоить `u16` — нужен приведённый операнд.\n{rust}"
     );
     let (_d, st) = generate("widen", "st", WIDEN);
@@ -136,6 +142,55 @@ fn c_is_untouched() {
     );
 }
 
+/// Беззнаковая арифметика с расширением сохраняет ОБЁРТКУ (фича 0507).
+///
+/// Прежде ветвь приёмника печатала операцию сама (`({a} + {b})`), и правило
+/// 0127 («беззнаковое переносится, mod 2ⁿ») теряло силу ровно там, где операнды
+/// разных типов: отладочная сборка порождённого Rust **паникует** на
+/// переполнении, тогда как эталон и цель `c` считают дальше. Компиляция обе
+/// формы принимает — расхождение видно только значением.
+#[test]
+fn unsigned_widening_keeps_wrapping() {
+    let (_d, rust) = generate("widen", "rust", WIDEN);
+    assert!(
+        rust.contains(".wrapping_add(") && !rust.contains("as u16) + ("),
+        "операцию печатает печатник арифметики, а он ставит обёртку.\n{rust}"
+    );
+}
+
+/// Приведение операнда печатается ПО НУЖДЕ (фича 0507).
+///
+/// `total := total + step;` при `total: u16` и `step: u8` давало
+/// `(self.total as u16) + (self.step as u16)` — приведение `u16` → `u16` есть
+/// `clippy::unnecessary_cast`, то есть отказ гейта самой цели при НУЛЕВОМ коде
+/// возврата `taktc`.
+#[test]
+fn operand_of_receiver_type_keeps_no_cast() {
+    let (_d, rust) = generate("keep", "rust", KEEP);
+    assert!(
+        rust.contains("self.total.wrapping_add(self.step as u16)"),
+        "левый операнд уже `u16` — приведения ему не нужно, правому нужно.\n{rust}"
+    );
+    assert!(
+        !rust.contains("self.total as u16"),
+        "лишнее приведение отвергает `clippy -D warnings`.\n{rust}"
+    );
+}
+
+/// Знаковый приёмник обёртки НЕ получает — контроль правила 0127.
+///
+/// Без этой проверки правка читалась бы как «печатать обёртку всегда», а у
+/// знакового переполнения в языке иной смысл: это ошибка программы, а не
+/// перенос.
+#[test]
+fn signed_widening_stays_plain() {
+    let (_d, rust) = generate("mixed", "rust", MIXED);
+    assert!(
+        rust.contains("(self.s as i16) + (self.u as i16)"),
+        "знаковая арифметика печатается обычным `+`.\n{rust}"
+    );
+}
+
 // ── Настоящие инструменты ────────────────────────────────────────────────────
 
 fn tool(bin: &str) -> bool {
@@ -153,7 +208,7 @@ fn rust_output_compiles() {
         eprintln!("[ПРОПУСК] rust_output_compiles: `clippy-driver` не найден");
         return;
     }
-    for (tag, source) in [("widen", WIDEN), ("mixed", MIXED)] {
+    for (tag, source) in [("widen", WIDEN), ("mixed", MIXED), ("keep", KEEP)] {
         let (dir, _) = generate(tag, "rust", source);
         let out = Command::new("clippy-driver")
             .args(["--edition", "2021", "--crate-type=lib", "-D", "warnings"])
