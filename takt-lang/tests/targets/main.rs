@@ -47,6 +47,7 @@ mod cli_version_tests;
 mod cli_warning_position_tests;
 mod cli_warnings_tests;
 mod codegen_tests;
+mod collapsible_if_tests;
 mod const_aggregate_tests;
 mod duration_field_tests;
 mod duration_targets_tests;

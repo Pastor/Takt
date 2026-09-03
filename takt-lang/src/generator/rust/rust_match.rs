@@ -1,0 +1,191 @@
+//! Печать `match` целью `rust` — цепочка `if`/`else if` (выделено фичей 0510).
+//!
+//! Образцы Takt — произвольные выражения, а `match x { y => … }` в Rust СВЯЗАЛ
+//! БЫ `y` как новое имя вместо сравнения с ним: молчаливое связывание дало бы
+//! всегда-истинную первую ветку, то есть тихо неверный автомат. Поэтому здесь
+//! печатается цепочка условий.
+//!
+//! Модуль выделен по границе ОТВЕТСТВЕННОСТИ: печать `match` знает про пустую
+//! ветвь (0509), про слияние вложенного `if` (0510) и про порядок ветвей — это
+//! отдельный предмет, а не часть общего печатника операторов.
+
+use crate::diagnostics::Diagnostic;
+use crate::generator::indent::Printer;
+use crate::generator::rust::rust_expr::{Scope, print_as_bool, print_expression};
+use crate::generator::rust::rust_stmt::{StmtOutput, print_statement};
+use crate::semantic::{ExpressionNode, MatchArmNode, MatchPatternNode, StatementNode};
+
+/// Печатает `match` цепочкой `if`/`else if`.
+pub(crate) fn print_match(
+    expr: &ExpressionNode,
+    arms: &[MatchArmNode],
+    scope: &mut Scope,
+    p: &mut Printer,
+    out: &mut StmtOutput,
+) -> Result<usize, Diagnostic> {
+    let subject = print_expression(expr, scope)?;
+    // Образец сравнивается с ТИПОМ разбираемого выражения: `match mode
+    // { 0 => … }` при `mode : Mode` приходит числом, и без обратного
+    // отображения получилось бы `self.mode == 0` — сравнение
+    // перечисления с целым.
+    let subject_type = crate::generator::rust::rust_expr::expression_type(expr);
+    let mut first = true;
+    let mut wildcard: Option<&StatementNode> = None;
+    for arm in arms {
+        if arm
+            .patterns
+            .iter()
+            .any(|p| matches!(p, MatchPatternNode::Wildcard))
+        {
+            wildcard = Some(&arm.body);
+        }
+    }
+    // Тело `_`-ветки печатается В БУФЕР: пустая ветвь (`_ => {}` —
+    // «прочие значения ничего не делают», запись из практики) давала
+    // `} else { }`, а `clippy` под `-D warnings` отвечает «this `else`
+    // branch is empty» — отказ гейта самой цели при нулевом коде
+    // возврата `taktc` (фича 0509). Тот же приём, что у пустого `if`
+    // (0474).
+    //
+    // ⚠️ Буфер заполняется ДО цепочки: печатать ли `_`-ветвь, знать
+    // нужно раньше — от этого зависит, можно ли слить последнюю ветвь с
+    // её вложенным `if` (фича 0510).
+    let mut wildcard_text = String::new();
+    if let Some(body) = wildcard {
+        let mut buffer = p.fork(&mut wildcard_text);
+        buffer.up();
+        print_statement(body, scope, &mut buffer, out)?;
+        buffer.down();
+    }
+    // Индекс последней ветви цепочки: только её тело можно сливать с
+    // условием — после неё `else` нет, и «провал» никуда не ведёт.
+    let last_printed = arms.iter().rposition(|arm| {
+        arm.patterns
+            .iter()
+            .any(|p| matches!(p, MatchPatternNode::Value(_)))
+    });
+    for (index, arm) in arms.iter().enumerate() {
+        if arm
+            .patterns
+            .iter()
+            .any(|p| matches!(p, MatchPatternNode::Wildcard))
+        {
+            continue;
+        }
+        let mut tests = Vec::new();
+        for pattern in &arm.patterns {
+            let MatchPatternNode::Value(value) = pattern else {
+                continue;
+            };
+            let printed = match &subject_type {
+                Some(ty) => crate::generator::rust::rust_expr::coerce_to(value, ty, scope)?,
+                None => print_expression(value, scope)?,
+            };
+            tests.push(format!("{} == {}", subject, printed));
+        }
+        if tests.is_empty() {
+            continue;
+        }
+        // Слияние вложенного `if` с условием ветви (фича 0510) — только
+        // у ПОСЛЕДНЕЙ ветви и только когда `_`-ветви в выводе нет.
+        // Иначе слияние изменило бы автомат: при истинном образце и
+        // ложном внутреннем условии управление ушло бы в следующую
+        // ветвь, тогда как вложенный `if` просто ничего не делает.
+        let mergeable = Some(index) == last_printed && wildcard_text.trim().is_empty();
+        let (extra, body) = if mergeable {
+            unwrap_if_chain(&arm.body)
+        } else {
+            (Vec::new(), arm.body.as_ref())
+        };
+        let mut guard = tests.join(" || ");
+        if !extra.is_empty() {
+            if tests.len() > 1 {
+                guard = format!("({guard})");
+            }
+            for cond in &extra {
+                guard = format!("{guard} && {}", print_as_bool(cond, scope)?);
+            }
+        }
+        let head = if first { "if" } else { "} else if" };
+        first = false;
+        p.ident(&format!("{head} {guard} {{")).nl();
+        p.up();
+        print_statement(body, scope, p, out)?;
+        p.down();
+    }
+    match (wildcard_text.trim().is_empty(), first) {
+        // Только `_`-ветка: цепочки нет, тело печатается как есть.
+        (false, true) => {
+            p.print(&wildcard_text);
+        }
+        (false, false) => {
+            p.ident("} else {").nl();
+            p.print(&wildcard_text);
+            p.ident("}").nl();
+        }
+        (true, false) => {
+            p.ident("}").nl();
+        }
+        (true, true) => {}
+    }
+    Ok(0)
+}
+
+/// Раскручивает цепочку `if a { if b { … } }` в список условий (фича 0510).
+///
+/// Возвращает условия по порядку, тело самого внутреннего `if` и ветвь `else`
+/// внешнего. Слияние идёт, пока выполняются ВСЕ условия правила:
+///
+/// - у внешнего `if` нет `else` (иначе `clippy` схлопывания не требует);
+/// - тело — ровно один оператор, и это `if`;
+/// - у внутреннего `if` нет `else`.
+///
+/// ⚠️ Границы замерены прогоном `clippy` (2026-09-03): на всех трёх соседних
+/// формах линт молчит, и трогать их значило бы менять вывод без повода.
+///
+/// ⚠️ Условие в Takt эффектов не имеет (присваивание — оператор, 0187), поэтому
+/// конъюнкция вычисляет то же самое; порядок проверок сохранён — `&&` в Rust
+/// ленив, как и вложенный `if`.
+pub(crate) fn collapse_nested_if<'a>(
+    cond: &'a ExpressionNode,
+    then_: &'a StatementNode,
+    else_: &'a Option<Box<StatementNode>>,
+) -> (
+    Vec<&'a ExpressionNode>,
+    &'a StatementNode,
+    &'a Option<Box<StatementNode>>,
+) {
+    let mut conds = vec![cond];
+    if else_.is_some() {
+        return (conds, then_, else_);
+    }
+    let (inner, body) = unwrap_if_chain(then_);
+    conds.extend(inner);
+    (conds, body, else_)
+}
+
+/// Раскручивает тело, состоящее ровно из одного `if` без `else` (фича 0510).
+///
+/// Возвращает условия раскрученных `if` по порядку и тело самого внутреннего.
+/// Пустой список означает «раскручивать нечего» — тело печатается как есть.
+fn unwrap_if_chain(body: &StatementNode) -> (Vec<&ExpressionNode>, &StatementNode) {
+    let mut conds = Vec::new();
+    let mut current = body;
+    loop {
+        let inner = match current {
+            StatementNode::Block(items) if items.len() == 1 => &items[0],
+            other => other,
+        };
+        let StatementNode::If {
+            cond,
+            then_,
+            else_: None,
+        } = inner
+        else {
+            break;
+        };
+        conds.push(cond.as_ref());
+        current = then_;
+    }
+    (conds, current)
+}
