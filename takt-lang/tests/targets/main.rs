@@ -52,6 +52,7 @@ mod duration_field_tests;
 mod duration_targets_tests;
 mod enum_in_function_tests;
 mod enum_in_struct_tests;
+mod enum_variant_value_tests;
 mod format_matrix_tests;
 mod formula_in_body_tests;
 mod fsm_table_sv_tests;

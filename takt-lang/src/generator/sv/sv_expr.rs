@@ -158,6 +158,17 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
     // **ложь** — молча, verilator такой модуль принимает. Формы выбраны
     // прогоном: расширение `$signed(W'(x))` и раскрытие проверкой знака.
     let cmp = |l: &ConditionNode, op: &str, r: &ConditionNode| -> Result<String, Diagnostic> {
+        // Имя варианта рядом с ЦЕЛЫМ операндом печатается ЗНАЧЕНИЕМ (0508):
+        // `ENUMITEMREF` шириной 2 бита против 8-битного сигнала даёт
+        // `WIDTHEXPAND`, а гейт цели считает предупреждение ошибкой.
+        if let Some(low) = crate::generator::enum_compare::lowered(l, r) {
+            let (lt, rt) = if low.variant_is_left {
+                (low.value.to_string(), print_condition(r, scope)?)
+            } else {
+                (print_condition(l, scope)?, low.value.to_string())
+            };
+            return Ok(format!("({lt} {op} {rt})"));
+        }
         match crate::generator::mixed_sign::plan(
             crate::generator::mixed_sign::operand_type_cond(l).as_ref(),
             crate::generator::mixed_sign::operand_type_cond(r).as_ref(),
