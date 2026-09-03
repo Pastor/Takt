@@ -50,27 +50,95 @@ use crate::diagnostics::{Diagnostic, Location};
 /// заголовок модуля.
 const IEC_RESERVED: &[&str] = &[
     // Строковые функции.
-    "left", "right", "mid", "concat", "len", "find", "insert", "delete", "replace",
+    "left",
+    "right",
+    "mid",
+    "concat",
+    "len",
+    "find",
+    "insert",
+    "delete",
+    "replace",
     // Выбор / ограничение.
-    "sel", "limit", "mux", "min", "max", // Числовые.
-    "abs", "sqrt", "expt",
+    "sel",
+    "limit",
+    "mux",
+    "min",
+    "max", // Числовые.
+    "abs",
+    "sqrt",
+    "expt",
     // Сдвиги / вращения над битовыми строками.
-    "shl", "shr", "rol", "ror", // Сравнения-функции.
-    "gt", "ge", "le", "lt", "eq", "ne",
+    "shl",
+    "shr",
+    "rol",
+    "ror", // Сравнения-функции.
+    "gt",
+    "ge",
+    "le",
+    "lt",
+    "eq",
+    "ne",
     // Стандартные функциональные блоки (триггеры, таймеры, счётчики).
-    "sr", "rs", "ton", "tof", "tp", "ctu", "ctd", "ctud", "r_trig", "f_trig",
+    "sr",
+    "rs",
+    "ton",
+    "tof",
+    "tp",
+    "ctu",
+    "ctd",
+    "ctud",
+    "r_trig",
+    "f_trig",
     // Ключевые слова SFC и управления.
-    "step", "action", "exit",
+    "step",
+    "action",
+    "exit",
     // Стандартные типы (идентификатором пользователя быть не могут).
-    "time", "date", "real", "lreal", "int", "sint", "dint", "lint", "usint", "uint", "udint",
-    "ulint", "byte", "word", "dword", "lword", "bool", "string", "wstring",
+    "time",
+    "date",
+    "real",
+    "lreal",
+    "int",
+    "sint",
+    "dint",
+    "lint",
+    "usint",
+    "uint",
+    "udint",
+    "ulint",
+    "byte",
+    "word",
+    "dword",
+    "lword",
+    "bool",
+    "string",
+    "wstring",
     // Математические функции (фича 0342). ⚠️ Замер прогоном `iec2c` — не
     // догадка: `var ln: u8;` давал невалидный ST при НУЛЕВОМ коде возврата
     // `taktc`, а сообщение инструмента («invalid located variable
     // declaration») причины не называло.
-    "ln", "log", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "trunc",
+    "ln",
+    "log",
+    "exp",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "trunc",
     // Операции, имеющие в IEC ФУНКЦИОНАЛЬНУЮ форму: `MOD`, `AND`, `ADD`, …
-    "mod", "and", "or", "xor", "not", "add", "sub", "mul", "div", "move",
+    "mod",
+    "and",
+    "or",
+    "xor",
+    "not",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "move",
     // ⚠️ `adr`, `size`, `bcd_to_int`, `int_to_bcd` в список НЕ входят: первый
     // замер счёл их занятыми, а прогон сторожа показал, что `iec2c` их
     // ПРИНИМАЕТ. Отказ на них был бы ложным — цель отвергала бы корректный
@@ -79,7 +147,53 @@ const IEC_RESERVED: &[&str] = &[
     // `var from: u8;` и `var to: u8;` `iec2c` отвергает. В языке Takt `from`
     // стало обычным именем той же фичей, `to` было им всегда — то есть дыра
     // существовала и до неё.
-    "from", "to",
+    "from",
+    "to",
+    // Ключевые слова ЯЗЫКА ST и объявлений (фича 0511, замер 2026-09-03).
+    // Прежний список знал функции и типы, но не структуру программы: `var
+    // program: u8;` — имя из практики (счётчик программ процессора) — давало
+    // невалидный ST при НУЛЕВОМ коде возврата `taktc`.
+    //
+    // ⚠️ Список — из ПРОГОНА арбитра, и в него внесены только имена, которые
+    // язык Takt принимает как идентификатор: `var`, `if`, `else`, `for`,
+    // `while`, `return`, `true`, `false`, `type`, `struct`, `at` — ключевые
+    // слова самого Takt, и написать их именем нельзя.
+    //
+    // ⚠️ `single`, `interval`, `priority` в список НЕ вошли: тем же прогоном
+    // `iec2c` их ПРИНИМАЕТ, и отказ на них был бы ложным (урок 0342).
+    "program",
+    "configuration",
+    "resource",
+    "task",
+    "end_var",
+    "function",
+    "function_block",
+    "end_type",
+    "array",
+    "of",
+    "constant",
+    "retain",
+    "non_retain",
+    "then",
+    "elsif",
+    "end_if",
+    "case",
+    "end_case",
+    "do",
+    "end_for",
+    "end_while",
+    "repeat",
+    "until",
+    "end_repeat",
+    "with",
+    "on",
+    "transition",
+    "initial_step",
+    "by",
+    "en",
+    "eno",
+    "f_edge",
+    "r_edge",
 ];
 
 /// Строит диагностику `ST-014` — идентификатор занят стандартной библиотекой IEC.

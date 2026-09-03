@@ -157,7 +157,7 @@ start Machine = Core(id := 0, base := 0) | Cache(serves := 0, enabled := 1)
 берёт `N+2`. Каждая стадия становится отдельной моделью, а между ними
 стоят #strong[регистры конвейера] — общие переменные:
 ```takt
-start Machine = StageExecute | StageDecode | StageFetch | Memory(latency := 0, program := 1);
+start Machine = StageExecute | StageDecode | StageFetch | Memory(latency := 0, prog_sel := 1);
 ```
 
 #quote(block: true)[
