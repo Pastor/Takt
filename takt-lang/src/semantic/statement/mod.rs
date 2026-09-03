@@ -349,6 +349,7 @@ fn resolve_ast_statement(
                 arms.push(MatchArmNode {
                     patterns,
                     body: Box::new(body_node),
+                    loc: arm.loc,
                 });
             }
             Ok(StatementNode::Match {

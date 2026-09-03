@@ -1618,7 +1618,7 @@ cargo test <имя>                                # один тест по им
 ### Документ и процесс
 
 - **Версия языка — единственный источник истины в коде**:
-  `takt_lang::LANGUAGE_VERSION`, **сейчас `0.15.0`**
+  `takt_lang::LANGUAGE_VERSION`, **сейчас `0.16.0`**
   ([0085](docs/features/0085-language-version-constant.md)). Гейт
   `scripts/check-language-version.sh` сверяет **три** источника — константу, README и
   живой контекст. ⚠️ Меняя версию языка (правило 22), правь все три синхронно; это

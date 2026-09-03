@@ -4,16 +4,35 @@
 //! модуля): там объявлены дерево и его корень, здесь — две самостоятельные
 //! структуры, которыми пользуются понижение, обходы и все восемь печатников.
 
+use crate::diagnostics::Location;
 use crate::semantic::{ExpressionNode, StatementNode};
 
 /// Семантическая ветка оператора `match`.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+///
+/// ⚠️ Позиция ветви нужна диагностике `SE-131` (фича 0514): она указывает на
+/// НЕДОСТИЖИМУЮ ветвь, а без координаты сообщение о повторе образца пришлось бы
+/// читать глазами по всему файлу. В АСД позиция была всегда — терялась она при
+/// понижении (класс 0471).
+#[derive(Default, Debug, Clone)]
 pub struct MatchArmNode {
     /// Образцы (хотя бы один).
     pub patterns: Vec<MatchPatternNode>,
     /// Тело ветки.
     pub body: Box<StatementNode>,
+    /// Место ветви в исходнике.
+    ///
+    /// ⚠️ В равенство узлов **не входит** (как у `Extend`, урок 0056): две
+    /// одинаковые по смыслу ветви в разных местах остаются равными.
+    pub loc: Location,
 }
+
+impl PartialEq for MatchArmNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.patterns == other.patterns && self.body == other.body
+    }
+}
+
+impl Eq for MatchArmNode {}
 
 /// Семантический образец ветки `match`.
 #[derive(Debug, PartialEq, Eq, Clone, Default)]

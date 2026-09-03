@@ -214,7 +214,15 @@ pub(crate) fn print_statement(
                 .nl();
             p.up();
             let mut has_default = false;
-            for arm in arms {
+            for (index, arm) in arms.iter().enumerate() {
+                // Ветвь, чей образец повторяет более ранний, НЕДОСТИЖИМА:
+                // `match` берёт первое совпадение (фича 0514). Вторая ветвь по
+                // умолчанию даёт у `verilator` ошибку «Multiple default
+                // statements in case statement» — невалидный RTL при нулевом
+                // коде возврата `taktc`.
+                if crate::semantic::match_arms::pattern_repeats_above(arms, index) {
+                    continue;
+                }
                 let wildcard = arm
                     .patterns
                     .iter()

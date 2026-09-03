@@ -40,6 +40,12 @@ pub fn collect_model_warnings(ast: &ast::Model, model: &Rc<RefCell<ModelNode>>) 
     warnings.extend(crate::semantic::validate::check_unreachable_edges(
         Rc::clone(model),
     ));
+    // SE-131 (0514): ветвь `match` с повторяющимся образцом недостижима —
+    // `match` берёт первое совпадение. Целям `c` и `rust` такой вход давал
+    // невалидный вывод, автору не говорил никто.
+    warnings.extend(crate::semantic::validate::check_duplicate_match_arms(
+        Rc::clone(model),
+    ));
     warnings.extend(crate::constant_condition_warnings(model));
     warnings.extend(crate::ltl_warnings(Rc::clone(model)));
     warnings.extend(crate::stray_semicolon_warnings(ast));

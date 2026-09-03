@@ -48,6 +48,7 @@ mod init_undefined_read;
 // `pub(crate)`, а не `mod`: границы целочисленного типа (`type_range`) нужны и
 // свёртке инициализатора (фича 0207) — вторая копия границ разошлась бы с
 // проверкой `SE-089`.
+mod duplicate_match_arm;
 pub(crate) mod literal_range;
 mod member_access;
 mod name_collisions;
@@ -88,6 +89,7 @@ use types::check_array_sizes;
 // (5 имён) и `lib.rs` (6 имён по пути `semantic::validate::…`) — не правятся.
 pub(crate) use common::reachable_targets;
 pub use constant_conditions::check_constant_conditions;
+pub use duplicate_match_arm::check_duplicate_match_arms;
 pub use entry::validate_entry_model;
 pub use enums::check_enum_type_safety;
 pub use implicit_bool::check_implicit_bool_conditions;
