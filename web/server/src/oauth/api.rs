@@ -111,6 +111,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/oauth/complete", post(complete))
         .route("/oauth/{provider}/start", get(start))
         .route("/oauth/{provider}/callback", get(callback))
+        .route(
+            "/me/identities/{provider}",
+            axum::routing::delete(drop_identity),
+        )
+        .route("/me/password", axum::routing::put(set_password))
 }
 
 /// Перечисляет настроенные площадки.
@@ -168,6 +173,61 @@ async fn identities(
         })
         .collect();
     Ok(Json(out).into_response())
+}
+
+/// Отвязывает площадку от своей записи.
+///
+/// ⚠️ Отвязка **последнего** способа войти отказывает: запись стала бы
+/// недостижимой, а восстановления по почте у нас нет вовсе — вернуть человека
+/// смог бы только администратор.
+async fn drop_identity(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(provider): Path<String>,
+) -> Result<Response, ApiError> {
+    let user = current_user(&state, &headers).await?;
+    let client = state.pool.get().await?;
+    unlink(&client, &user.id, &provider).await?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// Запрос «задать пароль».
+#[derive(Debug, Deserialize)]
+pub struct PasswordRequest {
+    pub password: String,
+}
+
+/// Задаёт пароль записи, у которой его не было.
+///
+/// ⚠️ Только для записи БЕЗ пароля. Смена существующего требует старого пароля
+/// — это другая ручка и другая задача; молчаливо позволить смену по одной лишь
+/// сессии значило бы, что забытая на чужой машине вкладка меняет пароль.
+async fn set_password(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(request): Json<PasswordRequest>,
+) -> Result<Response, ApiError> {
+    let user = current_user(&state, &headers).await?;
+    let client = state.pool.get().await?;
+    let has: bool = client
+        .query_one(
+            "SELECT pass_hash IS NOT NULL FROM users WHERE id = $1",
+            &[&user.id],
+        )
+        .await?
+        .get(0);
+    if has {
+        return Err(ApiError::Conflict {
+            message: "password_already_set".to_string(),
+            seen: None,
+            actual: 0,
+        });
+    }
+    auth::check_password(&request.password)?;
+    // Тем же носителем, что и сброс администратором: пароль хешируется и живые
+    // сеансы гасятся — второй способ поставить пароль разошёлся бы с первым.
+    auth::set_password(&client, &user.login, &request.password).await?;
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 /// Начинает вход: заводит поток и уводит на площадку.
@@ -355,6 +415,10 @@ async fn finish(
         let Some(owner) = flow_user else {
             return Err("failed");
         };
+        // ⚠️ Уже привязанное к ЭТОМУ же человеку — не ошибка: повторное
+        // нажатие кнопки идемпотентно. Привязанное к ДРУГОМУ — отказ: слить
+        // две записи значит перенести проекты, гранты и копии, а это
+        // необратимо и делается вручную.
         if existing.is_some_and(|found| found != owner) {
             return Err("identity_taken");
         }

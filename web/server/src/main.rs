@@ -10,6 +10,7 @@
 //! takt-web-server admin <логин> <пароль>    завести администратора
 //! takt-web-server passwd <логин> <пароль>   сменить пароль
 //! takt-web-server sweep                     свернуть залежавшиеся проекты
+//! takt-web-server unlink <логин> <площадка> отвязать площадку от записи
 //! ```
 //!
 //! Первый администратор и сброс пароля — командами: почта не хранится, и
@@ -51,9 +52,12 @@ async fn main() -> anyhow::Result<()> {
         // функцию, что и обход по времени внутри сервера: второй проход
         // разошёлся бы с первым.
         Some("sweep") => return command_sweep(&pool, &config).await,
+        // Отвязка администратором: человек потерял доступ к площадке, а
+        // отвязать её из своей сессии уже не может — войти-то нечем.
+        Some("unlink") => return command_unlink(&pool, &arguments).await,
         Some(unknown) => anyhow::bail!(
-            "неизвестная команда '{unknown}'. Известны: admin, passwd, sweep \
-             (без команды — запуск)"
+            "неизвестная команда '{unknown}'. Известны: admin, passwd, sweep, \
+             unlink (без команды — запуск)"
         ),
         None => {}
     }
@@ -189,6 +193,34 @@ async fn command_sweep(pool: &deadpool_postgres::Pool, config: &Config) -> anyho
         "свёрнуто проектов: {packed} (срок хранения — {} дней)",
         config.retention.as_secs() / 86_400
     );
+    Ok(())
+}
+
+async fn command_unlink(
+    pool: &deadpool_postgres::Pool,
+    arguments: &[String],
+) -> anyhow::Result<()> {
+    let (Some(login), Some(provider)) = (arguments.get(1), arguments.get(2)) else {
+        anyhow::bail!("takt-web-server unlink <логин> <площадка>");
+    };
+    let client = pool.get().await?;
+    let row = client
+        .query_opt(
+            "SELECT id FROM users WHERE lower(login) = lower($1)",
+            &[&login],
+        )
+        .await?;
+    let Some(row) = row else {
+        anyhow::bail!("нет такого логина: {login}");
+    };
+    let id: String = row.get(0);
+    // ⚠️ Правило то же, что у ручки: отвязка последнего способа войти
+    // отказывает и администратору. Иначе он одной командой делал бы запись
+    // недостижимой — и починить её было бы уже нечем.
+    takt_web_server::oauth::api::unlink(&client, &id, provider)
+        .await
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    println!("площадка '{provider}' отвязана от '{login}'");
     Ok(())
 }
 

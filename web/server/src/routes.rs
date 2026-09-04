@@ -89,6 +89,8 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/oauth/complete"),
     ("GET", "/api/oauth/{provider}/start"),
     ("GET", "/api/oauth/{provider}/callback"),
+    ("DELETE", "/api/me/identities/{provider}"),
+    ("PUT", "/api/me/password"),
 ];
 
 /// Собирает роутер.
@@ -490,8 +492,8 @@ mod tests {
         }
         assert_eq!(
             seen.len(),
-            25,
-            "вход, проекты, витрина, копия, права, архив и площадки"
+            27,
+            "вход, проекты, витрина, копия, права, архив, площадки и запись"
         );
     }
 }
