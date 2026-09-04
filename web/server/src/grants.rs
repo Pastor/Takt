@@ -188,7 +188,7 @@ async fn fork(
     // Вся копия — ОДНА транзакция: между чтением исходника и записью копии
     // помещается правка исходника, и копия вышла бы наполовину вчерашней.
     let transaction = client.transaction().await?;
-    let (_, level) = projects::locked(&transaction, &id, &user).await?;
+    let (_, level) = projects::locked(&transaction, &state.store, &id, &user).await?;
     projects::require_level(level, Level::Fork)?;
 
     let source = transaction
@@ -232,8 +232,9 @@ async fn fork(
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
                                   takt_lang, language_version, main_file, revision,
-                                  size_bytes, forked_from, created_at, updated_at)
-             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, 0, 0, $7, $8, $8)",
+                                  size_bytes, forked_from, created_at, updated_at,
+                                  touched_at)
+             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, 0, 0, $7, $8, $8, $8)",
             &[
                 &copy,
                 &user.id,
@@ -246,15 +247,34 @@ async fn fork(
             ],
         )
         .await?;
-    // Файлы копируются ЗАПРОСОМ, а не через приложение: тексты бывают в сотни
-    // килобайт, и возить их в память сервера ради вставки обратно незачем.
+    // Состав копируется запросом, а ТЕКСТЫ — на диске (задача 09h): база их
+    // больше не хранит.
     transaction
         .execute(
-            "INSERT INTO project_files(project_id, name, kind, text, size_bytes)
-             SELECT $1, name, kind, text, size_bytes FROM project_files WHERE project_id = $2",
+            "INSERT INTO project_files(project_id, name, kind, size_bytes)
+             SELECT $1, name, kind, size_bytes FROM project_files WHERE project_id = $2",
             &[&copy, &id],
         )
         .await?;
+    let names: Vec<String> = transaction
+        .query(
+            "SELECT name FROM project_files WHERE project_id = $1 ORDER BY name",
+            &[&id],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    for name in &names {
+        let text = state
+            .store
+            .read(&owner, &id, name)
+            .map_err(ApiError::Internal)?;
+        state
+            .store
+            .write(&user.id, &copy, name, &text)
+            .map_err(ApiError::Internal)?;
+    }
     let size: i64 = transaction
         .query_one(
             "SELECT coalesce(sum(size_bytes), 0)::bigint FROM project_files WHERE project_id = $1",
@@ -268,7 +288,8 @@ async fn fork(
             &[&copy, &size],
         )
         .await?;
-    showcase::refresh(&transaction, &copy).await?;
+    let body = projects::body_of(&*transaction, &copy, &state.store, &user.id).await?;
+    showcase::refresh(&transaction, &copy, &body).await?;
     let row = transaction
         .query_one(projects::SELECT_PROJECT, &[&copy])
         .await?;

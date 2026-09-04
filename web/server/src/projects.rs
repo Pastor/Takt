@@ -37,8 +37,10 @@ use crate::db;
 use crate::error::ApiError;
 use crate::grants;
 use crate::limits;
+use crate::retention;
 use crate::routes::{AppState, current_user, optional_user};
 use crate::showcase;
+use crate::store::Store;
 
 /// Метаданные проекта.
 #[derive(Debug, Serialize)]
@@ -247,10 +249,13 @@ async fn create(
         .unwrap_or_else(|| state.module_version.clone());
     transaction
         .execute(
+            // ⚠️ `touched_at` ставится СРАЗУ: ноль означал бы «не обращались
+            // никогда», и подметание свернуло бы проект в тот же час, когда
+            // его завели (задача 09h).
             "INSERT INTO projects(id, owner_id, name, description, visibility,
                                   takt_lang, language_version, revision, size_bytes,
-                                  created_at, updated_at)
-             VALUES ($1, $2, $3, $4, 'private', $5, $6, 0, 0, $7, $7)",
+                                  created_at, updated_at, touched_at)
+             VALUES ($1, $2, $3, $4, 'private', $5, $6, 0, 0, $7, $7, $7)",
             &[
                 &id,
                 &user.id,
@@ -262,7 +267,8 @@ async fn create(
             ],
         )
         .await?;
-    showcase::refresh(&transaction, &id).await?;
+    // У нового проекта файлов ещё нет — тело поиска пусто, и это законно.
+    showcase::refresh(&transaction, &id, "").await?;
     let row = transaction.query_one(SELECT_PROJECT, &[&id]).await?;
     let project = project_of(&row);
     transaction.commit().await?;
@@ -276,7 +282,7 @@ async fn read(
 ) -> Result<Response, ApiError> {
     let viewer = optional_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let (project, level) = resolve(&client, &id, viewer.as_ref()).await?;
+    let (project, level) = resolve(&client, &state.store, &id, viewer.as_ref()).await?;
     let rows = client
         .query(
             "SELECT name, kind, size_bytes FROM project_files
@@ -320,7 +326,7 @@ async fn patch(
     let user = current_user(&state, &headers).await?;
     let mut client = state.pool.get().await?;
     let transaction = client.transaction().await?;
-    let (_, level) = locked(&transaction, &id, &user).await?;
+    let (_, level) = locked(&transaction, &state.store, &id, &user).await?;
     // Метаданные — только владелец: `edit` правит СОДЕРЖИМОЕ, а видимость,
     // права и версия модуля меняют, кому и чем проект открывается.
     require_level(level, Level::Owner)?;
@@ -392,8 +398,15 @@ async fn patch(
         )
         .await?;
     // ⚠️ Имя и описание попадают в поиск: без пересчёта проект искался бы по
-    // позавчерашнему имени, и увидеть это глазом нельзя.
-    showcase::refresh(&transaction, &id).await?;
+    // позавчерашнему имени, и увидеть это глазом нельзя. Тело при этом
+    // перечитывается с диска: поисковое значение — одно, и собирается оно
+    // целиком (класс 0084).
+    let owner: String = transaction
+        .query_one("SELECT owner_id FROM projects WHERE id = $1", &[&id])
+        .await?
+        .get(0);
+    let body = body_of(&*transaction, &id, &state.store, &owner).await?;
+    showcase::refresh(&transaction, &id, &body).await?;
     let row = transaction.query_one(SELECT_PROJECT, &[&id]).await?;
     let project = project_of(&row);
     transaction.commit().await?;
@@ -407,13 +420,20 @@ async fn remove(
 ) -> Result<Response, ApiError> {
     let user = current_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let (_, level) = resolve(&client, &id, Some(&user)).await?;
+    let (_, level) = resolve(&client, &state.store, &id, Some(&user)).await?;
     require_level(level, Level::Owner)?;
-    // Файлы и права уходят каскадом (схема), копии — нет: у форка своя жизнь
+    // Состав и права уходят каскадом (схема), копии — нет: у форка своя жизнь
     // (`forked_from` объявлен `ON DELETE SET NULL`).
     client
         .execute("DELETE FROM projects WHERE id = $1", &[&id])
         .await?;
+    // ⚠️ Диск чистится ПОСЛЕ базы: обратный порядок при отказе базы оставил бы
+    // проект в списке без единого файла. Осиротевший каталог хуже, но он виден
+    // подметанию, а проект без исходников не виден никому.
+    state
+        .store
+        .remove_project(&user.id, &id)
+        .map_err(ApiError::Internal)?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -424,22 +444,32 @@ async fn read_file(
 ) -> Result<Response, ApiError> {
     let viewer = optional_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let (project, _) = resolve(&client, &id, viewer.as_ref()).await?;
+    let (project, _) = resolve(&client, &state.store, &id, viewer.as_ref()).await?;
     let row = client
         .query_opt(
-            "SELECT name, kind, text, size_bytes FROM project_files
-             WHERE project_id = $1 AND name = $2",
+            // ⚠️ Столбцы КВАЛИФИЦИРОВАНЫ: `name` есть и у файла, и у проекта, и
+            // без квалификации запрос двусмыслен — база отвечает отказом, а
+            // ручка превращает его в `500` на совершенно обычном чтении.
+            "SELECT f.name, f.kind, f.size_bytes, p.owner_id FROM project_files f
+             JOIN projects p ON p.id = f.project_id
+             WHERE f.project_id = $1 AND f.name = $2",
             &[&id, &name],
         )
         .await?;
     let Some(row) = row else {
         return Err(ApiError::NotFound);
     };
+    let owner: String = row.get(3);
+    // Текст живёт на ДИСКЕ (задача 09h): база ведёт состав, а не содержимое.
+    let text = state
+        .store
+        .read(&owner, &id, &name)
+        .map_err(ApiError::Internal)?;
     Ok(Json(FileJson {
         name: row.get(0),
         kind: row.get(1),
-        text: row.get(2),
-        size_bytes: row.get(3),
+        text,
+        size_bytes: row.get(2),
         revision: project.revision,
     })
     .into_response())
@@ -460,7 +490,7 @@ async fn write_file(
     // предел числа файлов, предел размера и пересчёт суммы обязаны видеть одно
     // и то же состояние. Порознь их обходит вторая вкладка того же владельца.
     let transaction = client.transaction().await?;
-    let (revision, level) = locked(&transaction, &id, &user).await?;
+    let (revision, level) = locked(&transaction, &state.store, &id, &user).await?;
     require_level(level, Level::Edit)?;
     let existing: Option<i64> = transaction
         .query_opt(
@@ -509,6 +539,10 @@ async fn write_file(
     }
 
     let size = request.text.len() as i64;
+    let owner: String = transaction
+        .query_one("SELECT owner_id FROM projects WHERE id = $1", &[&id])
+        .await?
+        .get(0);
     // ⚠️ Приведение обязательно: `sum()` над `bigint` в PostgreSQL даёт
     // `numeric`, и чтение его как `i64` кончается отказом разбора столбца.
     let others: i64 = transaction
@@ -529,14 +563,21 @@ async fn write_file(
 
     transaction
         .execute(
-            "INSERT INTO project_files(project_id, name, kind, text, size_bytes)
-             VALUES ($1, $2, $3, $4, $5)
+            "INSERT INTO project_files(project_id, name, kind, size_bytes)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (project_id, name) DO UPDATE
-               SET kind = excluded.kind, text = excluded.text, size_bytes = excluded.size_bytes",
-            &[&id, &name, &kind.as_str(), &request.text, &size],
+               SET kind = excluded.kind, size_bytes = excluded.size_bytes",
+            &[&id, &name, &kind.as_str(), &size],
         )
         .await?;
-    let written = bump(&transaction, &id).await?;
+    // ⚠️ Диск пишется ДО фиксации записи в базе: обратный порядок при отказе
+    // диска оставил бы в составе файл, которого нет, — а состав читает страница.
+    // Отказ диска здесь откатывает транзакцию, и база остаётся согласной.
+    state
+        .store
+        .write(&owner, &id, &name, &request.text)
+        .map_err(ApiError::Internal)?;
+    let written = bump(&transaction, &id, &state.store, &owner).await?;
     transaction.commit().await?;
     Ok(Json(written).into_response())
 }
@@ -549,8 +590,12 @@ async fn remove_file(
     let user = current_user(&state, &headers).await?;
     let mut client = state.pool.get().await?;
     let transaction = client.transaction().await?;
-    let (_, level) = locked(&transaction, &id, &user).await?;
+    let (_, level) = locked(&transaction, &state.store, &id, &user).await?;
     require_level(level, Level::Edit)?;
+    let owner: String = transaction
+        .query_one("SELECT owner_id FROM projects WHERE id = $1", &[&id])
+        .await?
+        .get(0);
     let affected = transaction
         .execute(
             "DELETE FROM project_files WHERE project_id = $1 AND name = $2",
@@ -560,6 +605,10 @@ async fn remove_file(
     if affected == 0 {
         return Err(ApiError::NotFound);
     }
+    state
+        .store
+        .remove(&owner, &id, &name)
+        .map_err(ApiError::Internal)?;
     // Активный файл, которого больше нет, забывается: иначе страница откроет
     // проект, показывая пустоту.
     transaction
@@ -568,7 +617,7 @@ async fn remove_file(
             &[&id, &name],
         )
         .await?;
-    let written = bump(&transaction, &id).await?;
+    let written = bump(&transaction, &id, &state.store, &owner).await?;
     transaction.commit().await?;
     Ok(Json(written).into_response())
 }
@@ -580,10 +629,14 @@ async fn remove_file(
 async fn bump(
     transaction: &tokio_postgres::Transaction<'_>,
     id: &str,
+    store: &Store,
+    owner: &str,
 ) -> Result<WriteResponse, ApiError> {
     // Тексты файлов идут в поиск, и пересчёт стоит **в той же транзакции**:
     // отдельным запросом он разошёлся бы с содержимым при первом же откате.
-    showcase::refresh(transaction, id).await?;
+    // ⚠️ Тело берётся с ДИСКА (задача 09h): базе его взять неоткуда.
+    let body = body_of(transaction, id, store, owner).await?;
+    showcase::refresh(transaction, id, &body).await?;
     let row = transaction
         .query_one(
             "UPDATE projects SET
@@ -609,12 +662,14 @@ async fn bump(
 /// отобранному.
 pub(crate) async fn locked(
     transaction: &tokio_postgres::Transaction<'_>,
+    store: &Arc<Store>,
     id: &str,
     user: &User,
 ) -> Result<(i64, Level), ApiError> {
     let row = transaction
         .query_opt(
-            "SELECT owner_id, visibility, revision FROM projects WHERE id = $1 FOR UPDATE",
+            "SELECT owner_id, visibility, revision, archived_at, touched_at
+             FROM projects WHERE id = $1 FOR UPDATE",
             &[&id],
         )
         .await?;
@@ -639,7 +694,46 @@ pub(crate) async fn locked(
     if level == Level::None {
         return Err(ApiError::NotFound);
     }
+    // Запись — тоже обращение: счётчик сбрасывается, свёрнутый проект
+    // разворачивается. Иначе запись легла бы поверх снятых с диска файлов.
+    retention::touch(transaction, store, id, &owner, row.get(3), row.get(4))
+        .await
+        .map_err(ApiError::Internal)?;
     Ok((revision, level))
+}
+
+/// Собирает тело поиска — тексты файлов `*.takt` одной строкой.
+///
+/// ⚠️ Список имён берёт БАЗА, а тексты — диск: каталог знает про файлы, которых
+/// нет в проекте (обрывок записи), а база — про состав.
+///
+/// ⚠️ Отказ чтения файла телом не считается ошибкой запроса: проект мог быть
+/// свёрнут либо файл потерян, и терять из-за этого правку соседнего файла было
+/// бы хуже, чем искать по неполному телу. Пропуск виден в журнале.
+pub(crate) async fn body_of<C: tokio_postgres::GenericClient>(
+    client: &C,
+    id: &str,
+    store: &Store,
+    owner: &str,
+) -> Result<String, ApiError> {
+    let rows = client
+        .query(
+            "SELECT name FROM project_files WHERE project_id = $1 AND kind = 'takt' ORDER BY name",
+            &[&id],
+        )
+        .await?;
+    let mut body = String::new();
+    for row in &rows {
+        let name: String = row.get(0);
+        match store.read(owner, id, &name) {
+            Ok(text) => {
+                body.push_str(&text);
+                body.push('\n');
+            }
+            Err(error) => tracing::warn!(%error, project = %id, file = %name, "файл не прочитан"),
+        }
+    }
+    Ok(body)
 }
 
 /// Читает проект и уровень доступа к нему спрашивающего.
@@ -653,6 +747,7 @@ pub(crate) async fn locked(
 /// «он есть, но не для вас», то есть ручка стала бы оракулом существования.
 pub(crate) async fn resolve(
     client: &deadpool_postgres::Client,
+    store: &Arc<Store>,
     id: &str,
     viewer: Option<&User>,
 ) -> Result<(ProjectJson, Level), ApiError> {
@@ -666,6 +761,20 @@ pub(crate) async fn resolve(
     if level == Level::None {
         return Err(ApiError::NotFound);
     }
+    // ⚠️ Обращение на ЧТЕНИЕ тоже сбрасывает счётчик хранения (корректировка
+    // заказчика): пропусти его — и проект, который читают каждый день,
+    // однажды свернётся под руками читателя. Здесь же свёрнутый проект
+    // разворачивается обратно.
+    retention::touch(
+        &***client,
+        store,
+        id,
+        &owner,
+        row.get("archived_at"),
+        row.get("touched_at"),
+    )
+    .await
+    .map_err(ApiError::Internal)?;
     Ok((project, level))
 }
 
@@ -710,7 +819,8 @@ pub(crate) fn require_level(level: Level, needed: Level) -> Result<(), ApiError>
 
 pub(crate) const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
         u.login AS owner, p.takt_lang, p.language_version, p.main_file, p.revision,
-        p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id
+        p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id,
+        p.touched_at, p.archived_at
     FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1";
 
 pub(crate) fn project_of(row: &tokio_postgres::Row) -> ProjectJson {

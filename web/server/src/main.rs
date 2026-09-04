@@ -9,6 +9,7 @@
 //! takt-web-server                           запустить сервер
 //! takt-web-server admin <логин> <пароль>    завести администратора
 //! takt-web-server passwd <логин> <пароль>   сменить пароль
+//! takt-web-server sweep                     свернуть залежавшиеся проекты
 //! ```
 //!
 //! Первый администратор и сброс пароля — командами: почта не хранится, и
@@ -22,7 +23,9 @@ use takt_web_server::config::Config;
 use takt_web_server::db;
 use takt_web_server::module;
 use takt_web_server::rate::Window;
+use takt_web_server::retention;
 use takt_web_server::routes::{self, AppState};
+use takt_web_server::store::Store;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -44,8 +47,13 @@ async fn main() -> anyhow::Result<()> {
     match arguments.first().map(String::as_str) {
         Some("admin") => return command_admin(&pool, &arguments).await,
         Some("passwd") => return command_passwd(&pool, &arguments).await,
+        // Обход по сроку хранения командой — для `cron`. Он зовёт ту же
+        // функцию, что и обход по времени внутри сервера: второй проход
+        // разошёлся бы с первым.
+        Some("sweep") => return command_sweep(&pool, &config).await,
         Some(unknown) => anyhow::bail!(
-            "неизвестная команда '{unknown}'. Известны: admin, passwd (без команды — запуск)"
+            "неизвестная команда '{unknown}'. Известны: admin, passwd, sweep \
+             (без команды — запуск)"
         ),
         None => {}
     }
@@ -75,6 +83,9 @@ async fn main() -> anyhow::Result<()> {
             None
         }
     };
+    let store = Arc::new(Store::new(&config.projects_dir)?);
+    let sweep_every = config.sweep;
+    let retention_secs = config.retention.as_secs() as i64;
     let state = Arc::new(AppState {
         config,
         pool,
@@ -82,7 +93,30 @@ async fn main() -> anyhow::Result<()> {
         module_version,
         language_version,
         modules,
+        store: store.clone(),
     });
+
+    // Обход по сроку хранения — в процессе. ⚠️ Он же доступен командой
+    // (`sweep`): у стенда бывает `cron`, у своей машины — нет, и обе половины
+    // зовут одну функцию.
+    if !sweep_every.is_zero() {
+        let pool = state.pool.clone();
+        let store = store.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(sweep_every);
+            loop {
+                ticker.tick().await;
+                match pool.get().await {
+                    Ok(client) => match retention::sweep(&client, &store, retention_secs).await {
+                        Ok(0) => {}
+                        Ok(packed) => tracing::info!(packed, "проекты свёрнуты по сроку хранения"),
+                        Err(error) => tracing::warn!(%error, "обход по сроку хранения не удался"),
+                    },
+                    Err(error) => tracing::warn!(%error, "обход: базы нет"),
+                }
+            }
+        });
+    }
 
     let listener = tokio::net::TcpListener::bind(listen).await?;
     tracing::info!(%listen, "сервер слушает");
@@ -119,6 +153,17 @@ async fn command_passwd(
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     println!("пароль '{login}' сменён; живые сеансы погашены");
+    Ok(())
+}
+
+async fn command_sweep(pool: &deadpool_postgres::Pool, config: &Config) -> anyhow::Result<()> {
+    let store = Arc::new(Store::new(&config.projects_dir)?);
+    let client = pool.get().await?;
+    let packed = retention::sweep(&client, &store, config.retention.as_secs() as i64).await?;
+    println!(
+        "свёрнуто проектов: {packed} (срок хранения — {} дней)",
+        config.retention.as_secs() / 86_400
+    );
     Ok(())
 }
 
