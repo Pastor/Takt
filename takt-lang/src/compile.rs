@@ -153,8 +153,10 @@ impl<'a> CompileInput<'a> {
 /// Запись на диск — [`compile_files`].
 pub fn compile_texts(target: Target, input: &CompileInput<'_>) -> Result<Output, Diagnostic> {
     match target {
-        Target::C => plain(input, PortSplit::All, false, true, Language::C),
-        Target::CHal => with_addresses(input, PortSplit::All, Language::C),
+        // ⚠️ Массив-порт цель `c` НЕ разворачивает (0533): элемент
+        // адресуется индексом в обращении HAL, и переменный индекс выразим.
+        Target::C => plain(input, PortSplit::StructsOnly, false, true, Language::C),
+        Target::CHal => with_addresses(input, PortSplit::StructsOnly, Language::C),
         Target::PlantUml => plantuml(input),
         Target::St => plain(input, PortSplit::ArraysOnly, true, true, Language::ST),
         Target::StAt => with_addresses(input, PortSplit::All, Language::ST),

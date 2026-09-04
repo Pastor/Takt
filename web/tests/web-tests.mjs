@@ -549,6 +549,22 @@ test("разделитель областей: незаданная доля —
   assert.equal(shell.panes({ getItem: () => { throw new Error("нет доступа"); } }), shell.HALF);
 });
 
+test("перенос строк: настройка своя у каждой области и по умолчанию выключена", () => {
+  // ⚠️ Умолчание — НЕТ переноса: код читают столбцом, и включённый по
+  // умолчанию перенос менял бы вид всякой модели у всякого читателя.
+  assert.equal(shell.wrapped({ getItem: () => null }, shell.WRAP_KEYS.source), false);
+  assert.equal(shell.wrapped({ getItem: () => "0" }, shell.WRAP_KEYS.source), false);
+  assert.equal(shell.wrapped({ getItem: () => "1" }, shell.WRAP_KEYS.output), true);
+  // Ключи РАЗНЫЕ: узкой бывает то одна область, то другая, и общий ключ
+  // переносил бы строки там, где места хватает.
+  assert.notEqual(shell.WRAP_KEYS.source, shell.WRAP_KEYS.output);
+  // Запрет хранилища не роняет страницу — настройка живёт до перезагрузки.
+  assert.equal(
+    shell.wrapped({ getItem: () => { throw new Error("нет доступа"); } }, shell.WRAP_KEYS.source),
+    false
+  );
+});
+
 test("разделитель рядов: та же ручка правил, другая ось", () => {
   // ⚠️ Предмет — ОДНО правило на оба разделителя: границы, память и счёт доли
   // у них общие, разойдись они — «ещё» и «выше» стали бы разными контролами.

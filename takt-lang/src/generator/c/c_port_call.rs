@@ -33,6 +33,89 @@
 /// одного разряда», и в семи местах он читался бы как случайная цифра.
 pub(in crate::generator::c) const SCALAR_BIT: &str = "0";
 
+/// Обращение К ЗАПИСИ порта любой категории.
+///
+/// ⚠️ Одна воронка на три категории: развилка `match cls` жила в каждом из
+/// мест печати, и добавление аргумента означало правку каждой ветви каждого
+/// места. Забытая ветвь даёт вызов с другим числом аргументов — невалидный C
+/// при нулевом коде возврата.
+pub(in crate::generator::c) fn write(
+    cls: super::PortClass,
+    ptr: &str,
+    variant: &str,
+    index: &str,
+    value: &str,
+) -> String {
+    match cls {
+        super::PortClass::Bit => write_bit(ptr, variant, index, value),
+        super::PortClass::Rational => write_float(ptr, variant, index, value),
+        super::PortClass::Numeric => write_numeric(ptr, variant, index, value),
+    }
+}
+
+/// Обращение К ЧТЕНИЮ порта любой категории.
+pub(in crate::generator::c) fn read(
+    cls: super::PortClass,
+    ptr: &str,
+    variant: &str,
+    index: &str,
+) -> String {
+    match cls {
+        super::PortClass::Bit => read_bit(ptr, variant, index),
+        super::PortClass::Rational => read_float(ptr, variant, index),
+        super::PortClass::Numeric => read_numeric(ptr, variant, index),
+    }
+}
+
+/// Индекс скалярного порта — того, у которого элемент один.
+///
+/// ⚠️ То же число, что [`SCALAR_BIT`], но другое ПОНЯТИЕ: у bit-порта это
+/// номер разряда, у числового — номер элемента. Разные имена держат смысл
+/// на виду в семи местах печати.
+pub(in crate::generator::c) const SCALAR_INDEX: &str = "0";
+
+/// Запись элемента порта: `(*model->write_numeric)(PORT, индекс, значение, ud)`.
+pub(in crate::generator::c) fn write_numeric(
+    ptr: &str,
+    variant: &str,
+    index: &str,
+    value: &str,
+) -> String {
+    format!(
+        "(*{ptr}->{f})({variant}, {index}, {value}, {ptr}->userdata)",
+        f = super::FUNCTION_PORT_WRITE_NUMERIC
+    )
+}
+
+/// Чтение элемента порта: `(*model->read_numeric)(PORT, индекс, ud)`.
+pub(in crate::generator::c) fn read_numeric(ptr: &str, variant: &str, index: &str) -> String {
+    format!(
+        "(*{ptr}->{f})({variant}, {index}, {ptr}->userdata)",
+        f = super::FUNCTION_PORT_READ_NUMERIC
+    )
+}
+
+/// Запись элемента вещественного порта.
+pub(in crate::generator::c) fn write_float(
+    ptr: &str,
+    variant: &str,
+    index: &str,
+    value: &str,
+) -> String {
+    format!(
+        "(*{ptr}->{f})({variant}, {index}, {value}, {ptr}->userdata)",
+        f = super::FUNCTION_PORT_WRITE_FLOAT
+    )
+}
+
+/// Чтение элемента вещественного порта.
+pub(in crate::generator::c) fn read_float(ptr: &str, variant: &str, index: &str) -> String {
+    format!(
+        "(*{ptr}->{f})({variant}, {index}, {ptr}->userdata)",
+        f = super::FUNCTION_PORT_READ_FLOAT
+    )
+}
+
 /// Запись разряда порта: `(*model->write_bit)(PORT, разряд, значение, ud)`.
 pub(in crate::generator::c) fn write_bit(
     ptr: &str,
@@ -71,8 +154,21 @@ mod tests {
             read_bit("main", "PROBE_PORT_SRC", SCALAR_BIT),
             "(*main->read_bit)(PROBE_PORT_SRC, 0, main->userdata)"
         );
-        // Скалярный порт — разряд ноль, а не отсутствие аргумента: контракт
-        // один на все bit-порты (решение заказчика).
+        // Скалярный порт — разряд (индекс) ноль, а не отсутствие аргумента:
+        // контракт один на ВСЕ порты (решение заказчика 2026-09-04).
         assert_eq!(SCALAR_BIT, "0");
+        assert_eq!(SCALAR_INDEX, "0");
+        assert_eq!(
+            write_numeric("model", "PROBE_PORT_BUS", "model->i", "7"),
+            "(*model->write_numeric)(PROBE_PORT_BUS, model->i, 7, model->userdata)"
+        );
+        // ⚠️ Индекс — ВЫРАЖЕНИЕ, а не число: переменный индекс (`bus[i]`) при
+        // прежнем устройстве не выражался вовсе — разворот порта по листам
+        // выбирал лист только по литералу, а на переменной печатал индексацию
+        // несуществующего имени.
+        assert_eq!(
+            read_numeric("main", "PROBE_PORT_BUS", "main->i + 1"),
+            "(*main->read_numeric)(PROBE_PORT_BUS, main->i + 1, main->userdata)"
+        );
     }
 }

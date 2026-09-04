@@ -377,7 +377,7 @@ fn generate_model_header(
                     .qualified_enum_name_with_dir(&root_camelcase, PortDirection::Out);
                 printer
                     .ident(&format!(
-                        "void  (*{write_bit})({bit_out} port, bool val, void *userdata);",
+                        "void  (*{write_bit})({bit_out} port, uint8_t bit, bool val, void *userdata);",
                         write_bit = FUNCTION_PORT_WRITE_BIT
                     ))
                     .nl();
@@ -387,7 +387,7 @@ fn generate_model_header(
                     PortClass::Bit.qualified_enum_name_with_dir(&root_camelcase, PortDirection::In);
                 printer
                     .ident(&format!(
-                        "bool  (*{read_bit} )({bit_in} port, void *userdata);",
+                        "bool  (*{read_bit} )({bit_in} port, uint8_t bit, void *userdata);",
                         read_bit = FUNCTION_PORT_READ_BIT
                     ))
                     .nl();
@@ -397,7 +397,7 @@ fn generate_model_header(
                     .qualified_enum_name_with_dir(&root_camelcase, PortDirection::Out);
                 printer
                     .ident(&format!(
-                        "void  (*{write_float})({rat_out} port, float val, void *userdata);",
+                        "void  (*{write_float})({rat_out} port, uint8_t index, float val, void *userdata);",
                         write_float = FUNCTION_PORT_WRITE_FLOAT
                     ))
                     .nl();
@@ -407,7 +407,7 @@ fn generate_model_header(
                     .qualified_enum_name_with_dir(&root_camelcase, PortDirection::In);
                 printer
                     .ident(&format!(
-                        "float (*{read_float} )({rat_in} port, void *userdata);",
+                        "float (*{read_float} )({rat_in} port, uint8_t index, void *userdata);",
                         read_float = FUNCTION_PORT_READ_FLOAT
                     ))
                     .nl();
@@ -417,7 +417,7 @@ fn generate_model_header(
                     .qualified_enum_name_with_dir(&root_camelcase, PortDirection::Out);
                 printer
                     .ident(&format!(
-                        "void    (*{write_numeric})({num_out} port, int64_t val, void *userdata);",
+                        "void    (*{write_numeric})({num_out} port, uint8_t index, int64_t val, void *userdata);",
                         write_numeric = FUNCTION_PORT_WRITE_NUMERIC
                     ))
                     .nl();
@@ -427,7 +427,7 @@ fn generate_model_header(
                     .qualified_enum_name_with_dir(&root_camelcase, PortDirection::In);
                 printer
                     .ident(&format!(
-                        "int64_t (*{read_numeric} )({num_in} port, void *userdata);",
+                        "int64_t (*{read_numeric} )({num_in} port, uint8_t index, void *userdata);",
                         read_numeric = FUNCTION_PORT_READ_NUMERIC
                     ))
                     .nl();

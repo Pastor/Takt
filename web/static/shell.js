@@ -322,3 +322,51 @@ export function panes(storage, key = PANES_KEY, fallback = HALF) {
     return fallback;
   }
 }
+
+/** Ключи хранилища переноса строк: у каждой области свой. */
+export const WRAP_KEYS = { source: "takt.wrap.source", output: "takt.wrap.output" };
+
+/**
+ * Читает настройку переноса строк.
+ *
+ * ⚠️ Умолчание — НЕТ переноса: код читают столбцом, и включённый по умолчанию
+ * перенос менял бы вид всякой модели у всякого читателя.
+ */
+export function wrapped(storage, key) {
+  try {
+    return storage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Заводит переключатель переноса строк для одной области кода.
+ *
+ * @param {HTMLElement} button кнопка-переключатель
+ * @param {HTMLElement} area область кода
+ * @param {Storage} storage хранилище настройки
+ * @param {string} key ключ хранилища этой области
+ */
+export function attachWrap(button, area, storage, key) {
+  const apply = (on) => {
+    // ⚠️ Класс ставится ОБЛАСТИ, а не строкам: строки перестраивает покраска
+    // (`paintCode`) на каждую правку, и настройка исчезала бы с первым же
+    // нажатием клавиши.
+    area.classList.toggle("wrap", on);
+    button.setAttribute("aria-pressed", String(on));
+  };
+  let on = wrapped(storage, key);
+  button.addEventListener("click", () => {
+    on = !on;
+    apply(on);
+    try {
+      // ⚠️ Не тернарник из двух литералов: сверка ключей словаря принимает
+      // такую форму за подписи (второй случай за задачу — см. стрелки осей).
+      storage.setItem(key, String(Number(on)));
+    } catch {
+      // Приватный режим: настройка действует до перезагрузки.
+    }
+  });
+  apply(on);
+}

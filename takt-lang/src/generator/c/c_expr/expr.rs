@@ -476,6 +476,58 @@ pub(in crate::generator::c) fn generate_expr(
                 printer.print(&crate::generator::c::c_anon::write(access, &rhs_str));
                 return Ok(());
             }
+            // Запись в ЭЛЕМЕНТ порта: `bus[i] := v` → write(PORT, i, v, ud).
+            //
+            // ⚠️ Индекс — выражение, а не литерал (фича 0533): прежде порт-массив
+            // разворачивался по листам, лист выбирался ТОЛЬКО по литеральному
+            // индексу, а на переменном печаталась индексация имени, которого в
+            // выводе нет вовсе — невалидный C при нулевом коде возврата.
+            if let ExpressionNode::ArraySubscript(base, index) = l.as_ref()
+                && let ExpressionNode::Variable(var_rc) = base.as_ref()
+                && let VariableNode::Port {
+                    direction,
+                    name,
+                    ty,
+                    upper,
+                    ..
+                } = &*var_rc.borrow()
+            {
+                let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) else {
+                    return Err(crate::generator::c::c_unresolved::refuse(
+                        expr.loc(),
+                        crate::generator::c::c_unresolved::UnresolvedNode::PortOwner(
+                            "запись элемента",
+                        ),
+                    ));
+                };
+                let model_name = Name::from(model_rc);
+                let cls = PortClass::from_type(ty);
+                let variant = crate::generator::c::c_names::port_enum_variant(
+                    &model_name,
+                    name,
+                    *direction,
+                    crate::parser::ast::PortDirection::Out,
+                );
+                let mut index_str = String::new();
+                {
+                    let mut tmp = Printer::new(4, &mut index_str);
+                    generate_expr(&mut tmp, map, owner, params.clone(), index, 0, has_model)?;
+                }
+                let mut rhs_str = String::new();
+                {
+                    let mut tmp = Printer::new(4, &mut rhs_str);
+                    generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
+                }
+                let ptr = if has_model && !owner.name().eq(&map.root_name()) {
+                    "main"
+                } else {
+                    "model"
+                };
+                printer.print(&crate::generator::c::c_port_call::write(
+                    cls, ptr, &variant, &index_str, &rhs_str,
+                ));
+                return Ok(());
+            }
             // Запись в порт → write_bit / write_float
             if let ExpressionNode::Variable(var_rc) = l.as_ref() {
                 let var = var_rc.borrow();
@@ -514,26 +566,15 @@ pub(in crate::generator::c) fn generate_expr(
                     } else {
                         "model"
                     };
-                    match cls {
-                        PortClass::Rational => {
-                            printer.print(&format!(
-                                "(*{ptr}->{write_float})({variant}, {rhs_str}, {ptr}->userdata)",
-                                write_float = FUNCTION_PORT_WRITE_FLOAT
-                            ));
-                        }
-                        PortClass::Numeric => {
-                            printer.print(&format!(
-                                "(*{ptr}->{write_numeric})({variant}, {rhs_str}, {ptr}->userdata)",
-                                write_numeric = FUNCTION_PORT_WRITE_NUMERIC
-                            ));
-                        }
-                        PortClass::Bit => {
-                            printer.print(&format!(
-                                "(*{ptr}->{write_bit})({variant}, {rhs_str}, {ptr}->userdata)",
-                                write_bit = FUNCTION_PORT_WRITE_BIT
-                            ));
-                        }
-                    }
+                    // Порт целиком — элемент нулевой: контракт один на все
+                    // порты (фича 0533), и «нет индекса» в нём не бывает.
+                    printer.print(&crate::generator::c::c_port_call::write(
+                        cls,
+                        ptr,
+                        &variant,
+                        crate::generator::c::c_port_call::SCALAR_INDEX,
+                        &rhs_str,
+                    ));
                     return Ok(());
                 }
             }
@@ -586,19 +627,35 @@ pub(in crate::generator::c) fn generate_expr(
                             "model"
                         };
                         match cls {
+                            // Разряд bit-порта пишется НАПРЯМУЮ: номер разряда
+                            // несёт сам вызов (контракт 0533). Прежде номер
+                            // терялся, и `lamp.3 := v` писал значение в порт
+                            // целиком — молча.
                             PortClass::Bit => {
-                                printer.print(&format!(
-                                    "(*{ptr}->{write_bit})({variant}, {rhs_str}, {ptr}->userdata)",
-                                    write_bit = FUNCTION_PORT_WRITE_BIT
+                                printer.print(&crate::generator::c::c_port_call::write_bit(
+                                    ptr,
+                                    &variant,
+                                    &n.to_string(),
+                                    &rhs_str,
                                 ));
                             }
+                            // У ЧИСЛОВОГО порта разряд — часть значения, а не
+                            // адрес: значение читается, правится и пишется
+                            // обратно, элемент при этом нулевой.
                             PortClass::Numeric => {
-                                printer.print(&format!(
-                                    "(*{ptr}->{write_numeric})({variant}, \
-                                    ((*{ptr}->{read_numeric})({variant}, {ptr}->userdata) \
-                                    & ~(1LL << {n})) | (({rhs_str} & 1LL) << {n}), {ptr}->userdata)",
-                                    write_numeric = FUNCTION_PORT_WRITE_NUMERIC,
-                                    read_numeric = FUNCTION_PORT_READ_NUMERIC,
+                                let read = crate::generator::c::c_port_call::read_numeric(
+                                    ptr,
+                                    &variant,
+                                    crate::generator::c::c_port_call::SCALAR_INDEX,
+                                );
+                                let value = format!(
+                                    "({read} & ~(1LL << {n})) | (({rhs_str} & 1LL) << {n})"
+                                );
+                                printer.print(&crate::generator::c::c_port_call::write_numeric(
+                                    ptr,
+                                    &variant,
+                                    crate::generator::c::c_port_call::SCALAR_INDEX,
+                                    &value,
                                 ));
                             }
                             PortClass::Rational => unreachable!(),
@@ -847,17 +904,23 @@ pub(in crate::generator::c) fn generate_expr(
                                 "model"
                             };
                             match cls {
+                                // Разряд bit-порта адресуется САМИМ вызовом
+                                // (контракт 0533): прежде номер терялся, и
+                                // `src.3` читал порт целиком.
                                 PortClass::Bit => {
-                                    printer.print(&format!(
-                                        "(*{ptr}->{read_bit})({variant}, {ptr}->userdata)",
-                                        read_bit = FUNCTION_PORT_READ_BIT
+                                    printer.print(&crate::generator::c::c_port_call::read_bit(
+                                        ptr,
+                                        &variant,
+                                        &n.to_string(),
                                     ));
                                 }
                                 PortClass::Numeric => {
-                                    printer.print(&format!(
-                                        "(((*{ptr}->{read_numeric})({variant}, {ptr}->userdata) >> {n}) & 1u)",
-                                        read_numeric = FUNCTION_PORT_READ_NUMERIC
-                                    ));
+                                    let read = crate::generator::c::c_port_call::read_numeric(
+                                        ptr,
+                                        &variant,
+                                        crate::generator::c::c_port_call::SCALAR_INDEX,
+                                    );
+                                    printer.print(&format!("(({read} >> {n}) & 1u)"));
                                 }
                                 PortClass::Rational => {
                                     return Err(Diagnostic::error(
