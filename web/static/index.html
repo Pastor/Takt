@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<!-- `viewport-fit=cover` обязателен: без него `env(safe-area-inset-*)` равен
+     нулю в браузере телефона, и полка режимов встаёт под зоной жестов
+     (замер референса 2026-09-04 — у него эта половина не работает). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Takt — онлайн-редактор</title>
+<meta name="description" content="Редактор языка Takt: подсветка, диагностики, генерация кода для восьми целей и прогон модели — всё в браузере.">
+<meta name="theme-color" content="#1b1f24">
+<!-- Предпросмотр ссылки: ею и делятся (приём референса, замер 2026-09-04). -->
+<meta property="og:title" content="Takt — онлайн-редактор">
+<meta property="og:description" content="Модель на Takt: написать, проверить, собрать под восемь целей и прогнать — в браузере.">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-mode="source">
+<header class="bar">
+  <span class="brand">Takt</span>
+  <span id="version" class="muted">загрузка модуля…</span>
+  <span class="spacer"></span>
+  <button id="format" type="button">Формат</button>
+  <button id="share" type="button">Поделиться</button>
+</header>
+
+<main class="work">
+  <section class="pane pane-source">
+    <div class="pane-head">
+      <span>Модель</span>
+      <span id="status" class="status"></span>
+    </div>
+    <div id="editor" class="editor" aria-label="Исходный текст модели"></div>
+    <div class="pane-head"><span>Диагностики</span></div>
+    <div id="diagnostics" class="list" aria-live="polite"></div>
+  </section>
+
+  <section class="pane pane-result">
+    <nav id="tabs" class="tabs" role="tablist">
+      <button class="tab active" data-tab="output" role="tab" aria-selected="true" type="button">Вывод цели</button>
+      <button class="tab" data-tab="trace" role="tab" aria-selected="false" type="button">Прогон</button>
+    </nav>
+
+    <div data-panel="output" class="panel">
+      <div class="controls">
+        <label for="target">Цель</label>
+        <select id="target"></select>
+        <label for="args">Ключи сборки</label>
+        <input id="args" type="text" placeholder="например: --fsm=table" spellcheck="false">
+      </div>
+      <div id="output" class="output"></div>
+    </div>
+
+    <div data-panel="trace" class="panel" hidden>
+      <div class="controls">
+        <label for="budget">Бюджет, тактов</label>
+        <input id="budget" type="number" min="1" max="1000000" value="200">
+        <button id="run" type="button">Прогон</button>
+        <button id="stop" type="button" disabled>Стоп</button>
+      </div>
+      <label for="scenario">Сценарий входов (JSON, как файл <code>-s</code> у takt-sim)</label>
+      <textarea id="scenario" class="scenario" spellcheck="false" placeholder='[{"in_ports": {"temperature": 25}}]'></textarea>
+      <div id="trace" class="list trace" aria-live="polite"></div>
+    </div>
+  </section>
+</main>
+
+<!-- Полка режимов: видна только на узком экране (см. app.css). Подпись у
+     каждой цели остаётся словом — по одним значкам вкладку находят не все. -->
+<nav id="modes" class="modes" role="tablist" aria-label="Область">
+  <button class="tab active" data-mode="source" role="tab" aria-selected="true" type="button">Модель</button>
+  <button class="tab" data-mode="output" role="tab" aria-selected="false" type="button">Вывод</button>
+  <button class="tab" data-mode="trace" role="tab" aria-selected="false" type="button">Прогон</button>
+</nav>
+
+<script type="module">
+  import { main } from "./app.js";
+  main().catch((error) => {
+    // Отказ загрузки модуля обязан быть виден: пустая страница неотличима от
+    // работающей, пока автор не начнёт печатать.
+    document.getElementById("version").textContent = `модуль не загружен: ${error?.message ?? error}`;
+  });
+</script>
+</body>
+</html>

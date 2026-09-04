@@ -1,0 +1,373 @@
+/* Оформление страницы редактора (фича 0531).
+ *
+ * Устройство токенов взято у референса (замер 2026-09-04, `docs/design/BOOK.md`):
+ * два слоя — СЫРЬЁ (цвета числом, только здесь) и РОЛИ (пары «заливка/чернила»).
+ * Тема — подмена сырья и только его; роли не трогаются. Отклик считается
+ * формулой одной плотности, а не набором готовых заливок: иначе на каждую
+ * кнопку заводится своя, и они расходятся.
+ *
+ * ⚠️ Цвет числом вне блоков сырья — нарушение правила. Гейт, который это
+ * сторожит, заводит задача 0531-07a; пока правило держится дисциплиной.
+ */
+
+/* ── Сырьё: светлая тема ────────────────────────────────────────────────── */
+:root {
+  --raw-ink: #1b1f24;
+  --raw-ink-soft: #5b6572;
+  --raw-paper: #fdfdfc;
+  --raw-paper-sunken: #f2f3f1;
+  --raw-paper-raised: #ffffff;
+  --raw-line: #d8dbd6;
+  --raw-accent: #1f6f4a;
+  --raw-accent-ink: #ffffff;
+  --raw-alarm: #a8331f;
+  --raw-warn: #8a6100;
+  --raw-yes: #1f6f4a;
+
+  /* Роли: заливка и чернила парами. */
+  --surface: var(--raw-paper);
+  --on-surface: var(--raw-ink);
+  --surface-sunken: var(--raw-paper-sunken);
+  --surface-raised: var(--raw-paper-raised);
+  --on-surface-soft: var(--raw-ink-soft);
+  --surface-accent: var(--raw-accent);
+  --on-surface-accent: var(--raw-accent-ink);
+  --border: var(--raw-line);
+  --alarm: var(--raw-alarm);
+  --warn: var(--raw-warn);
+  --yes: var(--raw-yes);
+
+  /* Роли подсветки кода. Виды токенов приходят от модуля (`takt_tokens`);
+   * страница лишь назначает им цвет. ⚠️ Задача 0531-06 обязана сверить эти
+   * роли с темой документа (`book/takt.tmTheme`), иначе код в PDF и в браузере
+   * разойдётся глазами. */
+  --tok-keyword: #7a3ea3;
+  --tok-type: #1f5f8f;
+  --tok-number: #8a3d00;
+  --tok-string: #1f6f4a;
+  --tok-comment: #6b7280;
+  --tok-function: #1f5f8f;
+  --tok-variable: var(--on-surface);
+
+  /* Шкалы: высоты, скругления, отступы, плотность отклика. */
+  --h-control: 32px;
+  --radius: 8px;
+  --gap: 8px;
+  --state-hover: 7%;
+  --state-press: 14%;
+  --font-code: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ── Сырьё: тёмная тема ─────────────────────────────────────────────────── */
+/* Подменяется ТОЛЬКО сырьё: роли объявлены выше и остаются теми же — иначе
+ * тема накрывает страницу наполовину (правило 2 книги референса). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --raw-ink: #e6e8e6;
+    --raw-ink-soft: #9aa4b0;
+    --raw-paper: #14181c;
+    --raw-paper-sunken: #0f1317;
+    --raw-paper-raised: #1b2026;
+    --raw-line: #2c333a;
+    --raw-accent: #3f9d6d;
+    --raw-accent-ink: #0f1317;
+    --raw-alarm: #e08374;
+    --raw-warn: #d9ac52;
+    --raw-yes: #3f9d6d;
+
+    --tok-keyword: #c58af9;
+    --tok-type: #7cb7e8;
+    --tok-number: #e0a06a;
+    --tok-string: #86d6a4;
+    --tok-comment: #8b95a1;
+    --tok-function: #7cb7e8;
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* ── Точки перелома (замер референса 2026-09-04, задача 0531-08) ──────────
+ * 900 — две колонки кода: 2 × 40 символов Fira Code 0.9rem ≈ 700 px + поля.
+ *       Число СВОЁ: у референса двух колонок нет вовсе.
+ * 560 — «карман»: порог референса, решается ПО ШИРИНЕ, а не по наличию мыши
+ *       (у него на планшете мыши нет, и раскладка по `hover` уезжала).
+ * max-height 560 — ландшафт телефона (приём референса).
+ * hover: none — размер цели нажатия: свойство ВВОДА, а не ширины.
+ * Других чисел в медиазапросах быть не должно. */
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  background: var(--surface);
+  color: var(--on-surface);
+  /* Высота — в экран, страница не прокручивается: прокрутка живёт внутри
+   * областей, поэтому шапка и полка режимов всегда на месте. `dvh` вместо
+   * `vh` потому, что адресная строка телефона съезжает и `vh` оставляет
+   * пустую полосу (замер референса). `clip` по горизонтали — длинная строка
+   * вывода не должна уводить вбок всю страницу. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overflow-x: clip;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Прокрутка не «протекает» на страницу: иначе жест в конце списка тянет
+ * документ, и на телефоне это выглядит поломкой. */
+.editor, .output, .list, .file-text, .scenario {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Версия в шапке не рвёт строку: на узком экране она длиннее свободного
+ * места, а этой же строкой сообщается отказ загрузки модуля. */
+#version { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Верхняя строка ─────────────────────────────────────────────────────── */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: var(--gap);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.brand { font-weight: 700; letter-spacing: 0.02em; }
+.muted { color: var(--on-surface-soft); font-size: 0.85rem; }
+.spacer { flex: 1; }
+
+/* ── Контролы: вариант — подмена пары, и ничего больше ──────────────────── */
+button, select, input, textarea {
+  font: inherit;
+  height: var(--h-control);
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--on-surface);
+}
+
+button { cursor: pointer; }
+
+/* Отклик — формулой одной плотности (правило 3 книги референса). */
+button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--on-surface) var(--state-hover), var(--surface-raised));
+}
+button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--on-surface) var(--state-press), var(--surface-raised));
+}
+button:disabled { color: var(--on-surface-soft); cursor: default; }
+
+/* Фокус виден всегда и одинаково: доступность — не украшение. */
+:focus-visible {
+  outline: 2px solid var(--surface-accent);
+  outline-offset: 2px;
+}
+
+/* ── Рабочая область ────────────────────────────────────────────────────── */
+.work {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px var(--gap);
+  font-size: 0.8rem;
+  color: var(--on-surface-soft);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Редактор ───────────────────────────────────────────────────────────── */
+.editor {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--gap);
+  font-family: var(--font-code);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+  background: var(--surface);
+}
+
+.line { min-height: 1.5em; }
+
+/* Строка с диагностикой помечена не только цветом — рядом список с текстом
+ * (правило доступности книги референса). */
+.line.has-error { background: color-mix(in srgb, var(--alarm) 10%, transparent); }
+.line.has-warning { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+
+.tok-keyword { color: var(--tok-keyword); }
+.tok-type { color: var(--tok-type); }
+.tok-number { color: var(--tok-number); }
+.tok-string { color: var(--tok-string); }
+.tok-comment { color: var(--tok-comment); font-style: italic; }
+.tok-function { color: var(--tok-function); }
+.tok-variable { color: var(--tok-variable); }
+.tok-enumMember { color: var(--tok-number); }
+.tok-operator { color: var(--on-surface-soft); }
+
+/* ── Списки: диагностики и трасса ───────────────────────────────────────── */
+.list {
+  max-height: 30dvh;
+  overflow: auto;
+  font-family: var(--font-code);
+  font-size: 0.82rem;
+  background: var(--surface-sunken);
+}
+
+.trace { max-height: none; flex: 1; }
+
+.row { padding: 2px var(--gap); white-space: pre-wrap; }
+.row-error { color: var(--alarm); cursor: pointer; }
+.row-warning { color: var(--warn); }
+.row-ok { color: var(--on-surface-soft); }
+.row-trace { color: var(--on-surface); }
+
+/* ── Вкладки и панели ───────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px var(--gap) 0;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.tab.active {
+  background: var(--surface-accent);
+  color: var(--on-surface-accent);
+  border-color: var(--surface-accent);
+}
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--gap);
+  gap: var(--gap);
+}
+
+/* ⚠️ `display: flex` СИЛЬНЕЕ атрибута `hidden`: без этого правила скрытая
+ * панель остаётся на экране, и вкладки перестают быть вкладками. Поймано
+ * прогоном страницы 2026-09-04 — в разметке `hidden` стоял с самого начала. */
+.panel[hidden] { display: none; }
+
+.controls { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+.controls label { font-size: 0.82rem; color: var(--on-surface-soft); }
+.controls input[type="text"] { flex: 1; min-width: 12ch; }
+
+.output {
+  flex: 1;
+  overflow: auto;
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+
+.file-name {
+  position: sticky;
+  top: 0;
+  padding: 4px var(--gap);
+  font-size: 0.8rem;
+  color: var(--on-surface-soft);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.file-text {
+  margin: 0;
+  padding: var(--gap);
+  font-family: var(--font-code);
+  font-size: 0.82rem;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.scenario {
+  height: 6.5em;
+  padding: var(--gap);
+  font-family: var(--font-code);
+  font-size: 0.82rem;
+  resize: vertical;
+}
+
+.status { font-size: 0.82rem; }
+.status-ok { color: var(--yes); }
+.status-warning { color: var(--warn); }
+.status-error { color: var(--alarm); }
+
+/* Движение гасится по просьбе системы. */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ── Полка режимов: ниже 900 px область на экране ОДНА ───────────────────
+ * Стек из двух областей на телефоне даёт редактору 6–8 строк кода (с
+ * клавиатурой — две) и три вложенные прокрутки в одном экране. Приём взят у
+ * референса: узкая раскладка прячет соседнюю колонку целиком, а переключает
+ * их полка внизу — под большим пальцем и над зоной жестов. */
+.modes { display: none; }
+
+@media (max-width: 900px) {
+  .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .pane { display: none; }
+  body[data-mode="source"] .pane-source,
+  body[data-mode="output"] .pane-result,
+  body[data-mode="trace"] .pane-result { display: flex; }
+  /* Внутренние вкладки дублируют полку — ими управляет она же. */
+  .pane-result .tabs { display: none; }
+  .modes {
+    display: flex;
+    gap: 2px;
+    padding: 4px var(--gap) calc(4px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+  }
+  /* Три равные цели во всю ширину: палец ищет по месту, а не по подписи. */
+  .modes .tab { flex: 1 1 0; min-width: 44px; border-radius: var(--radius); }
+}
+
+/* ── Там, где нет наведения, цель нажатия крупнее ────────────────────────
+ * 44 px — предел WCAG 2.5.5. Поля ввода не мельче 16 px: iOS иначе
+ * увеличивает страницу при фокусе, и вёрстка «уезжает» сама собой. */
+@media (hover: none) {
+  :root { --h-control: 44px; }
+  input, select, textarea, .scenario { font-size: 1rem; }
+  .row { padding: 8px var(--gap); }
+}
+
+/* ── Карман: отступы вдвое, подпись над полем ────────────────────────────
+ * Приём референса: на 320 px прежние поля съедали шестую часть строки, а
+ * подпись рядом с полем рвалась на три строки. */
+@media (max-width: 560px) {
+  :root { --gap: 6px; }
+  .controls label { flex-basis: 100%; }
+  .controls input[type="text"], .controls select { flex: 1 1 100%; min-width: 0; }
+}
+
+/* ── Ландшафт телефона: служебным строкам минимум ────────────────────────*/
+@media (max-height: 560px) {
+  .bar, .pane-head { padding-top: 2px; padding-bottom: 2px; }
+  .list { max-height: 22dvh; }
+  .modes { padding-top: 2px; padding-bottom: calc(2px + env(safe-area-inset-bottom, 0px)); }
+}
