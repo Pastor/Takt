@@ -21,14 +21,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY="$ROOT/web/deploy"
 BIND="${TAKT_WEB_BIND:-127.0.0.1:8730}"
+# ⚠️ Префикс входит в АДРЕС проверки живости: сервер вкладывает под него весь
+# роутер, и при `TAKT_WEB_BASE_PATH=/takt` `/health` живёт по `/takt/health`.
+# Без этого `status` спрашивал бы несуществующий адрес и объявлял живой стенд
+# мёртвым (нашлось при разборе выкатки под префиксом, задача 07d).
+PREFIX="${TAKT_WEB_BASE_PATH:-/}"
+[[ "$PREFIX" == "/" ]] && PREFIX=""
+HEALTH="http://$BIND${PREFIX}/health"
 
 compose() {
   # `docker compose` (плагин) либо `docker-compose` (старый бинарник): на
   # стендах встречаются оба, и падать из-за этого незачем.
+  #
+  # ⚠️ Имя проекта — `takt`, и оно задано и здесь, и в файле стека: на стенде
+  # рядом работает другой сервис, а имя по умолчанию берётся у каталога.
   if docker compose version >/dev/null 2>&1; then
-    docker compose --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
+    docker compose -p takt --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
   elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
+    docker-compose -p takt --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
   else
     echo "ОШИБКА: не найден ни 'docker compose', ни 'docker-compose'" >&2
     exit 1
@@ -41,8 +51,8 @@ case "${1:-}" in
     compose up -d --build
     echo "  Ждём готовности сервиса..."
     for _ in $(seq 1 60); do
-      if curl -fsS "http://$BIND/health" >/dev/null 2>&1; then
-        echo "  Стенд поднят: http://$BIND/"
+      if curl -fsS "$HEALTH" >/dev/null 2>&1; then
+        echo "  Стенд поднят: http://$BIND${PREFIX}/"
         exit 0
       fi
       sleep 2
@@ -61,7 +71,7 @@ case "${1:-}" in
   status)
     compose ps
     echo
-    if curl -fsS "http://$BIND/health" >/dev/null 2>&1; then
+    if curl -fsS "$HEALTH" >/dev/null 2>&1; then
       echo "  /health: сервис отвечает и видит базу"
     else
       echo "  /health: НЕ отвечает (контейнер может быть поднят — этого мало)"
@@ -74,7 +84,7 @@ case "${1:-}" in
     # разорванные соединения на ровном месте.
     compose restart server
     for _ in $(seq 1 60); do
-      if curl -fsS "http://$BIND/health" >/dev/null 2>&1; then
+      if curl -fsS "$HEALTH" >/dev/null 2>&1; then
         echo "  Перезапущен."
         exit 0
       fi
