@@ -4,13 +4,23 @@
 // в отдельном потоке (`worker.js`) и ссылку с черновиком (`share.js`,
 // `draft.js`). Своей логики языка здесь нет — только показ ответов модуля.
 
-import { Bridge } from "./bridge.js";
-import { Editor, positionToOffset } from "./editor.js";
+import { Bridge, spans } from "./bridge.js";
+import { Editor, paintCode, positionToOffset } from "./editor.js";
 import * as draft from "./draft.js";
 import { encodeState, decodeState } from "./share.js";
 
 /** Адрес модуля. Версия — в пути (решение A5): ссылка открывается СВОИМ модулем. */
 const WASM_DEFAULT = "takt.wasm";
+
+/**
+ * Порог, за которым вывод цели показывается без подсветки.
+ *
+ * Подсветка стоит разметки: у файла в сотни тысяч символов узлов-строк со
+ * span-ами становится столько, что вкладка перестаёт открываться мгновенно.
+ * Предел назван словами в шапке файла, а не молчаливо снят: «почему тут нет
+ * цвета» — вопрос, на который автор должен получать ответ.
+ */
+const HIGHLIGHT_LIMIT = 200_000;
 
 /** Модель, с которой открывается пустой редактор. */
 const SAMPLE = `// Термореле: греет, пока холодно, и ждёт, пока не остынет.
@@ -326,12 +336,46 @@ function compile() {
     header.textContent = file.name;
     const body = document.createElement("pre");
     body.className = "file-text";
-    body.textContent = file.text;
+    paintOutput(body, file.text, header);
     dom.output.append(header, body);
   }
   for (const warning of reply.warnings ?? []) {
     dom.output.appendChild(row(`[${warning.code ?? "?"}] ${warning.message}`, "warning"));
   }
+}
+
+/**
+ * Красит порождённый файл по правилам ЕГО языка (задача 06, требование R11).
+ *
+ * Отрезки приходят от модуля (`takt_highlight`) в той же форме, что токены
+ * исходника, и раскладывает их тот же `paintCode`: своего разбора C, ST, Rust,
+ * SystemVerilog или PlantUML в браузере нет — он разошёлся бы и с целями, и с
+ * подсветкой блоков кода в документе.
+ */
+function paintOutput(body, text, header) {
+  if (text.length > HIGHLIGHT_LIMIT) {
+    body.textContent = text;
+    header.append(note(`без подсветки: файл длиннее ${HIGHLIGHT_LIMIT} символов`));
+    return;
+  }
+  const reply = state.bridge.highlight(state.target, text);
+  if (!reply.ok) {
+    // Отказ подсветки — не отказ сборки: файл показывается как есть, а причина
+    // называется. Молчаливый чёрный текст выглядел бы дефектом вёрстки.
+    body.textContent = text;
+    header.append(note(reply.error?.message ?? "подсветка недоступна"));
+    return;
+  }
+  header.append(note(reply.language));
+  body.replaceChildren(paintCode(text, spans(reply)));
+}
+
+/** Приписка у имени файла: язык вывода либо причина, по которой цвета нет. */
+function note(text) {
+  const node = document.createElement("span");
+  node.className = "file-note";
+  node.textContent = text;
+  return node;
 }
 
 function format() {

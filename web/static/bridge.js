@@ -68,6 +68,17 @@ export class Bridge {
     return this.call("takt_tokens", { source });
   }
 
+  /**
+   * Подсветка вывода цели: те же пятёрки, что у `tokens`.
+   *
+   * Цель, а не язык: соответствие «цель → язык вывода» знает модуль
+   * (`c-hal` печатает C, `st-at` — Structured Text), и повторять его здесь
+   * значило бы завести вторую таблицу целей.
+   */
+  highlight(target, text) {
+    return this.call("takt_highlight", { target, text });
+  }
+
   hover(source, line, character) {
     return this.call("takt_hover", { source, line, character });
   }
