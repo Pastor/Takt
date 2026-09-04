@@ -31,7 +31,12 @@
        читатель обязан видеть автора — иначе чужая модель выглядит его
        собственной работой (задача 0531-09c). -->
   <span id="project" class="muted" hidden></span>
+  <!-- Что открыто: проект, файл и ревизия. Без ревизии «сохранено» ничего не
+       значит — автор не отличит свою запись от чужой (задача 0531-09e). -->
+  <span id="openfile" class="muted" hidden></span>
   <span class="spacer"></span>
+  <button id="account" type="button" data-i18n="account.enter">Войти</button>
+  <button id="save" type="button" hidden data-i18n="account.save">Сохранить</button>
   <button id="format" type="button" data-i18n="bar.format">Формат</button>
   <button id="share" type="button" data-i18n="bar.share">Поделиться</button>
   <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
@@ -48,6 +53,38 @@
     <div class="pane-head">
       <span data-i18n="source.title">Модель</span>
       <span id="status" class="status"></span>
+    </div>
+
+    <!-- Панель учётной записи и проектов. Скрыта, пока её не позвали: без
+         входа страница работает как прежде (проработка §5). -->
+    <div id="panel" class="account" hidden>
+      <div id="signedout" class="controls">
+        <input id="login" type="text" autocomplete="username" spellcheck="false"
+               data-i18n-attr="placeholder:account.login" placeholder="Логин">
+        <input id="password" type="password" autocomplete="current-password"
+               data-i18n-attr="placeholder:account.password" placeholder="Пароль">
+        <button id="signin" type="button" data-i18n="account.signIn">Войти</button>
+        <button id="signup" type="button" data-i18n="account.signUp">Завести запись</button>
+      </div>
+      <div id="signedin" class="controls" hidden>
+        <span id="whoami" class="muted"></span>
+        <button id="signout" type="button" data-i18n="account.signOut">Выйти</button>
+        <input id="newname" type="text" spellcheck="false"
+               data-i18n-attr="placeholder:account.newName" placeholder="Имя нового проекта">
+        <button id="newproject" type="button" data-i18n="account.newProject">Новый проект</button>
+      </div>
+      <div id="projects" class="list" data-i18n-attr="aria-label:account.projects"
+           aria-label="Мои проекты"></div>
+      <div id="files" class="list" data-i18n-attr="aria-label:account.files"
+           aria-label="Файлы проекта"></div>
+    </div>
+
+    <!-- Конфликт: обе стороны названы числами и датой, выбор делает автор.
+         Молчаливого выбора нет ни в одну сторону. -->
+    <div id="conflict" class="notice conflict" hidden>
+      <span id="conflicttext"></span>
+      <button id="reread" type="button" data-i18n="account.reread">Перечитать</button>
+      <button id="overwrite" type="button" data-i18n="account.overwrite">Перезаписать</button>
     </div>
     <div id="editor" class="editor" data-i18n-attr="aria-label:source.editor" aria-label="Исходный текст модели"></div>
     <div class="pane-head"><span data-i18n="diagnostics.title">Диагностики</span></div>

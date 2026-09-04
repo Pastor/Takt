@@ -560,6 +560,28 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
  * 2026-09-04; правило нужно каждому узлу, который прячут атрибутом. */
 .notice[hidden] { display: none; }
 
+/* Панель учётной записи и проектов (задача 0531-09e).
+   ⚠️ `[hidden]` объявлен ПОСЛЕ `display`: `display: flex` сильнее `hidden`, и
+   без этой строки панель не пряталась бы вовсе (урок задачи 03). */
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-half);
+  padding: var(--gap-half) var(--gap);
+  border-bottom: 1px solid var(--border);
+}
+.account[hidden] { display: none; }
+
+/* Строка конфликта — уведомление с выбором: обе кнопки стоят рядом с текстом,
+   потому что выбор делает автор, и делает его здесь. */
+.conflict {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-half);
+  flex-wrap: wrap;
+}
+.conflict[hidden] { display: none; }
+
 /* Строка с диагностикой помечена не только цветом — рядом список с текстом
  * (правило доступности книги референса). */
 .line.has-error { background: color-mix(in srgb, var(--alarm) var(--state-hover), transparent); }
@@ -637,6 +659,10 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 .panel[hidden] { display: none; }
 
 .controls { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+/* ⚠️ Обязательно: `display: flex` сильнее `hidden`, и без этой строки скрытая
+   половина панели входа показывалась бы вместе с видимой (урок задачи 03,
+   повторно пойман прогоном страницы в задаче 09e). */
+.controls[hidden] { display: none; }
 .controls label { font-size: var(--text-sm); color: var(--on-surface-soft); }
 .controls input[type="text"] { flex: 1; min-width: 12ch; }
 

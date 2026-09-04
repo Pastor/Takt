@@ -15,6 +15,8 @@ import { enhance } from "./pick.js";
 import * as build from "./build.js";
 import * as shell from "./shell.js";
 import * as project from "./project.js";
+import * as api from "./api.js";
+import * as account from "./account.js";
 
 /**
  * Адрес модуля, если описи сборки нет.
@@ -79,6 +81,20 @@ export async function main() {
 
   state.editor = new Editor(dom.editor, onEdit);
   wire();
+
+  // Учётная запись и проекты. ⚠️ Корень API берётся ОТ ПУТИ страницы: за
+  // прокси она стоит под префиксом, а на `/p/<id>` относительный адрес увёл бы
+  // запрос под неё саму.
+  api.configure({ root: project.apiRoot(location.pathname), storage: localStorage });
+  account.attach(dom, {
+    source: () => state.editor.value(),
+    scenario: () => state.scenario,
+    open: (restored) => {
+      applyState({ ...restored, target: state.target, args: state.args });
+      refresh();
+    },
+    say,
+  });
 
   // Порядок источников: адрес проекта → ссылка-снимок → черновик → пример.
   // ⚠️ Живая страница сильнее снимка и черновика: читатель пришёл ПО АДРЕСУ
@@ -236,6 +252,9 @@ function cache() {
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
     "lang", "tools-lang", "tools-lang-trace", "update", "grip", "project",
+    "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
+    "login", "password", "signin", "signup", "signout", "newname", "newproject",
+    "projects", "files", "conflict", "conflicttext", "reread", "overwrite",
   ]) {
     dom[id] = document.getElementById(id);
   }
@@ -324,12 +343,17 @@ function wire() {
 
 const saveDraft = draft.debounce(() => {
   state.dirty = false;
-  const problem = draft.save(localStorage, {
-    source: state.editor.value(),
-    scenario: state.scenario,
-    target: state.target,
-    args: state.args,
-  });
+  // ⚠️ Черновик открытого файла проекта ключуется проектом и файлом (`v2`), а
+  // безымянный буфер остаётся под прежним ключом: им пользуется тот, кто не
+  // входил вовсе, и терять его при появлении проектов незачем.
+  const problem = account.editing()
+    ? account.keepDraft(state.editor.value(), state.scenario)
+    : draft.save(localStorage, {
+        source: state.editor.value(),
+        scenario: state.scenario,
+        target: state.target,
+        args: state.args,
+      });
   if (problem) say(t(problem.key, problem.params), "warning");
 }, 400);
 
