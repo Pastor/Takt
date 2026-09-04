@@ -64,6 +64,9 @@ export async function main() {
   // её ширину, — и той же ручкой правил (границы, память, клавиатура).
   shell.attachPanes(dom.split, localStorage);
   shell.attachRows(dom.hsplit, localStorage);
+  // Перенос строк — настройка УЗКОЙ области, и потому своя у каждой.
+  shell.attachWrap(dom.wrapsource, dom.editor, localStorage, shell.WRAP_KEYS.source);
+  shell.attachWrap(dom.wrapoutput, dom.output, localStorage, shell.WRAP_KEYS.output);
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   fillLanguages();
   enhance(dom.lang);
@@ -267,7 +270,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "project",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "wrapsource", "wrapoutput", "project",
     "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",

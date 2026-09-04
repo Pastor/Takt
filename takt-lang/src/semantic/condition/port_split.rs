@@ -115,6 +115,12 @@ struct Leaf {
 pub(crate) enum PortSplit {
     /// Только массивы (цели `st` и `sv`).
     ArraysOnly,
+    /// Только структуры (цель `c` с фичи 0533): массив-порт остаётся ОДНИМ
+    /// портом, а его элемент адресуется индексом в обращении HAL. Разворот
+    /// массива по листам не выражает переменного индекса: лист выбирается
+    /// только по литералу, а `bus[i]` печатался индексацией имени, которого в
+    /// выводе нет вовсе.
+    StructsOnly,
     /// Массивы и структуры (цели, у которых составного порта нет вовсе).
     All,
 }
@@ -238,8 +244,15 @@ fn split_here(
 /// разворачивать его значило бы превратить упакованное слово в набор портов.
 fn is_composite(ty: &TypeNode, what: PortSplit) -> bool {
     match ty {
-        TypeNode::Struct(_) => what == PortSplit::All,
-        TypeNode::Array(..) => crate::semantic::bit_vector::is_bit_vector(ty).is_none(),
+        TypeNode::Struct(_) => matches!(what, PortSplit::All | PortSplit::StructsOnly),
+        // ⚠️ Бит-вектор `[bit; N ≤ 64]` — **скаляр** (правило 0078), а не
+        // массив: разворачивать его значило бы превратить упакованное слово в
+        // набор портов. У цели, адресующей элемент индексом (`StructsOnly`),
+        // не разворачивается и обычный массив.
+        TypeNode::Array(..) => {
+            what != PortSplit::StructsOnly
+                && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+        }
         _ => false,
     }
 }

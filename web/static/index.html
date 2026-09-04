@@ -54,7 +54,16 @@
   <section class="pane pane-source">
     <div class="pane-head">
       <span data-i18n="source.title">Модель</span>
-      <span id="status" class="status"></span>
+      <!-- Перенос строк — настройка УЗКОЙ области: сузив её разделителем,
+           читатель теряет правый край строки, и вернуть его надо не мышью по
+           горизонтальной прокрутке, а переключателем. Своя у каждой области:
+           узкой бывает то одна, то другая. -->
+      <span class="pane-tools">
+        <button id="wrapsource" class="chip" type="button" aria-pressed="false"
+                data-i18n="bar.wrap" data-i18n-attr="title:bar.wrapHint"
+                title="Переносить длинные строки">⏎</button>
+        <span id="status" class="status"></span>
+      </span>
     </div>
 
     <!-- Панель учётной записи и проектов. Скрыта, пока её не позвали: без
@@ -163,6 +172,9 @@
 
     <div data-panel="output" class="panel">
       <div class="controls">
+        <button id="wrapoutput" class="chip" type="button" aria-pressed="false"
+                data-i18n="bar.wrap" data-i18n-attr="title:bar.wrapHint"
+                title="Переносить длинные строки">⏎</button>
         <label for="target" data-i18n="output.target">Цель</label>
         <select id="target"></select>
         <label for="args" data-i18n="output.args">Ключи сборки</label>

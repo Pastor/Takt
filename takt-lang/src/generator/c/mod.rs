@@ -49,6 +49,7 @@ mod c_model_init;
 mod c_names;
 mod c_needs;
 mod c_params;
+mod c_port_call;
 mod c_port_enums;
 mod c_ports;
 mod c_source;
@@ -121,10 +122,23 @@ impl PortClass {
     }
 
     /// Определяет категорию по [`TypeNode`].
+    ///
+    /// ⚠️ **Массив спрашивает категорию у ЭЛЕМЕНТА** (фича 0533): порт-массив
+    /// с контракта 2026-09-04 — один порт, адресуемый индексом, а не набор
+    /// портов. Прежде `[bit;N]` доставался ветви «прочее» и объявлялся
+    /// ЧИСЛОВЫМ портом, отчего запись разряда шла чтением-правкой-записью, а
+    /// запись индексом (`heater[3] := 1`) печаталась как индексация
+    /// результата чтения — код, который не собирает ни один компилятор C.
     pub(super) fn from_type(ty: &TypeNode) -> Self {
         match ty {
             TypeNode::Bit | TypeNode::Bool => PortClass::Bit,
             TypeNode::Rational => PortClass::Rational,
+            // Бит-вектор `[bit;N]` — порт из N разрядов: категория та же, что
+            // у одного разряда, а число разрядов адресуется индексом.
+            TypeNode::Array(_, elem) => match crate::semantic::bit_vector::is_bit_vector(ty) {
+                Some(_) => PortClass::Bit,
+                None => PortClass::from_type(elem),
+            },
             _ => PortClass::Numeric,
         }
     }
@@ -140,14 +154,18 @@ impl PortClass {
     pub(super) fn fits_hal(ty: &TypeNode) -> bool {
         match ty {
             TypeNode::Struct(_) => false,
-            TypeNode::Array(_, _) => {
-                crate::semantic::bit_vector::is_bit_vector(ty).is_some_and(|bits| {
-                    matches!(
-                        crate::semantic::bit_vector::layout(bits),
-                        crate::semantic::bit_vector::BitVectorLayout::Scalar { .. }
-                    )
-                })
-            }
+            // ⚠️ Массив ложится на HAL с фичи 0533: обращение несёт ИНДЕКС, и
+            // колбэк по-прежнему принимает скаляр — элемент, а не массив
+            // целиком. Не ложится массив, чей ЭЛЕМЕНТ не ложится (массив
+            // структур, массив массивов), и широкий бит-вектор: у него
+            // носитель — набор слов, а не одно значение.
+            TypeNode::Array(_, elem) => match crate::semantic::bit_vector::is_bit_vector(ty) {
+                Some(bits) => matches!(
+                    crate::semantic::bit_vector::layout(bits),
+                    crate::semantic::bit_vector::BitVectorLayout::Scalar { .. }
+                ),
+                None => PortClass::fits_hal(elem),
+            },
             _ => true,
         }
     }
