@@ -4,8 +4,26 @@
     {
       "name": "takt-web",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8731", "--directory", "web/dist"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8731",
+        "--directory",
+        "web/dist"
+      ],
       "port": 8731
+    },
+    {
+      "name": "takt-web-design",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8732",
+        "--directory",
+        "web"
+      ],
+      "port": 8732
     }
   ]
 }

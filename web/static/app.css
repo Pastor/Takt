@@ -1,13 +1,19 @@
 /* Оформление страницы редактора (фича 0531).
  *
- * Устройство токенов взято у референса (замер 2026-09-04, `docs/design/BOOK.md`):
- * два слоя — СЫРЬЁ (цвета числом, только здесь) и РОЛИ (пары «заливка/чернила»).
+ * Дизайн-система описана словами в `web/design/BOOK.md`, показана живьём в
+ * `web/design/controls.html` и сторожится гейтом `scripts/check-design.py`.
+ * Третьей копии правды нет: книга объясняет, витрина показывает, гейт судит —
+ * а единственный источник значений здесь.
+ *
+ * Устройство токенов взято у референса (замер 2026-09-04): два слоя — СЫРЬЁ
+ * (цвета числом, только в блоках палитры) и РОЛИ (пары «заливка/чернила»).
  * Тема — подмена сырья и только его; роли не трогаются. Отклик считается
  * формулой одной плотности, а не набором готовых заливок: иначе на каждую
  * кнопку заводится своя, и они расходятся.
  *
- * ⚠️ Цвет числом вне блоков сырья — нарушение правила. Гейт, который это
- * сторожит, заводит задача 0531-07a; пока правило держится дисциплиной.
+ * ⚠️ Правила, которые сторожит машина (задача 0531-07a): цвет числом вне
+ * палитры, готовый цвет в `:hover`/`:active`, пара вне реестра книги, кегль и
+ * высота мимо шкалы. Отказ гейта называет строку и правило.
  */
 
 /* ── Сырьё: светлая тема ────────────────────────────────────────────────── */
@@ -60,12 +66,46 @@
   --tok-operator: var(--on-surface-soft);
   --tok-variable: var(--on-surface);
 
-  /* Шкалы: высоты, скругления, отступы, плотность отклика. */
+  /* ── Шкала кегля: пять ступеней, и других быть не должно ──────────────
+   * Ступень заводится под НАЗНАЧЕНИЕ, а не под вкус: у референса набралось 26
+   * значений на 92 объявления, прежде чем завели правило. Гейт отвергает
+   * `font-size` числом целиком. */
+  --text-xs: 0.78rem;  /* служебные строки: шапки областей, имя файла */
+  --text-sm: 0.82rem;  /* код в списках и выводе, подписи контролов */
+  --text-md: 0.9rem;   /* код редактора — его читают дольше всего */
+  --text-lg: 1rem;     /* текст интерфейса и поля ввода */
+  --text-xl: 1.1rem;   /* имя инструмента в шапке */
+
+  /* ── Шкала высот ──────────────────────────────────────────────────────
+   * Три ступени, и каждая названа: 44 px — предел цели нажатия WCAG 2.5.5
+   * там, где нет наведения; 32 px — контрол мыши; 24 px — служебная строка.
+   * Шкала референса (48/40/32/24) не переносится числами: у редактора нет ни
+   * крупных кнопок игры, ни его плотности. */
+  --h-touch: 44px;
   --h-control: 32px;
+  --h-compact: 24px;
+
+  /* ── Шкала скруглений ─────────────────────────────────────────────────
+   * Одно значение — и это замер, а не упрощение: в редакторе нет ни карточек,
+   * ни всплывающих окон, которым нужен второй радиус. Появятся — ступень
+   * заводится здесь, а не числом в правиле. */
   --radius: 8px;
+
+  /* ── Отступы ──────────────────────────────────────────────────────────
+   * Половина и четверть считаются ОТ базового: в «кармане» база ужимается, и
+   * производные обязаны ужаться вместе с ней. */
   --gap: 8px;
+  --gap-half: calc(var(--gap) / 2);
+  --gap-quarter: calc(var(--gap) / 4);
+
+  /* Плотность отклика — одна на проект (формула ниже). */
   --state-hover: 7%;
   --state-press: 14%;
+
+  /* Длительность перехода: 120 мс по фону и рамке; гасится
+   * `prefers-reduced-motion`. */
+  --motion: 120ms;
+
   --font-code: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -147,31 +187,43 @@ body {
   background: var(--surface-raised);
 }
 
-.brand { font-weight: 700; letter-spacing: 0.02em; }
-.muted { color: var(--on-surface-soft); font-size: 0.85rem; }
+.brand { font-weight: 700; letter-spacing: 0.02em; font-size: var(--text-xl); }
+.muted { color: var(--on-surface-soft); font-size: var(--text-sm); }
 .spacer { flex: 1; }
 
 /* ── Контролы: вариант — подмена пары, и ничего больше ──────────────────── */
 button, select, input, textarea {
   font: inherit;
+  font-size: var(--text-lg);
   height: var(--h-control);
-  padding: 0 10px;
+  padding: 0 var(--gap);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
   color: var(--on-surface);
+  transition: background var(--motion), border-color var(--motion);
 }
 
-button { cursor: pointer; }
+button, select { cursor: pointer; }
 
-/* Отклик — формулой одной плотности (правило 3 книги референса). */
-button:hover:not(:disabled) {
+/* Отклик — ФОРМУЛОЙ одной плотности, а не готовой заливкой: иначе на каждый
+ * контрол заводится своя, и они расходятся (правило 3 книги). Гейт отвергает
+ * цвет-токен в `:hover` и `:active`. */
+button:hover:not(:disabled),
+select:hover:not(:disabled) {
   background: color-mix(in srgb, var(--on-surface) var(--state-hover), var(--surface-raised));
 }
-button:active:not(:disabled) {
+button:active:not(:disabled),
+select:active:not(:disabled) {
   background: color-mix(in srgb, var(--on-surface) var(--state-press), var(--surface-raised));
 }
-button:disabled { color: var(--on-surface-soft); cursor: default; }
+
+/* Недоступность одна на всё и БЕЗ `opacity`: полупрозрачный контрол теряет
+ * контраст текста вместе с фоном, и предел 4,5:1 перестаёт соблюдаться. */
+button:disabled, select:disabled, input:disabled, textarea:disabled {
+  color: var(--on-surface-soft);
+  cursor: default;
+}
 
 /* Фокус виден всегда и одинаково: доступность — не украшение. */
 :focus-visible {
@@ -200,8 +252,9 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px var(--gap);
-  font-size: 0.8rem;
+  min-height: var(--h-compact);
+  padding: var(--gap-half) var(--gap);
+  font-size: var(--text-xs);
   color: var(--on-surface-soft);
   background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
@@ -214,7 +267,7 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   overflow: auto;
   padding: var(--gap);
   font-family: var(--font-code);
-  font-size: 0.9rem;
+  font-size: var(--text-md);
   line-height: 1.5;
   white-space: pre;
   tab-size: 4;
@@ -225,25 +278,18 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 
 /* Переключатель языка. Ширина по содержимому: самоназвания коротки, а
  * фиксированная обрезала бы длинное. */
-.lang {
-  height: var(--h-control);
-  padding: 0 6px;
-  color: var(--on-surface);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font: inherit;
-}
+.lang { padding: 0 var(--gap-half); }
 
 /* Строка-граница: до фичи 0532 сообщения инструментов только по-русски, и при
  * другом языке оболочки это НАЗЫВАЕТСЯ. Тон предупреждения, а не ошибки:
  * работать это не мешает. */
 .notice {
-  padding: 4px var(--gap);
+  min-height: var(--h-compact);
+  padding: var(--gap-half) var(--gap);
   color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  background: color-mix(in srgb, var(--warn) var(--state-hover), transparent);
   border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
 }
 
 /* ⚠️ `display: flex` сильнее атрибута `hidden` — урок прогона страницы
@@ -252,8 +298,8 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 
 /* Строка с диагностикой помечена не только цветом — рядом список с текстом
  * (правило доступности книги референса). */
-.line.has-error { background: color-mix(in srgb, var(--alarm) 10%, transparent); }
-.line.has-warning { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.line.has-error { background: color-mix(in srgb, var(--alarm) var(--state-hover), transparent); }
+.line.has-warning { background: color-mix(in srgb, var(--warn) var(--state-hover), transparent); }
 
 .tok-keyword { color: var(--tok-keyword); }
 .tok-type { color: var(--tok-type); }
@@ -276,13 +322,14 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   max-height: 30dvh;
   overflow: auto;
   font-family: var(--font-code);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   background: var(--surface-sunken);
+  color: var(--on-surface);
 }
 
 .trace { max-height: none; flex: 1; }
 
-.row { padding: 2px var(--gap); white-space: pre-wrap; }
+.row { padding: var(--gap-quarter) var(--gap); white-space: pre-wrap; }
 .row-error { color: var(--alarm); cursor: pointer; }
 .row-warning { color: var(--warn); }
 .row-ok { color: var(--on-surface-soft); }
@@ -291,8 +338,8 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 /* ── Вкладки и панели ───────────────────────────────────────────────────── */
 .tabs {
   display: flex;
-  gap: 2px;
-  padding: 4px var(--gap) 0;
+  gap: var(--gap-quarter);
+  padding: var(--gap-half) var(--gap) 0;
   background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
 }
@@ -319,7 +366,7 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 .panel[hidden] { display: none; }
 
 .controls { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
-.controls label { font-size: 0.82rem; color: var(--on-surface-soft); }
+.controls label { font-size: var(--text-sm); color: var(--on-surface-soft); }
 .controls input[type="text"] { flex: 1; min-width: 12ch; }
 
 .output {
@@ -332,8 +379,9 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 .file-name {
   position: sticky;
   top: 0;
-  padding: 4px var(--gap);
-  font-size: 0.8rem;
+  min-height: var(--h-compact);
+  padding: var(--gap-half) var(--gap);
+  font-size: var(--text-xs);
   color: var(--on-surface-soft);
   background: var(--surface-raised);
   border-bottom: 1px solid var(--border);
@@ -351,7 +399,7 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   margin: 0;
   padding: var(--gap);
   font-family: var(--font-code);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   white-space: pre;
   overflow-x: auto;
 }
@@ -364,11 +412,11 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   height: 6.5em;
   padding: var(--gap);
   font-family: var(--font-code);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   resize: vertical;
 }
 
-.status { font-size: 0.82rem; }
+.status { font-size: var(--text-sm); }
 .status-ok { color: var(--yes); }
 .status-warning { color: var(--warn); }
 .status-error { color: var(--alarm); }
@@ -395,22 +443,22 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   .pane-result .tabs { display: none; }
   .modes {
     display: flex;
-    gap: 2px;
-    padding: 4px var(--gap) calc(4px + env(safe-area-inset-bottom, 0px));
+    gap: var(--gap-quarter);
+    padding: var(--gap-half) var(--gap) calc(var(--gap-half) + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--border);
     background: var(--surface-raised);
   }
   /* Три равные цели во всю ширину: палец ищет по месту, а не по подписи. */
-  .modes .tab { flex: 1 1 0; min-width: 44px; border-radius: var(--radius); }
+  .modes .tab { flex: 1 1 0; min-width: var(--h-touch); border-radius: var(--radius); }
 }
 
 /* ── Там, где нет наведения, цель нажатия крупнее ────────────────────────
  * 44 px — предел WCAG 2.5.5. Поля ввода не мельче 16 px: iOS иначе
  * увеличивает страницу при фокусе, и вёрстка «уезжает» сама собой. */
 @media (hover: none) {
-  :root { --h-control: 44px; }
-  input, select, textarea, .scenario { font-size: 1rem; }
-  .row { padding: 8px var(--gap); }
+  :root { --h-control: var(--h-touch); }
+  input, select, textarea, .scenario { font-size: var(--text-lg); }
+  .row { padding: var(--gap) var(--gap); }
 }
 
 /* ── Карман: отступы вдвое, подпись над полем ────────────────────────────
@@ -433,7 +481,10 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 
 /* ── Ландшафт телефона: служебным строкам минимум ────────────────────────*/
 @media (max-height: 560px) {
-  .bar, .pane-head { padding-top: 2px; padding-bottom: 2px; }
+  .bar, .pane-head { padding-top: var(--gap-quarter); padding-bottom: var(--gap-quarter); }
   .list { max-height: 22dvh; }
-  .modes { padding-top: 2px; padding-bottom: calc(2px + env(safe-area-inset-bottom, 0px)); }
+  .modes {
+    padding-top: var(--gap-quarter);
+    padding-bottom: calc(var(--gap-quarter) + env(safe-area-inset-bottom, 0px));
+  }
 }
