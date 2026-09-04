@@ -1,139 +1,20 @@
-//! Проверки сервера через HTTP (фича 0531, задача 09a).
+//! Проверки входа через HTTP (фича 0531, задача 09a).
 //!
-//! # Чем платим за PostgreSQL
-//!
-//! Решение заказчика 2026-09-04 заменило SQLite на PostgreSQL, и вместе с
-//! базой в памяти ушла возможность проверять хранилище без сервера СУБД.
-//! Отсюда политика, та же, что у прочих внешних инструментов проекта
-//! (`iec2c`, `verilator`): **нет базы — мягкий пропуск, под
-//! `PRECHECK_STRICT=1` — ошибка**. Решает это гейт `check-web-server.sh`; здесь
-//! проверки просто не выполняются, и каждая говорит об этом словами.
-//!
-//! Строка подключения — `TAKT_WEB_TEST_DB`.
-//!
-//! # Изоляция
-//!
-//! Каждая проверка работает в **своей схеме** (`CREATE SCHEMA`), а не в своей
-//! базе: схема создаётся мгновенно, а `search_path` уводит туда всю схему
-//! сервера целиком. Соседние проверки друг друга не видят и идут параллельно.
+//! Стенд и политика пропуска — в `common`: наборов проверок два, а стенд им
+//! нужен один.
 
-use std::net::SocketAddr;
-use std::sync::Arc;
+mod common;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use http_body_util::BodyExt as _;
-use tower::ServiceExt as _;
 
+use common::{Stand, skipped};
 use takt_web_server::config::Config;
-use takt_web_server::rate::Window;
-use takt_web_server::routes::{self, AppState, ROUTES};
 use takt_web_server::{auth, db};
-
-/// Живой стенд: роутер и его состояние.
-struct Stand {
-    app: axum::Router,
-    schema: String,
-    url: String,
-}
-
-/// Поднимает стенд в своей схеме; `None` — базы нет, проверка пропускается.
-async fn stand(tag: &str) -> Option<Stand> {
-    let url = std::env::var("TAKT_WEB_TEST_DB").ok()?;
-    let schema = format!("t_{tag}");
-    // Схема пересоздаётся: прогон, оборвавшийся посередине, не должен мешать
-    // следующему.
-    let admin = db::pool(&url).ok()?;
-    let client = admin.get().await.ok()?;
-    client
-        .batch_execute(&format!(
-            "DROP SCHEMA IF EXISTS {schema} CASCADE; CREATE SCHEMA {schema}"
-        ))
-        .await
-        .ok()?;
-
-    let scoped = format!("{url}?options=-c%20search_path%3D{schema}");
-    let pool = db::pool(&scoped).ok()?;
-    let client = pool.get().await.ok()?;
-    db::prepare(&client).await.ok()?;
-
-    let mut config = Config::from_env().ok()?;
-    config.database_url = scoped.clone();
-    config.jwt_secret = "секрет-проверки".to_string();
-    config.rate_limit = 1000;
-    let rate = Window::new(config.rate_window, config.rate_limit);
-    let state = Arc::new(AppState { config, pool, rate });
-    Some(Stand {
-        app: routes::router(state),
-        schema,
-        url,
-    })
-}
-
-impl Stand {
-    /// Шлёт запрос от имени клиента с адресом.
-    async fn call(&self, request: Request<Body>) -> (StatusCode, serde_json::Value) {
-        let mut request = request;
-        // Адрес нужен окну частоты: без него `ConnectInfo` не извлекается.
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(SocketAddr::from((
-                [127, 0, 0, 1],
-                40000,
-            ))));
-        let response = self.app.clone().oneshot(request).await.expect("ответ");
-        let status = response.status();
-        let bytes = response
-            .into_body()
-            .collect()
-            .await
-            .expect("тело")
-            .to_bytes();
-        let body = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
-        (status, body)
-    }
-
-    async fn post(&self, path: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
-        self.call(
-            Request::post(path)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .expect("запрос"),
-        )
-        .await
-    }
-
-    async fn get_with(&self, path: &str, token: &str) -> (StatusCode, serde_json::Value) {
-        self.call(
-            Request::get(path)
-                .header("authorization", format!("Bearer {token}"))
-                .body(Body::empty())
-                .expect("запрос"),
-        )
-        .await
-    }
-
-    /// Убирает за собой: схема прогона не должна оставаться в базе.
-    async fn drop_schema(&self) {
-        if let Ok(pool) = db::pool(&self.url)
-            && let Ok(client) = pool.get().await
-        {
-            let _ = client
-                .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", self.schema))
-                .await;
-        }
-    }
-}
-
-/// Печатает причину пропуска: молча пропущенная проверка неотличима от
-/// прошедшей.
-fn skipped(what: &str) {
-    eprintln!("пропуск ({what}): не задан TAKT_WEB_TEST_DB — базы нет");
-}
 
 #[tokio::test]
 async fn health_answers_only_when_the_database_answers() {
-    let Some(stand) = stand("health").await else {
+    let Some(stand) = Stand::open("health").await else {
         return skipped("здоровье");
     };
     let (status, body) = stand
@@ -146,7 +27,7 @@ async fn health_answers_only_when_the_database_answers() {
 
 #[tokio::test]
 async fn registration_gives_a_pair_and_the_login_is_taken_after() {
-    let Some(stand) = stand("register").await else {
+    let Some(stand) = Stand::open("register").await else {
         return skipped("регистрация");
     };
     let (status, body) = stand
@@ -176,7 +57,7 @@ async fn registration_gives_a_pair_and_the_login_is_taken_after() {
 #[tokio::test]
 async fn bad_login_and_bad_password_answer_the_same() {
     // Разные ответы перечисляют заведённые логины.
-    let Some(stand) = stand("oracle").await else {
+    let Some(stand) = Stand::open("oracle").await else {
         return skipped("оракул логинов");
     };
     stand
@@ -208,7 +89,7 @@ async fn refresh_exchange_and_reuse_kills_the_family() {
     // ⚠️ Главное свойство цепочки: кража обнаруживается САМА. Владелец обменяет
     // свой токен, украденный предъявят вторым — и вход прекратится у обоих,
     // что заметно, в отличие от тихо работающей кражи.
-    let Some(stand) = stand("refresh").await else {
+    let Some(stand) = Stand::open("refresh").await else {
         return skipped("обмен токенов");
     };
     let (_, registered) = stand
@@ -259,7 +140,7 @@ async fn refresh_exchange_and_reuse_kills_the_family() {
 
 #[tokio::test]
 async fn revoke_says_the_same_about_a_stranger_token() {
-    let Some(stand) = stand("revoke").await else {
+    let Some(stand) = Stand::open("revoke").await else {
         return skipped("гашение токена");
     };
     let (_, registered) = stand
@@ -299,7 +180,7 @@ async fn revoke_says_the_same_about_a_stranger_token() {
 async fn me_needs_a_token_and_reads_the_role_from_the_database() {
     // ⚠️ Роль читается ИЗ БАЗЫ, а не из токена: иначе снятие права
     // администратора действовало бы только после истечения часа.
-    let Some(stand) = stand("me").await else {
+    let Some(stand) = Stand::open("me").await else {
         return skipped("сведения о себе");
     };
     let (_, registered) = stand
@@ -346,20 +227,11 @@ async fn me_needs_a_token_and_reads_the_role_from_the_database() {
 
 #[tokio::test]
 async fn rate_window_stops_the_flood_and_names_the_wait() {
-    let Some(mut stand) = stand("rate").await else {
+    // Стенд с узким окном: у прочих проверок оно широкое, чтобы не мешать.
+    let Some(stand) = Stand::open_with("rate", |config: &mut Config| config.rate_limit = 2).await
+    else {
         return skipped("окно частоты");
     };
-    // Стенд с узким окном: у прочих проверок оно широкое, чтобы не мешать.
-    let url = stand.url.clone();
-    let schema = stand.schema.clone();
-    let scoped = format!("{url}?options=-c%20search_path%3D{schema}");
-    let mut config = Config::from_env().expect("конфигурация");
-    config.database_url = scoped.clone();
-    config.jwt_secret = "секрет-проверки".to_string();
-    config.rate_limit = 2;
-    let pool = db::pool(&scoped).expect("пул");
-    let rate = Window::new(config.rate_window, config.rate_limit);
-    stand.app = routes::router(Arc::new(AppState { config, pool, rate }));
 
     for attempt in 1..=2 {
         let (status, _) = stand
@@ -387,7 +259,7 @@ async fn rate_window_stops_the_flood_and_names_the_wait() {
 
 #[tokio::test]
 async fn unknown_grant_type_answers_like_a_wrong_password() {
-    let Some(stand) = stand("grant").await else {
+    let Some(stand) = Stand::open("grant").await else {
         return skipped("вид выдачи");
     };
     let (status, body) = stand
@@ -406,10 +278,10 @@ async fn every_listed_route_answers_something() {
     // ⚠️ Список маршрутов объявлен в коде и проверяется здесь: маршрут,
     // заведённый мимо списка, появился бы у сервиса, не появившись в его
     // описании, — и о нём не узнал бы никто, кроме автора.
-    let Some(stand) = stand("routes").await else {
+    let Some(stand) = Stand::open("routes").await else {
         return skipped("список маршрутов");
     };
-    for (method, path) in ROUTES {
+    for (method, path) in takt_web_server::routes::ROUTES {
         let request = Request::builder()
             .method(*method)
             .uri(*path)
@@ -442,7 +314,7 @@ async fn user_row_holds_nothing_personal() {
     // 2026-09-04), адреса нет потому, что этого требует A6. Колонка,
     // заведённая «на будущее», — персональные данные, которых никто не
     // собирался собирать.
-    let Some(stand) = stand("schema").await else {
+    let Some(stand) = Stand::open("schema").await else {
         return skipped("схема пользователей");
     };
     let pool = db::pool(&stand.url).expect("пул");
@@ -484,7 +356,7 @@ async fn user_row_holds_nothing_personal() {
 async fn tokens_follow_the_user_they_belong_to() {
     // Связи в схеме есть, и каскад обязан работать: иначе токены удалённого
     // пользователя остались бы живыми ключами в базе.
-    let Some(stand) = stand("cascade").await else {
+    let Some(stand) = Stand::open("cascade").await else {
         return skipped("каскадное удаление");
     };
     stand
@@ -493,8 +365,7 @@ async fn tokens_follow_the_user_they_belong_to() {
             serde_json::json!({"login": "ivan", "password": "пароль-пароль"}),
         )
         .await;
-    let scoped = format!("{}?options=-c%20search_path%3D{}", stand.url, stand.schema);
-    let pool = db::pool(&scoped).expect("пул");
+    let pool = db::pool(&stand.scoped()).expect("пул");
     let client = pool.get().await.expect("соединение");
     let before: i64 = client
         .query_one("SELECT count(*) FROM refresh_tokens", &[])
@@ -518,11 +389,10 @@ async fn tokens_follow_the_user_they_belong_to() {
 #[tokio::test]
 async fn foreign_schema_version_is_refused_by_name() {
     // Молчаливый переход между версиями схемы — это порча данных стенда.
-    let Some(stand) = stand("version").await else {
+    let Some(stand) = Stand::open("version").await else {
         return skipped("версия схемы");
     };
-    let scoped = format!("{}?options=-c%20search_path%3D{}", stand.url, stand.schema);
-    let pool = db::pool(&scoped).expect("пул");
+    let pool = db::pool(&stand.scoped()).expect("пул");
     let client = pool.get().await.expect("соединение");
     client
         .execute("UPDATE schema_version SET version = 99", &[])
@@ -537,7 +407,7 @@ async fn foreign_schema_version_is_refused_by_name() {
 
 #[tokio::test]
 async fn password_change_kills_live_sessions() {
-    let Some(stand) = stand("passwd").await else {
+    let Some(stand) = Stand::open("passwd").await else {
         return skipped("смена пароля");
     };
     let (_, registered) = stand
@@ -551,8 +421,7 @@ async fn password_change_kills_live_sessions() {
         .expect("токен")
         .to_string();
 
-    let scoped = format!("{}?options=-c%20search_path%3D{}", stand.url, stand.schema);
-    let pool = db::pool(&scoped).expect("пул");
+    let pool = db::pool(&stand.scoped()).expect("пул");
     let client = pool.get().await.expect("соединение");
     auth::set_password(&client, "ivan", "новый-пароль")
         .await

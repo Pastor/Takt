@@ -57,7 +57,9 @@ if [[ -z "${TAKT_WEB_TEST_DB:-}" ]]; then
   exit 0
 fi
 
-cargo test --test http || {
+# ⚠️ `--tests`, а не `--test http`: наборов два (вход и проекты), и забытый
+# набор молча не прогонялся бы.
+cargo test --tests || {
   echo "  ОШИБКА: проверки хранилища и HTTP красны"
   exit 1
 }
