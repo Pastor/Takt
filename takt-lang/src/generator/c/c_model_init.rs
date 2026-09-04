@@ -164,14 +164,26 @@ fn generate_port_initial_values(
             *direction,
             crate::parser::ast::PortDirection::Out,
         );
-        let write = match PortClass::from_type(ty) {
-            PortClass::Bit => FUNCTION_PORT_WRITE_BIT,
-            PortClass::Rational => FUNCTION_PORT_WRITE_FLOAT,
-            PortClass::Numeric => FUNCTION_PORT_WRITE_NUMERIC,
-        };
-        printer.ident(&format!("(*{hal_ptr}->{write})({variant}, "));
-        generate_expr(printer, map, model, vec![], init, 0, true)?;
-        printer.print(&format!(", {hal_ptr}->userdata);")).nl();
+        // ⚠️ Начальное значение печатается ЧЕРЕЗ ТОТ ЖЕ носитель, что и запись
+        // в такте (0533): разойдись они — старт писал бы порт вызовом с другим
+        // числом аргументов, и `cc` отвергал бы файл при нулевом коде возврата.
+        let mut value = String::new();
+        {
+            let mut tmp = Printer::new(0, &mut value);
+            generate_expr(&mut tmp, map, model, vec![], init, 0, true)?;
+        }
+        printer
+            .ident(&format!(
+                "{};",
+                crate::generator::c::c_port_call::write(
+                    PortClass::from_type(ty),
+                    hal_ptr,
+                    &variant,
+                    crate::generator::c::c_port_call::SCALAR_INDEX,
+                    &value,
+                )
+            ))
+            .nl();
     }
     Ok(())
 }

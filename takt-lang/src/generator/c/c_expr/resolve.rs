@@ -235,20 +235,14 @@ pub(in crate::generator::c) fn resolve_variable_c_expr(
             } else {
                 "model"
             };
-            match cls {
-                PortClass::Rational => Ok(format!(
-                    "(*{ptr}->{read_float})({variant}, {ptr}->userdata)",
-                    read_float = FUNCTION_PORT_READ_FLOAT
-                )),
-                PortClass::Numeric => Ok(format!(
-                    "(*{ptr}->{read_numeric})({variant}, {ptr}->userdata)",
-                    read_numeric = FUNCTION_PORT_READ_NUMERIC
-                )),
-                PortClass::Bit => Ok(format!(
-                    "(*{ptr}->{read_bit})({variant}, {ptr}->userdata)",
-                    read_bit = FUNCTION_PORT_READ_BIT
-                )),
-            }
+            // Порт целиком — элемент нулевой: контракт один на все порты
+            // (0533), и «нет индекса» в нём не бывает.
+            Ok(crate::generator::c::c_port_call::read(
+                cls,
+                ptr,
+                &variant,
+                crate::generator::c::c_port_call::SCALAR_INDEX,
+            ))
         }
         VariableNode::Unresolved => Err(crate::generator::c::c_unresolved::refuse(
             crate::diagnostics::Location::Codegen,

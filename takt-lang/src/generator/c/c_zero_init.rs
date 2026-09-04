@@ -55,6 +55,14 @@ pub(super) fn emit_zero_init(
         }
         return Ok(());
     }
+    // ⚠️ Бит-вектор `[bit; N ≤ 64]` — СКАЛЯР (правило 0078), и обнуляется он
+    // одним присваиванием. Прежде он доставался общей ветви массива и получал
+    // `model->flags[0] = 0;` при поле `uint8_t flags` — `cc`: «subscripted
+    // value is not an array», при нулевом коде возврата `taktc` (замер 0533).
+    if crate::semantic::bit_vector::is_bit_vector(ty).is_some() {
+        printer.ident(&format!("model->{field} = 0;")).nl();
+        return Ok(());
+    }
     match ty {
         TypeNode::Array(size, elem) => {
             for i in 0..*size {

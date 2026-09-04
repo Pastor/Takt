@@ -756,8 +756,15 @@ pub(in crate::generator::c) fn generate_expr(
                 generate_expr(&mut p, map, owner, params.clone(), node, 0, has_model)?;
                 Ok(buf)
             };
-            let base_str = render(base)?;
             let idx_str = render(idx)?;
+            // ⚠️ У ПОРТА индекс — часть обращения к HAL, а не индексация
+            // значения (фича 0533): порт значением не является, и печать
+            // `read_numeric(PORT, ud)[i]` не собирается ни одним компилятором C.
+            if let Some(call) = port_element_read(base, &idx_str, map, owner, has_model)? {
+                printer.print(&call);
+                return Ok(());
+            }
+            let base_str = render(base)?;
             printer.print(&format!("{base_str}[{idx_str}]"));
         }
 
@@ -1055,4 +1062,55 @@ fn mixed_sign_compare(
     } else {
         format!("(!{neg} && {same})")
     }))
+}
+
+/// Обращение к ЭЛЕМЕНТУ порта на чтение; `None` — база не порт.
+///
+/// ⚠️ Носитель один на выражения и условия (фича 0533): порт значением не
+/// является, и всякий, кто напечатает индексацию его чтения, получит C, не
+/// собирающийся ни одним компилятором, — при нулевом коде возврата `taktc`.
+pub(in crate::generator::c) fn port_element_read(
+    base: &ExpressionNode,
+    index: &str,
+    map: &CMap,
+    owner: &Element,
+    has_model: bool,
+) -> Result<Option<String>, Diagnostic> {
+    let ExpressionNode::Variable(var_rc) = base else {
+        return Ok(None);
+    };
+    let var = var_rc.borrow();
+    let VariableNode::Port {
+        direction,
+        name,
+        ty,
+        upper,
+        ..
+    } = &*var
+    else {
+        return Ok(None);
+    };
+    let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) else {
+        return Err(crate::generator::c::c_unresolved::refuse(
+            crate::diagnostics::Location::Codegen,
+            crate::generator::c::c_unresolved::UnresolvedNode::PortOwner("чтение элемента"),
+        ));
+    };
+    let variant = crate::generator::c::c_names::port_enum_variant(
+        &Name::from(model_rc),
+        name,
+        *direction,
+        crate::parser::ast::PortDirection::In,
+    );
+    let ptr = if has_model && !owner.name().eq(&map.root_name()) {
+        "main"
+    } else {
+        "model"
+    };
+    Ok(Some(crate::generator::c::c_port_call::read(
+        PortClass::from_type(ty),
+        ptr,
+        &variant,
+        index,
+    )))
 }

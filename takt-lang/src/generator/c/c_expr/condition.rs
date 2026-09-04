@@ -312,8 +312,47 @@ pub(in crate::generator::c) fn generate_condition_expr(
         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
         // База — выражение (фича 0358): печатается тем же печатником условий.
         ConditionNode::ArraySubscript(base, idx) => {
-            let base_str = generate_condition_expr(base, map, owner)?;
             let idx_str = generate_condition_expr(idx, map, owner)?;
+            // ⚠️ У ПОРТА индекс — часть обращения к HAL (0533): условие
+            // `src[3]` печаталось индексацией результата чтения, то есть C, не
+            // собирающимся ни одним компилятором. Правило то же, что в
+            // выражениях, и потому спрашивается ТОТ ЖЕ носитель.
+            if let ConditionNode::Variable(var_rc, _) = base.as_ref()
+                && let VariableNode::Port {
+                    direction,
+                    name,
+                    ty,
+                    upper,
+                    ..
+                } = &*var_rc.borrow()
+            {
+                let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) else {
+                    return Err(crate::generator::c::c_unresolved::refuse(
+                        crate::generator::site::at(Location::Codegen),
+                        crate::generator::c::c_unresolved::UnresolvedNode::PortOwner(
+                            "чтение элемента в условии",
+                        ),
+                    ));
+                };
+                let variant = crate::generator::c::c_names::port_enum_variant(
+                    &Name::from(model_rc),
+                    name,
+                    *direction,
+                    crate::parser::ast::PortDirection::In,
+                );
+                let ptr = if owner.name().eq(&map.root_name()) {
+                    "model"
+                } else {
+                    "main"
+                };
+                return Ok(crate::generator::c::c_port_call::read(
+                    PortClass::from_type(ty),
+                    ptr,
+                    &variant,
+                    &idx_str,
+                ));
+            }
+            let base_str = generate_condition_expr(base, map, owner)?;
             Ok(format!("{base_str}[{idx_str}]"))
         }
         ConditionNode::BitAccess(inner, member) => {
@@ -363,14 +402,22 @@ pub(in crate::generator::c) fn generate_condition_expr(
                                 "main"
                             };
                             return match cls {
-                                PortClass::Bit => Ok(format!(
-                                    "(*{ptr}->{read_bit})({variant}, {ptr}->userdata)",
-                                    read_bit = FUNCTION_PORT_READ_BIT
-                                )),
-                                PortClass::Numeric => Ok(format!(
-                                    "(((*{ptr}->{read_numeric})({variant}, {ptr}->userdata) >> {n}) & 1u)",
-                                    read_numeric = FUNCTION_PORT_READ_NUMERIC
-                                )),
+                                // Разряд адресуется самим вызовом (0533).
+                                PortClass::Bit => Ok(
+                                    crate::generator::c::c_port_call::read_bit(
+                                        ptr,
+                                        &variant,
+                                        &n.to_string(),
+                                    ),
+                                ),
+                                PortClass::Numeric => {
+                                    let read = crate::generator::c::c_port_call::read_numeric(
+                                        ptr,
+                                        &variant,
+                                        crate::generator::c::c_port_call::SCALAR_INDEX,
+                                    );
+                                    Ok(format!("(({read} >> {n}) & 1u)"))
+                                }
                                 // Позицию даёт носитель (0308/0468): условие
                                 // ребра объявляет своё место, и без этого
                                 // причина отказа приезжала заметкой БЕЗ

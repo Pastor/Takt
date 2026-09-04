@@ -47,6 +47,15 @@
   <button id="update" class="update" type="button" data-i18n="bar.update" hidden>доступна новая сборка — обновить</button>
   <!-- Переключатель языка. Самоназвания в списке НЕ переводятся: так читатель
        находит свой язык, не зная текущего (задача 0531-10a). -->
+  <!-- Кегль страницы: ±1 к корневому размеру. Все ступени шкалы считаются от
+       него, поэтому меняется страница целиком — и код, и контролы. -->
+  <span class="pane-tools">
+    <button id="fontless" class="chip" type="button"
+            data-i18n="bar.fontLess" data-i18n-attr="title:bar.fontHint" title="Мельче">−</button>
+    <span id="fontsize" class="status" aria-live="polite"></span>
+    <button id="fontmore" class="chip" type="button"
+            data-i18n="bar.fontMore" data-i18n-attr="title:bar.fontHint" title="Крупнее">+</button>
+  </span>
   <select id="lang" class="lang" data-i18n-attr="aria-label:bar.language"></select>
 </header>
 

@@ -194,10 +194,11 @@ pub(super) fn generate_hal(
         let e = PortClass::Bit.qualified_enum_name_with_dir(&root, PortDirection::In);
         printer
             .print(&format!(
-                r#"static bool {root}_default_{f}({e} p, void *userdata) {{
+                r#"static bool {root}_default_{f}({e} p, uint8_t bit, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
-    int s = b.bit;
+    /* Разряд порта смещает позицию в регистре: у скалярного порта bit = 0. */
+    int s = b.bit + (int)bit;
     switch (b.width) {{
         case 2: return ((*(volatile uint16_t*)b.addr) >> s) & 1u;
         case 4: return ((*(volatile uint32_t*)b.addr) >> s) & 1u;
@@ -213,10 +214,11 @@ pub(super) fn generate_hal(
         let e = PortClass::Bit.qualified_enum_name_with_dir(&root, PortDirection::Out);
         printer
             .print(&format!(
-                r#"static void {root}_default_{f}({e} p, bool val, void *userdata) {{
+                r#"static void {root}_default_{f}({e} p, uint8_t bit, bool val, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
-    int s = b.bit;
+    /* Разряд порта смещает позицию в регистре: у скалярного порта bit = 0. */
+    int s = b.bit + (int)bit;
     switch (b.width) {{
         case 2: {{
             volatile uint16_t *r = (volatile uint16_t*)b.addr;
@@ -248,10 +250,11 @@ pub(super) fn generate_hal(
         let e = PortClass::Rational.qualified_enum_name_with_dir(&root, PortDirection::In);
         printer
             .print(&format!(
-                r#"static float {root}_default_{f}({e} p, void *userdata) {{
+                r#"static float {root}_default_{f}({e} p, uint8_t index, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
-    return *(volatile float*)b.addr;
+    /* Элемент лежит через шаг в ширину значения: у скалярного порта index = 0. */
+    return *(volatile float*)(b.addr + (uintptr_t)index * b.width);
 }}"#,
                 f = FUNCTION_PORT_READ_FLOAT,
             ))
@@ -261,10 +264,11 @@ pub(super) fn generate_hal(
         let e = PortClass::Rational.qualified_enum_name_with_dir(&root, PortDirection::Out);
         printer
             .print(&format!(
-                r#"static void {root}_default_{f}({e} p, float val, void *userdata) {{
+                r#"static void {root}_default_{f}({e} p, uint8_t index, float val, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
-    *(volatile float*)b.addr = val;
+    /* Элемент лежит через шаг в ширину значения: у скалярного порта index = 0. */
+    *(volatile float*)(b.addr + (uintptr_t)index * b.width) = val;
 }}"#,
                 f = FUNCTION_PORT_WRITE_FLOAT,
             ))
@@ -274,14 +278,16 @@ pub(super) fn generate_hal(
         let e = PortClass::Numeric.qualified_enum_name_with_dir(&root, PortDirection::In);
         printer
             .print(&format!(
-                r#"static int64_t {root}_default_{f}({e} p, void *userdata) {{
+                r#"static int64_t {root}_default_{f}({e} p, uint8_t index, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
+    /* Элемент лежит через шаг в ширину значения: у скалярного порта index = 0. */
+    uintptr_t at = b.addr + (uintptr_t)index * b.width;
     switch (b.width) {{
-        case 1: return (int64_t)*(volatile uint8_t*)b.addr;
-        case 2: return (int64_t)*(volatile uint16_t*)b.addr;
-        case 8: return (int64_t)*(volatile uint64_t*)b.addr;
-        default: return (int64_t)*(volatile uint32_t*)b.addr;
+        case 1: return (int64_t)*(volatile uint8_t*)at;
+        case 2: return (int64_t)*(volatile uint16_t*)at;
+        case 8: return (int64_t)*(volatile uint64_t*)at;
+        default: return (int64_t)*(volatile uint32_t*)at;
     }}
 }}"#,
                 f = FUNCTION_PORT_READ_NUMERIC,
@@ -292,14 +298,16 @@ pub(super) fn generate_hal(
         let e = PortClass::Numeric.qualified_enum_name_with_dir(&root, PortDirection::Out);
         printer
             .print(&format!(
-                r#"static void {root}_default_{f}({e} p, int64_t val, void *userdata) {{
+                r#"static void {root}_default_{f}({e} p, uint8_t index, int64_t val, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
+    /* Элемент лежит через шаг в ширину значения: у скалярного порта index = 0. */
+    uintptr_t at = b.addr + (uintptr_t)index * b.width;
     switch (b.width) {{
-        case 1: *(volatile uint8_t*)b.addr = (uint8_t)val; break;
-        case 2: *(volatile uint16_t*)b.addr = (uint16_t)val; break;
-        case 8: *(volatile uint64_t*)b.addr = (uint64_t)val; break;
-        default: *(volatile uint32_t*)b.addr = (uint32_t)val; break;
+        case 1: *(volatile uint8_t*)at = (uint8_t)val; break;
+        case 2: *(volatile uint16_t*)at = (uint16_t)val; break;
+        case 8: *(volatile uint64_t*)at = (uint64_t)val; break;
+        default: *(volatile uint32_t*)at = (uint32_t)val; break;
     }}
 }}"#,
                 f = FUNCTION_PORT_WRITE_NUMERIC,
