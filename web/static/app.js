@@ -60,6 +60,10 @@ export async function main() {
   // быть на месте с первого кадра — иначе оболочка успевает мигнуть чужим
   // языком.
   shell.attach(dom.grip, localStorage);
+  // Разделитель областей: доли внутри оболочки задаёт тот же читатель, что и
+  // её ширину, — и той же ручкой правил (границы, память, клавиатура).
+  shell.attachPanes(dom.split, localStorage);
+  shell.attachRows(dom.hsplit, localStorage);
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   fillLanguages();
   enhance(dom.lang);
@@ -263,7 +267,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "project",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "project",
     "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",

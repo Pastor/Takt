@@ -524,6 +524,68 @@ test("оболочка: испорченная запись ширины не р
   assert.equal(shell.stored({ getItem: () => { throw new Error("нет доступа"); } }), null);
 });
 
+test("разделитель областей: доли не схлопывают ни одну из них", () => {
+  // ⚠️ Ноль сюда не годится: область, сжатая в полосу, выглядит пропавшей, а
+  // вернуть её мышью уже не за что — разделитель уезжает под самый край.
+  assert.equal(shell.clampRatio(0.5), 0.5, "внутри пределов — как просили");
+  assert.equal(shell.clampRatio(0), shell.MIN_RATIO, "область схлопнута");
+  assert.equal(shell.clampRatio(1), 1 - shell.MIN_RATIO, "соседка схлопнута");
+  assert.equal(shell.clampRatio(-3), shell.MIN_RATIO);
+  // Испорченная запись хранилища даёт УМОЛЧАНИЕ, а не «долю NaN»: с нею
+  // вторая область исчезла бы молча, без единого отказа.
+  assert.equal(shell.clampRatio(NaN), shell.HALF);
+  assert.equal(shell.clampRatio(Number("не число")), shell.HALF);
+});
+
+test("разделитель областей: незаданная доля — половина, а не ноль", () => {
+  // ⚠️ Нашлось прогоном страницы: `Number(null)` даёт НОЛЬ, ноль — законная
+  // доля, и первый же заход схлопывал исходник в пятую часть экрана. Отказа
+  // при этом нет: страница просто открывается не такой, как задумана.
+  assert.equal(shell.panes({ getItem: () => null }), shell.HALF, "пусто — не ноль");
+  assert.equal(shell.panes({ getItem: () => "" }), shell.HALF);
+  assert.equal(shell.panes({ getItem: () => "не число" }), shell.HALF);
+  assert.equal(shell.panes({ getItem: () => "0.65" }), 0.65, "запомненное читается");
+  assert.equal(shell.panes({ getItem: () => "0.01" }), shell.MIN_RATIO, "прижимается");
+  assert.equal(shell.panes({ getItem: () => { throw new Error("нет доступа"); } }), shell.HALF);
+});
+
+test("разделитель рядов: та же ручка правил, другая ось", () => {
+  // ⚠️ Предмет — ОДНО правило на оба разделителя: границы, память и счёт доли
+  // у них общие, разойдись они — «ещё» и «выше» стали бы разными контролами.
+  const work = { left: 100, width: 800, top: 50, height: 400 };
+  assert.equal(shell.ratioAt(250, work, "y"), 0.5, "середина по высоте");
+  assert.equal(shell.ratioAt(150, work, "y"), 0.25);
+  assert.equal(shell.ratioAt(0, work, "y"), shell.MIN_RATIO, "прижимается сверху");
+  assert.equal(shell.ratioAt(5000, work, "y"), 1 - shell.MIN_RATIO);
+  // Ось по умолчанию — горизонтальная: у неё считается ширина, а не высота.
+  assert.equal(shell.ratioAt(500, work), 0.5);
+  // ⚠️ Ключи хранилища РАЗНЫЕ: общий ключ означал бы, что колонки и ряды
+  // помнят одну долю на двоих и таскают друг друга.
+  assert.notEqual(shell.PANES_KEY, shell.ROWS_KEY);
+  assert.equal(shell.panes({ getItem: () => "0.7" }, shell.ROWS_KEY), 0.7);
+  // ⚠️ Умолчание рядов НЕ половина: до разделителя список диагностик занимал
+  // 30 % высоты, и читатель, ничего не тронувший, не должен обнаружить, что
+  // редактор ужался вдвое.
+  assert.equal(
+    shell.panes({ getItem: () => null }, shell.ROWS_KEY, shell.ROWS_DEFAULT),
+    shell.ROWS_DEFAULT
+  );
+  assert.equal(shell.clampRatio(NaN, shell.ROWS_DEFAULT), shell.ROWS_DEFAULT);
+});
+
+test("разделитель областей: доля считается от рабочей области, а не от окна", () => {
+  // ⚠️ Оболочка стоит по центру и бывает уже окна: считай мы от края окна —
+  // разделитель уезжал бы из-под указателя тем сильнее, чем уже оболочка.
+  const work = { left: 200, width: 800 };
+  assert.equal(shell.ratioAt(600, work), 0.5, "середина области — половина");
+  assert.equal(shell.ratioAt(400, work), 0.25);
+  // Указатель ушёл за край области — доля прижимается, а не уходит за предел.
+  assert.equal(shell.ratioAt(0, work), shell.MIN_RATIO);
+  assert.equal(shell.ratioAt(5000, work), 1 - shell.MIN_RATIO);
+  // Области ещё нет на экране (нулевая ширина) — умолчание, а не деление на ноль.
+  assert.equal(shell.ratioAt(100, { left: 0, width: 0 }), shell.HALF);
+});
+
 test("адаптив: точки перелома перечислены в одном месте", async () => {
   // ⚠️ Числа порогов разбегаются по файлу первыми: одно правило поправили,
   // другое забыли, и на одной ширине действуют обе раскладки. Реестр —

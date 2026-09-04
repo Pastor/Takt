@@ -21,9 +21,71 @@
 // Значение помнится в `localStorage`: это настройка удобства читателя, и
 // спрашивать её заново на каждом заходе незачем. В ссылку-снимок она не
 // входит — ширина монитора у получателя своя.
+//
+// # Две ручки, одно правило
+//
+// Ручек здесь две, и предметы у них разные: `attach` задаёт ширину ОБОЛОЧКИ
+// (сколько места занимает страница в окне), `attachPanes` — ДОЛИ двух областей
+// внутри неё (сколько из них отдано исходнику, сколько выводу). Общего у них —
+// границы, память и обязательная клавиатура, и потому они лежат рядом: заведи
+// вторую отдельно, и правила разошлись бы на первой же правке.
 
-/** Ключ хранилища. */
+/** Ключ хранилища ширины оболочки. */
 export const KEY = "takt.shell";
+
+/** Ключ хранилища долей областей по горизонтали. */
+export const PANES_KEY = "takt.panes";
+
+/** Ключ хранилища долей рядов области (редактор и диагностики). */
+export const ROWS_KEY = "takt.rows";
+
+/** Какими стрелками двигается разделитель каждой оси. */
+const ARROWS = { x: ["ArrowLeft", "ArrowRight"], y: ["ArrowUp", "ArrowDown"] };
+
+/**
+ * Наименьшая доля области: `0.2` — пятая часть.
+ *
+ * ⚠️ Ноль сюда не годится: область, сжатая в полосу, выглядит пропавшей, и
+ * вернуть её мышью уже не за что — разделитель уезжает под край.
+ */
+export const MIN_RATIO = 0.2;
+
+/** Умолчание колонок — равные половины: пока читатель не тронул ручку, ничего не меняется. */
+export const HALF = 0.5;
+
+/**
+ * Умолчание рядов: семь десятых — редактору.
+ *
+ * ⚠️ Не половина: до появления разделителя список диагностик занимал 30 %
+ * высоты, и умолчание обязано оставить вид прежним — читатель, ничего не
+ * тронувший, не должен обнаружить, что редактор ужался вдвое.
+ */
+export const ROWS_DEFAULT = 0.7;
+
+/**
+ * Приводит долю к допустимой и отбрасывает мусор.
+ *
+ * ⚠️ Отдельной функцией по той же причине, что и [`clamp`]: DOM в проверках
+ * нет, а правило есть. `NaN` из испорченной записи хранилища обязан давать
+ * умолчание, а не «ширину NaN» — вторая область тогда исчезает молча.
+ */
+export function clampRatio(ratio, fallback = HALF) {
+  if (!Number.isFinite(ratio)) return fallback;
+  return Math.min(1 - MIN_RATIO, Math.max(MIN_RATIO, ratio));
+}
+
+/**
+ * Доля по месту указателя внутри рабочей области.
+ *
+ * @param {number} x координата указателя
+ * @param {{left: number, width: number}} rect место рабочей области
+ */
+export function ratioAt(point, rect, axis = "x") {
+  const size = axis === "y" ? rect?.height : rect?.width;
+  const start = axis === "y" ? rect?.top : rect?.left;
+  if (!size || size <= 0) return HALF;
+  return clampRatio((point - start) / size);
+}
 
 /** Наименьшая ширина оболочки: уже неё две колонки кода не имеют смысла. */
 export const MIN_WIDTH = 640;
@@ -121,4 +183,142 @@ export function attach(grip, storage) {
   window.addEventListener("resize", () => apply(width));
 
   apply(width);
+}
+
+/**
+ * Заводит разделитель областей.
+ *
+ * ⚠️ Доли считаются от МЕСТА рабочей области, а не от окна: оболочка стоит по
+ * центру и бывает уже окна, и счёт от края уводил бы разделитель из-под
+ * указателя тем сильнее, чем уже оболочка.
+ *
+ * @param {HTMLElement} split элемент-разделитель
+ * @param {Storage} storage хранилище настройки
+ */
+export function attachPanes(split, storage) {
+  attachDivider(split, {
+    storage,
+    key: PANES_KEY,
+    axis: "x",
+    // Доли считаются от рабочей области — вместилища разделителя.
+    box: () => split.parentElement.getBoundingClientRect(),
+    apply: (ratio, root) => {
+      // Доли задаются ОБЕ: `fr` делит остаток, и оставь мы вторую единицей —
+      // области перестали бы быть долями друг друга.
+      root.style.setProperty("--panes-l", `${ratio}fr`);
+      root.style.setProperty("--panes-r", `${1 - ratio}fr`);
+    },
+  });
+}
+
+/**
+ * Заводит РЯДЫ области: разделитель между редактором и диагностиками.
+ *
+ * ⚠️ Та же ручка правил, что у колонок: разделитель — один вид контрола, и
+ * второй набор границ, памяти и клавиатуры разошёлся бы с первым на первой же
+ * правке. Разница только в оси и в том, что именно ставится в стилях.
+ */
+export function attachRows(split, storage) {
+  attachDivider(split, {
+    storage,
+    key: ROWS_KEY,
+    axis: "y",
+    fallback: ROWS_DEFAULT,
+    box: () => split.parentElement.getBoundingClientRect(),
+    // Доля — часть высоты, отданная ВЕРХНЕЙ области (редактору); нижней
+    // достаётся остаток, и он же задаёт высоту списка диагностик.
+    apply: (ratio, root) => {
+      root.style.setProperty("--rows-b", `${(1 - ratio) * 100}%`);
+    },
+  });
+}
+
+/**
+ * Ручка разделителя: границы, память, клавиатура — на обе оси.
+ *
+ * @param {HTMLElement} split элемент-разделитель
+ * @param {{storage: Storage, key: string, axis: "x"|"y", fallback?: number,
+ *          box: () => DOMRect, apply: (ratio: number, root: HTMLElement) => void}} plan
+ *        чем меряем, где помним, что ставим и к чему возвращаемся
+ */
+function attachDivider(split, plan) {
+  const root = split.ownerDocument.documentElement;
+  const vertical = plan.axis === "y";
+  const fallback = plan.fallback ?? HALF;
+  let ratio = panes(plan.storage, plan.key, fallback);
+
+  const apply = (next) => {
+    ratio = clampRatio(next, fallback);
+    plan.apply(ratio, root);
+    split.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
+    split.setAttribute("aria-valuemin", String(Math.round(MIN_RATIO * 100)));
+    split.setAttribute("aria-valuemax", String(Math.round((1 - MIN_RATIO) * 100)));
+  };
+
+  const remember = () => {
+    try {
+      plan.storage.setItem(plan.key, String(ratio));
+    } catch {
+      // Приватный режим либо запрет сайту: доли действуют до перезагрузки.
+    }
+  };
+
+  split.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    split.setPointerCapture(event.pointerId);
+    const move = (moved) =>
+      apply(ratioAt(vertical ? moved.clientY : moved.clientX, plan.box(), plan.axis));
+    const stop = () => {
+      split.removeEventListener("pointermove", move);
+      split.removeEventListener("pointerup", stop);
+      split.removeEventListener("pointercancel", stop);
+      remember();
+    };
+    split.addEventListener("pointermove", move);
+    split.addEventListener("pointerup", stop);
+    split.addEventListener("pointercancel", stop);
+  });
+
+  // Клавиатура обязательна — разделитель без неё недоступен вовсе. Стрелки
+  // берутся ПО ОСИ таблицей: у горизонтального разделителя «влево» не значит
+  // ничего, а тернарник из двух литералов сверка ключей словаря принимает за
+  // подписи (нашлось её же прогоном).
+  const [less, more] = ARROWS[plan.axis];
+  split.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 0.1 : 0.02;
+    switch (event.key) {
+      case less: apply(ratio - step); remember(); break;
+      case more: apply(ratio + step); remember(); break;
+      case "Home": apply(MIN_RATIO); remember(); break;
+      case "End": apply(1 - MIN_RATIO); remember(); break;
+      default: return;
+    }
+    event.preventDefault();
+  });
+
+  // Двойной щелчок возвращает УМОЛЧАНИЕ: сдвинув разделитель случайно,
+  // вернуть его надо одним движением — и вернуть именно к тому, что было.
+  split.addEventListener("dblclick", () => {
+    apply(fallback);
+    remember();
+  });
+
+  apply(ratio);
+}
+
+/**
+ * Читает запомненную долю; умолчание — равные половины.
+ *
+ * ⚠️ Пустая запись отвечает УМОЛЧАНИЕМ, а не разбором пустоты: `Number(null)`
+ * даёт ноль, ноль — доля, и первый же заход на страницу схлопывал бы исходник
+ * в пятую часть. Нашлось прогоном страницы 2026-09-04.
+ */
+export function panes(storage, key = PANES_KEY, fallback = HALF) {
+  try {
+    const raw = storage.getItem(key);
+    if (raw === null || raw === undefined || raw === "") return fallback;
+    return clampRatio(Number(raw), fallback);
+  } catch {
+    return fallback;
+  }
 }

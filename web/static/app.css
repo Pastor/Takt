@@ -136,10 +136,20 @@
    * значений на 92 объявления, прежде чем завели правило. Гейт отвергает
    * `font-size` числом целиком. */
   --text-xs: 0.78rem;  /* служебные строки: шапки областей, имя файла */
-  --text-sm: 0.82rem;  /* код в списках и выводе, подписи контролов */
+  --text-sm: 0.82rem;  /* код в списках и выводе */
   --text-md: 0.9rem;   /* код редактора — его читают дольше всего */
-  --text-lg: 1rem;     /* текст интерфейса и поля ввода */
+  --text-lg: 1rem;     /* текст интерфейса */
   --text-xl: 1.1rem;   /* имя инструмента в шапке */
+
+  /* ── Множитель контролов (решение заказчика 2026-09-04) ────────────────
+   * Контролы набираются ВДВОЕ крупнее текста интерфейса: их читают беглым
+   * взглядом и по ним попадают, тогда как код читают строкой. Множитель
+   * отдельным токеном, а не числом в ступени: масштаб контролов — настройка
+   * одного решения, и менять её надо в одном месте, а не в девяти правилах.
+   * ⚠️ Высоты контролов множатся ТЕМ ЖЕ числом: кегль без высоты обрезает
+   * текст, а высота без кегля даёт пустую кнопку. */
+  --control-scale: 2;
+  --text-control: calc(var(--text-lg) * var(--control-scale));
 
   /* ── Шкала высот ──────────────────────────────────────────────────────
    * Три ступени, и каждая названа: 44 px — предел цели нажатия WCAG 2.5.5
@@ -150,8 +160,8 @@
    * она же с запасом перекрывает предел цели нажатия WCAG 2.5.5 (44 px):
    * отдельной ступени «для пальца» больше не нужно. 32 px — плотная строка
    * (вкладка, полка режимов), 24 px — служебная шапка области. */
-  --h-control: 48px;
-  --h-dense: 32px;
+  --h-control: calc(48px * var(--control-scale));
+  --h-dense: calc(32px * var(--control-scale));
   --h-compact: 24px;
 
   /* ── Шкала скруглений ─────────────────────────────────────────────────
@@ -354,6 +364,44 @@ body {
   .bar, .work, .modes { max-width: none; }
 }
 
+/* Разделитель областей: та же полоса, что у ручки ширины, но не у края окна, а
+ * между колонками — и потому обычным элементом сетки, а не `fixed`. Заливки
+ * своей у него нет: её даёт зазор сетки (`--border`), и вторая линия рядом с
+ * первой читалась бы как рамка. */
+.split {
+  width: var(--gap-half);
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+
+/* Отклик — той же формулой одной плотности, что у ручки ширины и контролов. */
+.split:hover {
+  background: color-mix(in srgb, var(--on-surface) var(--state-press), var(--surface));
+}
+
+/* Фокус — акцентная заливка: у полосы во всю высоту кольца не выйдет (то же
+ * исключение § 6, что у `.grip`). */
+.split:focus-visible {
+  outline: none;
+  background: var(--surface-accent);
+}
+
+/* Разделитель РЯДОВ — тот же контрол, другая ось: полоса во всю ширину
+ * области между редактором и диагностиками. */
+.split-h {
+  width: auto;
+  height: var(--gap-half);
+  cursor: row-resize;
+}
+
+/* ⚠️ На узком экране колонка ОДНА, и делить её по вертикали нечего: там
+ * пропадает разделитель колонок. Разделитель РЯДОВ остаётся — редактор и
+ * диагностики стоят друг под другом на любом экране. */
+@media (max-width: 900px) {
+  .split:not(.split-h) { display: none; }
+}
+
 /* ── Верхняя строка ─────────────────────────────────────────────────────── */
 .bar {
   display: flex;
@@ -371,7 +419,7 @@ body {
 /* ── Контролы: вариант — подмена пары, и ничего больше ──────────────────── */
 button, select, input, textarea {
   font: inherit;
-  font-size: var(--text-lg);
+  font-size: var(--text-control);
   height: var(--h-control);
   padding: 0 var(--gap);
   border: 1px solid var(--border);
@@ -416,10 +464,13 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 }
 
 /* ── Рабочая область ────────────────────────────────────────────────────── */
+/* ⚠️ Колонок ТРИ: между областями стоит разделитель, и доли задаёт читатель
+ * (`shell.js`, § 5в книги). Умолчание — равные половины, то есть ровно то,
+ * что было до появления ручки. */
 .work {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, var(--panes-l, 1fr)) auto minmax(0, var(--panes-r, 1fr));
   gap: 1px;
   background: var(--border);
   min-height: 0;
@@ -459,6 +510,29 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 }
 
 .line { min-height: 1.5em; }
+
+/* ── Номера строк в панелях кода ─────────────────────────────────────────
+ * Номер печатает СЧЁТЧИК CSS, а не разметка: строки красит один носитель
+ * (`paintCode`), и вставь он узел с номером — этот номер попал бы в
+ * `textContent` редактора, то есть в текст модели. Порождённое содержимое в
+ * текст не входит и не выделяется, поэтому копирование кода остаётся
+ * копированием кода.
+ * ⚠️ Счётчик заводится на КАЖДОЙ области кода: общий на страницу продолжал бы
+ * нумерацию вывода с последней строки исходника. */
+.editor, .output, .file-text { counter-reset: codeline; }
+
+.line { counter-increment: codeline; }
+
+.line::before {
+  content: counter(codeline);
+  display: inline-block;
+  min-width: 3ch;
+  margin-right: var(--gap);
+  text-align: right;
+  color: var(--on-surface-soft);
+  user-select: none;
+  -webkit-user-select: none;
+}
 
 /* ── Выпадающий список: кнопка и меню в стиле страницы ───────────────────
  * Системный `<select>` рисуется операционной системой и выпадает из
@@ -615,6 +689,16 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 
 .trace { max-height: none; flex: 1; }
 
+/* Высоту списка диагностик задаёт ЧИТАТЕЛЬ разделителем рядов (`shell.js`).
+ * Умолчание — прежние 30 % высоты: пока разделитель не тронут, не меняется
+ * ничего. ⚠️ `flex: 0 0 auto` обязателен: без него редактор и список делили бы
+ * остаток по своему усмотрению, и заданная высота ничего не значила бы. */
+#diagnostics {
+  flex: 0 0 auto;
+  max-height: none;
+  height: var(--rows-b, 30%);
+}
+
 .row { padding: var(--gap-quarter) var(--gap); white-space: pre-wrap; }
 /* Ошибка — ПАРА, а не одни чернила: строка диагностики читается как полоса,
  * и по ней же кликают. Состояние передаётся не только цветом — рядом код и
@@ -666,7 +750,7 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 /* ⚠️ Скрытый контрол ВНУТРИ полосы: у полосы `display: flex`, и её дети
    раскладываются ею же — правило `[hidden]` нужно и им. */
 .controls > [hidden] { display: none; }
-.controls label { font-size: var(--text-sm); color: var(--on-surface-soft); }
+.controls label { font-size: var(--text-control); color: var(--on-surface-soft); }
 .controls input[type="text"] { flex: 1; min-width: 12ch; }
 
 .output {
@@ -736,6 +820,8 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 .modes { display: none; }
 
 @media (max-width: 900px) {
+  /* ⚠️ Доли читателя здесь не действуют: колонка одна, и `--panes-l` увёл бы
+     единственную область в свою долю окна. */
   .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   .pane { display: none; }
   body[data-mode="source"] .pane-source,
@@ -758,7 +844,7 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
  * 44 px — предел WCAG 2.5.5. Поля ввода не мельче 16 px: iOS иначе
  * увеличивает страницу при фокусе, и вёрстка «уезжает» сама собой. */
 @media (hover: none) {
-  input, select, textarea, .scenario { font-size: var(--text-lg); }
+  input, select, textarea { font-size: var(--text-control); }
   .row { padding: var(--gap) var(--gap); }
 }
 
