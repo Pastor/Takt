@@ -53,5 +53,9 @@
   "draft.tooBig": "the draft is larger than {limit} KiB ({size} B) — not saved",
   "draft.notSaved": "the draft was not saved: {error}",
 
+  "project.open": "project “{name}” · by {owner}",
+  "project.notFound": "project not found: removed or closed",
+  "project.failed": "project did not open: {error}",
+
   "tools.russianOnly": "Tool messages are still Russian only"
 }

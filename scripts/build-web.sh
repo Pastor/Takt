@@ -51,7 +51,15 @@ fi
 # Версия крейта модуля — из его манифеста: второй записи версии в проекте быть
 # не должно (класс 0084).
 VERSION="$(awk -F'"' '/^version = /{print $2; exit}' "$ROOT/takt-lang/Cargo.toml")"
-LANGUAGE="$(awk -F'"' '/^pub const LANGUAGE_VERSION/{print $2; exit}' "$ROOT/takt-lang/src/lib.rs")"
+# ⚠️ Константа живёт в `takt-lang/src/version.rs` (там же её ищет гейт 0085), а
+# `lib.rs` её только реэкспортирует. Пока читали `lib.rs`, поле `language`
+# описей выходило ПУСТЫМ, и заметить это можно было лишь заглянув в
+# `version.json`: страница берёт версию языка у самого модуля.
+LANGUAGE="$(awk -F'"' '/^pub const LANGUAGE_VERSION/{print $2; exit}' "$ROOT/takt-lang/src/version.rs")"
+if [[ -z "$VERSION" || -z "$LANGUAGE" ]]; then
+  echo "  ОШИБКА: версия крейта ('$VERSION') либо версия языка ('$LANGUAGE') не прочитана"
+  exit 1
+fi
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }

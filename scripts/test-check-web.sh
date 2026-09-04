@@ -55,8 +55,10 @@ cp -R "$ROOT/web/static" "$ROOT/web/tests" "$TREE/web/"
 cp "$ROOT/scripts/check-web.sh" "$ROOT/scripts/build-web.sh" "$ROOT/scripts/target-dir.sh" "$TREE/scripts/"
 cp "$ROOT/takt-lang/Cargo.toml" "$TREE/takt-lang/"
 # Версия ЯЗЫКА для описи сборки берётся из константы (0085), а не повторяется.
+# ⚠️ Живёт она в `version.rs`; `lib.rs` её только реэкспортирует. Пока сборка
+# читала `lib.rs`, поле `language` описей выходило пустым (задача 09c).
 mkdir -p "$TREE/takt-lang/src"
-cp "$ROOT/takt-lang/src/lib.rs" "$TREE/takt-lang/src/"
+cp "$ROOT/takt-lang/src/lib.rs" "$ROOT/takt-lang/src/version.rs" "$TREE/takt-lang/src/"
 # Тема документа: по ней проверяется реестр ролей подсветки (задача 06).
 # ⚠️ Копия дерева — не «весь проект»: файл, который тесты читают, а сторож не
 # кладёт, роняет B4 с чужой причиной (нашлось первым же прогоном 2026-09-04).

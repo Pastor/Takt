@@ -24,7 +24,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 
 use crate::auth::{self, Role, User};
 use crate::config::Config;
@@ -65,6 +65,7 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("GET", "/api/projects/{id}/files/{name}"),
     ("PUT", "/api/projects/{id}/files/{name}"),
     ("DELETE", "/api/projects/{id}/files/{name}"),
+    ("GET", "/api/public"),
 ];
 
 /// Собирает роутер.
@@ -74,12 +75,17 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/token", post(token))
         .route("/revoke", post(revoke))
         .route("/me", get(me))
-        .merge(crate::projects::router());
+        .merge(crate::projects::router())
+        .merge(crate::showcase::router());
 
-    // ⚠️ Неизвестный путь отдаёт `index.html`: страница проекта живёт по
-    // адресу `/p/<id>`, и без этого перезагрузка на ней давала бы 404.
-    let index = state.config.static_dir.join("index.html");
-    let statics = ServeDir::new(&state.config.static_dir).fallback(ServeFile::new(index));
+    // Статика: файлы отдаются как есть, а СТРАНИЦЫ собирает `page`.
+    //
+    // ⚠️ Каталог сам `index.html` не подставляет
+    // (`append_index_html_on_directories(false)`): корень — тоже страница, и
+    // ему, как и `/p/<id>`, надо переписать корень адресов.
+    let statics = ServeDir::new(&state.config.static_dir)
+        .append_index_html_on_directories(false)
+        .fallback(page_service(state.clone()));
 
     let app = Router::new()
         .route("/health", get(health))
@@ -246,17 +252,37 @@ async fn me(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Re
 /// ⚠️ Роль читается **из базы**, а не из токена: иначе снятие права
 /// администратора действовало бы только после истечения часа.
 pub async fn current_user(state: &AppState, headers: &HeaderMap) -> Result<User, ApiError> {
-    let header = headers
+    optional_user(state, headers)
+        .await?
+        .ok_or(ApiError::Unauthorized)
+}
+
+/// Опознаёт того, кто пришёл, если он вообще назвался.
+///
+/// `None` — пришли **без** токена: открытый проект открыт и для того, у кого
+/// учётной записи нет вовсе (задача 09c).
+///
+/// ⚠️ Испорченный токен — это `401`, а не «аноним»: молчаливое понижение до
+/// анонима показало бы владельцу чужую картину его же проекта и выглядело бы
+/// потерей прав, а не просроченным входом.
+pub async fn optional_user(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<Option<User>, ApiError> {
+    let Some(header) = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or(ApiError::Unauthorized)?;
+    else {
+        return Ok(None);
+    };
     let claims =
         auth::read_access(&state.config.jwt_secret, header).ok_or(ApiError::Unauthorized)?;
     let client = state.pool.get().await?;
-    auth::load(&client, &claims.sub)
+    let user = auth::load(&client, &claims.sub)
         .await?
-        .ok_or(ApiError::Unauthorized)
+        .ok_or(ApiError::Unauthorized)?;
+    Ok(Some(user))
 }
 
 fn pair_body(state: &AppState, pair: auth::Pair) -> TokenResponse {
@@ -273,6 +299,81 @@ fn limit(state: &AppState, address: IpAddr) -> Result<(), ApiError> {
         Decision::Allow => Ok(()),
         Decision::Wait(after_secs) => Err(ApiError::TooManyRequests { after_secs }),
     }
+}
+
+/// Отдаёт страницу приложения на адрес, который ею и является.
+///
+/// ⚠️ Неизвестный путь `index.html` **не** получает. Пока получал, промах
+/// адреса выглядел успехом: ссылка на бандл со страницы `/p/<id>` уходила в
+/// `/p/b/<отпечаток>/app.css`, сервер отвечал `200` разметкой, и вкладка
+/// открывалась без стилей и без модуля, не сказав ни слова (нашлось прогоном
+/// страницы 2026-09-04).
+fn page_service(
+    state: Arc<AppState>,
+) -> tower::util::BoxCloneSyncService<Request, Response, std::convert::Infallible> {
+    tower::util::BoxCloneSyncService::new(tower::service_fn(move |request: Request| {
+        let state = state.clone();
+        async move {
+            let path = request.uri().path().to_string();
+            Ok(if is_page(&path) {
+                page(&state).await
+            } else {
+                StatusCode::NOT_FOUND.into_response()
+            })
+        }
+    }))
+}
+
+/// Собирает `index.html`, переписав корень адресов под префикс.
+///
+/// ⚠️ Читается на КАЖДЫЙ запрос, а не при старте: страницу пересобирают чаще,
+/// чем перезапускают сервер, и закешированная разметка отдавала бы вчерашний
+/// бандл, которого на диске уже нет.
+async fn page(state: &AppState) -> Response {
+    let file = state.config.static_dir.join("index.html");
+    let Ok(text) = tokio::fs::read_to_string(&file).await else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "no_static"})),
+        )
+            .into_response();
+    };
+    let body = text.replace(BASE_TAG, &base_tag(&state.config.base_path));
+    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], body).into_response()
+}
+
+/// Как корень адресов записан в исходной разметке.
+const BASE_TAG: &str = "<base href=\"/\">";
+
+/// Тот же тег под префиксом обратного прокси.
+///
+/// ⚠️ Косая черта в конце обязательна: без неё `takt` в `<base href="/takt">`
+/// браузер считает ИМЕНЕМ ФАЙЛА и отбрасывает — адреса снова уезжают в корень.
+fn base_tag(base_path: &str) -> String {
+    if base_path == "/" {
+        BASE_TAG.to_string()
+    } else {
+        format!("<base href=\"{base_path}/\">")
+    }
+}
+
+/// Является ли адрес СТРАНИЦЕЙ приложения.
+///
+/// Страниц две формы: корень и живая страница проекта `/p/<id>`. Всё
+/// остальное — файл, и промах по нему обязан быть промахом.
+pub fn is_page(path: &str) -> bool {
+    let path = path.trim_end_matches('/');
+    if path.is_empty() {
+        return true;
+    }
+    let Some(rest) = path.strip_prefix("/p/") else {
+        return false;
+    };
+    !rest.is_empty()
+        && !rest.contains('/')
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Заголовки кеша по форме адреса.
@@ -327,12 +428,44 @@ mod tests {
     }
 
     #[test]
+    fn a_page_is_a_page_and_a_file_is_a_file() {
+        // ⚠️ Предмет — класс, найденный прогоном страницы: пока `index.html`
+        // отдавался на ЛЮБОЙ неизвестный путь, промах по файлу выглядел
+        // успехом. Со страницы `/p/<id>` ссылка на бандл уходила в
+        // `/p/b/<отпечаток>/app.css`, сервер отвечал `200` разметкой, и вкладка
+        // открывалась без стилей и без модуля, не сказав ни слова.
+        assert!(is_page("/"), "корень — страница");
+        assert!(is_page("/p/_px-i2FkJsWvMobGAbI14g"));
+        assert!(is_page("/p/AbCd/"), "косая черта в конце ничего не меняет");
+        assert!(
+            !is_page("/p/b/f8377401e12e/app.css"),
+            "это файл, а не страница"
+        );
+        assert!(!is_page("/b/f8377401e12e/app.js"));
+        assert!(!is_page("/wasm/0.58.0/takt.wasm"));
+        assert!(!is_page("/p/"), "адрес без идентификатора");
+        assert!(!is_page("/такого-нет"));
+    }
+
+    #[test]
+    fn the_base_of_addresses_follows_the_prefix() {
+        assert_eq!(base_tag("/"), BASE_TAG, "без прокси разметка не меняется");
+        // ⚠️ Косая черта в конце обязательна: без неё браузер считает `takt`
+        // именем файла и отбрасывает — адреса снова уезжают в корень.
+        assert_eq!(base_tag("/takt"), "<base href=\"/takt/\">");
+    }
+
+    #[test]
     fn routes_are_listed_and_unique() {
         let mut seen = std::collections::BTreeSet::new();
         for route in ROUTES {
             assert!(seen.insert(route), "маршрут {route:?} перечислен дважды");
             assert!(route.1.starts_with('/'), "путь без косой: {route:?}");
         }
-        assert_eq!(seen.len(), 13, "пять ручек входа и восемь ручек проектов");
+        assert_eq!(
+            seen.len(),
+            14,
+            "пять ручек входа, восемь ручек проектов и витрина"
+        );
     }
 }
