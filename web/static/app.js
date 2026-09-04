@@ -44,6 +44,8 @@ const state = {
   target: "c",
   args: "",
   scenario: "",
+  /** Область сценария: тот же редактор, что у модели (номера строк, перенос). */
+  scenarioEditor: null,
   version: "",
   languageVersion: "",
   running: false,
@@ -64,6 +66,8 @@ export async function main() {
   // её ширину, — и той же ручкой правил (границы, память, клавиатура).
   shell.attachPanes(dom.split, localStorage);
   shell.attachRows(dom.hsplit, localStorage);
+  // Вкладка прогона делится так же: сценарий сверху, трасса снизу.
+  shell.attachTraceRows(dom.tsplit, localStorage);
   // Перенос строк — настройка УЗКОЙ области, и потому своя у каждой.
   shell.attachWrap(dom.wrapsource, dom.editor, localStorage, shell.WRAP_KEYS.source);
   shell.attachWrap(dom.wrapoutput, dom.output, localStorage, shell.WRAP_KEYS.output);
@@ -89,6 +93,14 @@ export async function main() {
   for (const node of [dom.editor, dom.output, dom.diagnostics, dom.trace]) fade(node);
 
   state.editor = new Editor(dom.editor, onEdit);
+  // Сценарий — такая же область кода: тот же носитель строк, те же номера.
+  // ⚠️ Подсветки у него нет (это JSON, а не Takt), и красить его словами
+  // компилятора было бы неверно — строки печатаются как есть.
+  state.scenarioEditor = new Editor(dom.scenario, () => {
+    state.scenario = state.scenarioEditor.value();
+    state.scenarioEditor.highlight(null, []);
+    saveDraft();
+  });
   wire();
 
   // Учётная запись и проекты. ⚠️ Корень API берётся ОТ ПУТИ страницы: за
@@ -272,7 +284,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "wrapsource", "wrapoutput", "fontless", "fontmore", "fontsize", "project",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "tsplit", "wrapsource", "wrapoutput", "fontless", "fontmore", "fontsize", "project",
     "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",
@@ -304,10 +316,6 @@ function wire() {
   dom.args.addEventListener("input", () => {
     state.args = dom.args.value;
     compile();
-    saveDraft();
-  });
-  dom.scenario.addEventListener("input", () => {
-    state.scenario = dom.scenario.value;
     saveDraft();
   });
   dom.lang.addEventListener("change", async () => {
@@ -387,7 +395,7 @@ function applyState(restored) {
   state.scenario = restored.scenario ?? "";
   dom.target.value = state.target;
   dom.args.value = state.args;
-  dom.scenario.value = state.scenario;
+  state.scenarioEditor.setValue(state.scenario);
   state.editor.setValue(restored.source ?? SAMPLE);
 }
 

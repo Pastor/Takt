@@ -565,6 +565,24 @@ test("кегль страницы: шаг в единицу и обе грани
   assert.ok(shell.FONT_MIN < shell.FONT_DEFAULT && shell.FONT_DEFAULT < shell.FONT_MAX);
 });
 
+test("вкладка прогона: у сценария своя доля и свой ключ памяти", () => {
+  // ⚠️ Ключи РАЗНЫЕ у трёх пар (колонки, ряды области, ряды вкладки): общий
+  // ключ таскал бы их друг за другом, и сдвинув один разделитель, читатель
+  // двигал бы все три.
+  const keys = [shell.PANES_KEY, shell.ROWS_KEY, shell.TRACE_KEY];
+  assert.equal(new Set(keys).size, keys.length, `ключи совпали: ${keys.join(", ")}`);
+  // Умолчание вкладки — НЕ половина: сценарий короток (несколько строк JSON),
+  // а трасса длинна, и полупустое поле над обрезанной трассой читателю не
+  // нужно.
+  assert.ok(shell.TRACE_DEFAULT < shell.HALF, "сценарию отдана меньшая доля");
+  assert.equal(
+    shell.panes({ getItem: () => null }, shell.TRACE_KEY, shell.TRACE_DEFAULT),
+    shell.TRACE_DEFAULT
+  );
+  // Границы — те же: область, сжатая в полосу, выглядит пропавшей.
+  assert.equal(shell.clampRatio(0, shell.TRACE_DEFAULT), shell.MIN_RATIO);
+});
+
 test("перенос строк: настройка своя у каждой области и по умолчанию выключена", () => {
   // ⚠️ Умолчание — НЕТ переноса: код читают столбцом, и включённый по
   // умолчанию перенос менял бы вид всякой модели у всякого читателя.

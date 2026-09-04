@@ -822,12 +822,20 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
  * значит и высота строки у них общая. */
 .file-text .line { min-height: 1.5em; }
 
+/* Сценарий — область КОДА (номера строк, перенос, подсветка ошибок идут тем же
+ * носителем, что у модели). Высоту задаёт читатель разделителем вкладки;
+ * умолчание — прежние 6.5 строки. ⚠️ `flex: 0 0 auto` обязателен: без него
+ * сценарий и трасса делили бы остаток по своему усмотрению. */
 .scenario {
-  height: 6.5em;
+  flex: 0 0 auto;
+  height: var(--trace-t, 6.5em);
+  min-height: 3em;
   padding: var(--gap);
   font-family: var(--font-code);
   font-size: var(--text-sm);
-  resize: vertical;
+  background: var(--surface-sunken);
+  color: var(--on-surface-sunken);
+  border-radius: var(--radius);
 }
 
 .status { font-size: var(--text-sm); }
