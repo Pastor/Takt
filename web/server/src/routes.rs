@@ -38,6 +38,12 @@ pub struct AppState {
     /// соединение под мьютексом создавало бы очередь, которой в базе нет.
     pub pool: deadpool_postgres::Pool,
     pub rate: Window,
+    /// Версия модуля, которую сервер считает последней (решение A5): её
+    /// получает новый проект, и по ней страница берёт `wasm/<версия>/`.
+    pub module_version: String,
+    /// Версия языка Takt на момент создания проекта — для человека, а не для
+    /// выбора модуля.
+    pub language_version: String,
 }
 
 /// Список маршрутов сервиса.
@@ -51,6 +57,14 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/token"),
     ("POST", "/api/revoke"),
     ("GET", "/api/me"),
+    ("GET", "/api/projects"),
+    ("POST", "/api/projects"),
+    ("GET", "/api/projects/{id}"),
+    ("PATCH", "/api/projects/{id}"),
+    ("DELETE", "/api/projects/{id}"),
+    ("GET", "/api/projects/{id}/files/{name}"),
+    ("PUT", "/api/projects/{id}/files/{name}"),
+    ("DELETE", "/api/projects/{id}/files/{name}"),
 ];
 
 /// Собирает роутер.
@@ -60,7 +74,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/token", post(token))
         .route("/revoke", post(revoke))
         .route("/me", get(me))
-        .with_state(state.clone());
+        .merge(crate::projects::router());
 
     // ⚠️ Неизвестный путь отдаёт `index.html`: страница проекта живёт по
     // адресу `/p/<id>`, и без этого перезагрузка на ней давала бы 404.
@@ -319,6 +333,6 @@ mod tests {
             assert!(seen.insert(route), "маршрут {route:?} перечислен дважды");
             assert!(route.1.starts_with('/'), "путь без косой: {route:?}");
         }
-        assert_eq!(seen.len(), 5, "остов 09a — пять маршрутов");
+        assert_eq!(seen.len(), 13, "пять ручек входа и восемь ручек проектов");
     }
 }

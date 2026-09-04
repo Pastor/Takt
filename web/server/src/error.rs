@@ -43,6 +43,15 @@ pub enum ApiError {
         /// Через сколько секунд окно освободится.
         after_secs: u64,
     },
+    /// Предел хранилища превышен: названы и предел, и факт.
+    #[error("{message}")]
+    LimitExceeded {
+        /// Что превышено, сколько можно и сколько получено.
+        message: String,
+    },
+    /// Запись устарела: у ресурса другая ревизия.
+    #[error("{0}")]
+    Conflict(String),
     /// Запрос не годится: причина названа.
     #[error("{0}")]
     BadRequest(String),
@@ -71,6 +80,14 @@ impl ApiError {
             // где его как раз и получают).
             Self::InvalidCredentials => (StatusCode::BAD_REQUEST, "invalid_grant"),
             Self::TooManyRequests { .. } => (StatusCode::TOO_MANY_REQUESTS, "too_many_requests"),
+            // 413 у ВСЕХ пределов, включая число файлов и число проектов:
+            // клиент по одному коду показывает одно — «столько нельзя», — а
+            // текст называет, чего именно и сколько.
+            Self::LimitExceeded { .. } => (StatusCode::PAYLOAD_TOO_LARGE, "limit_exceeded"),
+            // 409, а не 412: ревизию клиент шлёт в теле, а не заголовком
+            // `If-Match`, и предусловия HTTP здесь нет — есть расхождение
+            // состояний, о котором автору предстоит решить.
+            Self::Conflict(_) => (StatusCode::CONFLICT, "revision_conflict"),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         }
@@ -120,6 +137,10 @@ mod tests {
             ApiError::LoginTaken,
             ApiError::InvalidCredentials,
             ApiError::TooManyRequests { after_secs: 1 },
+            ApiError::LimitExceeded {
+                message: "предел 1, получено 2".into(),
+            },
+            ApiError::Conflict("ревизия 1, у ресурса 2".into()),
             ApiError::BadRequest("причина".into()),
             ApiError::Internal(anyhow::anyhow!("причина")),
         ];
