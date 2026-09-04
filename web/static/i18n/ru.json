@@ -53,5 +53,9 @@
   "draft.tooBig": "черновик больше {limit} КиБ ({size} Б) — не сохранён",
   "draft.notSaved": "черновик не сохранён: {error}",
 
+  "project.open": "проект «{name}» · автор {owner}",
+  "project.notFound": "проект не найден: он удалён либо закрыт",
+  "project.failed": "проект не открылся: {error}",
+
   "tools.russianOnly": "Сообщения инструментов пока только на русском"
 }

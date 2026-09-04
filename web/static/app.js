@@ -14,6 +14,7 @@ import { SAMPLE } from "./sample.js";
 import { enhance } from "./pick.js";
 import * as build from "./build.js";
 import * as shell from "./shell.js";
+import * as project from "./project.js";
 
 /**
  * Адрес модуля, если описи сборки нет.
@@ -79,9 +80,41 @@ export async function main() {
   state.editor = new Editor(dom.editor, onEdit);
   wire();
 
-  const restored = (await decodeState(location.hash)) ?? draft.load(localStorage);
+  // Порядок источников: адрес проекта → ссылка-снимок → черновик → пример.
+  // ⚠️ Живая страница сильнее снимка и черновика: читатель пришёл ПО АДРЕСУ
+  // проекта, и показать ему вместо проекта вчерашний черновик значило бы
+  // ответить не на тот вопрос.
+  const opened = await openProject();
+  const restored = opened ?? (await decodeState(location.hash)) ?? draft.load(localStorage);
   applyState(restored ?? { source: SAMPLE });
   refresh();
+}
+
+/**
+ * Открывает проект, если страницу открыли по его адресу (`/p/<id>`).
+ *
+ * @returns {Promise<object|null>} состояние редактора либо `null`
+ */
+async function openProject() {
+  const id = project.idInPath(location.pathname);
+  if (!id) return null;
+  try {
+    const opened = await project.read(id, project.apiRoot(location.pathname));
+    // Подпись — часть ответа: читатель обязан видеть, ЧЕЙ образец у него
+    // открыт, иначе чужая модель выглядит его собственной работой.
+    dom.project.textContent = t("project.open", {
+      name: opened.name,
+      owner: opened.owner,
+    });
+    dom.project.hidden = false;
+    return { source: opened.source, scenario: opened.scenario };
+  } catch (error) {
+    // Отказ виден строкой, а не пустой страницей: удалённый или закрытый
+    // проект — обычный ответ сервиса, и он обязан быть назван.
+    dom.project.textContent = t(error?.key ?? "project.failed", error?.params ?? {});
+    dom.project.hidden = false;
+    return null;
+  }
 }
 
 /**
@@ -202,7 +235,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "project",
   ]) {
     dom[id] = document.getElementById(id);
   }

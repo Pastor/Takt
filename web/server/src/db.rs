@@ -31,7 +31,12 @@ use deadpool_postgres::{Config as PoolConfig, Pool, Runtime};
 use tokio_postgres::NoTls;
 
 /// Версия схемы. Растёт вместе с изменением таблиц.
-pub const SCHEMA_VERSION: i64 = 1;
+///
+/// ⚠️ Задача 09c подняла её со `1` до `2`: колонка `search` перестала быть
+/// вычисляемой базой. Шага перехода нет намеренно (выпуска не было) — база
+/// прежней версии **отвергается с обоими номерами**, и это видно словами, а не
+/// проявляется потерей поиска на стенде.
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// Заводит пул соединений по строке подключения.
 ///
@@ -141,15 +146,14 @@ CREATE TABLE project_grants (
     PRIMARY KEY (project_id, user_id)
 );
 
--- Поиск по открытым проектам (задача 09c). Колонка считается базой, а не
--- кодом: вторая точка вычисления разошлась бы с первой при первой же правке
--- запроса. Словарь `russian` разбирает кириллицу; `simple` оставлен именам,
--- которые склонять нечего.
-ALTER TABLE projects ADD COLUMN search tsvector
-    GENERATED ALWAYS AS (
-        setweight(to_tsvector('russian', coalesce(name, '')), 'A') ||
-        setweight(to_tsvector('russian', coalesce(description, '')), 'B')
-    ) STORED;
+-- Поиск по открытым проектам (задача 09c).
+--
+-- ⚠️ Колонка НЕ вычисляемая базой (`GENERATED`), хотя такой заведена задачей
+-- 09a. Причина названа проработкой: искать надо и по ТЕКСТУ файлов, а
+-- вычисляемая колонка видит только свою строку — соседнюю таблицу ей не
+-- прочесть. Значение кладёт один носитель `search::refresh`, и второго места
+-- вычисления нет (класс 0084).
+ALTER TABLE projects ADD COLUMN search tsvector;
 CREATE INDEX projects_search ON projects USING gin(search);
 "#;
 

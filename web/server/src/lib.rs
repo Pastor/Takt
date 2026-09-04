@@ -24,3 +24,4 @@ pub mod limits;
 pub mod projects;
 pub mod rate;
 pub mod routes;
+pub mod showcase;

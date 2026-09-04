@@ -35,7 +35,8 @@ use crate::auth::User;
 use crate::db;
 use crate::error::ApiError;
 use crate::limits;
-use crate::routes::{AppState, current_user};
+use crate::routes::{AppState, current_user, optional_user};
+use crate::showcase;
 
 /// Метаданные проекта.
 #[derive(Debug, Serialize)]
@@ -44,6 +45,9 @@ pub struct ProjectJson {
     pub name: String,
     pub description: String,
     pub visibility: String,
+    /// Логин владельца — псевдоним, а не персональные данные (проработка §0).
+    /// Нужен странице открытого проекта: «чей это образец».
+    pub owner: String,
     /// Версия модуля, которой открывается проект (решение A5).
     pub takt_lang: String,
     pub language_version: String,
@@ -152,9 +156,11 @@ async fn list(
     let client = state.pool.get().await?;
     let rows = client
         .query(
-            "SELECT id, name, description, visibility, takt_lang, language_version,
-                    main_file, revision, size_bytes, forked_from, created_at, updated_at
-             FROM projects WHERE owner_id = $1 ORDER BY updated_at DESC",
+            "SELECT p.id, p.name, p.description, p.visibility, u.login AS owner,
+                    p.takt_lang, p.language_version, p.main_file, p.revision,
+                    p.size_bytes, p.forked_from, p.created_at, p.updated_at
+             FROM projects p JOIN users u ON u.id = p.owner_id
+             WHERE p.owner_id = $1 ORDER BY p.updated_at DESC",
             &[&user.id],
         )
         .await?;
@@ -211,6 +217,7 @@ async fn create(
             ],
         )
         .await?;
+    showcase::refresh(&transaction, &id).await?;
     let row = transaction.query_one(SELECT_PROJECT, &[&id]).await?;
     let project = project_of(&row);
     transaction.commit().await?;
@@ -222,9 +229,9 @@ async fn read(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let user = current_user(&state, &headers).await?;
+    let viewer = optional_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let project = owned(&client, &id, &user).await?;
+    let project = readable(&client, &id, viewer.as_ref()).await?;
     let rows = client
         .query(
             "SELECT name, kind, size_bytes FROM project_files
@@ -331,6 +338,9 @@ async fn patch(
             &[&db::now(), &id],
         )
         .await?;
+    // ⚠️ Имя и описание попадают в поиск: без пересчёта проект искался бы по
+    // позавчерашнему имени, и увидеть это глазом нельзя.
+    showcase::refresh(&transaction, &id).await?;
     let row = transaction.query_one(SELECT_PROJECT, &[&id]).await?;
     let project = project_of(&row);
     transaction.commit().await?;
@@ -358,9 +368,9 @@ async fn read_file(
     headers: HeaderMap,
     Path((id, name)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    let user = current_user(&state, &headers).await?;
+    let viewer = optional_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let project = owned(&client, &id, &user).await?;
+    let project = readable(&client, &id, viewer.as_ref()).await?;
     let row = client
         .query_opt(
             "SELECT name, kind, text, size_bytes FROM project_files
@@ -532,6 +542,9 @@ async fn bump(
     transaction: &tokio_postgres::Transaction<'_>,
     id: &str,
 ) -> Result<WriteResponse, ApiError> {
+    // Тексты файлов идут в поиск, и пересчёт стоит **в той же транзакции**:
+    // отдельным запросом он разошёлся бы с содержимым при первом же откате.
+    showcase::refresh(transaction, id).await?;
     let row = transaction
         .query_one(
             "UPDATE projects SET
@@ -548,6 +561,40 @@ async fn bump(
         revision: row.get(0),
         size_bytes: row.get(1),
     })
+}
+
+/// Читает проект, доступный **для чтения** спрашивающему.
+///
+/// Правило одно на весь сервис (задача 09c):
+///
+/// | Видимость | Владелец | Всякий другой, в том числе без входа |
+/// |---|---|---|
+/// | `private` | читает | **`404`** |
+/// | `link` | читает | читает — идентификатор И ЕСТЬ секрет |
+/// | `public` | читает | читает, и проект виден в витрине |
+///
+/// ⚠️ Чужой закрытый проект отвечает `404`, а не `403`: `403` означал бы «он
+/// есть, но не для вас», то есть ручка стала бы оракулом существования.
+///
+/// ⚠️ Выданных прав здесь ещё нет — это задача `09d`; до неё `view`/`fork`/`edit`
+/// в таблице `project_grants` **не действуют**, и граница названа, а не забыта.
+async fn readable(
+    client: &deadpool_postgres::Client,
+    id: &str,
+    viewer: Option<&User>,
+) -> Result<ProjectJson, ApiError> {
+    let row = client.query_opt(SELECT_PROJECT, &[&id]).await?;
+    let Some(row) = row else {
+        return Err(ApiError::NotFound);
+    };
+    let project = project_of(&row);
+    let owner: String = row.get("owner_id");
+    let mine = viewer.is_some_and(|user| user.id == owner);
+    if mine || project.visibility == "link" || project.visibility == "public" {
+        Ok(project)
+    } else {
+        Err(ApiError::NotFound)
+    }
 }
 
 /// Читает проект и убеждается, что он принадлежит спрашивающему.
@@ -570,10 +617,10 @@ async fn owned(
     Ok(project_of(&row))
 }
 
-const SELECT_PROJECT: &str = "SELECT id, name, description, visibility, takt_lang,
-        language_version, main_file, revision, size_bytes, forked_from,
-        created_at, updated_at, owner_id
-    FROM projects WHERE id = $1";
+const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
+        u.login AS owner, p.takt_lang, p.language_version, p.main_file, p.revision,
+        p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id
+    FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1";
 
 fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
     ProjectJson {
@@ -581,6 +628,7 @@ fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
         name: row.get("name"),
         description: row.get("description"),
         visibility: row.get("visibility"),
+        owner: row.get("owner"),
         takt_lang: row.get("takt_lang"),
         language_version: row.get("language_version"),
         main_file: row.get("main_file"),

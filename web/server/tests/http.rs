@@ -288,11 +288,16 @@ async fn every_listed_route_answers_something() {
             .header("content-type", "application/json")
             .body(Body::from("{}"))
             .expect("запрос");
-        let (status, _) = stand.call(request).await;
-        assert_ne!(
-            status,
-            StatusCode::NOT_FOUND,
-            "{method} {path} перечислен, а сервис его не знает"
+        let (status, body) = stand.call(request).await;
+        // ⚠️ Одного `404` мало, чтобы объявить маршрут незнакомым: с задачи 09c
+        // ручки проектов честно отвечают `404` на несуществующий проект, и
+        // литеральный `{id}` — как раз такой. Знакомый маршрут узнаётся по
+        // ОТВЕТУ API: у него есть машинный код ошибки, а промах роутера уходит
+        // в статику и никакого кода не несёт.
+        let answered = status != StatusCode::NOT_FOUND || body["error"].is_string();
+        assert!(
+            answered,
+            "{method} {path} перечислен, а сервис его не знает: {status} {body}"
         );
     }
     // И обратное: путь мимо API уходит в статику, а не отвечает от неё.

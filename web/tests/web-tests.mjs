@@ -32,6 +32,7 @@ import * as i18n from "../static/i18n.js";
 import { inlineScripts, literalsWithText, nodesWithoutKey } from "./strings.mjs";
 import { bundleOfUrl } from "../static/build.js";
 import * as shell from "../static/shell.js";
+import * as project from "../static/project.js";
 
 const MODEL = `var level: u8 := 0;
 
@@ -384,7 +385,8 @@ test("язык: порядок выбора — сохранённый, брау
  */
 const PAGE_SCRIPTS = [
   "app.js", "boot.js", "bridge.js", "build.js", "draft.js", "editor.js",
-  "i18n.js", "pick.js", "sample.js", "share.js", "shell.js", "worker.js",
+  "i18n.js", "pick.js", "project.js", "sample.js", "share.js", "shell.js",
+  "worker.js",
 ];
 
 /**
@@ -403,7 +405,15 @@ test("сборка: разметка ссылается только в ката
   // год и `immutable`. Ссылка мимо бандла — файл, который кеш обязан считать
   // вечным, не будучи вечным, то есть молчаливая порча у всех, кто кешировал.
   const html = await readFile(join(DIST, "index.html"), "utf8");
-  const links = [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
+  // ⚠️ `<base>` из разбора выброшен: он называет КОРЕНЬ адресов, а не файл, и
+  // отпечатка у него быть не может. Именно он и делает остальные ссылки
+  // считаемыми от корня — без него страница `/p/<id>` искала бы бандл под
+  // собой (нашлось прогоном страницы, задача 09c).
+  const base = /<base href="([^"]+)"/.exec(html);
+  assert.ok(base, "в разметке нет корня адресов");
+  assert.equal(base[1], "/", "корень адресов — не бандл и не подкаталог");
+  const links = [...html.replace(/<base [^>]*>/g, "").matchAll(/(?:href|src)="([^"]+)"/g)]
+    .map((m) => m[1]);
   assert.ok(links.length > 0, "в разметке нет ссылок вовсе");
   for (const link of links) {
     if (/^(https?:|data:|#)/.test(link)) continue;
@@ -439,6 +449,18 @@ test("сборка: опись модуля несёт его контрольн
   const index = JSON.parse(await readFile(join(DIST, "wasm", "index.json"), "utf8"));
   assert.equal(index.latest, version.takt_lang);
   assert.ok(index.versions.includes(version.takt_lang));
+
+  // ⚠️ Обе версии НЕПУСТЫ. Поле `language` собиралось грепом по `lib.rs`, где
+  // константа только реэкспортируется, и описи месяц несли пустую строку:
+  // сервер отдавал её новому проекту, а увидеть это можно было лишь заглянув в
+  // `version.json`. Пустая строка — не значение, и молчать о ней нельзя.
+  for (const [where, value] of [
+    ["version.json takt_lang", version.takt_lang],
+    ["version.json language", version.language],
+    ["manifest language", manifest.language],
+  ]) {
+    assert.match(value ?? "", /^\d+\.\d+\.\d+$/, `${where}: не версия — '${value}'`);
+  }
 });
 
 test("сборка: текстовые файлы предсжаты", { skip: !DIST }, async () => {
@@ -529,6 +551,87 @@ test("адаптив: у каждой вкладки есть подпись с�
   for (const [, inner] of html.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)) {
     assert.ok(inner.trim().length > 0, "вкладка без подписи");
   }
+});
+
+test("страница проекта: адрес разбирается вместе с префиксом", () => {
+  // ⚠️ Разбирается ПУТЬ, а не адрес целиком: сервис умеет стоять за обратным
+  // прокси под префиксом, и `/takt/p/<id>` — тот же случай. Ошибись разбор — и
+  // страница молча откроется черновиком вместо проекта.
+  assert.equal(project.idInPath("/p/AbCd-_12"), "AbCd-_12");
+  assert.equal(project.idInPath("/takt/p/AbCd-_12"), "AbCd-_12");
+  assert.equal(project.idInPath("/p/AbCd-_12/"), "AbCd-_12");
+  assert.equal(project.idInPath("/"), null, "корень — не проект");
+  assert.equal(project.idInPath("/p/"), null, "адрес без идентификатора");
+  assert.equal(project.idInPath("/p/чужое имя"), null, "не идентификатор");
+
+  // Корень API считается ОТ ПУТИ страницы: относительный адрес от документа
+  // `/p/<id>` увёл бы запрос в `/p/api/...` — нашлось бы только в браузере.
+  assert.equal(project.apiRoot("/p/AbCd-_12"), "/");
+  assert.equal(project.apiRoot("/takt/p/AbCd-_12"), "/takt/");
+  assert.equal(project.apiRoot("/takt/"), "/takt/");
+});
+
+test("страница проекта: читается активный файл и сценарий рядом", async () => {
+  const asked = [];
+  const answers = {
+    "/api/projects/AbCd": {
+      id: "AbCd",
+      name: "Термореле",
+      owner: "ivan",
+      visibility: "public",
+      takt_lang: "0.58.0",
+      main_file: "model.takt",
+      files: [
+        { name: "other.takt", kind: "takt", size_bytes: 3 },
+        { name: "model.takt", kind: "takt", size_bytes: 9 },
+        { name: "run.json", kind: "scenario", size_bytes: 2 },
+      ],
+    },
+    "/api/projects/AbCd/files/model.takt": { name: "model.takt", text: MODEL },
+    "/api/projects/AbCd/files/run.json": { name: "run.json", text: "[]" },
+  };
+  const get = async (url) => {
+    asked.push(url);
+    const body = answers[url];
+    if (!body) return { ok: false, status: 404, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => body };
+  };
+
+  const opened = await project.read("AbCd", "/", get);
+  assert.equal(opened.source, MODEL, "открылся активный файл, а не первый по имени");
+  assert.equal(opened.scenario, "[]");
+  assert.equal(opened.owner, "ivan", "автор назван: чужая модель не выглядит своей");
+  assert.equal(opened.version, "0.58.0", "версия модуля — свойство проекта (A5)");
+  // Лишних обращений нет: витрина бывает длинной, и читать всё подряд незачем.
+  assert.equal(asked.length, 3, `обращений ${asked.length}: ${asked.join(", ")}`);
+});
+
+test("страница проекта: закрытый отвечает названным отказом", async () => {
+  // ⚠️ Отказ поднимается КЛЮЧОМ словаря, а не текстом: текст оболочки строит
+  // одна точка — главный поток страницы (задача 10a).
+  const get = async () => ({ ok: false, status: 404, json: async () => ({}) });
+  await assert.rejects(
+    () => project.read("AbCd", "/", get),
+    (error) => error.key === "project.notFound",
+  );
+
+  const broken = async () => {
+    throw new Error("сеть");
+  };
+  await assert.rejects(
+    () => project.read("AbCd", "/", broken),
+    (error) => error.key === "project.failed",
+  );
+});
+
+test("язык: список модулей страницы полон", async () => {
+  // ⚠️ Модуль, забытый в списке, ускользает от ОБЕИХ проверок разом — и от
+  // сверки ключей, и от поиска текста мимо словаря. Список тем самым перестаёт
+  // быть списком, оставаясь на вид полным.
+  const files = (await readdir(new URL("../static/", import.meta.url)))
+    .filter((name) => name.endsWith(".js"))
+    .sort();
+  assert.deepEqual(PAGE_SCRIPTS.slice().sort(), files, "список модулей отстал от каталога");
 });
 
 /** Хранилище в памяти — тот же интерфейс, что у `localStorage`. */

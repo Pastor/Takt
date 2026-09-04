@@ -1,4 +1,4 @@
-//! Общий стенд проверок сервера (фича 0531, задачи 09a и 09b).
+//! Общий стенд проверок сервера (фича 0531, задачи 09a, 09b и 09c).
 //!
 //! ⚠️ Отдельным модулем, потому что наборов проверок два, а стенд им нужен
 //! один: вторая копия разошлась бы с первой при первой же правке схемы.
@@ -166,6 +166,13 @@ impl Stand {
         self.get_as(path, token).await
     }
 
+    /// Шлёт запрос БЕЗ токена: открытый проект открыт и для того, у кого
+    /// учётной записи нет вовсе (задача 09c).
+    pub async fn get(&self, path: &str) -> (StatusCode, serde_json::Value) {
+        self.call(Request::get(path).body(Body::empty()).expect("запрос"))
+            .await
+    }
+
     pub async fn get_as(&self, path: &str, token: &str) -> (StatusCode, serde_json::Value) {
         self.call(
             Request::get(path)
@@ -213,6 +220,46 @@ impl Stand {
                 .await
                 .expect("проект");
         }
+    }
+
+    /// Набивает витрину открытыми проектами напрямую в базу.
+    ///
+    /// ⚠️ Мимо ручек нарочно, и вместе с поисковым значением: предмет замера —
+    /// **поиск по десяти тысячам**, а не скорость десяти тысяч HTTP-запросов.
+    /// Один проект несёт редкое слово `верёвкоукладчик`: искать по слову,
+    /// которое есть у всех, значит мерить сортировку, а не индекс.
+    pub async fn fill_public(&self, login: &str, count: i64) {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        let owner: String = client
+            .query_one(
+                "SELECT id FROM users WHERE lower(login) = lower($1)",
+                &[&login],
+            )
+            .await
+            .expect("владелец")
+            .get(0);
+        client
+            .execute(
+                "INSERT INTO projects(id, owner_id, name, description, visibility,
+                                      takt_lang, language_version, created_at, updated_at, search)
+                 SELECT md5(i::text || 'набивка'), $1,
+                        'Образец ' || i, 'описание образца номер ' || i,
+                        'public', '0.58.0', '0.17.0', i, i,
+                        setweight(to_tsvector('russian', 'Образец ' || i), 'A') ||
+                        setweight(to_tsvector('russian', 'описание образца номер ' || i), 'B') ||
+                        setweight(to_tsvector('russian',
+                            CASE WHEN i = 1 THEN 'model Верёвкоукладчик state Ожидание'
+                                 ELSE 'model Реле state Ожидание переход Нагрев' END), 'C')
+                 FROM generate_series(1, $2::bigint) AS i",
+                &[&owner, &count],
+            )
+            .await
+            .expect("набивка витрины");
+        client
+            .execute("ANALYZE projects", &[])
+            .await
+            .expect("статистика");
     }
 
     /// Убирает за собой: схема прогона не должна оставаться в базе.
