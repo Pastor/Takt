@@ -9,7 +9,8 @@
 //! takt-web-server                           запустить сервер
 //! takt-web-server admin <логин> <пароль>    завести администратора
 //! takt-web-server passwd <логин> <пароль>   сменить пароль
-//! takt-web-server sweep                     свернуть залежавшиеся проекты
+//! takt-web-server sweep                     свернуть залежавшиеся и подмести
+//!                                           осиротевшее
 //! takt-web-server unlink <логин> <площадка> отвязать площадку от записи
 //! ```
 //!
@@ -136,11 +137,28 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 ticker.tick().await;
                 match pool.get().await {
-                    Ok(client) => match retention::sweep(&client, &store, retention_secs).await {
-                        Ok(0) => {}
-                        Ok(packed) => tracing::info!(packed, "проекты свёрнуты по сроку хранения"),
-                        Err(error) => tracing::warn!(%error, "обход по сроку хранения не удался"),
-                    },
+                    Ok(client) => {
+                        match retention::sweep(&client, &store, retention_secs).await {
+                            Ok(0) => {}
+                            Ok(packed) => {
+                                tracing::info!(packed, "проекты свёрнуты по сроку хранения")
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "обход по сроку хранения не удался")
+                            }
+                        }
+                        // Подметание сирот — тем же обходом: у стенда бывает
+                        // `cron`, у своей машины нет, а мусор копится у обоих.
+                        match retention::sweep_orphans(&client, &store, retention::ORPHAN_GRACE)
+                            .await
+                        {
+                            Ok(0) => {}
+                            Ok(swept) => tracing::info!(swept, "осиротевшие каталоги убраны"),
+                            Err(error) => {
+                                tracing::warn!(%error, "подметание осиротевших не удалось")
+                            }
+                        }
+                    }
                     Err(error) => tracing::warn!(%error, "обход: базы нет"),
                 }
             }
@@ -189,8 +207,14 @@ async fn command_sweep(pool: &deadpool_postgres::Pool, config: &Config) -> anyho
     let store = Arc::new(Store::new(&config.projects_dir)?);
     let client = pool.get().await?;
     let packed = retention::sweep(&client, &store, config.retention.as_secs() as i64).await?;
+    // ⚠️ Второй проход идёт в обратную сторону: первый сворачивает то, что база
+    // знает, второй убирает то, чего она не знает вовсе. Порядок именно такой —
+    // свёртка заводит `.zip` рядом с каталогом, и подметание обязано видеть уже
+    // сложившееся состояние, а не промежуточное.
+    let swept = retention::sweep_orphans(&client, &store, retention::ORPHAN_GRACE).await?;
     println!(
-        "свёрнуто проектов: {packed} (срок хранения — {} дней)",
+        "свёрнуто проектов: {packed} (срок хранения — {} дней); \
+         осиротевших каталогов убрано: {swept}",
         config.retention.as_secs() / 86_400
     );
     Ok(())

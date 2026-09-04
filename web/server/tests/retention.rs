@@ -195,3 +195,101 @@ async fn removing_a_project_takes_its_files_off_the_disk() {
 
     stand.drop_schema().await;
 }
+
+#[tokio::test]
+async fn an_orphaned_directory_is_swept_but_a_young_one_is_left_alone() {
+    let Some(stand) = Stand::open("r_orphan").await else {
+        return skipped("подметание осиротевших");
+    };
+    let author = person(&stand, "ivan").await;
+    let id = project(&stand, &author, "Термореле", "model A {}").await;
+    let owner = stand.user_id("ivan").await;
+    assert!(stand.project_dir_exists(&owner, &id), "файлов нет на диске");
+
+    // Живой проект подметанию не принадлежит — ни при какой выдержке.
+    assert_eq!(stand.sweep_orphans(0).await, 0, "убран ЖИВОЙ проект");
+    assert!(stand.project_dir_exists(&owner, &id));
+
+    // Строка исчезает мимо ручки: прямой `DELETE` в базе либо обрыв между
+    // двумя шагами удаления. Каталог остаётся, и не виден больше никому.
+    stand.forget_project(&id).await;
+    assert!(stand.project_dir_exists(&owner, &id), "каталог исчез сам");
+
+    // ⚠️ Пока каталог молод, он не сирота, а идущая запись: между записью
+    // файла на диск и закрытием транзакции проходит время, и подметание в этот
+    // миг унесло бы исходник у автора прямо во время сохранения.
+    assert_eq!(stand.sweep_orphans(3600).await, 0, "убрано молодое");
+    assert!(stand.project_dir_exists(&owner, &id), "каталог убран рано");
+
+    // А без выдержки — то же самое состояние диска судится как мусор.
+    assert_eq!(stand.sweep_orphans(0).await, 1, "сирота не убрана");
+    assert!(!stand.project_dir_exists(&owner, &id), "каталог остался");
+    // Владелец без единого проекта каталога не заслуживает.
+    assert!(!stand.owner_dir_exists(&owner), "пустой каталог остался");
+
+    // Второй обход убирать уже нечего: подметание идемпотентно.
+    assert_eq!(stand.sweep_orphans(0).await, 0);
+
+    stand.drop_schema().await;
+}
+
+#[tokio::test]
+async fn sweeping_orphans_spares_the_neighbours_and_takes_the_packed_form() {
+    let Some(stand) = Stand::open("r_orphan2").await else {
+        return skipped("подметание: соседи и свёрнутая форма");
+    };
+    let author = person(&stand, "ivan").await;
+    let stranger = person(&stand, "petr").await;
+    let doomed = project(&stand, &author, "Сирота", "model A {}").await;
+    let kept = project(&stand, &author, "Живой", "model B {}").await;
+    let alien = project(&stand, &stranger, "Соседский", "model C {}").await;
+    let owner = stand.user_id("ivan").await;
+    let other = stand.user_id("petr").await;
+
+    // Сирота свёрнута: подметание обязано убирать ОБЕ формы — иначе `.zip`
+    // остаётся на диске, а отчёт утверждает, что убрано.
+    stand.age_project(&doomed, 100 * 86_400).await;
+    assert_eq!(stand.sweep(90).await, 1);
+    assert!(stand.is_packed(&doomed).await);
+    stand.forget_project(&doomed).await;
+
+    assert_eq!(stand.sweep_orphans(0).await, 1, "убрано не одно");
+    assert!(
+        !stand.store.is_packed(&owner, &doomed).expect("признак"),
+        "свёрнутая форма сироты осталась"
+    );
+    // Соседи целы — и у того же владельца, и у другого.
+    assert!(stand.project_dir_exists(&owner, &kept), "убран живой сосед");
+    assert!(
+        stand.project_dir_exists(&other, &alien),
+        "убран чужой проект"
+    );
+    assert!(stand.owner_dir_exists(&owner), "каталог владельца снесён");
+
+    // ⚠️ Сирота узнаётся по ПАРЕ «владелец и проект», а не по одному
+    // идентификатору: каталог с именем живого проекта, лежащий у ЧУЖОГО
+    // владельца, — мусор, и живая строка его не оправдывает.
+    stand
+        .store
+        .write(&other, &kept, "model.takt", "model X {}")
+        .expect("подкладка");
+    assert!(stand.project_dir_exists(&other, &kept));
+    assert_eq!(stand.sweep_orphans(0).await, 1, "подкладка не убрана");
+    assert!(
+        !stand.project_dir_exists(&other, &kept),
+        "подкладка осталась"
+    );
+    assert!(
+        stand.project_dir_exists(&owner, &kept),
+        "убран настоящий проект"
+    );
+
+    // И файлы живого соседа читаются, как читались.
+    let (status, file) = stand
+        .get_as(&format!("/api/projects/{kept}/files/model.takt"), &author)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{file}");
+    assert_eq!(file["text"], "model B {}");
+
+    stand.drop_schema().await;
+}

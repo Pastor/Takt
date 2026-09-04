@@ -109,6 +109,7 @@
   "showcase.query": "Поиск по открытым проектам",
   "showcase.find": "Найти",
   "showcase.row": "{name} — {owner}",
+  "showcase.more": "Ещё",
   "showcase.nothing": "ничего не найдено",
   "archive.download": "Скачать архивом",
   "archive.upload": "Загрузить архив",

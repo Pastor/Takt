@@ -20,6 +20,7 @@
 
 import * as api from "./api.js";
 import * as draft from "./draft.js";
+import { feed } from "./showcase.js";
 import { t } from "./i18n.js";
 
 /**
@@ -43,6 +44,15 @@ const state = {
   /** Ждущий решения конфликт: `{seen, actual, text}`. */
   conflict: null,
 };
+
+/**
+ * Лента витрины: чем спросить следующую страницу, знает она.
+ *
+ * ⚠️ Курсор здесь не считается и не хранится россыпью по обработчикам: правило
+ * «спросить тем, что дал сервер, и остановиться, когда он молчит» живёт одним
+ * носителем и проверяется без браузера.
+ */
+const showcase = feed((query, cursor) => api.showcase(query, cursor));
 
 /** Узлы страницы и обратные вызовы, которые даёт `app.js`. */
 let dom = null;
@@ -71,6 +81,7 @@ export function attach(nodes, callbacks) {
   dom.setpass.addEventListener("click", () => setPassword());
   dom.showcase.addEventListener("click", () => toggleShowcase());
   dom.findbtn.addEventListener("click", () => search());
+  dom.more.addEventListener("click", () => showMore());
   dom.query.addEventListener("keydown", (event) => {
     if (event.key === "Enter") search();
   });
@@ -268,19 +279,13 @@ async function toggleShowcase() {
   if (show) await search();
 }
 
-/** Ищет по витрине открытых проектов. */
+/** Ищет по витрине открытых проектов — с первой страницы. */
 async function search() {
   try {
-    const page = await api.showcase(dom.query.value.trim(), null);
+    const items = await showcase.first(dom.query.value.trim());
     dom.found.replaceChildren();
-    for (const item of page.items ?? []) {
-      const node = document.createElement("div");
-      node.className = "row";
-      node.dataset.open = item.id;
-      node.textContent = t("showcase.row", { name: item.name, owner: item.owner });
-      dom.found.appendChild(node);
-    }
-    if ((page.items ?? []).length === 0) {
+    showRows(items);
+    if (items.length === 0) {
       const empty = document.createElement("div");
       empty.className = "row row-ok";
       empty.textContent = t("showcase.nothing");
@@ -289,6 +294,35 @@ async function search() {
   } catch (error) {
     fail(error);
   }
+}
+
+/**
+ * Досыпает следующую страницу витрины.
+ *
+ * ⚠️ Записи ДОБАВЛЯЮТСЯ, а не заменяют показанные: «ещё» — это продолжение
+ * списка, и подмена содержимого выглядела бы потерей найденного.
+ */
+async function showMore() {
+  try {
+    showRows(await showcase.next());
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/**
+ * Дописывает записи витрины и показывает «ещё» ровно тогда, когда сервер
+ * сказал, что продолжение есть.
+ */
+function showRows(items) {
+  for (const item of items) {
+    const node = document.createElement("div");
+    node.className = "row";
+    node.dataset.open = item.id;
+    node.textContent = t("showcase.row", { name: item.name, owner: item.owner });
+    dom.found.appendChild(node);
+  }
+  dom.more.hidden = !showcase.hasMore();
 }
 
 /**
