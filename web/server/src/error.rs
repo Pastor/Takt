@@ -50,8 +50,21 @@ pub enum ApiError {
         message: String,
     },
     /// Запись устарела: у ресурса другая ревизия.
-    #[error("{0}")]
-    Conflict(String),
+    ///
+    /// ⚠️ Числа едут **полями**, а не только в тексте. Страница обязана
+    /// предложить выбор «перечитать / перезаписать», и для перезаписи ей нужна
+    /// ревизия сервера; разбирать её из человеческого сообщения значило бы
+    /// сделать текст отказа частью протокола — он перестал бы переводиться и
+    /// перестал бы правиться.
+    #[error("{message}")]
+    Conflict {
+        /// Текст для человека.
+        message: String,
+        /// Ревизия, которую назвал автор; `None` — не назвал вовсе.
+        seen: Option<i64>,
+        /// Ревизия ресурса сейчас.
+        actual: i64,
+    },
     /// Запрос не годится: причина названа.
     #[error("{0}")]
     BadRequest(String),
@@ -87,7 +100,7 @@ impl ApiError {
             // 409, а не 412: ревизию клиент шлёт в теле, а не заголовком
             // `If-Match`, и предусловия HTTP здесь нет — есть расхождение
             // состояний, о котором автору предстоит решить.
-            Self::Conflict(_) => (StatusCode::CONFLICT, "revision_conflict"),
+            Self::Conflict { .. } => (StatusCode::CONFLICT, "revision_conflict"),
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         }
@@ -118,6 +131,20 @@ impl IntoResponse for ApiError {
             error: code,
             message: self.to_string(),
         };
+        // Отказ ревизии несёт ЧИСЛА полями: по ним страница строит выбор
+        // «перечитать / перезаписать», не разбирая человеческий текст.
+        if let Self::Conflict { seen, actual, .. } = self {
+            let mut value = serde_json::to_value(&body).unwrap_or_default();
+            if let Some(map) = value.as_object_mut() {
+                map.insert("revision".into(), actual.into());
+                map.insert(
+                    "seen".into(),
+                    seen.map(serde_json::Value::from)
+                        .unwrap_or(serde_json::Value::Null),
+                );
+            }
+            return (status, Json(value)).into_response();
+        }
         (status, Json(body)).into_response()
     }
 }
@@ -140,7 +167,11 @@ mod tests {
             ApiError::LimitExceeded {
                 message: "предел 1, получено 2".into(),
             },
-            ApiError::Conflict("ревизия 1, у ресурса 2".into()),
+            ApiError::Conflict {
+                message: "ревизия 1, у ресурса 2".into(),
+                seen: Some(1),
+                actual: 2,
+            },
             ApiError::BadRequest("причина".into()),
             ApiError::Internal(anyhow::anyhow!("причина")),
         ];

@@ -33,6 +33,7 @@ import { inlineScripts, literalsWithText, nodesWithoutKey } from "./strings.mjs"
 import { bundleOfUrl } from "../static/build.js";
 import * as shell from "../static/shell.js";
 import * as project from "../static/project.js";
+import * as api from "../static/api.js";
 
 const MODEL = `var level: u8 := 0;
 
@@ -384,9 +385,9 @@ test("язык: порядок выбора — сохранённый, брау
  * `index.html` нет, а забытый модуль остался бы без обеих проверок молча.
  */
 const PAGE_SCRIPTS = [
-  "app.js", "boot.js", "bridge.js", "build.js", "draft.js", "editor.js",
-  "i18n.js", "pick.js", "project.js", "sample.js", "share.js", "shell.js",
-  "worker.js",
+  "account.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js",
+  "draft.js", "editor.js", "i18n.js", "pick.js", "project.js", "sample.js",
+  "share.js", "shell.js", "worker.js",
 ];
 
 /**
@@ -632,6 +633,168 @@ test("язык: список модулей страницы полон", async 
     .filter((name) => name.endsWith(".js"))
     .sort();
   assert.deepEqual(PAGE_SCRIPTS.slice().sort(), files, "список модулей отстал от каталога");
+});
+
+test("черновик v2: круговой рейс ключуется проектом и файлом", () => {
+  const storage = memoryStorage();
+  draft.saveFile(storage, {
+    project: "p1", file: "model.takt", revision: 3, source: "первый", savedAt: 100,
+  });
+  draft.saveFile(storage, {
+    project: "p2", file: "model.takt", revision: 7, source: "второй", savedAt: 200,
+  });
+  // ⚠️ Одинаковое имя файла в двух проектах — не один черновик: ключ несёт и
+  // проект, иначе работа над одним затирала бы работу над другим.
+  assert.equal(draft.loadFile(storage, "p1", "model.takt").source, "первый");
+  assert.equal(draft.loadFile(storage, "p2", "model.takt").source, "второй");
+  // Ревизия хранится вместе с текстом: без неё при возвращении нельзя сказать,
+  // разошёлся ли черновик с сервером.
+  assert.equal(draft.loadFile(storage, "p1", "model.takt").revision, 3);
+  assert.equal(draft.loadFile(storage, "p3", "model.takt"), null, "чужого нет");
+
+  draft.clearFile(storage, "p1", "model.takt");
+  assert.equal(draft.loadFile(storage, "p1", "model.takt"), null, "успешное сохранение стирает");
+  assert.equal(draft.loadFile(storage, "p2", "model.takt").source, "второй", "соседний цел");
+
+  // Безымянный буфер живёт своей жизнью: им пользуется тот, кто не входил.
+  draft.save(storage, { source: "буфер" });
+  draft.saveFile(storage, { project: "p9", file: "a.takt", source: "проектный" });
+  assert.equal(draft.load(storage).source, "буфер");
+  assert.equal(draft.loadFile(storage, "p9", "a.takt").source, "проектный");
+});
+
+test("черновик v2: карта не растёт без предела", () => {
+  // ⚠️ Предел нужен не ради места, а ради предела: `localStorage` кончается
+  // молча и кончается НА ЗАПИСИ — то есть в момент сохранения работы.
+  const storage = memoryStorage();
+  for (let i = 0; i < draft.DRAFTS_KEPT + 5; i += 1) {
+    draft.saveFile(storage, {
+      project: "p", file: `f${i}.takt`, source: `текст ${i}`, savedAt: 1000 + i,
+    });
+  }
+  const kept = JSON.parse(storage.getItem("takt.draft.v2"));
+  assert.equal(Object.keys(kept).length, draft.DRAFTS_KEPT);
+  // Уходят СТАРШИЕ: к черновику, до которого не возвращались двадцать файлов
+  // назад, автор уже не вернётся.
+  assert.equal(draft.loadFile(storage, "p", "f0.takt"), null, "старший вытеснен");
+  assert.ok(draft.loadFile(storage, "p", `f${draft.DRAFTS_KEPT + 4}.takt`), "младший на месте");
+});
+
+test("сессия: пара переживает перезагрузку, а выход её забывает", async () => {
+  const storage = memoryStorage();
+  const answers = {
+    "/api/token": { access_token: "A1", refresh_token: "R1" },
+    "/api/me": { id: "u1", login: "ivan", role: "user" },
+    "/api/revoke": null,
+  };
+  const get = async (url) => ({
+    ok: true,
+    status: answers[url] === null ? 204 : 200,
+    json: async () => answers[url],
+  });
+  api.configure({ root: "/", fetch: get, storage });
+  assert.equal(api.signed(), false, "без пары мы никто");
+  const me = await api.signIn("ivan", "пароль-пароль");
+  assert.equal(me.login, "ivan");
+  assert.ok(storage.getItem("takt.session.v1"), "пара записана");
+
+  // Перезагрузка страницы: новый клиент поднимает пару из хранилища.
+  api.configure({ root: "/", fetch: get, storage });
+  assert.equal(api.signed(), true, "после перезагрузки вход сохранён");
+  assert.equal(api.who().login, "ivan");
+
+  await api.signOut();
+  assert.equal(api.signed(), false);
+  assert.equal(storage.getItem("takt.session.v1"), null, "пара забыта");
+});
+
+test("сессия: просроченный доступ обновляется ОДИН раз на все запросы", async () => {
+  // ⚠️ refresh одноразовый: две параллельные попытки гасят семейство целиком,
+  // то есть выкидывают автора ровно тогда, когда он сохраняет работу.
+  const storage = memoryStorage();
+  storage.setItem(
+    "takt.session.v1",
+    JSON.stringify({ access: "старый", refresh: "R1", login: "ivan", role: "user" })
+  );
+  let refreshes = 0;
+  let fresh = false;
+  const get = async (url, options) => {
+    if (url === "/api/token") {
+      refreshes += 1;
+      fresh = true;
+      return { ok: true, status: 200, json: async () => ({ access_token: "A2", refresh_token: "R2" }) };
+    }
+    if (!fresh) return { ok: false, status: 401, json: async () => ({ error: "unauthorized" }) };
+    assert.equal(options.headers.authorization, "Bearer A2", "запрос повторён свежим токеном");
+    return { ok: true, status: 200, json: async () => [] };
+  };
+  api.configure({ root: "/", fetch: get, storage });
+  await Promise.all([api.projects(), api.projects(), api.projects()]);
+  assert.equal(refreshes, 1, `обновлений пары ${refreshes}, а должно быть одно`);
+});
+
+test("сессия: отказ приходит кодом и числами, а не разобранным текстом", async () => {
+  const storage = memoryStorage();
+  const get = async () => ({
+    ok: false,
+    status: 409,
+    json: async () => ({
+      error: "revision_conflict",
+      message: "проект изменился: у вас ревизия 1, у проекта 2",
+      seen: 1,
+      revision: 2,
+    }),
+  });
+  api.configure({ root: "/", fetch: get, storage });
+  await assert.rejects(
+    () => api.write("p1", "model.takt", "текст", 1),
+    (error) => {
+      // ⚠️ Числа взяты ПОЛЯМИ: разбирай их страница из сообщения — текст отказа
+      // стал бы частью протокола и перестал бы переводиться.
+      assert.equal(error.code, "revision_conflict");
+      assert.equal(error.seen, 1);
+      assert.equal(error.revision, 2);
+      assert.equal(error.key, "api.failed", "ключ один на все коды сервера");
+      return true;
+    }
+  );
+});
+
+test("разметка: каждый узел с именем найден страницей", async () => {
+  // ⚠️ Список имён в `cache()` — второй носитель разметки, и отстаёт он молча:
+  // забытый `signout` дал пустую страницу с сообщением «модуль не загружен»,
+  // хотя модуль был загружен (нашлось прогоном страницы, задача 09e).
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../static/app.js", import.meta.url), "utf8");
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(ids.length > 0, "в разметке нет именованных узлов");
+  const cached = new Set(
+    [...app.matchAll(/"([a-z][a-z0-9-]*)"/g)].map((m) => m[1])
+  );
+  const missing = ids.filter((id) => !cached.has(id));
+  assert.deepEqual(missing, [], `узлы разметки не найдены страницей: ${missing.join(", ")}`);
+});
+
+test("разметка: скрытый узел действительно скрыт", async () => {
+  // ⚠️ `display: flex` СИЛЬНЕЕ `hidden`: узел с таким классом остаётся на
+  // экране, сколько его ни прячь. Класс ловился прогоном страницы дважды —
+  // теперь его ловит машина: у каждого класса, которым помечен скрываемый
+  // узел, обязано быть правило `[hidden]`, если этот класс задаёт `display`.
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../static/app.css", import.meta.url), "utf8");
+  const hiddenClasses = new Set();
+  for (const [, tag] of html.matchAll(/<([^>]*\bhidden\b[^>]*)>/g)) {
+    const classes = /class="([^"]+)"/.exec(tag);
+    if (!classes) continue;
+    for (const name of classes[1].split(/\s+/)) if (name) hiddenClasses.add(name);
+  }
+  const unprotected = [];
+  for (const name of hiddenClasses) {
+    const sets = new RegExp(`\\.${name}\\s*(,[^{]*)?\\{[^}]*display:`).test(css);
+    const guards = css.includes(`.${name}[hidden]`);
+    if (sets && !guards) unprotected.push(name);
+  }
+  assert.deepEqual(unprotected, [], `класс задаёт display и не гасится: ${unprotected.join(", ")}`);
 });
 
 /** Хранилище в памяти — тот же интерфейс, что у `localStorage`. */

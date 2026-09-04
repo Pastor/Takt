@@ -473,14 +473,20 @@ async fn write_file(
     match (request.revision, existing) {
         // Правка существующего файла обязана назвать ревизию, которую видела.
         (None, Some(_)) => {
-            return Err(ApiError::Conflict(format!(
-                "файл '{name}' уже есть: правка требует ревизии (сейчас {revision})"
-            )));
+            return Err(ApiError::Conflict {
+                message: format!(
+                    "файл '{name}' уже есть: правка требует ревизии (сейчас {revision})"
+                ),
+                seen: None,
+                actual: revision,
+            });
         }
         (Some(seen), _) if seen != revision => {
-            return Err(ApiError::Conflict(format!(
-                "проект изменился: у вас ревизия {seen}, у проекта {revision}"
-            )));
+            return Err(ApiError::Conflict {
+                message: format!("проект изменился: у вас ревизия {seen}, у проекта {revision}"),
+                seen: Some(seen),
+                actual: revision,
+            });
         }
         _ => {}
     }

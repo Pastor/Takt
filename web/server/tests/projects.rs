@@ -223,6 +223,11 @@ async fn stale_revision_is_a_conflict_and_names_both_numbers() {
         .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"], "revision_conflict");
+    // ⚠️ Числа едут ПОЛЯМИ, а не только в тексте: по ним страница строит выбор
+    // «перечитать / перезаписать». Разбирай она их из сообщения — текст отказа
+    // стал бы частью протокола и перестал бы переводиться (задача 09e).
+    assert_eq!(body["seen"], 1, "названа ревизия автора");
+    assert_eq!(body["revision"], 2, "названа ревизия проекта");
     let message = body["message"].as_str().expect("текст");
     assert!(message.contains('1') && message.contains('2'), "{message}");
 

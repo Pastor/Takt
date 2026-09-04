@@ -11,7 +11,13 @@
 // устройствами, ни отправки на сервер. Обещание A6 — не хранить чужой код без
 // спроса — выполняется тем, что хранить нечего.
 
-/** Ключ хранилища. Версия в имени: форма записи ещё может измениться. */
+/**
+ * Ключ безымянного буфера. Версия в имени: форма записи ещё может измениться.
+ *
+ * ⚠️ Черновик БЕЗ проекта остаётся под прежним ключом (проработка §7): им
+ * пользуется тот, кто не входил вовсе, и терять его при появлении проектов
+ * незачем.
+ */
 const KEY = "takt.draft.v1";
 
 /**
@@ -67,6 +73,87 @@ export function load(storage) {
     // Испорченная запись — не повод падать: страница открывается с
     // умолчаниями, как при первом заходе.
     return null;
+  }
+}
+
+/** Ключ черновиков ПРОЕКТОВ: их много, и каждый ключуется файлом. */
+const KEY_V2 = "takt.draft.v2";
+
+/**
+ * Сколько черновиков проектов держим.
+ *
+ * ⚠️ Предел нужен не ради места, а ради предела: без него карта растёт по
+ * числу открытых за всё время файлов, а `localStorage` кончается молча — и
+ * кончится он на записи, то есть в момент сохранения работы.
+ */
+export const DRAFTS_KEPT = 20;
+
+/** Ключ записи: проект и файл вместе. */
+function slot(project, file) {
+  return `${project}\u0000${file}`;
+}
+
+/**
+ * Сохраняет черновик файла проекта; `null` либо причина отказа.
+ *
+ * ⚠️ Ревизия хранится ВМЕСТЕ с текстом: без неё при возвращении нельзя
+ * сказать, разошёлся ли черновик с сервером, и выбор пришлось бы предлагать
+ * всегда — то есть приучать отвечать не читая.
+ */
+export function saveFile(storage, record) {
+  const all = loadAll(storage);
+  all[slot(record.project, record.file)] = {
+    project: record.project,
+    file: record.file,
+    revision: record.revision ?? null,
+    source: record.source ?? "",
+    scenario: record.scenario ?? "",
+    savedAt: record.savedAt ?? Date.now(),
+  };
+  // Старшие уходят первыми: черновик, к которому не возвращались двадцать
+  // файлов назад, автору уже не нужен.
+  const kept = Object.entries(all)
+    .sort((a, b) => (b[1].savedAt ?? 0) - (a[1].savedAt ?? 0))
+    .slice(0, DRAFTS_KEPT);
+  const text = JSON.stringify(Object.fromEntries(kept));
+  const size = new TextEncoder().encode(text).length;
+  if (size > LIMIT_BYTES) {
+    return { key: "draft.tooBig", params: { limit: Math.floor(LIMIT_BYTES / 1024), size } };
+  }
+  try {
+    storage.setItem(KEY_V2, text);
+    return null;
+  } catch (error) {
+    return { key: "draft.notSaved", params: { error: error?.message ?? error } };
+  }
+}
+
+/** Читает черновик файла проекта; `null` — его нет. */
+export function loadFile(storage, project, file) {
+  return loadAll(storage)[slot(project, file)] ?? null;
+}
+
+/** Забывает черновик файла: успешное сохранение делает его лишним. */
+export function clearFile(storage, project, file) {
+  const all = loadAll(storage);
+  delete all[slot(project, file)];
+  try {
+    storage.setItem(KEY_V2, JSON.stringify(all));
+  } catch {
+    // Нечего забывать — не ошибка.
+  }
+}
+
+/** Все черновики проектов. */
+function loadAll(storage) {
+  try {
+    const text = storage.getItem(KEY_V2);
+    if (!text) return {};
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    // Испорченная запись — не повод падать: считаем, что черновиков нет.
+    return {};
   }
 }
 
