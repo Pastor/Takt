@@ -1,0 +1,55 @@
+{
+  "page.title": "Takt — online editor",
+  "bar.loading": "loading the module…",
+  "bar.version": "language {language} · module {module}",
+  "bar.format": "Format",
+  "bar.share": "Share",
+  "bar.language": "Interface language",
+  "bar.moduleFailed": "module not loaded: {error}",
+
+  "source.title": "Model",
+  "source.editor": "Model source text",
+  "diagnostics.title": "Diagnostics",
+  "diagnostics.none": "No errors",
+
+  "tabs.output": "Target output",
+  "tabs.trace": "Run",
+  "modes.label": "Area",
+  "modes.source": "Model",
+  "modes.output": "Output",
+  "modes.trace": "Run",
+
+  "output.target": "Target",
+  "output.args": "Build flags",
+  "output.argsPlaceholder": "for example: --fsm=table",
+  "output.refused": "refused",
+  "output.noHighlight": "no highlighting: the file is longer than {limit} characters",
+  "output.highlightFailed": "highlighting unavailable",
+
+  "trace.budget": "Budget, ticks",
+  "trace.run": "Run",
+  "trace.stop": "Stop",
+  "trace.scenario": "Input scenario (JSON, same as the -s file of takt-sim)",
+  "trace.notOpened": "the run did not open",
+  "trace.tickFailed": "the tick did not execute",
+  "trace.stoppedByAuthor": "stopped by the author",
+  "trace.budgetSpent": "run budget spent, ticks: {steps}",
+  "trace.unknownCommand": "unknown worker command: {type}",
+
+  "editor.noSymbol": "no name with a declaration under the cursor",
+  "editor.declaration": "declared on line {line}; usages: {uses}",
+  "editor.renamePrompt": "New name:",
+  "editor.renameUnavailable": "rename unavailable",
+  "editor.renamed": "occurrences renamed: {count}",
+  "editor.formatUnavailable": "formatting unavailable",
+  "editor.formatted": "formatted",
+  "editor.alreadyFormatted": "the document is already canonical",
+
+  "share.copied": "link copied, characters: {length}",
+  "share.inAddressBar": "the link is in the address bar — copy it",
+
+  "draft.tooBig": "the draft is larger than {limit} KiB ({size} B) — not saved",
+  "draft.notSaved": "the draft was not saved: {error}",
+
+  "tools.russianOnly": "Tool messages are still Russian only"
+}

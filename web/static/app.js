@@ -8,6 +8,9 @@ import { Bridge, spans } from "./bridge.js";
 import { Editor, paintCode, positionToOffset } from "./editor.js";
 import * as draft from "./draft.js";
 import { encodeState, decodeState } from "./share.js";
+import * as i18n from "./i18n.js";
+import { t } from "./i18n.js";
+import { SAMPLE } from "./sample.js";
 
 /** Адрес модуля. Версия — в пути (решение A5): ссылка открывается СВОИМ модулем. */
 const WASM_DEFAULT = "takt.wasm";
@@ -22,31 +25,6 @@ const WASM_DEFAULT = "takt.wasm";
  */
 const HIGHLIGHT_LIMIT = 200_000;
 
-/** Модель, с которой открывается пустой редактор. */
-const SAMPLE = `// Термореле: греет, пока холодно, и ждёт, пока не остынет.
-in temperature: u8;
-out heater: bit;
-
-const HOT := 24;
-const COLD := 20;
-
-start Heating {
-    always {
-        heater := 1;
-    }
-
-    ref Cooling: temperature >= HOT;
-}
-
-state Cooling {
-    always {
-        heater := 0;
-    }
-
-    ref Heating: temperature <= COLD;
-}
-`;
-
 const state = {
   bridge: null,
   editor: null,
@@ -55,6 +33,7 @@ const state = {
   args: "",
   scenario: "",
   version: "",
+  languageVersion: "",
   running: false,
 };
 
@@ -63,10 +42,20 @@ const dom = {};
 /** Точка входа страницы. */
 export async function main() {
   cache();
+  // Язык выбирается ДО модуля: он весит мегабайты, а подписи страницы обязаны
+  // быть на месте с первого кадра — иначе оболочка успевает мигнуть чужим
+  // языком.
+  await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
+  fillLanguages();
+
   state.bridge = await Bridge.load(WASM_DEFAULT);
   const version = state.bridge.version();
   state.version = version.takt_lang ?? "";
-  dom.version.textContent = `язык ${version.language} · модуль ${version.takt_lang}`;
+  state.languageVersion = version.language ?? "";
+  // Метка «загрузка модуля…» снимается вместе со своим ключом: иначе смена
+  // языка перерисовала бы её поверх версии — нашлось прогоном страницы.
+  dom.version.removeAttribute("data-i18n");
+  showVersion();
   fillTargets(version.targets ?? []);
 
   state.editor = new Editor(dom.editor, onEdit);
@@ -77,11 +66,74 @@ export async function main() {
   refresh();
 }
 
+/**
+ * Ставит язык оболочки: словарь, разметка, строка-граница.
+ *
+ * Смена идёт БЕЗ перезагрузки: в редакторе лежит несохранённая работа, и
+ * перезагрузка ради подписи была бы худшей ценой из возможных.
+ */
+async function useLanguage(lang) {
+  await i18n.load(lang);
+  i18n.apply(document);
+  if (dom.lang) dom.lang.value = i18n.language();
+  // До фичи 0532 диагностики, трасса и сводка приходят из модуля только
+  // по-русски. При другом языке оболочки смешение НАЗЫВАЕТСЯ строкой, а не
+  // прячется: читатель, увидевший русский текст без предупреждения, решит,
+  // что перевод сломан.
+  const mixed = i18n.language() !== i18n.BASE;
+  if (dom["tools-lang"]) dom["tools-lang"].hidden = !mixed;
+  if (dom["tools-lang-trace"]) dom["tools-lang-trace"].hidden = !mixed;
+  redraw();
+}
+
+/**
+ * Перерисовывает то, что построено КОДОМ, а не разметкой.
+ *
+ * ⚠️ `i18n.apply` знает только узлы с `data-i18n`; список диагностик, вывод
+ * цели и строка версии собираются на ходу, и без этого шага они остались бы на
+ * прежнем языке. Нашлось прогоном страницы: после переключения подписи стали
+ * английскими, а «Ошибок нет» под ними — нет.
+ *
+ * ⚠️ Трасса прогона НЕ перерисовывается: это журнал уже случившегося, и
+ * переписать его задним числом значило бы соврать о том, что было напечатано.
+ */
+function redraw() {
+  // ⚠️ Зовётся и ДО того, как страница собрана: язык выбирается первым делом,
+  // раньше модуля и редактора. Отсюда обе проверки — без них смена языка
+  // роняла бы загрузку страницы, и отказ выглядел бы отказом модуля (нашлось
+  // прогоном страницы).
+  if (!state.bridge) return;
+  showVersion();
+  if (state.editor) refresh();
+}
+
+/** Строка версии: язык Takt и версия модуля. */
+function showVersion() {
+  dom.version.textContent = t("bar.version", {
+    language: state.languageVersion,
+    module: state.version,
+  });
+}
+
+/** Наполняет переключатель языками выпуска. */
+function fillLanguages() {
+  dom.lang.replaceChildren();
+  for (const [code, name] of Object.entries(i18n.LANGUAGES)) {
+    const option = document.createElement("option");
+    option.value = code;
+    // Самоназвание: оно не переводится (см. `i18n.js`).
+    option.textContent = name;
+    dom.lang.appendChild(option);
+  }
+  dom.lang.value = i18n.language();
+}
+
 /** Находит узлы страницы один раз: поиск в обработчике — лишняя работа. */
 function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
+    "lang", "tools-lang", "tools-lang-trace",
   ]) {
     dom[id] = document.getElementById(id);
   }
@@ -112,6 +164,12 @@ function wire() {
   dom.scenario.addEventListener("input", () => {
     state.scenario = dom.scenario.value;
     saveDraft();
+  });
+  dom.lang.addEventListener("change", async () => {
+    // Язык — свойство ЧИТАТЕЛЯ, а не документа: в ссылку-снимок и в черновик
+    // он не входит, иначе переданная ссылка меняла бы язык у получателя.
+    i18n.remember(localStorage, dom.lang.value);
+    await useLanguage(dom.lang.value);
   });
   dom.format.addEventListener("click", format);
   dom.run.addEventListener("click", run);
@@ -165,7 +223,7 @@ const saveDraft = draft.debounce(() => {
     target: state.target,
     args: state.args,
   });
-  if (problem) say(problem, "warning");
+  if (problem) say(t(problem.key, problem.params), "warning");
 }, 400);
 
 function applyState(restored) {
@@ -196,7 +254,7 @@ function refresh() {
 function showDiagnostics(items) {
   dom.diagnostics.replaceChildren();
   if (items.length === 0) {
-    dom.diagnostics.appendChild(row("Ошибок нет", "ok"));
+    dom.diagnostics.appendChild(row(t("diagnostics.none"), "ok"));
     return;
   }
   for (const item of items) {
@@ -284,23 +342,29 @@ function declarationAndUses() {
   const target = state.bridge.goto(source, at.line, at.character);
   if (target.ok && target.range) {
     jump(target.range.start_line, target.range.start_character);
-    say(`объявление: строка ${target.range.start_line + 1}; использований: ${uses.ranges?.length ?? 0}`, "ok");
+    say(
+      t("editor.declaration", {
+        line: target.range.start_line + 1,
+        uses: uses.ranges?.length ?? 0,
+      }),
+      "ok"
+    );
     return;
   }
-  say("под курсором нет имени с объявлением", "warning");
+  say(t("editor.noSymbol"), "warning");
 }
 
 /** Переименование символа под курсором. */
 function renameSymbol() {
   const at = state.editor.position();
   const source = state.editor.value();
-  const newName = prompt("Новое имя:");
+  const newName = prompt(t("editor.renamePrompt"));
   if (!newName) return;
   const reply = state.bridge.rename(source, at.line, at.character, newName);
   if (!reply.ok) {
     // Отказ переименования назван причиной слоя: «полнота или отказ» — его
     // правило, и прятать причину значило бы оставить автора в догадках.
-    say(reply.error?.message ?? "переименование недоступно", "warning");
+    say(reply.error?.message ?? t("editor.renameUnavailable"), "warning");
     return;
   }
   // Правки применяются С КОНЦА: иначе каждая сдвигала бы координаты
@@ -315,7 +379,7 @@ function renameSymbol() {
     text = text.slice(0, from) + edit.new_text + text.slice(to);
   }
   state.editor.setValue(text);
-  say(`переименовано: ${edits.length} вхождений`, "ok");
+  say(t("editor.renamed", { count: edits.length }), "ok");
 }
 
 /** Компилирует текущей целью и показывает вывод. */
@@ -327,7 +391,7 @@ function compile() {
     // позиция и текст — те же, что печатает `taktc`.
     const code = reply.error?.code ? `[${reply.error.code}] ` : "";
     const where = reply.error?.line ? `${reply.error.line}:${reply.error.column}: ` : "";
-    dom.output.appendChild(row(`${where}${code}${reply.error?.message ?? "отказ"}`, "error"));
+    dom.output.appendChild(row(`${where}${code}${reply.error?.message ?? t("output.refused")}`, "error"));
     return;
   }
   for (const file of reply.files ?? []) {
@@ -355,7 +419,7 @@ function compile() {
 function paintOutput(body, text, header) {
   if (text.length > HIGHLIGHT_LIMIT) {
     body.textContent = text;
-    header.append(note(`без подсветки: файл длиннее ${HIGHLIGHT_LIMIT} символов`));
+    header.append(note(t("output.noHighlight", { limit: HIGHLIGHT_LIMIT })));
     return;
   }
   const reply = state.bridge.highlight(state.target, text);
@@ -363,7 +427,7 @@ function paintOutput(body, text, header) {
     // Отказ подсветки — не отказ сборки: файл показывается как есть, а причина
     // называется. Молчаливый чёрный текст выглядел бы дефектом вёрстки.
     body.textContent = text;
-    header.append(note(reply.error?.message ?? "подсветка недоступна"));
+    header.append(note(reply.error?.message ?? t("output.highlightFailed")));
     return;
   }
   header.append(note(reply.language));
@@ -381,15 +445,15 @@ function note(text) {
 function format() {
   const reply = state.bridge.format(state.editor.value());
   if (!reply.ok) {
-    say(reply.error?.message ?? "форматирование недоступно", "warning");
+    say(reply.error?.message ?? t("editor.formatUnavailable"), "warning");
     return;
   }
   if (reply.text === null || reply.text === undefined) {
-    say("документ уже в каноне", "ok");
+    say(t("editor.alreadyFormatted"), "ok");
     return;
   }
   state.editor.setValue(reply.text);
-  say("отформатировано", "ok");
+  say(t("editor.formatted"), "ok");
 }
 
 /** Запускает прогон в отдельном потоке. */
@@ -436,11 +500,13 @@ function onWorker(message) {
     case "halted":
       // Останов называется словами — и по бюджету, и по просьбе автора:
       // молчаливо оборванный прогон неотличим от завершившегося.
-      dom.trace.appendChild(row(message.reason, "warning"));
+      dom.trace.appendChild(row(t(message.key, message.params), "warning"));
       finish();
       break;
     case "failed":
-      dom.trace.appendChild(row(message.message, "error"));
+      // Текст МОДУЛЯ сильнее ключа оболочки: он называет причину точнее, чем
+      // общее «такт не выполнен», и это его язык, а не наш (фича 0532).
+      dom.trace.appendChild(row(message.message ?? t(message.key, message.params), "error"));
       finish();
       break;
     default:
@@ -467,11 +533,11 @@ async function share() {
   history.replaceState(null, "", `#${fragment}`);
   try {
     await navigator.clipboard.writeText(url);
-    say(`ссылка скопирована (${url.length} символов)`, "ok");
+    say(t("share.copied", { length: url.length }), "ok");
   } catch {
     // Буфер обмена требует разрешения и жеста; ссылка уже в адресной строке —
     // сказать об этом важнее, чем промолчать об отказе.
-    say("ссылка в адресной строке — скопируйте её", "warning");
+    say(t("share.inAddressBar"), "warning");
   }
 }
 

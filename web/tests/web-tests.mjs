@@ -18,13 +18,15 @@
 // Запуск: node web/tests/web-tests.mjs <модуль.wasm>
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { encodeState, decodeState } from "../static/share.js";
 import { offsetToPosition, positionToOffset } from "../static/editor.js";
 import * as draft from "../static/draft.js";
 import { Bridge, spans } from "../static/bridge.js";
+import * as i18n from "../static/i18n.js";
+import { inlineScripts, literalsWithText, nodesWithoutKey } from "./strings.mjs";
 
 const MODEL = `var level: u8 := 0;
 
@@ -89,7 +91,11 @@ test("черновик: превышение предела названо, а �
   const storage = memoryStorage();
   const problem = draft.save(storage, { source: "x".repeat(draft.LIMIT_BYTES + 1) });
   assert.ok(problem, "предел обязан быть назван");
-  assert.match(problem, /КиБ/);
+  // Причина возвращается КЛЮЧОМ словаря: текст строит главный поток страницы
+  // (задача 10a), и второй копии словаря здесь нет.
+  assert.equal(problem.key, "draft.tooBig");
+  assert.equal(problem.params.limit, 64);
+  assert.ok(problem.params.size > draft.LIMIT_BYTES);
   assert.equal(draft.load(storage), null, "черновик сверх предела не сохраняется");
 });
 
@@ -239,6 +245,135 @@ test("подсветка: раскладка строк не зависит от
   }
   assert.deepEqual([...buckets.keys()].sort(), [0, 2]);
   assert.equal(text.split("\n").length, 3);
+});
+
+/** Читает словарь языка с диска: `fetch` относительного пути в `node` нет. */
+async function dictionary(lang) {
+  const text = await readFile(new URL(`../static/i18n/${lang}.json`, import.meta.url), "utf8");
+  return JSON.parse(text);
+}
+
+test("язык: словари полны — паритет ключей и подстановок", async () => {
+  // ⚠️ Замер референса 2026-09-04: у него 163 ключа есть только в `ru`, и
+  // непереведённое молча падает на русский. Правило проекта иное: язык либо
+  // полон, либо не заведён, — и держит его эта проверка, а не дисциплина.
+  const base = await dictionary(i18n.BASE);
+  const names = (text) => new Set([...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]));
+  for (const lang of Object.keys(i18n.LANGUAGES)) {
+    if (lang === i18n.BASE) continue;
+    const dict = await dictionary(lang);
+    assert.deepEqual(
+      Object.keys(dict).sort(),
+      Object.keys(base).sort(),
+      `словарь '${lang}' не равен базовому по составу ключей`
+    );
+    for (const key of Object.keys(base)) {
+      assert.deepEqual(
+        [...names(dict[key])].sort(),
+        [...names(base[key])].sort(),
+        `ключ '${key}' в '${lang}': другой набор подстановок`
+      );
+      assert.ok(dict[key].trim().length > 0, `ключ '${key}' в '${lang}' пуст`);
+    }
+  }
+});
+
+test("язык: список выпуска равен составу каталога словарей", async () => {
+  // Язык без словаря даёт подписи-ключи; словарь без записи в списке не
+  // выбрать ничем. И то и другое — тишина.
+  const files = (await readdir(new URL("../static/i18n/", import.meta.url)))
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => name.replace(/\.json$/, ""));
+  assert.deepEqual(files.sort(), Object.keys(i18n.LANGUAGES).sort());
+});
+
+test("язык: каждый ключ разметки есть в словаре, и мёртвых ключей нет", async () => {
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const scripts = await Promise.all(
+    ["app.js", "worker.js", "draft.js", "i18n.js", "editor.js", "share.js", "bridge.js"].map((name) =>
+      readFile(new URL(`../static/${name}`, import.meta.url), "utf8")
+    )
+  );
+  const base = await dictionary(i18n.BASE);
+
+  const used = new Set();
+  for (const [, key] of html.matchAll(/data-i18n="([^"]+)"/g)) used.add(key);
+  for (const [, pairs] of html.matchAll(/data-i18n-attr="([^"]+)"/g)) {
+    for (const pair of pairs.split(";")) used.add(pair.split(":")[1].trim());
+  }
+  const text = [html, ...scripts].join("\n");
+  for (const [, key] of text.matchAll(/\bt\(\s*"([\w.]+)"/g)) used.add(key);
+  // Ключи, которые страница строит не буквально: воркер и черновик возвращают
+  // их полем `key`.
+  for (const [, key] of text.matchAll(/key:\s*"([\w.]+)"/g)) used.add(key);
+  for (const [, a, b] of text.matchAll(/\?\s*"([\w.]+)"\s*:\s*"([\w.]+)"/g)) {
+    used.add(a);
+    used.add(b);
+  }
+
+  for (const key of used) {
+    assert.ok(base[key], `ключ '${key}' используется, но его нет в словаре`);
+  }
+  const dead = Object.keys(base).filter((key) => !used.has(key));
+  assert.deepEqual(dead, [], `мёртвые ключи словаря: ${dead.join(", ")}`);
+});
+
+test("язык: текста оболочки мимо словаря нет", async () => {
+  // Строка, написанная в коде, не переводится никогда и не обнаруживается
+  // ничем: страница выглядит рабочей, а подпись остаётся на чужом языке.
+  // Исключений ДВА, и оба названы:
+  //   `sample.js` — стартовая МОДЕЛЬ, то есть документ автора, а не оболочка;
+  //   `i18n.js` — самоназвания языков (они не переводятся ни на какой язык) и
+  //   отказ ЗАГРУЗКИ словаря: сообщить о нём словарём нечем — его нет.
+  const scripts = ["app.js", "worker.js", "draft.js", "editor.js", "share.js", "bridge.js"];
+  for (const name of scripts) {
+    const source = await readFile(new URL(`../static/${name}`, import.meta.url), "utf8");
+    const found = literalsWithText(source);
+    assert.deepEqual(
+      found,
+      [],
+      `${name}: текст мимо словаря — ${found.map((f) => `строка ${f.line}: ${f.text}`).join("; ")}`
+    );
+  }
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const inMarkup = nodesWithoutKey(html);
+  assert.deepEqual(
+    inMarkup,
+    [],
+    `index.html: текст без ключа — ${inMarkup.map((f) => `строка ${f.line}: ${f.text}`).join("; ")}`
+  );
+  // Встроенный скрипт разметки — такой же код страницы: строку оболочки в нём
+  // не видно ни разбором тегов, ни обходом модулей.
+  for (const script of inlineScripts(html)) {
+    const found = literalsWithText(script.source);
+    assert.deepEqual(
+      found,
+      [],
+      `index.html, скрипт со строки ${script.line}: текст мимо словаря — ${found
+        .map((f) => f.text)
+        .join("; ")}`
+    );
+  }
+});
+
+test("язык: подстановки и падение на базовый", async () => {
+  i18n.use("en", { "a.b": "hello {name}" }, { "a.b": "привет {name}", "c.d": "только база" });
+  assert.equal(i18n.t("a.b", { name: "Takt" }), "hello Takt");
+  // Ключа нет в выбранном языке — берётся базовый.
+  assert.equal(i18n.t("c.d"), "только база");
+  // Нет и там — сам ключ: пустая кнопка хуже кнопки с именем ключа.
+  assert.equal(i18n.t("нет.такого"), "нет.такого");
+  // Неизвестная подстановка остаётся как есть: молча съеденная выглядела бы
+  // опечаткой автора словаря.
+  assert.equal(i18n.t("a.b", { other: 1 }), "hello {name}");
+});
+
+test("язык: порядок выбора — сохранённый, браузер, база", () => {
+  assert.equal(i18n.pick("en", ["ru-RU"]), "en", "сохранённый сильнее браузера");
+  assert.equal(i18n.pick(null, ["en-GB", "ru"]), "en", "регион отбрасывается");
+  assert.equal(i18n.pick(null, ["de-DE"]), i18n.BASE, "неизвестный язык — база");
+  assert.equal(i18n.pick("de", ["en"]), "en", "сохранённый язык без словаря не берётся");
+  assert.equal(i18n.pick(null, []), i18n.BASE);
 });
 
 test("адаптив: точки перелома перечислены в одном месте", async () => {

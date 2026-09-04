@@ -22,12 +22,18 @@ const KEY = "takt.draft.v1";
  */
 export const LIMIT_BYTES = 64 * 1024;
 
-/** Сохраняет черновик; возвращает `null` либо причину отказа. */
+/**
+ * Сохраняет черновик; возвращает `null` либо причину отказа.
+ *
+ * ⚠️ Причина возвращается **ключом словаря и подстановками**, а не строкой:
+ * текст оболочки строит одна точка — главный поток страницы (задача 0531-10a).
+ * Здесь строкой была бы вторая копия словаря.
+ */
 export function save(storage, draft) {
   const text = JSON.stringify(draft);
   const size = new TextEncoder().encode(text).length;
   if (size > LIMIT_BYTES) {
-    return `черновик больше ${Math.floor(LIMIT_BYTES / 1024)} КиБ (${size} Б) — не сохранён`;
+    return { key: "draft.tooBig", params: { limit: Math.floor(LIMIT_BYTES / 1024), size } };
   }
   try {
     storage.setItem(KEY, text);
@@ -36,7 +42,7 @@ export function save(storage, draft) {
     // Приватный режим, переполненное хранилище, запрет сайту — записи нет, и
     // автор обязан об этом узнать: он рассчитывает, что текст переживёт
     // перезагрузку.
-    return `черновик не сохранён: ${error?.message ?? error}`;
+    return { key: "draft.notSaved", params: { error: error?.message ?? error } };
   }
 }
 

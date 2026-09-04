@@ -6,7 +6,7 @@
      нулю в браузере телефона, и полка режимов встаёт под зоной жестов
      (замер референса 2026-09-04 — у него эта половина не работает). -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Takt — онлайн-редактор</title>
+<title data-i18n="page.title">Takt — онлайн-редактор</title>
 <meta name="description" content="Редактор языка Takt: подсветка, диагностики, генерация кода для восьми целей и прогон модели — всё в браузере.">
 <meta name="theme-color" content="#1b1f24">
 <!-- Предпросмотр ссылки: ею и делятся (приём референса, замер 2026-09-04). -->
@@ -19,48 +19,59 @@
 <body data-mode="source">
 <header class="bar">
   <span class="brand">Takt</span>
-  <span id="version" class="muted">загрузка модуля…</span>
+  <span id="version" class="muted" data-i18n="bar.loading">загрузка модуля…</span>
   <span class="spacer"></span>
-  <button id="format" type="button">Формат</button>
-  <button id="share" type="button">Поделиться</button>
+  <button id="format" type="button" data-i18n="bar.format">Формат</button>
+  <button id="share" type="button" data-i18n="bar.share">Поделиться</button>
+  <!-- Переключатель языка. Самоназвания в списке НЕ переводятся: так читатель
+       находит свой язык, не зная текущего (задача 0531-10a). -->
+  <select id="lang" class="lang" data-i18n-attr="aria-label:bar.language"></select>
 </header>
 
 <main class="work">
   <section class="pane pane-source">
     <div class="pane-head">
-      <span>Модель</span>
+      <span data-i18n="source.title">Модель</span>
       <span id="status" class="status"></span>
     </div>
-    <div id="editor" class="editor" aria-label="Исходный текст модели"></div>
-    <div class="pane-head"><span>Диагностики</span></div>
-    <div id="diagnostics" class="list" aria-live="polite"></div>
+    <div id="editor" class="editor" data-i18n-attr="aria-label:source.editor" aria-label="Исходный текст модели"></div>
+    <div class="pane-head"><span data-i18n="diagnostics.title">Диагностики</span></div>
+    <!-- Строка-граница: до фичи 0532 сообщения инструментов существуют только
+           по-русски, и при другом языке оболочки смешение НАЗЫВАЕТСЯ, а не
+           прячется (задача 0531-10a). -->
+      <div id="tools-lang" class="notice" data-i18n="tools.russianOnly" hidden>Сообщения инструментов пока только на русском</div>
+      <div id="diagnostics" class="list" aria-live="polite"></div>
   </section>
 
   <section class="pane pane-result">
     <nav id="tabs" class="tabs" role="tablist">
-      <button class="tab active" data-tab="output" role="tab" aria-selected="true" type="button">Вывод цели</button>
-      <button class="tab" data-tab="trace" role="tab" aria-selected="false" type="button">Прогон</button>
+      <button class="tab active" data-tab="output" role="tab" aria-selected="true" type="button" data-i18n="tabs.output">Вывод цели</button>
+      <button class="tab" data-tab="trace" role="tab" aria-selected="false" type="button" data-i18n="tabs.trace">Прогон</button>
     </nav>
 
     <div data-panel="output" class="panel">
       <div class="controls">
-        <label for="target">Цель</label>
+        <label for="target" data-i18n="output.target">Цель</label>
         <select id="target"></select>
-        <label for="args">Ключи сборки</label>
-        <input id="args" type="text" placeholder="например: --fsm=table" spellcheck="false">
+        <label for="args" data-i18n="output.args">Ключи сборки</label>
+        <input id="args" type="text" data-i18n-attr="placeholder:output.argsPlaceholder" placeholder="например: --fsm=table" spellcheck="false">
       </div>
       <div id="output" class="output"></div>
     </div>
 
     <div data-panel="trace" class="panel" hidden>
       <div class="controls">
-        <label for="budget">Бюджет, тактов</label>
+        <label for="budget" data-i18n="trace.budget">Бюджет, тактов</label>
         <input id="budget" type="number" min="1" max="1000000" value="200">
-        <button id="run" type="button">Прогон</button>
-        <button id="stop" type="button" disabled>Стоп</button>
+        <button id="run" type="button" data-i18n="trace.run">Прогон</button>
+        <button id="stop" type="button" disabled data-i18n="trace.stop">Стоп</button>
       </div>
-      <label for="scenario">Сценарий входов (JSON, как файл <code>-s</code> у takt-sim)</label>
+      <!-- Подпись — ОДНА строка словаря: разметка внутри переводимого текста
+           потребовала бы `innerHTML` из словаря, то есть лишнего пути в DOM.
+           Ключ `-s` остался в строке, элемент `code` снят. -->
+      <label for="scenario" data-i18n="trace.scenario">Сценарий входов (JSON, как файл -s у takt-sim)</label>
       <textarea id="scenario" class="scenario" spellcheck="false" placeholder='[{"in_ports": {"temperature": 25}}]'></textarea>
+      <div id="tools-lang-trace" class="notice" data-i18n="tools.russianOnly" hidden>Сообщения инструментов пока только на русском</div>
       <div id="trace" class="list trace" aria-live="polite"></div>
     </div>
   </section>
@@ -68,18 +79,21 @@
 
 <!-- Полка режимов: видна только на узком экране (см. app.css). Подпись у
      каждой цели остаётся словом — по одним значкам вкладку находят не все. -->
-<nav id="modes" class="modes" role="tablist" aria-label="Область">
-  <button class="tab active" data-mode="source" role="tab" aria-selected="true" type="button">Модель</button>
-  <button class="tab" data-mode="output" role="tab" aria-selected="false" type="button">Вывод</button>
-  <button class="tab" data-mode="trace" role="tab" aria-selected="false" type="button">Прогон</button>
+<nav id="modes" class="modes" role="tablist" data-i18n-attr="aria-label:modes.label" aria-label="Область">
+  <button class="tab active" data-mode="source" role="tab" aria-selected="true" type="button" data-i18n="modes.source">Модель</button>
+  <button class="tab" data-mode="output" role="tab" aria-selected="false" type="button" data-i18n="modes.output">Вывод</button>
+  <button class="tab" data-mode="trace" role="tab" aria-selected="false" type="button" data-i18n="modes.trace">Прогон</button>
 </nav>
 
 <script type="module">
   import { main } from "./app.js";
+  import { t } from "./i18n.js";
   main().catch((error) => {
     // Отказ загрузки модуля обязан быть виден: пустая страница неотличима от
     // работающей, пока автор не начнёт печатать.
-    document.getElementById("version").textContent = `модуль не загружен: ${error?.message ?? error}`;
+    document.getElementById("version").textContent = t("bar.moduleFailed", {
+      error: error?.message ?? error,
+    });
   });
 </script>
 </body>
