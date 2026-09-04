@@ -86,6 +86,30 @@ async fn main() -> anyhow::Result<()> {
     let store = Arc::new(Store::new(&config.projects_dir)?);
     let sweep_every = config.sweep;
     let retention_secs = config.retention.as_secs() as i64;
+    // Клиент площадок — один на сервер, с таймаутом из конфигурации: без него
+    // обработчик висел бы вместе с площадкой, держа соединение к базе.
+    let http = reqwest::Client::builder()
+        .timeout(config.oauth.timeout)
+        .build()?;
+    // Настроенные способы входа печатаются одной строкой: «включено» и
+    // «выключено» обязаны быть видны при запуске, а не выясняться нажатием.
+    let mut ways = vec!["пароль".to_string()];
+    if config.oauth.has_yandex() {
+        ways.push("yandex".to_string());
+    }
+    if config.oauth.has_vk() {
+        ways.push("vk".to_string());
+    }
+    if config.oauth.has_mail() {
+        ways.push("mail".to_string());
+    }
+    if ways.len() > 1 && config.public_url.is_empty() {
+        anyhow::bail!(
+            "площадки входа настроены, но не задан TAKT_WEB_PUBLIC_URL — \
+             redirect_uri построить не из чего"
+        );
+    }
+    tracing::info!("вход через: {}", ways.join(", "));
     let state = Arc::new(AppState {
         config,
         pool,
@@ -94,6 +118,7 @@ async fn main() -> anyhow::Result<()> {
         language_version,
         modules,
         store: store.clone(),
+        http,
     });
 
     // Обход по сроку хранения — в процессе. ⚠️ Он же доступен командой
