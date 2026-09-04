@@ -110,6 +110,13 @@ impl Stand {
             // параллельно, и общий каталог сделал бы их зависимыми друг от
             // друга (тот же приём, что у каталогов тестов компилятора, 0190).
             store: store.clone(),
+            // ⚠️ Таймаут проверок короткий: случай «площадка не отвечает»
+            // проверяется поддельным провайдером, который спит дольше него, и
+            // десять секунд ожидания превратили бы набор в десять секунд сна.
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(700))
+                .build()
+                .ok()?,
             modules: std::env::var("TAKT_WEB_TEST_STATIC")
                 .ok()
                 .and_then(|dir| takt_web_server::module::Modules::new(dir).ok())
@@ -191,6 +198,96 @@ impl Stand {
 
     pub async fn get_with(&self, path: &str, token: &str) -> (StatusCode, serde_json::Value) {
         self.get_as(path, token).await
+    }
+
+    /// Шлёт запрос и возвращает адрес перенаправления и cookie (задача 09f).
+    ///
+    /// ⚠️ Перенаправление НЕ прослеживается: браузера здесь нет, а предмет
+    /// проверки — что и куда сервер отправил.
+    pub async fn follow(&self, path: &str, token: Option<&str>) -> (StatusCode, String, String) {
+        let mut builder = Request::get(path);
+        if let Some(token) = token {
+            builder = builder.header("authorization", format!("Bearer {token}"));
+        }
+        let mut request = builder.body(Body::empty()).expect("запрос");
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(SocketAddr::from((
+                [127, 0, 0, 1],
+                40000,
+            ))));
+        let response = self.app.clone().oneshot(request).await.expect("ответ");
+        let status = response.status();
+        let location = response
+            .headers()
+            .get("location")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        // Из `Set-Cookie` берём только пару «имя=значение»: остальное —
+        // свойства, которые браузер обратно не шлёт.
+        let cookie = response
+            .headers()
+            .get("set-cookie")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .unwrap_or_default()
+            .to_string();
+        (status, location, cookie)
+    }
+
+    /// Возврат с площадки: путь плюс cookie потока.
+    pub async fn callback(&self, path: &str, cookie: &str) -> (StatusCode, String) {
+        let mut request = Request::get(path)
+            .header("cookie", cookie)
+            .body(Body::empty())
+            .expect("запрос");
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(SocketAddr::from((
+                [127, 0, 0, 1],
+                40000,
+            ))));
+        let response = self.app.clone().oneshot(request).await.expect("ответ");
+        let status = response.status();
+        let location = response
+            .headers()
+            .get("location")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        (status, location)
+    }
+
+    /// Есть ли у человека пароль и сколько у него связанных площадок.
+    pub async fn identity_facts(&self, login: &str) -> (bool, i64) {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        let row = client
+            .query_one(
+                "SELECT pass_hash IS NOT NULL,
+                        (SELECT count(*) FROM external_identities e WHERE e.user_id = u.id)
+                 FROM users u WHERE lower(login) = lower($1)",
+                &[&login],
+            )
+            .await
+            .expect("человек");
+        (row.get(0), row.get(1))
+    }
+
+    /// Состав колонок таблицы — по нему судится обещание «этого мы не храним».
+    pub async fn columns(&self, table: &str) -> Vec<String> {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        let rows = client
+            .query(
+                "SELECT column_name FROM information_schema.columns
+                 WHERE table_schema = $1 AND table_name = $2 ORDER BY column_name",
+                &[&self.schema, &table],
+            )
+            .await
+            .expect("колонки");
+        rows.iter().map(|row| row.get(0)).collect()
     }
 
     /// Читает ответ БАЙТАМИ: архив — не JSON (задача 09g).

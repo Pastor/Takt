@@ -222,7 +222,12 @@ pub async fn authenticate(client: &Client, login: &str, password: &str) -> Resul
     let Some(row) = rows.first() else {
         return Err(ApiError::InvalidCredentials);
     };
-    let hash: String = row.get(2);
+    // ⚠️ Пароля может не быть вовсе: человек, вошедший через площадку, его у
+    // нас не заводил (задача 09f-1). Ответ тот же, что у неверного пароля —
+    // иначе ручка сообщала бы, каким способом заведена чужая запись.
+    let Some(hash) = row.get::<_, Option<String>>(2) else {
+        return Err(ApiError::InvalidCredentials);
+    };
     if !verify_password(password, &hash) {
         return Err(ApiError::InvalidCredentials);
     }

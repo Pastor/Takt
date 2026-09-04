@@ -38,7 +38,7 @@ use tokio_postgres::NoTls;
 /// обращения и признак свёртки. Шага перехода нет намеренно (выпуска не
 /// было) — база прежней версии **отвергается с обоими номерами**, и это видно
 /// словами, а не проявляется потерей данных на стенде.
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// Заводит пул соединений по строке подключения.
 ///
@@ -94,7 +94,10 @@ CREATE TABLE users (
     -- зависел бы от регистра, а два владельца получили бы неразличимые на
     -- глаз имена.
     login      TEXT NOT NULL,
-    pass_hash  TEXT NOT NULL,
+    -- ⚠️ Может быть NULL: человек, вошедший через площадку, пароля у нас не
+    -- заводит вовсе (задача 09f-1). Проверка пароля обязана это учитывать —
+    -- иначе пустой хеш сравнивался бы с введённым.
+    pass_hash  TEXT,
     role       TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
     created_at BIGINT NOT NULL
 );
@@ -160,6 +163,42 @@ CREATE TABLE project_grants (
     granted_at BIGINT NOT NULL,
     PRIMARY KEY (project_id, user_id)
 );
+
+-- Внешняя учётная запись → наша (задача 09f-1). Одна площадка даёт одному
+-- человеку одну строку; у нашего пользователя строк — по числу площадок.
+--
+-- ⚠️ Персональных данных здесь нет и быть не может: из ответа площадки
+-- разбирается ОДНО поле — идентификатор. Ни почты, ни имени, ни фотографии, ни
+-- токенов площадки: последние нужны один раз, внутри обработчика.
+CREATE TABLE external_identities (
+    provider   TEXT NOT NULL CHECK (provider IN ('yandex', 'vk')),
+    subject    TEXT NOT NULL,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (provider, subject)
+);
+CREATE INDEX external_identities_user ON external_identities(user_id);
+
+-- Незавершённый вход. Живёт минуты, персональных данных не несёт, чистится при
+-- каждой вставке — как окно частоты (09a).
+--
+-- ⚠️ `state` лежит ОТПЕЧАТКОМ (приём refresh-токенов 09a): утечка таблицы не
+-- даёт довести чужой вход. Ticket — та же строка со `stage = 'ticket'`: второй
+-- таблицы с тем же сроком жизни и той же уборкой не заводится.
+CREATE TABLE oauth_flows (
+    state_hash    TEXT PRIMARY KEY,
+    provider      TEXT NOT NULL,
+    stage         TEXT NOT NULL CHECK (stage IN ('started', 'ticket')),
+    nonce_hash    TEXT NOT NULL,
+    code_verifier TEXT,
+    purpose       TEXT NOT NULL CHECK (purpose IN ('login', 'link')),
+    user_id       TEXT REFERENCES users(id) ON DELETE CASCADE,
+    subject       TEXT,
+    return_to     TEXT NOT NULL DEFAULT '/',
+    created_at    BIGINT NOT NULL,
+    expires_at    BIGINT NOT NULL
+);
+CREATE INDEX oauth_flows_expires ON oauth_flows(expires_at);
 
 -- Поиск по открытым проектам (задача 09c).
 --

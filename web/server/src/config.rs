@@ -45,12 +45,114 @@ pub struct Config {
     pub projects_dir: PathBuf,
     /// Срок хранения без обращений: дольше — проект сворачивается в архив.
     pub retention: Duration,
+    /// Внешний адрес сервиса: из него строится `redirect_uri` площадок.
+    ///
+    /// ⚠️ Выводить его из заголовка `Host` нельзя: `redirect_uri` обязан **в
+    /// точности** совпасть с зарегистрированным у площадки, а `Host` приходит
+    /// от клиента. Пусто — вход через площадки выключен целиком.
+    pub public_url: String,
+    /// Настройки площадок входа.
+    pub oauth: OAuthConfig,
     /// Как часто обходить хранилище в поисках залежавшихся проектов.
     ///
     /// ⚠️ Ноль отключает обход **в процессе** — тогда его ставят в `cron`
     /// командой `takt-web-server sweep`. Обход по времени есть у того, у кого
     /// `cron` нет (своя машина, проба стенда).
     pub sweep: Duration,
+}
+
+/// Настройки входа через площадки (фича 0531, задача 09f-1).
+///
+/// ⚠️ Умолчание у каждой площадки — «не настроена», и это **не** молчание:
+/// половина пары ключей роняет старт с названным ключом. Молчаливое «площадка
+/// выключена» при заданном `CLIENT_ID` означало бы, что конфигурация врёт.
+#[derive(Debug, Clone, Default)]
+pub struct OAuthConfig {
+    pub yandex_client_id: String,
+    pub yandex_client_secret: String,
+    pub vk_client_id: String,
+    pub vk_service_token: String,
+    /// Включена ли в кабинете VK «Авторизация через Mail».
+    ///
+    /// ⚠️ Сервер узнать этого сам не может — это настройка кабинета площадки.
+    pub vk_mail: bool,
+    /// Корни адресов площадок. На стенде не задаются; подменяются проверками
+    /// на поддельного провайдера (§6 проработки).
+    pub yandex_base: String,
+    pub yandex_info: String,
+    pub vk_base: String,
+    /// Таймаут исходящего запроса к площадке.
+    pub timeout: Duration,
+}
+
+impl OAuthConfig {
+    /// Читает настройки площадок.
+    ///
+    /// # Ошибки
+    /// Задана половина пары ключей — отказ с названным ключом.
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let config = Self {
+            yandex_client_id: var("TAKT_WEB_OAUTH_YANDEX_CLIENT_ID", ""),
+            yandex_client_secret: var("TAKT_WEB_OAUTH_YANDEX_CLIENT_SECRET", ""),
+            vk_client_id: var("TAKT_WEB_OAUTH_VK_CLIENT_ID", ""),
+            vk_service_token: var("TAKT_WEB_OAUTH_VK_SERVICE_TOKEN", ""),
+            vk_mail: var("TAKT_WEB_OAUTH_VK_MAIL", "0") == "1",
+            yandex_base: var("TAKT_WEB_OAUTH_YANDEX_BASE", crate::oauth::YANDEX_BASE),
+            yandex_info: var("TAKT_WEB_OAUTH_YANDEX_INFO", crate::oauth::YANDEX_INFO),
+            vk_base: var("TAKT_WEB_OAUTH_VK_BASE", crate::oauth::VK_BASE),
+            timeout: Duration::from_secs(parse("TAKT_WEB_OAUTH_TIMEOUT", "10", "секунды")?),
+        };
+        config.check_pairs()?;
+        Ok(config)
+    }
+
+    /// Половина пары — отказ с названным ключом.
+    fn check_pairs(&self) -> Result<(), ConfigError> {
+        for (first, first_key, second, second_key) in [
+            (
+                &self.yandex_client_id,
+                "TAKT_WEB_OAUTH_YANDEX_CLIENT_ID",
+                &self.yandex_client_secret,
+                "TAKT_WEB_OAUTH_YANDEX_CLIENT_SECRET",
+            ),
+            (
+                &self.vk_client_id,
+                "TAKT_WEB_OAUTH_VK_CLIENT_ID",
+                &self.vk_service_token,
+                "TAKT_WEB_OAUTH_VK_SERVICE_TOKEN",
+            ),
+        ] {
+            if first.is_empty() != second.is_empty() {
+                let (set, missing) = if first.is_empty() {
+                    (second_key, first_key)
+                } else {
+                    (first_key, second_key)
+                };
+                tracing::error!("задан {set}, но не {missing}");
+                return Err(ConfigError {
+                    key: missing,
+                    value: String::new(),
+                    what: "задана половина пары: без него площадка не включится",
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Настроен ли Яндекс.
+    pub fn has_yandex(&self) -> bool {
+        !self.yandex_client_id.is_empty()
+    }
+
+    /// Настроен ли VK ID.
+    pub fn has_vk(&self) -> bool {
+        !self.vk_client_id.is_empty()
+    }
+
+    /// Настроена ли кнопка «Mail» — она живёт внутри VK ID.
+    pub fn has_mail(&self) -> bool {
+        self.has_vk() && self.vk_mail
+    }
 }
 
 /// Отказ разбора конфигурации: ключ назван, значение показано.
@@ -102,6 +204,10 @@ impl Config {
             retention: Duration::from_secs(
                 60 * 60 * 24 * parse::<u64>("TAKT_WEB_RETENTION_DAYS", "90", "число дней")?,
             ),
+            public_url: var("TAKT_WEB_PUBLIC_URL", "")
+                .trim_end_matches('/')
+                .to_string(),
+            oauth: OAuthConfig::from_env()?,
             sweep: Duration::from_secs(
                 60 * 60 * parse::<u64>("TAKT_WEB_SWEEP_HOURS", "6", "число часов")?,
             ),

@@ -51,6 +51,11 @@ pub struct AppState {
     /// Хранилище исходников: файловая система (задача 09h). Тексты живут
     /// **здесь**, а база ведёт состав и сведения о проекте.
     pub store: Arc<crate::store::Store>,
+    /// Клиент исходящих запросов к площадкам входа (задача 09f-1).
+    ///
+    /// ⚠️ Один на сервер: у него пул соединений и таймаут, а клиент на запрос
+    /// открывал бы новое TLS-соединение к площадке каждому входящему.
+    pub http: reqwest::Client,
 }
 
 /// Список маршрутов сервиса.
@@ -79,6 +84,11 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("DELETE", "/api/projects/{id}/grants/{login}"),
     ("GET", "/api/projects/{id}/archive"),
     ("POST", "/api/projects/import"),
+    ("GET", "/api/oauth/providers"),
+    ("GET", "/api/oauth/identities"),
+    ("POST", "/api/oauth/complete"),
+    ("GET", "/api/oauth/{provider}/start"),
+    ("GET", "/api/oauth/{provider}/callback"),
 ];
 
 /// Собирает роутер.
@@ -91,6 +101,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(crate::projects::router())
         .merge(crate::grants::router())
         .merge(crate::archive_api::router())
+        .merge(crate::oauth::api::router())
         .merge(crate::showcase::router());
 
     // Статика: файлы отдаются как есть, а СТРАНИЦЫ собирает `page`.
@@ -479,8 +490,8 @@ mod tests {
         }
         assert_eq!(
             seen.len(),
-            20,
-            "вход, проекты, витрина, копия, права и архив"
+            25,
+            "вход, проекты, витрина, копия, права, архив и площадки"
         );
     }
 }

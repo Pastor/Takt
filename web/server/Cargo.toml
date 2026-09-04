@@ -45,6 +45,13 @@ password-hash = { version = "0.5", features = ["rand_core"] }
 wasmtime = { version = "27", default-features = false, features = ["cranelift", "runtime", "gc-drc"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+# Исходящие запросы к площадкам входа (задача 09f-1). Без умолчаний: ни cookie,
+# ни json, ни http2 — тела `x-www-form-urlencoded`, ответы разбираются
+# `serde_json`.
+# ⚠️ `rustls`, а не системный TLS: сборка не должна зависеть от того, что
+# установлено на стенде.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots"] }
+
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
