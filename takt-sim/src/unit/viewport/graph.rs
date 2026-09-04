@@ -6,8 +6,22 @@
 
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use rand::RngExt;
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
 use std::collections::HashMap;
+
+/// Зерно генератора раскладки (фича 0531).
+///
+/// Раскладка ищется имитацией отжига — по существу случайным поиском, — и с
+/// генератором от системного источника один и тот же прогон давал РАЗНЫЙ кадр.
+/// Для эталона это недопустимо: трасса воспроизводима (фича 0134), а картинка
+/// рядом с ней — нет; сверить два прогона по кадрам было нельзя, и всякий
+/// снимок вывода мигал бы. Зерно постоянно, поэтому кадр — функция модели и
+/// настроек холста, а не времени запуска.
+///
+/// ⚠️ Качество раскладки от постоянного зерна не страдает: отжиг ищет минимум
+/// энергии, а не «разные» картинки.
+const LAYOUT_SEED: u64 = 0x7461_6b74_5f30_3533; // "takt_053" — фича 0531
 
 use super::Positions;
 use crate::graphics_config::GraphicsConfig;
@@ -45,14 +59,25 @@ fn populate_graph(unit: &Unit, graph: &mut Graph<String, String>) {
         UnitKind::Node {
             state_transitions, ..
         } => {
+            // Порядок узлов и рёбер берётся ОТСОРТИРОВАННЫМ, а не обходом
+            // `HashMap` (фича 0531): раскладка ищется отжигом от начального
+            // размещения, и порядок узлов входит в результат. Прежде два
+            // прогона одной модели давали разные кадры — при воспроизводимой
+            // трассе рядом. Сортировка живёт здесь, в раскладке: порядок
+            // проверки переходов — дело исполнения, и его она не касается.
+            let mut names: Vec<&String> = state_transitions.keys().collect();
+            names.sort();
             let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
-            for name in state_transitions.keys() {
-                let idx = graph.add_node(name.clone());
-                node_map.insert(name.clone(), idx);
+            for name in &names {
+                let idx = graph.add_node((*name).clone());
+                node_map.insert((*name).clone(), idx);
             }
-            for (from, transitions) in state_transitions {
+            for from in &names {
+                let Some(transitions) = state_transitions.get(*from) else {
+                    continue;
+                };
                 for (to, pred) in transitions {
-                    if let (Some(&fi), Some(&ti)) = (node_map.get(from), node_map.get(to)) {
+                    if let (Some(&fi), Some(&ti)) = (node_map.get(*from), node_map.get(to)) {
                         graph.add_edge(fi, ti, pred.name.clone());
                     }
                 }
@@ -102,7 +127,7 @@ pub(super) fn calculate_graph(
     }
 
     let n = node_labels.len();
-    let mut rng = rand::rng();
+    let mut rng = StdRng::seed_from_u64(LAYOUT_SEED);
     let mut positions: Positions = (0..n)
         .map(|_| {
             (
@@ -113,7 +138,7 @@ pub(super) fn calculate_graph(
         .collect();
 
     let edges_for_layout: Vec<(usize, usize)> = edges_vec.iter().map(|&(u, v, _)| (u, v)).collect();
-    optimize_layout(&mut positions, &edges_for_layout, cfg);
+    optimize_layout(&mut positions, &edges_for_layout, cfg, &mut rng);
 
     (node_labels, edges_vec, positions)
 }
@@ -132,7 +157,12 @@ pub(super) fn calculate_graph(
 /// 3. Пересечения рёбер.
 ///
 /// Для пустого графа функция завершается немедленно.
-fn optimize_layout(positions: &mut Positions, edges: &[(usize, usize)], cfg: &GraphicsConfig) {
+fn optimize_layout(
+    positions: &mut Positions,
+    edges: &[(usize, usize)],
+    cfg: &GraphicsConfig,
+    rng: &mut StdRng,
+) {
     let n = positions.len();
     if n == 0 {
         return;
@@ -146,7 +176,6 @@ fn optimize_layout(positions: &mut Positions, edges: &[(usize, usize)], cfg: &Gr
         incident[v].push(ei);
     }
 
-    let mut rng = rand::rng();
     let radius = cfg.node.radius;
     let min_distance = cfg.node.min_distance;
     let width = cfg.canvas.width;
@@ -489,6 +518,68 @@ mod tests {
         });
         let g = unit_to_graph(&unit);
         assert_eq!(g.node_count(), 3);
+    }
+
+    // ── воспроизводимость раскладки (фича 0531) ───────────────────────────
+
+    /// Раскладка ВОСПРОИЗВОДИМА: одна модель — одни и те же координаты.
+    ///
+    /// Прежде начальное размещение и отжиг брали генератор от системного
+    /// источника, и два прогона одной модели давали разные кадры — при
+    /// воспроизводимой трассе рядом. Сторож ловит возврат `rand::rng()`.
+    #[test]
+    fn layout_is_reproducible() {
+        let cfg = crate::graphics_config::GraphicsConfig::default();
+        let build = || {
+            let mut g: Graph<String, String> = Graph::new();
+            let a = g.add_node("A".to_string());
+            let b = g.add_node("B".to_string());
+            let c = g.add_node("C".to_string());
+            g.add_edge(a, b, String::new());
+            g.add_edge(b, c, String::new());
+            g.add_edge(c, a, String::new());
+            g
+        };
+        let (labels, edges, first) = calculate_graph(build(), &cfg);
+        for run in 1..4 {
+            let (l, e, positions) = calculate_graph(build(), &cfg);
+            assert_eq!(l, labels, "прогон {run}: порядок меток уехал");
+            assert_eq!(e, edges, "прогон {run}: порядок рёбер уехал");
+            assert_eq!(
+                positions, first,
+                "прогон {run}: раскладка не воспроизвелась"
+            );
+        }
+    }
+
+    /// Порядок узлов не зависит от порядка обхода `HashMap` переходов.
+    ///
+    /// Ключи `state_transitions` обходятся отсортированными: иначе раскладка
+    /// зависела бы от случайного затравочного значения `RandomState`, и
+    /// воспроизводимость держалась бы только внутри одного процесса.
+    #[test]
+    fn node_order_does_not_depend_on_map_order() {
+        let names = ["Zeta", "Alpha", "Mu"];
+        let mut first: Option<Vec<String>> = None;
+        for shift in 0..names.len() {
+            let mut t: HashMap<String, Vec<(String, crate::unit::Predicate)>> = HashMap::new();
+            for i in 0..names.len() {
+                t.insert(names[(i + shift) % names.len()].to_string(), vec![]);
+            }
+            let graph = unit_to_graph(&make_node(t));
+            let labels: Vec<String> = graph.node_indices().map(|idx| graph[idx].clone()).collect();
+            match &first {
+                None => first = Some(labels),
+                Some(expected) => assert_eq!(
+                    &labels, expected,
+                    "порядок узлов зависит от порядка вставки в карту"
+                ),
+            }
+        }
+        assert_eq!(
+            first.unwrap(),
+            vec!["Alpha".to_string(), "Mu".to_string(), "Zeta".to_string()]
+        );
     }
 
     // ── calculate_graph ───────────────────────────────────────────────────

@@ -8,6 +8,7 @@ mod every;
 mod initial;
 pub(crate) mod statement;
 mod tick;
+#[cfg(feature = "graphics")]
 pub(crate) mod viewport;
 
 use crate::context::Context;

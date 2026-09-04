@@ -1,48 +1,22 @@
+#[cfg(feature = "graphics")]
+mod graphics;
+
 use crate::context::Context;
 use crate::eval::value::Value;
-use crate::gif::GifRecorder;
 use crate::graphics_config::{GraphicsConfig, OutputMode};
 use crate::json_input::{Guard, PortValues, SimStep, json_to_value};
 // Реестр имён вынесен в свой модуль (фикс 0150-01), но потребители зовут его
 // прежним путём `takt_sim::runner::PortNames` — реэкспорт держит контракт.
 pub use crate::port_names::{PortDirectionKind, PortNames};
-use crate::svg::SvgRecorder;
-use crate::unit::viewport::{CachedLayout, LegendData, compute_layout, render_from_layout};
+// Человекочитаемая длительность переехала в носитель трассы (фича 0531);
+// прежний путь `takt_sim::runner::format_duration` держит реэкспорт.
+pub use crate::trace::format_duration;
+#[cfg(feature = "graphics")]
+use crate::unit::viewport::CachedLayout;
 use crate::unit::{TickResult, Unit};
+#[cfg(feature = "graphics")]
+use graphics::GraphicsRecorder;
 use std::path::PathBuf;
-
-// ── Диспетчер режимов записи графики ─────────────────────────────────────────
-
-pub(crate) enum GraphicsRecorder {
-    Gif(GifRecorder),
-    Svg(SvgRecorder),
-}
-
-impl GraphicsRecorder {
-    fn add_frame(
-        &mut self,
-        viewport: &crate::unit::viewport::Viewport,
-        w: u32,
-        h: u32,
-        delay: Option<u16>,
-    ) -> Result<crate::gif::FrameTiming, String> {
-        match self {
-            Self::Gif(r) => r.add_frame(viewport, w, h, delay),
-            Self::Svg(r) => r.add_frame(viewport, w, h, delay),
-        }
-    }
-
-    fn save(self) -> Result<(), String> {
-        match self {
-            Self::Gif(r) => r.save(),
-            Self::Svg(r) => r.save(),
-        }
-    }
-
-    fn is_svg(&self) -> bool {
-        matches!(self, Self::Svg(_))
-    }
-}
 
 // ── Результат симуляции ──────────────────────────────────────────────────────
 
@@ -76,12 +50,19 @@ pub struct SimulationRunner {
     unit: Unit,
     sim_steps: Vec<SimStep>,
     max_steps: Option<usize>,
+    #[cfg(feature = "graphics")]
     graphics_recorder: Option<GraphicsRecorder>,
+    #[cfg(feature = "graphics")]
     gif_frame_size: Option<(u32, u32)>,
     port_names: PortNames,
+    // Имя модели и настройки холста нужны ТОЛЬКО кадрам: без фичи `graphics`
+    // они не поля, а мусор — и компилятор об этом честно говорит.
+    #[cfg(feature = "graphics")]
     model_name: Option<String>,
+    #[cfg(feature = "graphics")]
     gif_config: GraphicsConfig,
     // Раскладка графа вычисляется один раз перед первым кадром.
+    #[cfg(feature = "graphics")]
     cached_layout: Option<CachedLayout>,
     /// Мягкий режим инвариантов (фича 0087): нарушение записывается и прогон
     /// продолжается, вместо останова. Умолчание — `false` (жёсткий режим 0044).
@@ -120,40 +101,31 @@ impl SimulationRunner {
         model_name: Option<String>,
         gif_config: GraphicsConfig,
     ) -> Result<Self, String> {
-        let (graphics_recorder, gif_frame_size) = if let Some(dir) = output_dir {
-            std::fs::create_dir_all(dir)
-                .map_err(|e| format!("Не удалось создать директорию {}: {e}", dir.display()))?;
-            let size = (
-                (gif_config.canvas.width + gif_config.legend.width) as u32,
-                gif_config.canvas.height as u32,
-            );
-            let recorder = match output_mode {
-                OutputMode::Gif => {
-                    let gif_path = dir.join(format!("{input_stem}.gif"));
-                    GraphicsRecorder::Gif(GifRecorder::new(
-                        &gif_path,
-                        gif_config.canvas.frame_delay_cs,
-                    ))
-                }
-                OutputMode::Svg => GraphicsRecorder::Svg(SvgRecorder::new(
-                    dir.clone(),
-                    input_stem.to_string(),
-                    &gif_config,
-                )),
-            };
-            (Some(recorder), Some(size))
-        } else {
-            (None, None)
-        };
+        #[cfg(feature = "graphics")]
+        let (graphics_recorder, gif_frame_size) =
+            graphics::recorder_of(output_dir, input_stem, output_mode, &gif_config)?;
+        // Без графики запрос на кадры — отказ, а не молчаливый пропуск: автор
+        // просил картинку, и рапорт об успехе без неё был бы ложью.
+        #[cfg(not(feature = "graphics"))]
+        if output_dir.is_some() {
+            let _ = (input_stem, output_mode, &model_name, &gif_config);
+            return Err("запись кадров недоступна: крейт собран без фичи `graphics`".to_string());
+        }
+
         Ok(Self {
             unit,
             sim_steps,
             max_steps,
+            #[cfg(feature = "graphics")]
             graphics_recorder,
+            #[cfg(feature = "graphics")]
             gif_frame_size,
             port_names,
+            #[cfg(feature = "graphics")]
             model_name,
+            #[cfg(feature = "graphics")]
             gif_config,
+            #[cfg(feature = "graphics")]
             cached_layout: None,
             soft_invariants: false,
             positional_form_warned: std::cell::Cell::new(false),
@@ -248,10 +220,16 @@ impl SimulationRunner {
             }
             completed += 1;
 
-            // Выводим информацию о шаге
-            self.print_step(completed);
+            // Выводим информацию о шаге. Строку СТРОИТ библиотека
+            // (`trace::step_line`, фича 0531), CLI её только печатает: тот же
+            // текст нужен потребителю без консоли — модулю WebAssembly.
+            println!(
+                "{}",
+                crate::trace::step_line(&self.unit, &self.port_names, completed, self.now_ns)
+            );
 
             // Записываем кадры в графику (если нужно)
+            #[cfg(feature = "graphics")]
             if self.graphics_recorder.is_some() {
                 // Highlight-кадры для каждого сработавшего перехода (включая параллельные)
                 let transitions = self.unit.take_last_transitions();
@@ -295,6 +273,7 @@ impl SimulationRunner {
 
     /// Сохраняет результат записи (вызывается после завершения run).
     pub fn save_output(self) -> Result<(), String> {
+        #[cfg(feature = "graphics")]
         if let Some(recorder) = self.graphics_recorder {
             recorder.save()?;
         }
@@ -324,70 +303,6 @@ impl SimulationRunner {
                 qualified.join(", ")
             );
         }
-    }
-
-    fn print_step(&self, step_no: usize) {
-        let states = self.unit.active_states();
-        let states_str = if states.is_empty() {
-            "—".to_string()
-        } else {
-            states.join(", ")
-        };
-
-        // Двусмысленное имя (фича 0135) печатается КВАЛИФИЦИРОВАННЫМИ формами:
-        // показывать `val=1`, пока вторая под-модель держит `val=2`, — значит
-        // скрывать половину состояния модели.
-        let display_names = |names: &[String]| -> Vec<String> {
-            let mut out = Vec::new();
-            for n in names {
-                match self.port_names.ambiguous.iter().find(|(bare, _)| bare == n) {
-                    Some((_, qualified)) => out.extend(qualified.iter().cloned()),
-                    None => out.push(n.clone()),
-                }
-            }
-            out
-        };
-
-        let fmt_group = |names: &[String]| -> String {
-            display_names(names)
-                .iter()
-                .filter_map(|n| {
-                    self.unit
-                        .get_value(n)
-                        .map(|v| format!("{}={}", n, format_value(&v)))
-                })
-                .collect::<Vec<_>>()
-                .join("  ")
-        };
-
-        // Трасса печатает и такт, и модельное время (фича 0134): без времени
-        // не прочесть, почему выдержка сработала именно здесь, а без такта —
-        // не сверить с целью. Время показывается, только когда часы идут не по
-        // умолчанию либо уже сдвинулись, — иначе оно засоряло бы вывод моделям,
-        // время не использующим.
-        if self.now_ns > 0 {
-            print!(
-                "Шаг {:3} ({:>8}):  [{}]",
-                step_no,
-                format_duration(self.now_ns),
-                states_str
-            );
-        } else {
-            print!("Шаг {:3}:  [{}]", step_no, states_str);
-        }
-
-        for (label, names) in [
-            ("in", self.port_names.in_ports.as_slice()),
-            ("out", self.port_names.out_ports.as_slice()),
-            ("inout", self.port_names.inout_ports.as_slice()),
-            ("vars", self.port_names.vars.as_slice()),
-        ] {
-            let s = fmt_group(names);
-            if !s.is_empty() {
-                print!("  {}:{}", label, s);
-            }
-        }
-        println!();
     }
 
     /// Применяет входы шага: позиционно (историческая форма) либо по именам.
@@ -608,109 +523,6 @@ impl SimulationRunner {
         }
         Ok(())
     }
-
-    fn capture_frame(&mut self) -> Result<(), String> {
-        self.capture_frame_impl(None)
-    }
-
-    fn capture_frame_with_highlight(&mut self, edge: Option<(&str, &str)>) -> Result<(), String> {
-        // Гарантируем, что раскладка вычислена до поиска индексов
-        if self.cached_layout.is_none() && self.gif_frame_size.is_some() {
-            self.cached_layout = Some(compute_layout(&self.unit, &self.gif_config));
-        }
-        let highlighted = edge.and_then(|(from, to)| {
-            let layout = self.cached_layout.as_ref()?;
-            let fi = layout.node_labels.iter().position(|n| n == from)?;
-            let ti = layout.node_labels.iter().position(|n| n == to)?;
-            Some((fi, ti))
-        });
-        self.capture_frame_impl(highlighted)
-    }
-
-    fn capture_frame_impl(
-        &mut self,
-        highlighted_edge: Option<(usize, usize)>,
-    ) -> Result<(), String> {
-        let (w, h) = match self.gif_frame_size {
-            Some(s) => s,
-            None => return Ok(()),
-        };
-
-        // Раскладка вычисляется один раз: имитация отжига дорогая, но структура
-        // модели не меняется в ходе симуляции.
-        let layout_ms = if self.cached_layout.is_none() {
-            let t = std::time::Instant::now();
-            self.cached_layout = Some(compute_layout(&self.unit, &self.gif_config));
-            Some(t.elapsed().as_millis())
-        } else {
-            None
-        };
-
-        let active = self.unit.active_states();
-        let active_refs: Vec<&str> = active.iter().map(String::as_str).collect();
-        let legend = build_legend(&self.unit, &self.port_names);
-
-        let t_vp = std::time::Instant::now();
-        let is_svg = self
-            .graphics_recorder
-            .as_ref()
-            .map(|r| r.is_svg())
-            .unwrap_or(false);
-        let viewport = render_from_layout(
-            self.cached_layout.as_ref().unwrap(),
-            &self.gif_config,
-            &active_refs,
-            Some(&legend),
-            self.model_name.as_deref(),
-            highlighted_edge,
-            is_svg,
-        )
-        .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
-        let vp_ms = t_vp.elapsed().as_millis();
-
-        // Highlight-кадры показываются дольше — задержка из конфигурации.
-        let delay = if highlighted_edge.is_some() {
-            Some(self.gif_config.canvas.highlight_frame_delay_cs)
-        } else {
-            None
-        };
-        let frame_timing = if let Some(rec) = &mut self.graphics_recorder {
-            Some((rec.is_svg(), rec.add_frame(&viewport, w, h, delay)?))
-        } else {
-            None
-        };
-
-        // Вывод тайминга
-        if let Some((is_svg, ft)) = frame_timing {
-            if is_svg {
-                if let Some(lms) = layout_ms {
-                    println!(
-                        "           SVG:  раскладка={lms} мс  viewport={vp_ms} мс  запись={} мс",
-                        ft.serial_ms
-                    );
-                } else {
-                    println!(
-                        "           SVG:  viewport={vp_ms} мс  запись={} мс",
-                        ft.serial_ms
-                    );
-                }
-            } else {
-                let rast_detail = format!(
-                    "svg={} мс  usvg={} мс  render={} мс  quant={} мс",
-                    ft.serial_ms, ft.parse_ms, ft.render_ms, ft.quant_ms
-                );
-                if let Some(lms) = layout_ms {
-                    println!(
-                        "           GIF:  раскладка={lms} мс  viewport={vp_ms} мс  {rast_detail}"
-                    );
-                } else {
-                    println!("           GIF:  viewport={vp_ms} мс  {rast_detail}");
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 // ── Вспомогательные функции ───────────────────────────────────────────────────
@@ -726,93 +538,6 @@ fn values_match(actual: &Option<Value>, expected: &Value) -> bool {
             (Value::Real(a), Value::Number(b)) => (a - *b as f64).abs() < 1e-9,
             _ => false,
         },
-    }
-}
-
-/// Человекочитаемая запись длительности: `999ms`, `1s`, `1s1ms`, `1m30s`.
-///
-/// Разряды переносятся, как в литерале языка: пока значение укладывается в
-/// младшую единицу — печатается ею (`999ms`), при переполнении появляется
-/// старшая (`1000ms` → `1s`), а остаток дописывается справа (`1001ms` →
-/// `1s1ms`). Так запись в трассе читается тем же способом, каким автор её
-/// **писал** в исходнике, и `90000ms` не приходится делить в голове.
-///
-/// Нулевые разряды опускаются (`3600s` → `1h`, а не `1h0m0s`); нулевая
-/// длительность печатается младшей содержательной единицей — `0ms`.
-pub fn format_duration(nanos: i64) -> String {
-    const UNITS: [(i64, &str); 6] = [
-        (3_600_000_000_000, "h"),
-        (60_000_000_000, "m"),
-        (1_000_000_000, "s"),
-        (1_000_000, "ms"),
-        (1_000, "us"),
-        (1, "ns"),
-    ];
-    if nanos == 0 {
-        return "0ms".to_string();
-    }
-    let sign = if nanos < 0 { "-" } else { "" };
-    // Модуль берётся с защитой от i64::MIN: `abs()` на нём паникует.
-    let mut rest = nanos.unsigned_abs();
-    let mut out = String::new();
-    for (size, name) in UNITS {
-        let size = size.unsigned_abs();
-        if rest >= size {
-            out.push_str(&format!("{}{}", rest / size, name));
-            rest %= size;
-        }
-        if rest == 0 {
-            break;
-        }
-    }
-    format!("{sign}{out}")
-}
-
-fn format_value(v: &Value) -> String {
-    match v {
-        Value::Number(n) => n.to_string(),
-        Value::Real(f) => format!("{f:.4}"),
-        Value::Boolean(b) => b.to_string(),
-        // q(m, n): показываем вещественное значение repr·2⁻ⁿ.
-        Value::Fixed { repr, n, .. } => format!("{:.4}", *repr as f64 / (1u64 << n) as f64),
-        // Длительность печатается человекочитаемо: наносекунды в трассе
-        // нечитаемы, а выдержки задаются секундами и миллисекундами.
-        Value::Duration(ns) => crate::runner::format_duration(*ns),
-        Value::Array(arr) => format!(
-            "[{}]",
-            arr.iter().map(format_value).collect::<Vec<_>>().join(",")
-        ),
-        // Структура (фича 0034): `Point{x=7,y=300}` — читаемо и в объявленном
-        // порядке полей.
-        Value::Struct { name, fields } => format!(
-            "{name}{{{}}}",
-            fields
-                .iter()
-                .map(|(f, v)| format!("{f}={}", format_value(v)))
-                .collect::<Vec<_>>()
-                .join(",")
-        ),
-    }
-}
-
-fn build_legend(unit: &Unit, port_names: &PortNames) -> LegendData {
-    let to_entries = |names: &[String]| -> Vec<(String, String)> {
-        names
-            .iter()
-            .map(|n| {
-                let v = unit
-                    .get_value(n)
-                    .map(|v| format_value(&v))
-                    .unwrap_or_else(|| "?".to_string());
-                (n.clone(), v)
-            })
-            .collect()
-    };
-    LegendData {
-        in_ports: to_entries(&port_names.in_ports),
-        out_ports: to_entries(&port_names.out_ports),
-        inout_ports: to_entries(&port_names.inout_ports),
-        vars: to_entries(&port_names.vars),
     }
 }
 

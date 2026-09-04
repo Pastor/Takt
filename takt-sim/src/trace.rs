@@ -1,0 +1,278 @@
+//! Трасса прогона: строка шага и итоговая сводка — **строками**, а не печатью.
+//!
+//! # Зачем носитель
+//!
+//! Эталон — то, с чем сверяются восемь целей, и его трасса обязана быть
+//! доступна не только консоли. Прежде строку шага печатал `SimulationRunner`
+//! (`print!` ×5, `println!`), а сводку — бинарник `takt-sim`; потребитель без
+//! консоли — модуль WebAssembly (фича 0531) — не мог получить ту же трассу
+//! иначе, чем повторив её сборку у себя. Две сборки одной строки разошлись бы
+//! молча: браузер показывал бы одно, а сверка гоняла бы другое.
+//!
+//! Здесь строка **строится**; печатают её `SimulationRunner` и CLI.
+
+use crate::context::Context;
+use crate::eval::value::Value;
+use crate::port_names::PortNames;
+use crate::runner::RunResult;
+use crate::unit::Unit;
+
+/// Строит строку шага трассы — ту же, что печатает `takt-sim`.
+///
+/// `now_ns` — модельное время прогона (фича 0134): показывается, только когда
+/// часы сдвинулись, иначе оно засоряло бы вывод моделям, время не
+/// использующим.
+pub fn step_line(unit: &Unit, port_names: &PortNames, step_no: usize, now_ns: i64) -> String {
+    let states = unit.active_states();
+    let states_str = if states.is_empty() {
+        "—".to_string()
+    } else {
+        states.join(", ")
+    };
+
+    // Двусмысленное имя (фича 0135) печатается КВАЛИФИЦИРОВАННЫМИ формами:
+    // показывать `val=1`, пока вторая под-модель держит `val=2`, — значит
+    // скрывать половину состояния модели.
+    let display_names = |names: &[String]| -> Vec<String> {
+        let mut out = Vec::new();
+        for n in names {
+            match port_names.ambiguous.iter().find(|(bare, _)| bare == n) {
+                Some((_, qualified)) => out.extend(qualified.iter().cloned()),
+                None => out.push(n.clone()),
+            }
+        }
+        out
+    };
+
+    let fmt_group = |names: &[String]| -> String {
+        display_names(names)
+            .iter()
+            .filter_map(|n| {
+                unit.get_value(n)
+                    .map(|v| format!("{}={}", n, format_value(&v)))
+            })
+            .collect::<Vec<_>>()
+            .join("  ")
+    };
+
+    // Трасса печатает и такт, и модельное время (фича 0134): без времени
+    // не прочесть, почему выдержка сработала именно здесь, а без такта —
+    // не сверить с целью.
+    let mut line = if now_ns > 0 {
+        format!(
+            "Шаг {:3} ({:>8}):  [{}]",
+            step_no,
+            format_duration(now_ns),
+            states_str
+        )
+    } else {
+        format!("Шаг {:3}:  [{}]", step_no, states_str)
+    };
+
+    for (label, names) in [
+        ("in", port_names.in_ports.as_slice()),
+        ("out", port_names.out_ports.as_slice()),
+        ("inout", port_names.inout_ports.as_slice()),
+        ("vars", port_names.vars.as_slice()),
+    ] {
+        let s = fmt_group(names);
+        if !s.is_empty() {
+            line.push_str(&format!("  {}:{}", label, s));
+        }
+    }
+    line
+}
+
+/// Итог прогона: что сказать в обычный поток, а что — в поток ошибок.
+///
+/// Разделение потоков — свойство **CLI**, но принадлежность строки к тому или
+/// другому решает содержание («прогон окончен» против «нарушен инвариант»), и
+/// потому живёт вместе с текстом. Потребитель без консоли складывает обе
+/// половины, не гадая.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ResultReport {
+    /// Сообщения об исходе прогона (обычный поток).
+    pub info: Vec<String>,
+    /// Сообщения об отказах и нарушениях (поток ошибок).
+    pub errors: Vec<String>,
+}
+
+/// Строит итоговую сводку прогона — ту же, что печатает `takt-sim`.
+pub fn result_report(result: &RunResult) -> ResultReport {
+    let mut report = ResultReport::default();
+    match result {
+        RunResult::Terminated { steps } => {
+            report.info.push(format!(
+                "Завершено: модель достигла терминального состояния за {steps} шагов."
+            ));
+        }
+        RunResult::StepsReached { steps } => {
+            report
+                .info
+                .push(format!("Выполнено {steps} шагов (лимит достигнут)."));
+        }
+        RunResult::GuardFailed { step, details } => {
+            report
+                .errors
+                .push(format!("ОШИБКА guard на шаге {step}: {details}"));
+        }
+        RunResult::EvalFailed { step, details } => {
+            report
+                .errors
+                .push(format!("ОШИБКА вычисления на шаге {step}: {details}"));
+            report
+                .errors
+                .push("Симуляция остановлена: результат недостоверен.".to_string());
+        }
+        RunResult::CompletedWithInvariantViolations {
+            steps,
+            terminated,
+            violations,
+        } => {
+            let how = if *terminated {
+                "модель достигла терминального состояния"
+            } else {
+                "лимит шагов достигнут"
+            };
+            report.info.push(format!(
+                "Прогон завершён ({how}) за {steps} шагов; мягкий режим инвариантов."
+            ));
+            report.errors.push(format!(
+                "Нарушений инвариантов: {} (режим --invariant-soft — прогон продолжен):",
+                violations.len()
+            ));
+            for (step, details) in violations {
+                report.errors.push(format!("  шаг {step}: {details}"));
+            }
+        }
+    }
+    report
+}
+
+/// Человекочитаемая запись длительности: `999ms`, `1s`, `1s1ms`, `1m30s`.
+///
+/// Разряды переносятся, как в литерале языка: пока значение укладывается в
+/// младшую единицу — печатается ею (`999ms`), при переполнении появляется
+/// старшая (`1000ms` → `1s`), а остаток дописывается справа (`1001ms` →
+/// `1s1ms`). Так запись в трассе читается тем же способом, каким автор её
+/// **писал** в исходнике, и `90000ms` не приходится делить в голове.
+///
+/// Нулевые разряды опускаются (`3600s` → `1h`, а не `1h0m0s`); нулевая
+/// длительность печатается младшей содержательной единицей — `0ms`.
+pub fn format_duration(nanos: i64) -> String {
+    const UNITS: [(i64, &str); 6] = [
+        (3_600_000_000_000, "h"),
+        (60_000_000_000, "m"),
+        (1_000_000_000, "s"),
+        (1_000_000, "ms"),
+        (1_000, "us"),
+        (1, "ns"),
+    ];
+    if nanos == 0 {
+        return "0ms".to_string();
+    }
+    let sign = if nanos < 0 { "-" } else { "" };
+    // Модуль берётся с защитой от i64::MIN: `abs()` на нём паникует.
+    let mut rest = nanos.unsigned_abs();
+    let mut out = String::new();
+    for (size, name) in UNITS {
+        let size = size.unsigned_abs();
+        if rest >= size {
+            out.push_str(&format!("{}{}", rest / size, name));
+            rest %= size;
+        }
+        if rest == 0 {
+            break;
+        }
+    }
+    format!("{sign}{out}")
+}
+
+pub(crate) fn format_value(v: &Value) -> String {
+    match v {
+        Value::Number(n) => n.to_string(),
+        Value::Real(f) => format!("{f:.4}"),
+        Value::Boolean(b) => b.to_string(),
+        // q(m, n): показываем вещественное значение repr·2⁻ⁿ.
+        Value::Fixed { repr, n, .. } => format!("{:.4}", *repr as f64 / (1u64 << n) as f64),
+        // Длительность печатается человекочитаемо: наносекунды в трассе
+        // нечитаемы, а выдержки задаются секундами и миллисекундами.
+        Value::Duration(ns) => format_duration(*ns),
+        Value::Array(arr) => format!(
+            "[{}]",
+            arr.iter().map(format_value).collect::<Vec<_>>().join(",")
+        ),
+        // Структура (фича 0034): `Point{x=7,y=300}` — читаемо и в объявленном
+        // порядке полей.
+        Value::Struct { name, fields } => format!(
+            "{name}{{{}}}",
+            fields
+                .iter()
+                .map(|(f, v)| format!("{f}={}", format_value(v)))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Каждый исход прогона высказывается — и в СВОЙ поток.
+    ///
+    /// Сторож против молчаливой потери ветви при переносе печати в носитель
+    /// (фича 0531): текст сводки читает человек, и «прогон завершён» вместо
+    /// «нарушен инвариант» выглядело бы успехом.
+    #[test]
+    fn every_outcome_is_reported() {
+        let terminated = result_report(&RunResult::Terminated { steps: 7 });
+        assert_eq!(
+            terminated.info,
+            vec!["Завершено: модель достигла терминального состояния за 7 шагов."]
+        );
+        assert!(terminated.errors.is_empty(), "исход успеха молчит в stderr");
+
+        let reached = result_report(&RunResult::StepsReached { steps: 4 });
+        assert_eq!(reached.info, vec!["Выполнено 4 шагов (лимит достигнут)."]);
+
+        let guard = result_report(&RunResult::GuardFailed {
+            step: 2,
+            details: "vars[n]".to_string(),
+        });
+        assert!(guard.info.is_empty(), "отказ не идёт в обычный поток");
+        assert_eq!(guard.errors, vec!["ОШИБКА guard на шаге 2: vars[n]"]);
+
+        let eval = result_report(&RunResult::EvalFailed {
+            step: 3,
+            details: "деление на ноль".to_string(),
+        });
+        assert!(eval.info.is_empty());
+        assert_eq!(
+            eval.errors,
+            vec![
+                "ОШИБКА вычисления на шаге 3: деление на ноль",
+                "Симуляция остановлена: результат недостоверен.",
+            ]
+        );
+
+        // Мягкий режим (фича 0087): исход — в обычный поток, нарушения — в поток
+        // ошибок, каждое своей строкой.
+        let soft = result_report(&RunResult::CompletedWithInvariantViolations {
+            steps: 5,
+            terminated: false,
+            violations: vec![(4, "нарушен инвариант 'Small' (SIM-025)".to_string())],
+        });
+        assert_eq!(
+            soft.info,
+            vec!["Прогон завершён (лимит шагов достигнут) за 5 шагов; мягкий режим инвариантов."]
+        );
+        assert_eq!(
+            soft.errors,
+            vec![
+                "Нарушений инвариантов: 1 (режим --invariant-soft — прогон продолжен):",
+                "  шаг 4: нарушен инвариант 'Small' (SIM-025)",
+            ]
+        );
+    }
+}

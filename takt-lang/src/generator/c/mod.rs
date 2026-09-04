@@ -64,7 +64,7 @@ use crate::generator::Generator as AsGenerator;
 use crate::generator::c::c_header::generate_header;
 use crate::generator::c::c_map::CMap;
 use crate::generator::c::c_source::generate_source;
-use crate::generator::{FloatWidth, GenerateOptions};
+use crate::generator::{FloatWidth, GenerateOptions, GeneratedFile, Output};
 use crate::semantic::ModelNode;
 use crate::semantic::PortDirection;
 use crate::semantic::bit_vector::{self, BitVectorLayout};
@@ -73,8 +73,6 @@ use crate::semantic::minimap::{Element, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::Path;
 
 pub(super) const FUNCTION_PORT_WRITE_BIT: &str = "write_bit";
 pub(super) const FUNCTION_PORT_READ_BIT: &str = "read_bit";
@@ -162,12 +160,11 @@ impl PortClass {
 pub struct Generator {}
 
 impl AsGenerator for Generator {
-    fn generate(
+    fn generate_texts(
         &self,
         model: &ModelNode,
-        output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<Vec<Diagnostic>, Diagnostic> {
+    ) -> Result<Output, Diagnostic> {
         // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
         // подтвердить (задача 0134-05). Сверка живёт в общем слое; здесь —
         // единый чекпойнт-энфорсмент: несовпадение → `SE-069`/`SE-070` из `?`,
@@ -186,25 +183,30 @@ impl AsGenerator for Generator {
         let header = generate_header(map.get_filename(), &map, options)?;
         let source = generate_source(map.get_filename(), &map)?;
         let filename = map.get_filename();
-        let _ = fs::create_dir(Path::new(output_path));
-        fs::write(
-            Path::new(output_path).join(filename.to_owned() + ".h"),
-            header,
-        )
-        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{e}")).with_code("CC-010"))?;
-        fs::write(
-            Path::new(output_path).join(filename.to_owned() + ".c"),
-            source,
-        )
-        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{e}")).with_code("CC-010"))?;
-        // Предупреждения цели (канал заведён фичей 0168, первым по нему поехал
-        // `CC-024` — фича 0314): накопитель живёт в карте, потому что печатники
-        // получают её по `&self` и доходят до каждого оператора.
-        //
-        // ⚠️ Забирать надо ПОСЛЕ печати обоих файлов: заголовок и исходник
-        // печатаются разными проходами, и вызов, выброшенный во втором, иначе
-        // потерялся бы.
-        Ok(map.take_warnings())
+        Ok(Output {
+            files: vec![
+                GeneratedFile {
+                    name: filename.to_owned() + ".h",
+                    text: header,
+                },
+                GeneratedFile {
+                    name: filename.to_owned() + ".c",
+                    text: source,
+                },
+            ],
+            // Предупреждения цели (канал заведён фичей 0168, первым по нему поехал
+            // `CC-024` — фича 0314): накопитель живёт в карте, потому что печатники
+            // получают её по `&self` и доходят до каждого оператора.
+            //
+            // ⚠️ Забирать надо ПОСЛЕ печати обоих файлов: заголовок и исходник
+            // печатаются разными проходами, и вызов, выброшенный во втором, иначе
+            // потерялся бы.
+            warnings: map.take_warnings(),
+        })
+    }
+
+    fn write_failure(&self, error: &std::io::Error) -> Diagnostic {
+        Diagnostic::warning(Location::Codegen, format!("{error}")).with_code("CC-010")
     }
 }
 

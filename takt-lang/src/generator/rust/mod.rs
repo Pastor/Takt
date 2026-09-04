@@ -77,16 +77,14 @@ mod rust_type;
 mod rust_unused;
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
+use crate::generator::{GenerateOptions, GeneratedFile, Output};
 use crate::semantic::ModelNode;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use rust_map::RustMap;
 use std::cell::RefCell;
-use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 
 /// Размер одного уровня отступа в порождаемом Rust (конвенция rustfmt).
@@ -96,12 +94,11 @@ const INDENT: usize = 4;
 pub struct Generator {}
 
 impl AsGenerator for Generator {
-    fn generate(
+    fn generate_texts(
         &self,
         model: &ModelNode,
-        output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<Vec<Diagnostic>, Diagnostic> {
+    ) -> Result<Output, Diagnostic> {
         // Молчаливое игнорирование флага недопустимо: пользователь решил бы, что
         // получил f32, тогда как `Rational` → f64 — решение ADR.
         rust_type::reject_float_width(options.float_width)?;
@@ -119,13 +116,17 @@ impl AsGenerator for Generator {
         .with_fsm(options.fsm);
         let (program, warnings) = generate_program(&map)?;
         let filename = map.get_filename();
-        let _ = fs::create_dir(Path::new(output_path));
-        fs::write(
-            Path::new(output_path).join(filename.to_owned() + ".rs"),
-            program,
-        )
-        .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("RS-001"))?;
-        Ok(warnings)
+        Ok(Output {
+            files: vec![GeneratedFile {
+                name: filename.to_owned() + ".rs",
+                text: program,
+            }],
+            warnings,
+        })
+    }
+
+    fn write_failure(&self, error: &std::io::Error) -> Diagnostic {
+        Diagnostic::error(Location::Codegen, format!("{error}")).with_code("RS-001")
     }
 }
 

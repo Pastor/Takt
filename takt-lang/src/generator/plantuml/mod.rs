@@ -13,39 +13,40 @@
 mod puml_map;
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
+use crate::generator::{GenerateOptions, GeneratedFile, Output};
 use crate::semantic::ModelNode;
 use crate::semantic::minimap::{Element, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use puml_map::PumlMap;
-use std::fs;
-use std::path::Path;
 
 /// Генератор PlantUML-диаграмм для модели Takt.
 pub struct Generator {}
 
 impl AsGenerator for Generator {
-    fn generate(
+    fn generate_texts(
         &self,
         model: &ModelNode,
-        output_path: &str,
         _options: &GenerateOptions,
-    ) -> Result<Vec<Diagnostic>, Diagnostic> {
+    ) -> Result<Output, Diagnostic> {
         let map = PumlMap::new(
             &normalize_lowercase_snakecase(model.name().to_string()),
             model,
         )?;
         let diagram = generate_diagram(&map)?;
         let filename = map.get_filename();
-        let _ = fs::create_dir(Path::new(output_path));
-        fs::write(
-            Path::new(output_path).join(filename.to_owned() + ".puml"),
-            diagram,
-        )
-        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{e}")).with_code("PU-001"))?;
-        // Предупреждений у цели `plantuml` нет (фича 0168) — канал общий.
-        Ok(Vec::new())
+        Ok(Output {
+            files: vec![GeneratedFile {
+                name: filename.to_owned() + ".puml",
+                text: diagram,
+            }],
+            // Предупреждений у цели `plantuml` нет (фича 0168) — канал общий.
+            warnings: Vec::new(),
+        })
+    }
+
+    fn write_failure(&self, error: &std::io::Error) -> Diagnostic {
+        Diagnostic::warning(Location::Codegen, format!("{error}")).with_code("PU-001")
     }
 }
 

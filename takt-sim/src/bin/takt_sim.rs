@@ -289,38 +289,14 @@ fn stamp_file(
 }
 
 fn print_result(result: &RunResult) {
-    match result {
-        RunResult::Terminated { steps } => {
-            println!("Завершено: модель достигла терминального состояния за {steps} шагов.");
-        }
-        RunResult::StepsReached { steps } => {
-            println!("Выполнено {steps} шагов (лимит достигнут).");
-        }
-        RunResult::GuardFailed { step, details } => {
-            eprintln!("ОШИБКА guard на шаге {step}: {details}");
-        }
-        RunResult::EvalFailed { step, details } => {
-            eprintln!("ОШИБКА вычисления на шаге {step}: {details}");
-            eprintln!("Симуляция остановлена: результат недостоверен.");
-        }
-        RunResult::CompletedWithInvariantViolations {
-            steps,
-            terminated,
-            violations,
-        } => {
-            let how = if *terminated {
-                "модель достигла терминального состояния"
-            } else {
-                "лимит шагов достигнут"
-            };
-            println!("Прогон завершён ({how}) за {steps} шагов; мягкий режим инвариантов.");
-            eprintln!(
-                "Нарушений инвариантов: {} (режим --invariant-soft — прогон продолжен):",
-                violations.len()
-            );
-            for (step, details) in violations {
-                eprintln!("  шаг {step}: {details}");
-            }
-        }
+    // Текст сводки СТРОИТ библиотека (`trace::result_report`, фича 0531): та же
+    // сводка нужна потребителю без консоли — модулю WebAssembly. CLI решает
+    // только, в какой поток её отдать.
+    let report = takt_sim::trace::result_report(result);
+    for line in &report.info {
+        println!("{line}");
+    }
+    for line in &report.errors {
+        eprintln!("{line}");
     }
 }
