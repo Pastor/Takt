@@ -119,14 +119,22 @@ async fn visibility_decides_who_reads_the_project() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     // Чужой не правит открытое: чтение и запись — разные вопросы.
-    let (status, _) = stand
+    //
+    // ⚠️ Здесь `403`, а не `404` (задача 09d): открытый проект человеку ВИДНО,
+    // и прятать его уже незачем — а «не найдено» отправило бы его искать
+    // опечатку в ссылке вместо того, чтобы попросить право.
+    let (status, body) = stand
         .put_as(
             &format!("/api/projects/{open}/files/model.takt"),
             &stranger,
             serde_json::json!({"text": "model X {}", "revision": 1}),
         )
         .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "правка чужого открытого");
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "правка чужого открытого: {body}"
+    );
 
     stand.drop_schema().await;
 }

@@ -16,10 +16,12 @@
 //! запросами. До модулей БИНАРНИКА они дотянуться не могут — значит проверялся
 //! бы не сервер, а его копия в тесте.
 
+pub mod access;
 pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod grants;
 pub mod limits;
 pub mod projects;
 pub mod rate;
