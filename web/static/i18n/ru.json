@@ -91,5 +91,19 @@
   "api.failed": "сервер отказал: {message}",
   "api.offline": "сервер не отвечает: {error}",
 
+  "oauth.yandex": "Яндекс",
+  "oauth.vk": "ВКонтакте",
+  "oauth.mail": "Mail (через VK ID)",
+  "oauth.linked": "площадка привязана",
+  "oauth.pickLogin": "выберите логин: 3…32 символа, латиница, цифры, «_» и «-»",
+  "oauth.loginPlaceholder": "Логин (3…32, латиница)",
+  "oauth.pickOk": "Продолжить",
+  "oauth.error.denied": "вход отменён на стороне площадки",
+  "oauth.error.failed": "вход не удался — попробуйте ещё раз",
+  "oauth.error.expired": "вход просрочен: начните заново",
+  "oauth.error.csrf": "вход начат не в этом браузере — начните заново",
+  "oauth.error.unavailable": "площадка не отвечает — попробуйте позже",
+  "oauth.error.identityTaken": "эта площадка уже привязана к другой записи",
+
   "tools.russianOnly": "Сообщения инструментов пока только на русском"
 }

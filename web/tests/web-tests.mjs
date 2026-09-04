@@ -313,6 +313,10 @@ test("язык: каждый ключ разметки есть в словар�
   // Ключи, которые страница строит не буквально: воркер и черновик возвращают
   // их полем `key`.
   for (const [, key] of text.matchAll(/key:\s*"([\w.]+)"/g)) used.add(key);
+  // ⚠️ Подписи кнопок площадок приходят ОТ СЕРВЕРА (задача 09f-3): имён
+  // площадок в коде страницы нет намеренно. Ключи берутся у него же — иначе
+  // сверка объявила бы их мёртвыми и подтолкнула бы завести список в вебе.
+  for (const key of await serverLabelKeys()) used.add(key);
   for (const [, a, b] of text.matchAll(/\?\s*"([\w.]+)"\s*:\s*"([\w.]+)"/g)) {
     used.add(a);
     used.add(b);
@@ -796,6 +800,45 @@ test("разметка: скрытый узел действительно ск�
   }
   assert.deepEqual(unprotected, [], `класс задаёт display и не гасится: ${unprotected.join(", ")}`);
 });
+
+test("язык: подписи площадок объявляет сервер, а словарь их знает", async () => {
+  // ⚠️ Реестр сверяется ДВУМЯ сторонами: сервер объявляет ключ подписи, словарь
+  // даёт текст. Заведи площадку на сервере без записи в словаре — кнопка
+  // показала бы читателю служебный ключ, и увидел бы это он, а не гейт.
+  const keys = await serverLabelKeys();
+  assert.ok(keys.length >= 3, `сервер объявил подписей: ${keys.length}`);
+  for (const lang of Object.keys(i18n.LANGUAGES)) {
+    const dictionary = JSON.parse(
+      await readFile(new URL(`../static/i18n/${lang}.json`, import.meta.url), "utf8")
+    );
+    for (const key of keys) {
+      assert.ok(dictionary[key], `в словаре '${lang}' нет подписи площадки '${key}'`);
+    }
+  }
+});
+
+test("страница не знает имён площадок", async () => {
+  // ⚠️ Приём тот же, что «нет списка ключевых слов Takt в вебе»: свой список
+  // площадок разошёлся бы с настройкой стенда молча, и кнопка вела бы в никуда.
+  for (const name of PAGE_SCRIPTS) {
+    const source = await readFile(new URL(`../static/${name}`, import.meta.url), "utf8");
+    const code = source
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//"))
+      .join("\n");
+    const found = /["'`](yandex|vk|mail_ru)["'`]/i.exec(code);
+    assert.equal(found, null, `${name}: имя площадки в коде — ${found?.[0]}`);
+  }
+});
+
+/** Ключи подписей площадок, объявленные сервером. */
+async function serverLabelKeys() {
+  const source = await readFile(
+    new URL("../server/src/oauth/api.rs", import.meta.url),
+    "utf8"
+  );
+  return [...source.matchAll(/label:\s*"([\w.]+)"/g)].map((match) => match[1]);
+}
 
 /** Хранилище в памяти — тот же интерфейс, что у `localStorage`. */
 function memoryStorage() {

@@ -66,6 +66,14 @@ export function attach(nodes, callbacks) {
   dom.save.addEventListener("click", () => save());
   dom.reread.addEventListener("click", () => resolveConflict("reread"));
   dom.overwrite.addEventListener("click", () => resolveConflict("overwrite"));
+  dom.pickok.addEventListener("click", () => {
+    const login = dom.picklogin.value.trim();
+    if (!login) {
+      host.say(t("oauth.pickLogin"), "warning");
+      return;
+    }
+    exchange(state.ticket, login);
+  });
   dom.projects.addEventListener("click", (event) => {
     const row = event.target.closest("[data-project]");
     if (row) openProject(row.dataset.project);
@@ -83,6 +91,7 @@ export function attach(nodes, callbacks) {
     }
   });
   refresh();
+  fillProviders();
 }
 
 /** Открыт ли файл проекта (а не безымянный буфер). */
@@ -100,6 +109,123 @@ export function keepDraft(source, scenario) {
     source,
     scenario,
   });
+}
+
+/**
+ * Строит кнопки площадок по ответу сервера.
+ *
+ * ⚠️ Имён площадок в коде страницы нет: идентификатор и **ключ подписи**
+ * приходят от сервера. Заведи здесь свой список — он разошёлся бы с настройкой
+ * стенда молча, и кнопка вела бы в никуда.
+ */
+async function fillProviders() {
+  let list = [];
+  try {
+    list = await api.oauthProviders();
+  } catch {
+    // Площадки не настроены либо сервера нет: вход паролем работает, и
+    // сообщать тут не о чем.
+    list = [];
+  }
+  dom.oauth.replaceChildren();
+  dom.oauth.hidden = list.length === 0;
+  for (const item of list) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = t(item.label);
+    button.addEventListener("click", () => leaveTo(item));
+    dom.oauth.appendChild(button);
+  }
+}
+
+/**
+ * Уходит на площадку.
+ *
+ * ⚠️ Черновик пишется НЕМЕДЛЕННО, до перехода: отложенная на 400 мс запись до
+ * ухода со страницы не доживёт, а `beforeunload` встретил бы вопросом «уйти?»
+ * каждого, кто нажал «Войти».
+ */
+function leaveTo(item) {
+  host.keep();
+  const path = `${api.apiRoot()}api/oauth/${encodeURIComponent(item.id)}/start`;
+  const query = new URLSearchParams({ return_to: location.pathname });
+  if (item.via) query.set("via", item.via);
+  // Обычная навигация, а не `fetch`: cookie потока и перенаправление на
+  // площадку бывают только у неё.
+  location.assign(`${path}?${query}`);
+}
+
+/**
+ * Разбирает возврат с площадки: `#login=…`, `#login_error=…`, `#linked=1`.
+ *
+ * ⚠️ Фрагмент стирается СРАЗУ и до первого запроса: ticket — секрет этого шага,
+ * и оставлять его в адресной строке и в истории браузера незачем.
+ */
+export async function handleReturn() {
+  const raw = location.hash.replace(/^#/, "");
+  if (!raw) return false;
+  const params = new URLSearchParams(raw);
+  const ticket = params.get("login");
+  const failure = params.get("login_error");
+  const linked = params.get("linked");
+  if (!ticket && !failure && !linked) return false;
+  history.replaceState(null, "", location.pathname + location.search);
+
+  if (failure) {
+    // Причина приходит КЛЮЧОМ, а не текстом площадки: чужой текст не
+    // переводится и не всегда предназначен читателю.
+    host.say(oauthError(failure), "error");
+    return true;
+  }
+  if (linked) {
+    host.say(t("oauth.linked"), "ok");
+    refresh();
+    return true;
+  }
+  await exchange(ticket, null);
+  return true;
+}
+
+/** Меняет ticket на пару; при нужде спрашивает логин. */
+async function exchange(ticket, login) {
+  try {
+    const pair = await api.oauthComplete(ticket, login);
+    hideLoginPrompt();
+    host.say(t("account.hello", { login: pair.login }), "ok");
+    refresh();
+    await list();
+  } catch (error) {
+    if (error?.message_text === "login_required") {
+      // Первый вход: логин выбирает человек — имени площадки мы не читаем.
+      showLoginPrompt(ticket);
+      return;
+    }
+    fail(error);
+  }
+}
+
+/** Показывает окно «Выберите логин». */
+function showLoginPrompt(ticket) {
+  state.ticket = ticket;
+  dom.pick.hidden = false;
+  dom.picklogin.value = "";
+  dom.picklogin.focus();
+  host.say(t("oauth.pickLogin"), "warning");
+}
+
+function hideLoginPrompt() {
+  state.ticket = null;
+  dom.pick.hidden = true;
+}
+
+/** Текст отказа входа через площадку — по конечному словарю ключей. */
+function oauthError(key) {
+  if (key === "denied") return t("oauth.error.denied");
+  if (key === "expired") return t("oauth.error.expired");
+  if (key === "csrf") return t("oauth.error.csrf");
+  if (key === "unavailable") return t("oauth.error.unavailable");
+  if (key === "identity_taken") return t("oauth.error.identityTaken");
+  return t("oauth.error.failed");
 }
 
 /** Показывает или прячет панель. */
@@ -124,7 +250,7 @@ async function enter(how) {
     refresh();
     await list();
   } catch (error) {
-    host.say(text(error), "error");
+    fail(error);
   }
 }
 
@@ -151,7 +277,7 @@ async function make() {
     await list();
     await openProject(created.id);
   } catch (error) {
-    host.say(text(error), "error");
+    fail(error);
   }
 }
 
@@ -177,7 +303,7 @@ async function list() {
       dom.projects.appendChild(empty);
     }
   } catch (error) {
-    host.say(text(error), "error");
+    fail(error);
   }
 }
 
@@ -215,7 +341,7 @@ async function openProject(id) {
       refresh();
     }
   } catch (error) {
-    host.say(text(error), "error");
+    fail(error);
   }
 }
 
@@ -254,7 +380,7 @@ async function openFile(id, name) {
     }
     refresh();
   } catch (error) {
-    host.say(text(error), "error");
+    fail(error);
   }
 }
 
@@ -293,7 +419,7 @@ async function save() {
       );
       return;
     }
-    host.say(text(error), "error");
+    fail(error);
   }
 }
 
@@ -318,7 +444,7 @@ async function resolveConflict(choice) {
     hideConflict();
     refresh();
   } catch (error) {
-    host.say(text(error), "error");
+    fail(error);
   }
 }
 
@@ -377,6 +503,25 @@ function levelName(level) {
 function when(savedAt) {
   if (!savedAt) return "—";
   return new Date(savedAt).toLocaleString();
+}
+
+/**
+ * Показывает отказ и приводит панель в согласие с сессией.
+ *
+ * ⚠️ Отказ `401` означает, что сохранённая пара больше не годится (сервер
+ * перезапущен с чистой базой, токен отозван, семейство погашено). Без этого шага
+ * панель продолжала бы показывать «вошли как …» и кнопку «Выйти» у сессии,
+ * которой нет — нашлось прогоном страницы (задача 09f-3).
+ */
+function fail(error) {
+  host.say(text(error), "error");
+  if (error?.status === 401) {
+    state.project = null;
+    state.file = null;
+    state.level = "none";
+    refresh();
+    fillProviders();
+  }
 }
 
 /** Текст отказа: свой — из словаря, чужой — как прислал сервер. */

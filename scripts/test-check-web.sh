@@ -52,6 +52,12 @@ trap 'rm -rf "$WORK"' EXIT
 TREE="$WORK/tree"
 mkdir -p "$TREE/scripts" "$TREE/web" "$TREE/takt-lang" "$TREE/book" "$TREE/target/precheck/wasm32-unknown-unknown/$PROFILE"
 cp -R "$ROOT/web/static" "$ROOT/web/tests" "$TREE/web/"
+# ⚠️ Подписи кнопок площадок объявляет СЕРВЕР, и сверка словаря читает его
+# исходник (задача 09f-3). Копия дерева — не «весь проект»: файл, который тесты
+# читают, а сторож не кладёт, роняет B4 с чужой причиной (тот же класс, что у
+# `version.rs`).
+mkdir -p "$TREE/web/server/src/oauth"
+cp "$ROOT/web/server/src/oauth/api.rs" "$TREE/web/server/src/oauth/"
 cp "$ROOT/scripts/check-web.sh" "$ROOT/scripts/build-web.sh" "$ROOT/scripts/target-dir.sh" "$TREE/scripts/"
 cp "$ROOT/takt-lang/Cargo.toml" "$TREE/takt-lang/"
 # Версия ЯЗЫКА для описи сборки берётся из константы (0085), а не повторяется.

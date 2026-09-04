@@ -66,6 +66,17 @@
         <button id="signin" type="button" data-i18n="account.signIn">Войти</button>
         <button id="signup" type="button" data-i18n="account.signUp">Завести запись</button>
       </div>
+      <!-- Кнопки площадок строятся ПО ОТВЕТУ СЕРВЕРА: имён площадок в коде
+           страницы нет, иначе список разошёлся бы с настройкой стенда молча
+           (задача 0531-09f-3). -->
+      <div id="oauth" class="controls" hidden></div>
+      <!-- Первый вход через площадку: логин выбирает человек — имени с
+           площадки мы не читаем и не храним. -->
+      <div id="pick" class="controls" hidden>
+        <input id="picklogin" type="text" spellcheck="false"
+               data-i18n-attr="placeholder:oauth.loginPlaceholder" placeholder="Логин (3…32, латиница)">
+        <button id="pickok" type="button" data-i18n="oauth.pickOk">Продолжить</button>
+      </div>
       <div id="signedin" class="controls" hidden>
         <span id="whoami" class="muted"></span>
         <button id="signout" type="button" data-i18n="account.signOut">Выйти</button>
