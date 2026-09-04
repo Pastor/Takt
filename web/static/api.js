@@ -90,6 +90,54 @@ export async function signOut() {
   }
 }
 
+/**
+ * Настроенные площадки входа.
+ *
+ * ⚠️ Страница рисует кнопки **только по этому ответу**: своего списка площадок
+ * у неё нет и быть не должно — второй список разошёлся бы с первым молча (тот
+ * же приём, что «нет списка ключевых слов Takt в вебе»).
+ */
+export async function oauthProviders() {
+  return await call("oauth/providers", {}, false);
+}
+
+/** Меняет ticket площадки на пару токенов. */
+export async function oauthComplete(ticket, login) {
+  const pair = await call(
+    "oauth/complete",
+    { method: "POST", body: login ? { ticket, login } : { ticket } },
+    false,
+  );
+  session = {
+    access: pair.access_token,
+    refresh: pair.refresh_token,
+    login: pair.login ?? "",
+    role: "user",
+  };
+  remember(session);
+  return pair;
+}
+
+/** Связанные со мной площадки. */
+export async function oauthIdentities() {
+  return await call("oauth/identities");
+}
+
+/** Отвязывает площадку. */
+export async function oauthUnlink(provider) {
+  return await call(`me/identities/${encodeURIComponent(provider)}`, { method: "DELETE" });
+}
+
+/** Задаёт пароль записи, у которой его не было. */
+export async function setPassword(password) {
+  return await call("me/password", { method: "PUT", body: { password } });
+}
+
+/** Корень API — страница строит по нему адрес перехода на площадку. */
+export function apiRoot() {
+  return root;
+}
+
 /** Мои проекты и выданные мне, каждый со своим уровнем. */
 export async function projects() {
   return await call("projects");

@@ -91,5 +91,19 @@
   "api.failed": "the server refused: {message}",
   "api.offline": "the server does not answer: {error}",
 
+  "oauth.yandex": "Yandex",
+  "oauth.vk": "VKontakte",
+  "oauth.mail": "Mail (via VK ID)",
+  "oauth.linked": "the platform is linked",
+  "oauth.pickLogin": "pick a login: 3…32 characters, latin letters, digits, “_” and “-”",
+  "oauth.loginPlaceholder": "Login (3…32, latin)",
+  "oauth.pickOk": "Continue",
+  "oauth.error.denied": "the sign-in was cancelled on the platform",
+  "oauth.error.failed": "the sign-in failed — try again",
+  "oauth.error.expired": "the sign-in expired: start over",
+  "oauth.error.csrf": "the sign-in started in another browser — start over",
+  "oauth.error.unavailable": "the platform does not answer — try later",
+  "oauth.error.identityTaken": "this platform is already linked to another account",
+
   "tools.russianOnly": "Tool messages are still Russian only"
 }

@@ -93,15 +93,22 @@ export async function main() {
       applyState({ ...restored, target: state.target, args: state.args });
       refresh();
     },
+    // ⚠️ Черновик пишется НЕМЕДЛЕННО перед уходом на площадку: отложенная
+    // запись до перехода не доживёт.
+    keep: () => saveDraft.now(),
     say,
   });
+  // Возврат с площадки разбирается ДО восстановления состояния: во фрагменте
+  // там ticket, а не ссылка-снимок, и принять одно за другое нельзя.
+  const returned = await account.handleReturn();
 
   // Порядок источников: адрес проекта → ссылка-снимок → черновик → пример.
   // ⚠️ Живая страница сильнее снимка и черновика: читатель пришёл ПО АДРЕСУ
   // проекта, и показать ему вместо проекта вчерашний черновик значило бы
   // ответить не на тот вопрос.
   const opened = await openProject();
-  const restored = opened ?? (await decodeState(location.hash)) ?? draft.load(localStorage);
+  const restored =
+    opened ?? (returned ? null : await decodeState(location.hash)) ?? draft.load(localStorage);
   applyState(restored ?? { source: SAMPLE });
   refresh();
 }
@@ -255,6 +262,7 @@ function cache() {
     "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",
+    "oauth", "pick", "picklogin", "pickok",
   ]) {
     dom[id] = document.getElementById(id);
   }
