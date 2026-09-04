@@ -49,7 +49,7 @@ const RESTRICTED: &[Restricted] = &[
 ///
 /// `raised` — какие из ограниченных флагов заданы (по имени из таблицы).
 /// Возвращает готовый текст отказа либо `Ok(())`.
-pub(crate) fn check(target: &str, raised: &[&str]) -> Result<(), String> {
+pub fn check(target: &str, raised: &[&str]) -> Result<(), String> {
     for flag in raised {
         let Some(entry) = RESTRICTED.iter().find(|e| e.flag == *flag) else {
             continue;

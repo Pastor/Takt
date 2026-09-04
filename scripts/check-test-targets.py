@@ -34,7 +34,9 @@ ROOT = os.environ.get(
     "TT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-CRATES = ("takt-lang", "takt-sim")
+# ⚠️ Список крейтов ведётся ЗДЕСЬ, и новый крейт обязан в него попасть: иначе
+# его тесты гейту невидимы молча (фича 0531 добавила `takt-wasm`).
+CRATES = ("takt-lang", "takt-sim", "takt-wasm")
 # Каталоги, которые темами не являются: фикстуры и вспомогательные данные.
 NOT_A_THEME = {"data"}
 
