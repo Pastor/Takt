@@ -6,10 +6,10 @@
 //! приоритет источников) и понижение `float → q` цели `sv`.
 
 use crate::address_map::{self, AddressEnv, AddressMapEntry};
+use crate::apply_float_lowering;
+use crate::compile::CompileInput;
 use crate::diagnostics::{self, Diagnostic};
 use crate::generator::{self, GenerateOptions};
-use crate::{apply_float_lowering, parse_and_construct};
-use std::path::Path;
 
 /// Компилирует Takt в синтезируемый SystemVerilog в режиме `sv-mmio` (фича 0062):
 /// порт **с** адресом становится битом регистрового файла на шинно-агностичном
@@ -37,16 +37,29 @@ pub fn compile_to_sv_mmio(
     env: &AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options)?;
+    let input = CompileInput {
+        filename,
+        source,
+        search_paths,
+        external,
+        env: Some(env),
+        options,
+    };
+    crate::compile::compile_files(crate::compile::Target::SvMmio, &input, output_path)
+}
 
-    if unit.model.borrow().name.is_none() {
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
+/// Та же цель, но вывод — В ПАМЯТЬ (фича 0531): зовётся из
+/// [`compile_texts`](crate::compile::compile_texts).
+pub(crate) fn compile_sv_mmio_texts(
+    input: &CompileInput<'_>,
+) -> Result<generator::Output, Diagnostic> {
+    let unit = crate::compile::named_unit(input)?;
+    let default_env = AddressEnv::default();
+    let (external, env, options) = (
+        input.external,
+        input.env.unwrap_or(&default_env),
+        input.options,
+    );
 
     // Порт составного типа разворачивается в скалярные (фича 0390): у
     // регистрового файла поле ложится в своё слово, и `SV-002` о «ширине, не
@@ -90,8 +103,10 @@ pub fn compile_to_sv_mmio(
     // 0168). Прежде у одного вызова было **две** судьбы: адресные возвращались
     // и глушились `--quiet`, а `SV-009` печаталась `eprintln!` из библиотеки и
     // не глушилась ничем.
+    let mut output = unit.emit_texts(generator::Language::SvMmio, &mmio_options)?;
     let mut warnings = resolution.diagnostics;
-    warnings.extend(unit.emit(generator::Language::SvMmio, output_path, &mmio_options)?);
+    warnings.append(&mut output.warnings);
+    output.warnings = warnings;
 
-    Ok(warnings)
+    Ok(output)
 }

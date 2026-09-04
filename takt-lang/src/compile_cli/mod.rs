@@ -13,7 +13,8 @@ use crate::address_map::split_include_dirs;
 use std::fs;
 use std::process;
 
-mod target_flags;
+/// Применимость ключа сборки к цели — одна таблица на проект (фича 0466).
+pub mod target_flags;
 
 #[cfg(test)]
 mod tests;
@@ -466,7 +467,7 @@ fn parse_tick_hz(value: &str) -> Result<u64, String> {
 /// не доезжает до других, а расхождение обнаруживается на выходе генератора.
 /// Цели `st`/`st-at` `float_width` не потребляют — у ST своё отображение типов
 /// (`generator/st/st_type.rs`).
-fn generate_options(options: &CompileOptions) -> crate::GenerateOptions {
+pub fn generate_options(options: &CompileOptions) -> crate::GenerateOptions {
     let mut generate = crate::GenerateOptions::new(options.guard_enable);
     generate.float_width = options.float_width;
     generate.float_as_q = options.float_as_q;
@@ -738,159 +739,74 @@ pub fn run_compile(args: &[String]) -> i32 {
         print_warnings(&warnings, &files, options.quiet);
     }
 
-    match options.target.as_str() {
-        "c-hal" => {
-            report_result(
-                crate::compile_to_c_hal(
-                    &options.input_file,
-                    &source,
-                    &options.output_path,
-                    &options.include_dirs,
-                    &external_entries,
-                    &address_env,
-                    &generate_options(&options),
-                ),
-                "c-hal",
-                &options,
-                &files,
-            );
-        }
-        "c" => {
-            match crate::compile_to_c(
-                &options.input_file,
-                &source,
-                &options.output_path,
-                &options.include_dirs,
-                &generate_options(&options),
-            ) {
-                // Предупреждений у цели `c` сегодня нет, но канал общий (фича
-                // 0168): появится первое — поедет отсюда, без правки CLI.
-                Ok(warnings) => {
-                    let files = crate::diagnostics::FileTable::new(&options.input_file);
-                    print_warnings(&warnings, &files, options.quiet);
-                }
-                Err(diag) => {
-                    print_compile_error(&diag);
-                    return 1;
-                }
+    // Выбор цели по имени — ОДНА точка на проект (`compile::Target`, фича 0531).
+    // Прежде список целей стоял здесь восемью ветвями, и потребитель без
+    // файловой системы (модуль WebAssembly) обязан был бы завести девятую копию;
+    // два списка расходятся молча — класс 0084/0466.
+    let Some(target) = crate::compile::Target::parse(options.target.as_str()) else {
+        eprintln!(
+            "Ошибка: неизвестная цель '{}'. Поддерживается: {}",
+            options.target,
+            crate::compile::Target::ALL
+                .iter()
+                .map(|t| t.name())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        return 1;
+    };
+
+    let input = crate::compile::CompileInput {
+        filename: &options.input_file,
+        source: &source,
+        search_paths: &options.include_dirs,
+        external: &external_entries,
+        env: Some(&address_env),
+        options: &generate_options(&options),
+    };
+    let result = crate::compile::compile_files(target, &input, &options.output_path);
+
+    // ⚠️ У цели `c` своё сообщение об успехе — оно старше общего и называет
+    // число путей поиска, а не имя цели. Сохранено ДОСЛОВНО: вывод CLI —
+    // контракт с пользователем и с гейтами, и «заодно причесать» его эта
+    // фича не вправе.
+    if matches!(target, crate::compile::Target::C) {
+        match result {
+            // Предупреждений у цели `c` сегодня нет, но канал общий (фича
+            // 0168): появится первое — поедет отсюда, без правки CLI.
+            Ok(warnings) => {
+                let files = crate::diagnostics::FileTable::new(&options.input_file);
+                print_warnings(&warnings, &files, options.quiet);
             }
-            // В тихом режиме не выводим информационные сообщения
-            if !options.quiet {
-                if options.verbose {
-                    // Расширенный вывод: полный путь к файлу и список директорий поиска
-                    eprintln!(
-                        "Скомпилировано: {} → {} (путей поиска: {}: {:?})",
-                        fs::canonicalize(&options.input_file)
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|_| options.input_file.clone()),
-                        options.output_path,
-                        options.include_dirs.len(),
-                        options.include_dirs,
-                    );
-                } else {
-                    eprintln!(
-                        "Скомпилировано: {} → {}/ (путей поиска: {})",
-                        options.input_file,
-                        options.output_path,
-                        options.include_dirs.len()
-                    );
-                }
+            Err(diag) => {
+                print_compile_error(&diag);
+                return 1;
             }
         }
-        "plantuml" => {
-            report_result(
-                crate::compile_to_plantuml(
-                    &options.input_file,
-                    &source,
-                    &options.output_path,
-                    &options.include_dirs,
-                ),
-                "plantuml",
-                &options,
-                &files,
-            );
+        // В тихом режиме не выводим информационные сообщения
+        if !options.quiet {
+            if options.verbose {
+                // Расширенный вывод: полный путь к файлу и список директорий поиска
+                eprintln!(
+                    "Скомпилировано: {} → {} (путей поиска: {}: {:?})",
+                    fs::canonicalize(&options.input_file)
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| options.input_file.clone()),
+                    options.output_path,
+                    options.include_dirs.len(),
+                    options.include_dirs,
+                );
+            } else {
+                eprintln!(
+                    "Скомпилировано: {} → {}/ (путей поиска: {})",
+                    options.input_file,
+                    options.output_path,
+                    options.include_dirs.len()
+                );
+            }
         }
-        "st" => {
-            report_result(
-                crate::compile_to_st(
-                    &options.input_file,
-                    &source,
-                    &options.output_path,
-                    &options.include_dirs,
-                    &generate_options(&options),
-                ),
-                "st",
-                &options,
-                &files,
-            );
-        }
-        "st-at" => {
-            report_result(
-                crate::compile_to_st_at(
-                    &options.input_file,
-                    &source,
-                    &options.output_path,
-                    &options.include_dirs,
-                    &external_entries,
-                    &address_env,
-                    &generate_options(&options),
-                ),
-                "st-at",
-                &options,
-                &files,
-            );
-        }
-        "rust" => {
-            report_result(
-                crate::compile_to_rust(
-                    &options.input_file,
-                    &source,
-                    &options.output_path,
-                    &options.include_dirs,
-                    &generate_options(&options),
-                ),
-                "rust",
-                &options,
-                &files,
-            );
-        }
-        "sv" => {
-            report_result(
-                crate::compile_to_sv(
-                    &options.input_file,
-                    &source,
-                    &options.output_path,
-                    &options.include_dirs,
-                    &generate_options(&options),
-                ),
-                "sv",
-                &options,
-                &files,
-            );
-        }
-        "sv-mmio" => {
-            report_result(
-                crate::compile_to_sv_mmio(
-                    &options.input_file,
-                    &source,
-                    &options.output_path,
-                    &options.include_dirs,
-                    &external_entries,
-                    &address_env,
-                    &generate_options(&options),
-                ),
-                "sv-mmio",
-                &options,
-                &files,
-            );
-        }
-        t => {
-            eprintln!(
-                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at, rust, sv, sv-mmio",
-                t
-            );
-            return 1;
-        }
+    } else {
+        report_result(result, target.name(), &options, &files);
     }
 
     0

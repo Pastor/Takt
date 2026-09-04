@@ -389,6 +389,18 @@ pub fn generate(
     Ok(output.warnings)
 }
 
+/// Кладёт готовые файлы цели в каталог `output_path` (фича 0531).
+///
+/// Вход для того, кто уже получил вывод [`generate_texts`] и решил его
+/// сохранить: цель нужна, чтобы отказ диска пришёл с её кодом.
+pub fn write_files(
+    l: Language,
+    files: &[GeneratedFile],
+    output_path: &str,
+) -> Result<(), Diagnostic> {
+    write_output(files, output_path, generator_of(&l).as_ref())
+}
+
 /// Кладёт файлы вывода в каталог `output_path`.
 ///
 /// Каталог создаётся молча — как и прежде: отсутствие права на создание

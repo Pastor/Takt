@@ -44,6 +44,12 @@ pub use goto::{Location, goto_declaration, goto_declaration_at, goto_declaration
 pub use hover::{hover_info, word_at_position};
 pub use init_options::search_paths_from_options;
 pub use keywords::SEMANTIC_TOKEN_TYPES;
+/// Типы протокола — ТОТ ЖЕ крейт, которым живёт слой (фича 0531).
+///
+/// Реэкспорт нужен потребителю вне `takt-lang` (мост WebAssembly): объяви он
+/// свою зависимость на `lsp-types`, версии разъехались бы, а `Position` из
+/// двух разных версий — два разных типа. Здесь версия одна по построению.
+pub use lsp_types;
 pub use position::{node_at_position, offset_to_position, offset_to_range, position_to_offset};
 pub use references::{FileReference, references_at, references_in_workspace};
 pub use rename::{

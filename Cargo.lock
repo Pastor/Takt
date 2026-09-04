@@ -1495,7 +1495,7 @@ dependencies = [
 
 [[package]]
 name = "takt-lang"
-version = "0.56.0"
+version = "0.57.0"
 dependencies = [
  "criterion",
  "itertools 0.15.0",
@@ -1504,13 +1504,9 @@ dependencies = [
  "log",
  "lsp-server",
  "lsp-types",
- "petgraph",
  "phf",
- "rand",
- "rand_distr",
  "serde",
  "serde_json",
- "svg",
  "tempfile",
  "thiserror",
  "unicode-xid",
@@ -1518,7 +1514,7 @@ dependencies = [
 
 [[package]]
 name = "takt-sim"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "base64 0.23.0",
  "clap",
@@ -1535,6 +1531,16 @@ dependencies = [
  "svg",
  "takt-lang",
  "tempfile",
+]
+
+[[package]]
+name = "takt-wasm"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "takt-lang",
+ "takt-sim",
 ]
 
 [[package]]

@@ -44,6 +44,21 @@ pub enum RunResult {
     },
 }
 
+/// Итог одного такта прогона (фича 0531).
+///
+/// Строка и исход **вместе**: такт, на котором автомат пришёл в терминальное
+/// состояние, и трассу даёт, и заканчивает прогон. Разведи их по разным
+/// ответам — и последняя строка трассы потерялась бы у того потребителя,
+/// который читает исход первым.
+#[derive(Debug)]
+pub struct Step {
+    /// Строка трассы этого такта; `None` — такта не было (прогон уже окончен
+    /// либо оборван ошибкой вычисления).
+    pub line: Option<String>,
+    /// Исход прогона, если он окончен на этом такте.
+    pub result: Option<RunResult>,
+}
+
 // ── Бегун симуляции ──────────────────────────────────────────────────────────
 
 pub struct SimulationRunner {
@@ -78,6 +93,10 @@ pub struct SimulationRunner {
     /// возможным, а неявной частоты здесь не появляется — это свойство прогона,
     /// а не модели. Объявленная моделью частота (`clock`) задаёт период такта.
     tick_period_ns: i64,
+    /// Сколько тактов уже выполнено (фича 0531: прогон идёт по одному такту).
+    completed: usize,
+    /// Накопленные нарушения инвариантов мягкого режима, с номером шага (0087).
+    soft_violations: Vec<(usize, String)>,
     /// Сказано ли уже, что сценарий пользуется устаревшей позиционной формой
     /// (фича 0150, `SIM-037`).
     ///
@@ -128,6 +147,8 @@ impl SimulationRunner {
             #[cfg(feature = "graphics")]
             cached_layout: None,
             soft_invariants: false,
+            completed: 0,
+            soft_violations: Vec::new(),
             positional_form_warned: std::cell::Cell::new(false),
             now_ns: 0,
             tick_period_ns: 1_000_000,
@@ -154,9 +175,34 @@ impl SimulationRunner {
         self.now_ns
     }
 
-    /// Запускает главный цикл симуляции.
+    /// Запускает главный цикл симуляции, печатая трассу.
+    ///
+    /// Такт делает [`SimulationRunner::step`]; здесь — только печать и обход.
+    /// ⚠️ Второго цикла исполнения в проекте быть не должно: потребитель без
+    /// консоли (модуль WebAssembly, фича 0531) тикает тем же `step`, иначе две
+    /// реализации прогона разошлись бы молча — и сверки перестали бы что-либо
+    /// доказывать.
     pub fn run(&mut self) -> Result<RunResult, String> {
-        self.warn_about_ambiguous_names();
+        for warning in self.ambiguous_name_warnings() {
+            eprintln!("{warning}");
+        }
+        loop {
+            let step = self.step()?;
+            if let Some(line) = step.line {
+                println!("{line}");
+            }
+            if let Some(result) = step.result {
+                return Ok(result);
+            }
+        }
+    }
+
+    /// Выполняет ОДИН такт прогона (фича 0531).
+    ///
+    /// Возвращает строку трассы этого такта и — когда прогон окончен — его
+    /// исход. Оба поля вместе: такт, на котором автомат пришёл в терминальное
+    /// состояние, и строку даёт, и заканчивает прогон.
+    pub fn step(&mut self) -> Result<Step, String> {
         // Длину прогона задаёт `-n`, а сценарий задаёт ВХОДЫ (фича 0523).
         // Когда шаги сценария кончились, прогон продолжается: значения входных
         // портов удерживаются — ровно как они удерживаются между тактами внутри
@@ -169,106 +215,115 @@ impl SimulationRunner {
         let limit = self
             .max_steps
             .unwrap_or(if sim_len > 0 { sim_len } else { usize::MAX });
-        let mut completed = 0usize;
-        // Фича 0087: накопленные нарушения инвариантов мягкого режима, с шагом.
-        let mut soft_violations: Vec<(usize, String)> = Vec::new();
-
-        for step_no in 0..limit {
-            let sim_step: Option<SimStep> = self.sim_steps.get(step_no).cloned();
-
-            // Модельное время (фича 0134) ставится ДО такта: показания часов на
-            // такте N обязаны быть видны телу, исполняемому на такте N. Иначе
-            // выдержка сдвинулась бы на такт относительно целей — а такой сдвиг
-            // компилируется молча (тот же класс, что вход в стартовое состояние,
-            // фича 0033).
-            // ⚠️ Первый такт идёт при t = 0: часы двигаются ПЕРЕД каждым тактом,
-            // кроме первого. Иначе модель входила бы в стартовое состояние уже
-            // «спустя период», и выдержка отсчитывалась бы от чужого момента.
-            if step_no > 0 {
-                let advance_ns = sim_step
-                    .as_ref()
-                    .and_then(|step| step.time_ms)
-                    .map_or(self.tick_period_ns, |ms| ms.saturating_mul(1_000_000));
-                self.now_ns = self.now_ns.saturating_add(advance_ns);
-            }
-            self.unit.set_time_ns(self.now_ns);
-
-            // Применяем входные порты и стенд внешних функций (фича 0209):
-            // и то, и другое — вход шага сценария, и ставится оно перед тактом.
-            if let Some(step) = &sim_step {
-                self.apply_step_inputs(step, step_no + 1)?;
-                self.unit
-                    .set_extern_stubs(extern_stubs_of(step, step_no + 1)?);
-            }
-
-            // Выполняем шаг. В мягком режиме нарушения инвариантов не прерывают
-            // такт, а записываются (фича 0087) — сливаем их и тегируем шагом.
-            let tick_result = if self.soft_invariants {
-                let r = self.unit.tick_soft();
-                for details in self.unit.take_invariant_violations() {
-                    soft_violations.push((completed + 1, details));
-                }
-                r
-            } else {
-                self.unit.tick()
-            };
-            if let TickResult::Failed(details) = &tick_result {
-                return Ok(RunResult::EvalFailed {
-                    step: completed + 1,
-                    details: details.clone(),
-                });
-            }
-            completed += 1;
-
-            // Выводим информацию о шаге. Строку СТРОИТ библиотека
-            // (`trace::step_line`, фича 0531), CLI её только печатает: тот же
-            // текст нужен потребителю без консоли — модулю WebAssembly.
-            println!(
-                "{}",
-                crate::trace::step_line(&self.unit, &self.port_names, completed, self.now_ns)
-            );
-
-            // Записываем кадры в графику (если нужно)
-            #[cfg(feature = "graphics")]
-            if self.graphics_recorder.is_some() {
-                // Highlight-кадры для каждого сработавшего перехода (включая параллельные)
-                let transitions = self.unit.take_last_transitions();
-                for (from, to, _pred) in &transitions {
-                    self.capture_frame_with_highlight(Some((from.as_str(), to.as_str())))?;
-                }
-                // Обычный кадр с новым активным состоянием
-                self.capture_frame()?;
-            }
-
-            // Проверяем guard
-            if let Some(step) = &sim_step
-                && let Some(guard) = &step.guard
-            {
-                let guard = guard.clone();
-                self.check_guard(&guard, step_no + 1)?;
-            }
-
-            // Проверяем терминальность
-            if tick_result == TickResult::Terminated {
-                if !soft_violations.is_empty() {
-                    return Ok(RunResult::CompletedWithInvariantViolations {
-                        steps: completed,
-                        terminated: true,
-                        violations: soft_violations,
-                    });
-                }
-                return Ok(RunResult::Terminated { steps: completed });
-            }
-        }
-
-        if !soft_violations.is_empty() {
-            return Ok(RunResult::CompletedWithInvariantViolations {
-                steps: completed,
-                terminated: false,
-                violations: soft_violations,
+        let step_no = self.completed;
+        if step_no >= limit {
+            return Ok(Step {
+                line: None,
+                result: Some(self.outcome(false)),
             });
         }
-        Ok(RunResult::StepsReached { steps: completed })
+
+        let sim_step: Option<SimStep> = self.sim_steps.get(step_no).cloned();
+
+        // Модельное время (фича 0134) ставится ДО такта: показания часов на
+        // такте N обязаны быть видны телу, исполняемому на такте N. Иначе
+        // выдержка сдвинулась бы на такт относительно целей — а такой сдвиг
+        // компилируется молча (тот же класс, что вход в стартовое состояние,
+        // фича 0033).
+        // ⚠️ Первый такт идёт при t = 0: часы двигаются ПЕРЕД каждым тактом,
+        // кроме первого. Иначе модель входила бы в стартовое состояние уже
+        // «спустя период», и выдержка отсчитывалась бы от чужого момента.
+        if step_no > 0 {
+            let advance_ns = sim_step
+                .as_ref()
+                .and_then(|step| step.time_ms)
+                .map_or(self.tick_period_ns, |ms| ms.saturating_mul(1_000_000));
+            self.now_ns = self.now_ns.saturating_add(advance_ns);
+        }
+        self.unit.set_time_ns(self.now_ns);
+
+        // Применяем входные порты и стенд внешних функций (фича 0209):
+        // и то, и другое — вход шага сценария, и ставится оно перед тактом.
+        if let Some(step) = &sim_step {
+            self.apply_step_inputs(step, step_no + 1)?;
+            self.unit
+                .set_extern_stubs(extern_stubs_of(step, step_no + 1)?);
+        }
+
+        // Выполняем шаг. В мягком режиме нарушения инвариантов не прерывают
+        // такт, а записываются (фича 0087) — сливаем их и тегируем шагом.
+        let tick_result = if self.soft_invariants {
+            let r = self.unit.tick_soft();
+            for details in self.unit.take_invariant_violations() {
+                self.soft_violations.push((self.completed + 1, details));
+            }
+            r
+        } else {
+            self.unit.tick()
+        };
+        if let TickResult::Failed(details) = &tick_result {
+            return Ok(Step {
+                line: None,
+                result: Some(RunResult::EvalFailed {
+                    step: self.completed + 1,
+                    details: details.clone(),
+                }),
+            });
+        }
+        self.completed += 1;
+
+        // Строку трассы СТРОИТ библиотека (`trace::step_line`, фича 0531):
+        // печатает её CLI, а модуль в браузере показывает.
+        let line =
+            crate::trace::step_line(&self.unit, &self.port_names, self.completed, self.now_ns);
+
+        // Записываем кадры в графику (если нужно)
+        #[cfg(feature = "graphics")]
+        if self.graphics_recorder.is_some() {
+            // Highlight-кадры для каждого сработавшего перехода (включая параллельные)
+            let transitions = self.unit.take_last_transitions();
+            for (from, to, _pred) in &transitions {
+                self.capture_frame_with_highlight(Some((from.as_str(), to.as_str())))?;
+            }
+            // Обычный кадр с новым активным состоянием
+            self.capture_frame()?;
+        }
+
+        // Проверяем guard
+        if let Some(step) = &sim_step
+            && let Some(guard) = &step.guard
+        {
+            let guard = guard.clone();
+            self.check_guard(&guard, step_no + 1)?;
+        }
+
+        // Проверяем терминальность
+        let result = (tick_result == TickResult::Terminated).then(|| self.outcome(true));
+        Ok(Step {
+            line: Some(line),
+            result,
+        })
+    }
+
+    /// Исход законченного прогона: `terminated` — дошёл ли автомат до
+    /// терминального состояния или исчерпал бюджет шагов.
+    fn outcome(&mut self, terminated: bool) -> RunResult {
+        if !self.soft_violations.is_empty() {
+            return RunResult::CompletedWithInvariantViolations {
+                steps: self.completed,
+                terminated,
+                violations: std::mem::take(&mut self.soft_violations),
+            };
+        }
+        if terminated {
+            RunResult::Terminated {
+                steps: self.completed,
+            }
+        } else {
+            RunResult::StepsReached {
+                steps: self.completed,
+            }
+        }
     }
 
     /// Сохраняет результат записи (вызывается после завершения run).
@@ -287,22 +342,26 @@ impl SimulationRunner {
 
     // ── Вспомогательные методы ────────────────────────────────────────────────
 
-    /// Предупреждает об именах, объявленных несколькими моделями (фича 0135).
+    /// Предупреждения об именах, объявленных несколькими моделями (фича 0135).
     ///
     /// Пространство имён значений плоское: по голому имени читается ПЕРВАЯ
     /// нашедшаяся ветвь, а запись расходится по всем. Прежде это происходило
     /// молча — модель с одноимёнными портами под-моделей выглядела работающей,
     /// хотя половина её состояния была недоступна. Теперь двусмысленность
     /// названа, и рядом показано, как адресовать точно.
-    fn warn_about_ambiguous_names(&self) {
-        for (bare, qualified) in &self.port_names.ambiguous {
-            eprintln!(
-                "ВНИМАНИЕ: имя '{bare}' объявлено несколькими моделями ({}). \
-                 По голому имени адресуется первая из них; для точного обращения \
-                 используйте квалифицированное имя.",
-                qualified.join(", ")
-            );
-        }
+    pub fn ambiguous_name_warnings(&self) -> Vec<String> {
+        self.port_names
+            .ambiguous
+            .iter()
+            .map(|(bare, qualified)| {
+                format!(
+                    "ВНИМАНИЕ: имя '{bare}' объявлено несколькими моделями ({}). \
+                     По голому имени адресуется первая из них; для точного обращения \
+                     используйте квалифицированное имя.",
+                    qualified.join(", ")
+                )
+            })
+            .collect()
     }
 
     /// Применяет входы шага: позиционно (историческая форма) либо по именам.

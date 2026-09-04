@@ -26,9 +26,7 @@
 extern crate core;
 
 use crate::parser::ast;
-use crate::semantic::condition::port_split::PortSplit;
 use diagnostics::Diagnostic;
-use std::path::Path;
 
 /// Внешняя карта адресов портов (`.ld`-подобный формат, фича 0020).
 pub mod address_map;
@@ -123,9 +121,10 @@ pub(crate) use parse_entry::parse_without_depth_limit;
 
 // Общий конвейер разбора и построения (фича 0053) плюс сбор всех диагностик
 // (фича 0130) — вынесено модулем: `lib.rs` пришпилен реестром размеров.
+/// Компиляция по имени цели: одна точка выбора для CLI и модуля (фича 0531).
+pub mod compile;
 pub mod pipeline; // общий конвейер: разбор → дерево → диагностики
 pub use pipeline::collect_compile_diagnostics;
-pub(crate) use pipeline::parse_and_construct;
 pub(crate) use semantic::lower_float::apply_float_lowering;
 
 /// Компилирует исходный код Takt в C-код.
@@ -172,35 +171,11 @@ pub fn compile_to_c(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    // Шаги 1–2: разбор и семантика; диагностика получает путь своего файла.
-    let unit = parse_and_construct(filename, source, search_paths, options)?;
-
-    // Генератор C требует именованной модели.
-    // Корневая (файловая) модель всегда анонимна — задаём имя из имени файла.
-    if unit.model.borrow().name.is_none() {
-        // V1: `file_name()` возвращает None, если путь оканчивается на `/` или пустой.
-        //     `to_str()` возвращает None для не-UTF-8 путей.
-        //     В обоих случаях используем запасное имя «Root».
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| {
-                // `split('.')` выделяет часть до первой точки.
-                // Если точки нет — возвращает всю строку.
-                s.split('.').next().unwrap_or(s).to_owned()
-            })
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
-    unit.lower_for_target(PortSplit::All, false)?;
-
-    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-as-q` +
-    // `--float-embedded` (иначе `float` остаётся нативным `double`).
-    apply_float_lowering(&unit.model, options, true)?;
-
-    // Шаг 3: Генерация C-кода. Предупреждения цели возвращаются вызывающему
-    // (фича 0168) — печатать их библиотека не вправе.
-    unit.emit(generator::Language::C, output_path, options)
+    compile::compile_files(
+        compile::Target::C,
+        &compile::CompileInput::new(filename, source, search_paths, options),
+        output_path,
+    )
 }
 
 /// Компилирует Takt в C в режиме `c-hal` (фича 0020-05): к обычному C добавляются
@@ -219,40 +194,15 @@ pub fn compile_to_c_hal(
     env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options)?;
-
-    if unit.model.borrow().name.is_none() {
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
-    unit.lower_for_target(PortSplit::All, false)?;
-
-    // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
-
-    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
-    // Путь ставит ТИП, а не вызов (0212, 0467): иначе `SE-052` без координаты.
-    if let Some(err) = pipeline::first_error(&resolution.diagnostics) {
-        return Err(unit.stamp(err));
-    }
-
-    let mut hal_options = options.clone();
-    hal_options.hal = true;
-    hal_options.address_map = resolution.map;
-
-    // Фича 0096: embedded-путь `float → q(m, n)` (c-hal — основная embedded-цель).
-    apply_float_lowering(&unit.model, options, true)?;
-
-    // Предупреждения цели присоединяются к адресным (фича 0168): у одного
-    // вызова обязана быть одна судьба, иначе часть диагностики глушится
-    // `--quiet`, а часть — нет.
-    let mut warnings = resolution.diagnostics;
-    warnings.extend(unit.emit(generator::Language::C, output_path, &hal_options)?);
-
-    Ok(warnings)
+    let input = compile::CompileInput {
+        filename,
+        source,
+        search_paths,
+        external,
+        env: Some(env),
+        options,
+    };
+    compile::compile_files(compile::Target::CHal, &input, output_path)
 }
 
 /// Компилирует исходный код Takt в Structured Text (IEC 61131-3) — язык ПЛК.
@@ -281,22 +231,11 @@ pub fn compile_to_st(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options)?;
-
-    if unit.model.borrow().name.is_none() {
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
-    unit.lower_for_target(PortSplit::ArraysOnly, true)?;
-
-    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
-    apply_float_lowering(&unit.model, options, true)?;
-
-    unit.emit(generator::Language::ST, output_path, options)
+    compile::compile_files(
+        compile::Target::St,
+        &compile::CompileInput::new(filename, source, search_paths, options),
+        output_path,
+    )
 }
 
 /// Компилирует исходный код Takt в `no_std` Rust — прошивку микроконтроллера.
@@ -347,22 +286,11 @@ pub fn compile_to_rust(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options)?;
-
-    if unit.model.borrow().name.is_none() {
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
-    unit.lower_for_target(PortSplit::All, true)?;
-
-    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
-    apply_float_lowering(&unit.model, options, true)?;
-
-    unit.emit(generator::Language::Rust, output_path, options)
+    compile::compile_files(
+        compile::Target::Rust,
+        &compile::CompileInput::new(filename, source, search_paths, options),
+        output_path,
+    )
 }
 
 /// Компилирует исходный код Takt в синтезируемый SystemVerilog (IEEE 1800) —
@@ -412,23 +340,11 @@ pub fn compile_to_sv(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options)?;
-
-    if unit.model.borrow().name.is_none() {
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
-
-    // Фича 0096: при `--float-as-q=m.n` понижаем `float → q(m, n)` (снимая
-    // `SV-003`). Для `sv` флаг применяется всегда (без `--float-embedded`).
-    apply_float_lowering(&unit.model, options, false)?;
-    unit.lower_for_target(PortSplit::ArraysOnly, false)?; // 0417: порт-массив
-
-    unit.emit(generator::Language::SV, output_path, options)
+    compile::compile_files(
+        compile::Target::Sv,
+        &compile::CompileInput::new(filename, source, search_paths, options),
+        output_path,
+    )
 }
 
 /// Компилирует Takt в Structured Text в режиме `st-at` (фича 0041): к обычному ST
@@ -449,35 +365,15 @@ pub fn compile_to_st_at(
     env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, options)?;
-
-    if unit.model.borrow().name.is_none() {
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
-    unit.lower_for_target(PortSplit::All, true)?;
-
-    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
-    // Путь ставит ТИП, а не вызов (0212, 0467): иначе `SE-052` без координаты.
-    if let Some(err) = pipeline::first_error(&resolution.diagnostics) {
-        return Err(unit.stamp(err));
-    }
-
-    let mut at_options = options.clone();
-    at_options.hal = true;
-    at_options.address_map = resolution.map;
-
-    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
-    apply_float_lowering(&unit.model, options, true)?;
-
-    let mut warnings = resolution.diagnostics;
-    warnings.extend(unit.emit(generator::Language::ST, output_path, &at_options)?);
-
-    Ok(warnings)
+    let input = compile::CompileInput {
+        filename,
+        source,
+        search_paths,
+        external,
+        env: Some(env),
+        options,
+    };
+    compile::compile_files(compile::Target::StAt, &input, output_path)
 }
 
 /// Компилирует исходный код Takt в диаграмму состояний PlantUML.
@@ -500,21 +396,11 @@ pub fn compile_to_plantuml(
     output_path: &str,
     search_paths: &[String],
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let unit = parse_and_construct(filename, source, search_paths, &GenerateOptions::default())?;
-
-    if unit.model.borrow().name.is_none() {
-        let stem = Path::new(filename)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
-            .unwrap_or_else(|| "Root".to_owned());
-        unit.model.borrow_mut().name = Some(stem);
-    }
-
-    unit.emit(
-        generator::Language::PlantUML,
+    let defaults = GenerateOptions::default();
+    compile::compile_files(
+        compile::Target::PlantUml,
+        &compile::CompileInput::new(filename, source, search_paths, &defaults),
         output_path,
-        &GenerateOptions::default(),
     )
 }
 
