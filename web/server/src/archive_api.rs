@@ -69,24 +69,33 @@ async fn export(
 ) -> Result<Response, ApiError> {
     let viewer = optional_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let (project, level) = projects::resolve(&client, &id, viewer.as_ref()).await?;
+    let (project, level) = projects::resolve(&client, &state.store, &id, viewer.as_ref()).await?;
     // Выгрузка — с уровня чтения: текст уже виден тому, кто читает проект.
     projects::require_level(level, Level::View)?;
 
     let rows = client
         .query(
-            "SELECT name, kind, text FROM project_files WHERE project_id = $1 ORDER BY name",
+            "SELECT f.name, f.kind, p.owner_id FROM project_files f
+             JOIN projects p ON p.id = f.project_id
+             WHERE f.project_id = $1 ORDER BY f.name",
             &[&id],
         )
         .await?;
-    let sources: Vec<SourceFile> = rows
-        .iter()
-        .map(|row| SourceFile {
-            name: row.get(0),
+    // Тексты живут на диске (задача 09h): база ведёт состав.
+    let mut sources: Vec<SourceFile> = Vec::new();
+    for row in &rows {
+        let name: String = row.get(0);
+        let owner: String = row.get(2);
+        let text = state
+            .store
+            .read(&owner, &id, &name)
+            .map_err(ApiError::Internal)?;
+        sources.push(SourceFile {
+            name,
             kind: row.get(1),
-            text: row.get(2),
-        })
-        .collect();
+            text,
+        });
+    }
 
     let (generated, refusal, target) = match request.target.as_deref().filter(|t| !t.is_empty()) {
         None => (Vec::new(), None, None),
@@ -227,8 +236,8 @@ async fn import(
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
                                   takt_lang, language_version, main_file, revision,
-                                  size_bytes, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, 1, $8, $9, $9)",
+                                  size_bytes, created_at, updated_at, touched_at)
+             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, 1, $8, $9, $9, $9)",
             &[
                 &id,
                 &user.id,
@@ -245,19 +254,18 @@ async fn import(
     for file in &parsed.sources {
         transaction
             .execute(
-                "INSERT INTO project_files(project_id, name, kind, text, size_bytes)
-                 VALUES ($1, $2, $3, $4, $5)",
-                &[
-                    &id,
-                    &file.name,
-                    &file.kind,
-                    &file.text,
-                    &(file.text.len() as i64),
-                ],
+                "INSERT INTO project_files(project_id, name, kind, size_bytes)
+                 VALUES ($1, $2, $3, $4)",
+                &[&id, &file.name, &file.kind, &(file.text.len() as i64)],
             )
             .await?;
+        state
+            .store
+            .write(&user.id, &id, &file.name, &file.text)
+            .map_err(ApiError::Internal)?;
     }
-    showcase::refresh(&transaction, &id).await?;
+    let body = projects::body_of(&*transaction, &id, &state.store, &user.id).await?;
+    showcase::refresh(&transaction, &id, &body).await?;
     let row = transaction
         .query_one(projects::SELECT_PROJECT, &[&id])
         .await?;

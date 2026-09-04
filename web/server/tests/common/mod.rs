@@ -41,6 +41,10 @@ pub struct Stand {
     pub app: axum::Router,
     pub schema: String,
     pub url: String,
+    /// Метка проверки: по ней зовётся и схема, и каталог исходников.
+    pub tag: String,
+    /// Хранилище исходников этой проверки.
+    pub store: std::sync::Arc<takt_web_server::store::Store>,
 }
 
 /// Печатает причину пропуска: молча пропущенная проверка неотличима от
@@ -75,6 +79,15 @@ impl Stand {
         let client = pool.get().await.ok()?;
         db::prepare(&client).await.ok()?;
 
+        // Хранилище исходников — свой каталог на каждую проверку: они идут
+        // параллельно, и общий каталог сделал бы их зависимыми друг от друга
+        // (тот же приём, что у каталогов тестов компилятора, 0190).
+        let store = std::sync::Arc::new(
+            takt_web_server::store::Store::new(
+                std::env::temp_dir().join(format!("takt-web-{}-{tag}", std::process::id())),
+            )
+            .ok()?,
+        );
         let mut config = Config::from_env().ok()?;
         config.database_url = scoped;
         config.jwt_secret = "секрет-проверки".to_string();
@@ -93,6 +106,10 @@ impl Stand {
             // нет: выгрузка с генерацией тогда отказывает словами, а всё
             // остальное — исходники, метаданные, круговой рейс — проверяется
             // без неё. Путь задаётся `TAKT_WEB_TEST_STATIC`.
+            // Хранилище исходников — свой каталог на каждую проверку: они идут
+            // параллельно, и общий каталог сделал бы их зависимыми друг от
+            // друга (тот же приём, что у каталогов тестов компилятора, 0190).
+            store: store.clone(),
             modules: std::env::var("TAKT_WEB_TEST_STATIC")
                 .ok()
                 .and_then(|dir| takt_web_server::module::Modules::new(dir).ok())
@@ -102,6 +119,8 @@ impl Stand {
             app: routes::router(state),
             schema,
             url,
+            tag: tag.to_string(),
+            store,
         })
     }
 
@@ -312,8 +331,78 @@ impl Stand {
             .expect("статистика");
     }
 
-    /// Убирает за собой: схема прогона не должна оставаться в базе.
+    /// Отодвигает отметку обращения проекта назад — то же, что прошедшее время.
+    ///
+    /// ⚠️ Ждать девяносто дней проверка не может, а спать даже секунду —
+    /// значит мерить не срок хранения, а терпение прогона. Двигается ОТМЕТКА:
+    /// предмет проверки в том, что обход считает разницу.
+    pub async fn age_project(&self, id: &str, seconds: i64) {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        client
+            .execute(
+                "UPDATE projects SET touched_at = touched_at - $2 WHERE id = $1",
+                &[&id, &seconds],
+            )
+            .await
+            .expect("отметка");
+    }
+
+    /// Гоняет обход по сроку хранения; возвращает, сколько свёрнуто.
+    pub async fn sweep(&self, retention_days: i64) -> usize {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        takt_web_server::retention::sweep(&client, &self.store, retention_days * 86_400)
+            .await
+            .expect("обход")
+    }
+
+    /// Свёрнут ли проект на диске.
+    pub async fn is_packed(&self, id: &str) -> bool {
+        let owner = self.owner_of(id).await;
+        self.store.is_packed(&owner, id).expect("признак")
+    }
+
+    /// Есть ли на диске каталог проекта.
+    ///
+    /// ⚠️ Владелец передаётся, а не спрашивается у базы: проверка зовётся и
+    /// ПОСЛЕ удаления проекта, когда строки уже нет.
+    pub fn project_dir_exists(&self, owner: &str, id: &str) -> bool {
+        self.store.root().join(owner).join(id).is_dir()
+    }
+
+    /// Идентификатор человека по логину.
+    pub async fn user_id(&self, login: &str) -> String {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        client
+            .query_one(
+                "SELECT id FROM users WHERE lower(login) = lower($1)",
+                &[&login],
+            )
+            .await
+            .expect("человек")
+            .get(0)
+    }
+
+    /// Владелец проекта — его идентификатор нужен для пути на диске.
+    async fn owner_of(&self, id: &str) -> String {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        client
+            .query_one("SELECT owner_id FROM projects WHERE id = $1", &[&id])
+            .await
+            .expect("проект")
+            .get(0)
+    }
+
+    /// Убирает за собой: ни схема, ни каталог прогона не должны оставаться.
     pub async fn drop_schema(&self) {
+        let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!(
+            "takt-web-{}-{}",
+            std::process::id(),
+            self.tag
+        )));
         if let Ok(pool) = db::pool(&self.url)
             && let Ok(client) = pool.get().await
         {

@@ -32,11 +32,13 @@ use tokio_postgres::NoTls;
 
 /// Версия схемы. Растёт вместе с изменением таблиц.
 ///
-/// ⚠️ Задача 09c подняла её со `1` до `2`: колонка `search` перестала быть
-/// вычисляемой базой. Шага перехода нет намеренно (выпуска не было) — база
-/// прежней версии **отвергается с обоими номерами**, и это видно словами, а не
-/// проявляется потерей поиска на стенде.
-pub const SCHEMA_VERSION: i64 = 2;
+/// ⚠️ Задача 09c подняла её со `1` до `2` (колонка `search` перестала быть
+/// вычисляемой базой), задача 09h — до `3`: **тексты файлов ушли из базы на
+/// диск** (корректировка заказчика), а у проекта появились отметка последнего
+/// обращения и признак свёртки. Шага перехода нет намеренно (выпуска не
+/// было) — база прежней версии **отвергается с обоими номерами**, и это видно
+/// словами, а не проявляется потерей данных на стенде.
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// Заводит пул соединений по строке подключения.
 ///
@@ -124,16 +126,29 @@ CREATE TABLE projects (
     size_bytes       BIGINT NOT NULL DEFAULT 0,
     forked_from      TEXT REFERENCES projects(id) ON DELETE SET NULL,
     created_at       BIGINT NOT NULL,
-    updated_at       BIGINT NOT NULL
+    updated_at       BIGINT NOT NULL,
+    -- Когда к проекту обращались в последний раз — на чтение ИЛИ на запись
+    -- (корректировка заказчика 2026-09-04). От неё считается срок хранения, и
+    -- обращение счётчик сбрасывает.
+    touched_at       BIGINT NOT NULL DEFAULT 0,
+    -- Когда проект свёрнут в архив; `NULL` — развёрнут. Свёрнутый живёт одним
+    -- `.zip` в хранилище, и первое же обращение разворачивает его обратно.
+    archived_at      BIGINT
 );
 CREATE INDEX projects_owner ON projects(owner_id);
 CREATE INDEX projects_public ON projects(visibility, updated_at);
+-- Обход по сроку хранения идёт по этому индексу: без него подметание читало бы
+-- таблицу целиком на каждом проходе.
+CREATE INDEX projects_touched ON projects(archived_at, touched_at);
 
+-- ⚠️ ТЕКСТА здесь нет (корректировка заказчика 2026-09-04): исходники живут в
+-- файловой системе (`<владелец>/<проект>/<файл>`, модуль `store`), а база
+-- ведёт СОСТАВ — имя, вид и размер. Порождённый вывод целей не хранится нигде:
+-- он воспроизводим (0048) и нужен лишь при выгрузке в архив и при показе.
 CREATE TABLE project_files (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name       TEXT NOT NULL,
     kind       TEXT NOT NULL CHECK (kind IN ('takt', 'scenario')),
-    text       TEXT NOT NULL,
     size_bytes BIGINT NOT NULL,
     PRIMARY KEY (project_id, name)
 );

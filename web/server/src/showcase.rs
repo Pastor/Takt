@@ -52,26 +52,29 @@ const SEARCH_SQL: &str = "
     UPDATE projects SET search =
         setweight(to_tsvector('russian', coalesce(name, '')), 'A') ||
         setweight(to_tsvector('russian', coalesce(description, '')), 'B') ||
-        setweight(to_tsvector('russian', coalesce((
-            SELECT string_agg(text, ' ') FROM project_files
-            WHERE project_id = projects.id AND kind = 'takt'
-        ), '')), 'C')
+        setweight(to_tsvector('russian', $2), 'C')
     WHERE id = $1";
 
 /// Пересчитывает поисковое значение проекта.
 ///
 /// Зовётся из **всех** точек записи: создание, правка метаданных, запись и
-/// удаление файла. Пропусти одну — и проект будет искаться по позавчерашнему
-/// имени, не отвечая ни на что видимое глазом.
+/// удаление файла, копия, загрузка архива. Пропусти одну — и проект будет
+/// искаться по позавчерашнему имени, не отвечая ни на что видимое глазом.
+///
+/// `body` — тексты файлов `*.takt` одной строкой. ⚠️ Их приносит ВЫЗЫВАЮЩИЙ, а
+/// не читает запрос: с задачи 09h тексты живут на диске (корректировка
+/// заказчика), и базе их взять неоткуда. Пустая строка законна — у проекта без
+/// файлов тела нет.
 ///
 /// # Ошибки
 /// Отказ базы.
 pub async fn refresh(
     transaction: &tokio_postgres::Transaction<'_>,
     id: &str,
+    body: &str,
 ) -> Result<(), ApiError> {
     transaction
-        .execute(SEARCH_SQL, &[&id])
+        .execute(SEARCH_SQL, &[&id, &body])
         .await
         .map_err(|error| ApiError::Internal(error.into()))?;
     Ok(())
@@ -276,11 +279,15 @@ mod tests {
     }
 
     #[test]
-    fn only_takt_files_are_indexed() {
-        // Предмет проверки — обещание модуля, а не форма строки: сценарий в
-        // индекс не идёт (проработка §3).
-        assert!(SEARCH_SQL.contains("kind = 'takt'"));
-        assert!(!SEARCH_SQL.contains("scenario"));
+    fn the_body_comes_from_the_caller_and_not_from_the_database() {
+        // ⚠️ С задачи 09h тексты живут на диске: запрос, читающий их из базы,
+        // молча индексировал бы пустоту — поиск по телу перестал бы находить, а
+        // отказа бы не было.
+        assert!(SEARCH_SQL.contains("$2"), "тело — параметр запроса");
+        assert!(
+            !SEARCH_SQL.contains("project_files"),
+            "поиск снова читает тексты из базы"
+        );
     }
 
     #[test]

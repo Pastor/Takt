@@ -28,5 +28,7 @@ pub mod limits;
 pub mod module;
 pub mod projects;
 pub mod rate;
+pub mod retention;
 pub mod routes;
 pub mod showcase;
+pub mod store;

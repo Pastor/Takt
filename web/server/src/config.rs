@@ -41,6 +41,16 @@ pub struct Config {
     pub rate_window: Duration,
     /// Сколько попыток входа и регистраций допускается в окне с одного адреса.
     pub rate_limit: u32,
+    /// Каталог хранилища исходников (задача 09h): `<владелец>/<проект>/<файлы>`.
+    pub projects_dir: PathBuf,
+    /// Срок хранения без обращений: дольше — проект сворачивается в архив.
+    pub retention: Duration,
+    /// Как часто обходить хранилище в поисках залежавшихся проектов.
+    ///
+    /// ⚠️ Ноль отключает обход **в процессе** — тогда его ставят в `cron`
+    /// командой `takt-web-server sweep`. Обход по времени есть у того, у кого
+    /// `cron` нет (своя машина, проба стенда).
+    pub sweep: Duration,
 }
 
 /// Отказ разбора конфигурации: ключ назван, значение показано.
@@ -85,6 +95,16 @@ impl Config {
             body_limit: parse("TAKT_WEB_BODY_LIMIT", "1048576", "байты")?,
             rate_window: Duration::from_secs(parse("TAKT_WEB_RATE_WINDOW", "60", "секунды")?),
             rate_limit: parse("TAKT_WEB_RATE_LIMIT", "10", "число")?,
+            projects_dir: var("TAKT_WEB_PROJECTS", "web/projects").into(),
+            // ⚠️ 90 дней — решение заказчика 2026-09-04, а не круглое число:
+            // квартал без единого открытия — внятный признак, что проект
+            // оставлен, и он же переживает перерыв между семестрами.
+            retention: Duration::from_secs(
+                60 * 60 * 24 * parse::<u64>("TAKT_WEB_RETENTION_DAYS", "90", "число дней")?,
+            ),
+            sweep: Duration::from_secs(
+                60 * 60 * parse::<u64>("TAKT_WEB_SWEEP_HOURS", "6", "число часов")?,
+            ),
         })
     }
 
