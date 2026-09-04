@@ -1,0 +1,57 @@
+[package]
+name = "takt-web-server"
+version = "0.1.0"
+authors = ["Pastor <viruszold@gmail.com>"]
+description = "Takt — сервер проектов онлайн-редактора: учётные записи, хранилище исходников, раздача статики"
+homepage = "https://but.ru"
+repository = "https://github.com/Pastor/Takt"
+license = "BSD"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+# ⚠️ СВОЙ workspace, а не член корневого (решение ADR и уточнение заказчика
+# 2026-09-04: членом корневого сделан только `takt-wasm`). Причина —
+# зависимости: `axum`, `rusqlite` и argon2 тянут полторы сотни крейтов, а
+# предкоммит корня гоняется на каждой правке компилятора. Тот же приём, что у
+# расширения Zed (`extensions/zed-takt`, фича 0414).
+[workspace]
+
+[dependencies]
+# HTTP и статика.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "set-header", "trace"] }
+
+# Хранилище — PostgreSQL (решение заказчика 2026-09-04, отменяет SQLite из
+# проработки). `tokio-postgres`, а не `sqlx`: проверка запросов на СБОРКЕ
+# требует живой базы либо снимка метаданных в дереве, то есть `cargo build`
+# переставал бы собираться без базы. Пул — `deadpool-postgres`: у PostgreSQL
+# писатель не один, и очередь на соединении была бы выдуманной.
+tokio-postgres = "0.7"
+deadpool-postgres = "0.14"
+
+# Вход: argon2id для паролей, JWT HS256 для access-токена.
+argon2 = "0.5"
+jsonwebtoken = "9"
+password-hash = { version = "0.5", features = ["rand_core"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[[bin]]
+name = "takt-web-server"
+path = "src/main.rs"
