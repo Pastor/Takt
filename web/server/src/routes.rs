@@ -44,6 +44,10 @@ pub struct AppState {
     /// Версия языка Takt на момент создания проекта — для человека, а не для
     /// выбора модуля.
     pub language_version: String,
+    /// Модули `takt-wasm` из статики: ими собирается вывод целей в архиве
+    /// (задача 09g). `None` — статики нет, и выгрузка с генерацией отказывает
+    /// словами вместо того, чтобы отдать архив без обещанного вывода.
+    pub modules: Option<Arc<crate::module::Modules>>,
 }
 
 /// Список маршрутов сервиса.
@@ -70,6 +74,8 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("GET", "/api/projects/{id}/grants/{login}"),
     ("PUT", "/api/projects/{id}/grants/{login}"),
     ("DELETE", "/api/projects/{id}/grants/{login}"),
+    ("GET", "/api/projects/{id}/archive"),
+    ("POST", "/api/projects/import"),
 ];
 
 /// Собирает роутер.
@@ -81,6 +87,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/me", get(me))
         .merge(crate::projects::router())
         .merge(crate::grants::router())
+        .merge(crate::archive_api::router())
         .merge(crate::showcase::router());
 
     // Статика: файлы отдаются как есть, а СТРАНИЦЫ собирает `page`.
@@ -469,8 +476,8 @@ mod tests {
         }
         assert_eq!(
             seen.len(),
-            18,
-            "пять ручек входа, восемь ручек проектов, витрина, копия и права"
+            20,
+            "вход, проекты, витрина, копия, права и архив"
         );
     }
 }

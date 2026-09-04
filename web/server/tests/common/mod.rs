@@ -89,6 +89,14 @@ impl Stand {
             rate,
             module_version: "0.58.0".to_string(),
             language_version: "0.17.0".to_string(),
+            // ⚠️ Модули берутся из СОБРАННОЙ статики, и в проверках её обычно
+            // нет: выгрузка с генерацией тогда отказывает словами, а всё
+            // остальное — исходники, метаданные, круговой рейс — проверяется
+            // без неё. Путь задаётся `TAKT_WEB_TEST_STATIC`.
+            modules: std::env::var("TAKT_WEB_TEST_STATIC")
+                .ok()
+                .and_then(|dir| takt_web_server::module::Modules::new(dir).ok())
+                .map(std::sync::Arc::new),
         });
         Some(Stand {
             app: routes::router(state),
@@ -164,6 +172,48 @@ impl Stand {
 
     pub async fn get_with(&self, path: &str, token: &str) -> (StatusCode, serde_json::Value) {
         self.get_as(path, token).await
+    }
+
+    /// Читает ответ БАЙТАМИ: архив — не JSON (задача 09g).
+    pub async fn bytes(&self, path: &str, token: Option<&str>) -> (StatusCode, Vec<u8>) {
+        let mut builder = Request::get(path);
+        if let Some(token) = token {
+            builder = builder.header("authorization", format!("Bearer {token}"));
+        }
+        let mut request = builder.body(Body::empty()).expect("запрос");
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(SocketAddr::from((
+                [127, 0, 0, 1],
+                40000,
+            ))));
+        let response = self.app.clone().oneshot(request).await.expect("ответ");
+        let status = response.status();
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("тело")
+            .to_bytes()
+            .to_vec();
+        (status, body)
+    }
+
+    /// Отправляет байты телом запроса: загрузка архива — не JSON.
+    pub async fn upload(
+        &self,
+        path: &str,
+        token: &str,
+        body: &[u8],
+    ) -> (StatusCode, serde_json::Value) {
+        self.call(
+            Request::post(path)
+                .header("content-type", "application/zip")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(body.to_vec()))
+                .expect("запрос"),
+        )
+        .await
     }
 
     /// Шлёт запрос БЕЗ токена: открытый проект открыт и для того, у кого

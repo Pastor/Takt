@@ -37,6 +37,14 @@ argon2 = "0.5"
 jsonwebtoken = "9"
 password-hash = { version = "0.5", features = ["rand_core"] }
 
+# Архив проекта (задача 09g). ⚠️ Модуль `takt-wasm` исполняется ТЕМ ЖЕ
+# байт-кодом, что и в браузере (решение заказчика 2026-09-04): второй
+# реализации компилятора не появляется, появляется вторая среда исполнения.
+# `wasmtime` берётся без кеша сборки на диске и без WASI: у модуля плоский
+# C-ABI (решение A1 фичи), и ничего, кроме памяти, ему не нужно.
+wasmtime = { version = "27", default-features = false, features = ["cranelift", "runtime", "gc-drc"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -51,6 +59,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+# Проверки архива читают его тем же способом, что и человек: своим разбором zip
+# они проверяли бы себя.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [[bin]]
 name = "takt-web-server"
