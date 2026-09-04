@@ -1,6 +1,6 @@
 [package]
 name = "takt-sim"
-version = "0.11.0"
+version = "0.12.0"
 authors = ["Pastor <viruszold@gmail.com>"]
 description = "Takt — учебный DSL конечных автоматов: симулятор моделей. Язык сделан в учебных целях и показывает принципы автоматного подхода к разработке"
 homepage = "https://but.ru"
@@ -20,24 +20,28 @@ include = ["Cargo.toml", "src/**/*", "README.md", "LICENSE*"]
 [lib]
 bench = false
 
+# CLI требует графики: он умеет писать GIF и SVG, и без них половина его
+# ключей не имела бы смысла (фича 0531). Библиотека без графики — для
+# потребителя без файловой системы и без растеризатора (модуль WebAssembly).
 [[bin]]
 name = "takt-sim"
 bench = false
 path = "src/bin/takt_sim.rs"
+required-features = ["graphics"]
 
 [dependencies]
 takt-lang = { path = "../takt-lang" }
 log = "0.4.29"
-svg = "0.18.0"
-petgraph = "0.8.3"
-rand = "0.10.1"
-rand_distr = "0.6.0"
+svg = { version = "0.18.0", optional = true }
+petgraph = { version = "0.8.3", optional = true }
+rand = { version = "0.10.1", optional = true }
+rand_distr = { version = "0.6.0", optional = true }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-resvg = "0.47.0"
-base64 = "0.23.0"
-gif = "0.14.2"
+resvg = { version = "0.47.0", optional = true }
+base64 = { version = "0.23.0", optional = true }
+gif = { version = "0.14.2", optional = true }
 env_logger = "0.11"
 
 [dev-dependencies]
@@ -50,4 +54,11 @@ name = "simulate"
 harness = false
 
 [features]
-default = []
+default = ["graphics"]
+# Визуализация прогона: раскладка графа, SVG-кадры, GIF-запись (фича 0531).
+#
+# ⚠️ Выключается не ради веса, а ради ПЕРЕНОСИМОСТИ: растеризатор и файловая
+# система есть не у всякого потребителя эталона — модуль WebAssembly (фича
+# 0531) исполняет модель в браузере, где нет ни того, ни другого. Умолчание
+# оставлено включённым: прежние потребители не замечают фичи вовсе.
+graphics = ["dep:svg", "dep:petgraph", "dep:rand", "dep:rand_distr", "dep:resvg", "dep:base64", "dep:gif"]

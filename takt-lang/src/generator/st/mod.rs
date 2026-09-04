@@ -64,17 +64,15 @@ mod st_type;
 
 use crate::address_map::{AddressSource, ResolvedAddress};
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
+use crate::generator::{GenerateOptions, GeneratedFile, Output};
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::{ModelNode, PortDirection, VariableNode};
 use st_map::StMap;
 use std::cell::RefCell;
 use std::fmt::Write as _;
-use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 
 /// Размер одного уровня отступа в порождаемом ST.
@@ -84,12 +82,11 @@ const INDENT: usize = 4;
 pub struct Generator {}
 
 impl AsGenerator for Generator {
-    fn generate(
+    fn generate_texts(
         &self,
         model: &ModelNode,
-        output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<Vec<Diagnostic>, Diagnostic> {
+    ) -> Result<Output, Diagnostic> {
         // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
         // подтвердить (0134-05). Единый чекпойнт-энфорсмент `SE-069`/`SE-070`.
         let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
@@ -103,13 +100,17 @@ impl AsGenerator for Generator {
         .with_fsm(options.fsm);
         let (program, warnings) = generate_program(&map)?;
         let filename = map.get_filename();
-        let _ = fs::create_dir(Path::new(output_path));
-        fs::write(
-            Path::new(output_path).join(filename.to_owned() + ".st"),
-            program,
-        )
-        .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("ST-001"))?;
-        Ok(warnings)
+        Ok(Output {
+            files: vec![GeneratedFile {
+                name: filename.to_owned() + ".st",
+                text: program,
+            }],
+            warnings,
+        })
+    }
+
+    fn write_failure(&self, error: &std::io::Error) -> Diagnostic {
+        Diagnostic::error(Location::Codegen, format!("{error}")).with_code("ST-001")
     }
 }
 

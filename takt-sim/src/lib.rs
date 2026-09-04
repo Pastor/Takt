@@ -25,6 +25,7 @@ pub(crate) mod anon_cell;
 mod context;
 pub(crate) mod eval;
 pub(crate) mod expression;
+#[cfg(feature = "graphics")]
 pub(crate) mod gif;
 pub mod graphics_config;
 pub mod json_input;
@@ -33,13 +34,16 @@ pub mod port_names;
 mod predicate;
 pub mod runner;
 pub mod state_io;
+#[cfg(feature = "graphics")]
 pub(crate) mod svg;
+/// Трасса прогона строками: шаг и сводка (фича 0531).
+pub mod trace;
 mod unit;
 
 /// Значение переменной или порта — для наблюдения извне ([`Unit::variable`]).
 pub use eval::value::Value;
 /// Человекочитаемая запись длительности для трасс (фича 0134).
-pub use runner::format_duration;
+pub use trace::format_duration;
 /// Дерево симуляции и результат шага.
 ///
 /// Реэкспорт: сам модуль `unit` внутренний, но его типы возвращаются публичным

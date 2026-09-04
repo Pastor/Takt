@@ -63,15 +63,13 @@ mod sv_unroll;
 mod sv_unused;
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
+use crate::generator::{GenerateOptions, GeneratedFile, Output};
 use crate::semantic::ModelNode;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use std::cell::RefCell;
-use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 use sv_map::SvMap;
 
@@ -90,12 +88,11 @@ pub struct Generator {
 }
 
 impl AsGenerator for Generator {
-    fn generate(
+    fn generate_texts(
         &self,
         model: &ModelNode,
-        output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<Vec<Diagnostic>, Diagnostic> {
+    ) -> Result<Output, Diagnostic> {
         // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
         // подтвердить (0134-05). Единый чекпойнт-энфорсмент `SE-069`/`SE-070`.
         let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
@@ -109,26 +106,25 @@ impl AsGenerator for Generator {
         let (program, warnings, adapter) =
             generate_program(&map, self.mmio, &options.address_map, options.bus)?;
         let filename = map.get_filename();
-        let _ = fs::create_dir(Path::new(output_path));
-        fs::write(
-            Path::new(output_path).join(filename.to_owned() + ".sv"),
-            program,
-        )
-        .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("SV-001"))?;
+        let mut files = vec![GeneratedFile {
+            name: filename.to_owned() + ".sv",
+            text: program,
+        }];
 
         // Адаптер шины (фича 0169) — ОТДЕЛЬНЫЙ файл рядом с ядром: ядро остаётся
         // шинно-агностичным, и второй протокол не потребует его трогать.
         // Без флага не эмитится ничего, поэтому прежний вывод байт-в-байт цел.
         if let Some((suffix, text)) = adapter {
-            fs::write(
-                Path::new(output_path).join(format!("{filename}{suffix}.sv")),
+            files.push(GeneratedFile {
+                name: format!("{filename}{suffix}.sv"),
                 text,
-            )
-            .map_err(|e| {
-                Diagnostic::error(Location::Codegen, format!("{e}")).with_code("SV-001")
-            })?;
+            });
         }
-        Ok(warnings)
+        Ok(Output { files, warnings })
+    }
+
+    fn write_failure(&self, error: &std::io::Error) -> Diagnostic {
+        Diagnostic::error(Location::Codegen, format!("{error}")).with_code("SV-001")
     }
 }
 

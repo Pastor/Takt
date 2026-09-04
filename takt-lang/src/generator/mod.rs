@@ -277,9 +277,37 @@ impl Default for GenerateOptions {
     }
 }
 
+/// Один файл вывода цели: имя (с расширением) и текст (фича 0531).
+///
+/// Имя — **имя файла**, а не путь: куда его положить, решает тот, кто пишет на
+/// диск, а в браузере диска нет вовсе.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratedFile {
+    /// Имя файла вместе с расширением (`heater.h`, `heater_apb.sv`).
+    pub name: String,
+    /// Текст файла.
+    pub text: String,
+}
+
+/// Вывод цели без диска: файлы и предупреждения цели (фича 0531).
+///
+/// # Зачем тип, а не пара
+///
+/// Предупреждения цели уже ездят отдельным каналом (фича 0168), и файлов у
+/// цели бывает больше одного (`c` — заголовок и исходник, `sv` с `--bus` —
+/// ядро и адаптер). Пара `(Vec<_>, Vec<_>)` на месте вызова читается как
+/// загадка, а порядок её половин ничем не закреплён.
+#[derive(Debug, Clone, Default)]
+pub struct Output {
+    /// Файлы вывода в том порядке, в каком цель их печатает.
+    pub files: Vec<GeneratedFile>,
+    /// Предупреждения цели (фича 0168) — см. [`Generator::generate_texts`].
+    pub warnings: Vec<Diagnostic>,
+}
+
 /// Интерфейс генератора кода для языка Takt.
 pub trait Generator {
-    /// Генерирует код из семантического дерева модели и записывает результат в файл.
+    /// Печатает вывод цели **в память**: файлы и предупреждения (фича 0531).
     ///
     /// Возвращает **предупреждения цели** (фича 0168) — то, что цель хочет
     /// сказать автору, но что не мешает выпустить код: `ST-009` (тело внешней
@@ -293,52 +321,181 @@ pub trait Generator {
     /// (терялась позиция), а тест мог проверить факт предупреждения только
     /// перехватом потока. Копий было три потому, что другого выхода наружу у
     /// генератора **не было по типу** — этот тип и есть выход.
-    fn generate(
+    ///
+    /// ⚠️ Диска цель не касается **по типу**: запись делает [`write_output`],
+    /// один раз на все цели. Прежде `fs::write` стоял у каждой — семь мест в
+    /// пяти модулях, — и потребитель без файловой системы (модуль WebAssembly,
+    /// фича 0531) вывода цели получить не мог вовсе.
+    fn generate_texts(
         &self,
         model: &ModelNode,
-        output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<Vec<Diagnostic>, Diagnostic>;
+    ) -> Result<Output, Diagnostic>;
+
+    /// Диагностика неудачной записи файла на диск.
+    ///
+    /// Код принадлежит **цели** (`CC-010`, `ST-001`, `RS-001`, `SV-001`,
+    /// `PU-001`), поэтому общий носитель записи спрашивает его здесь, а не
+    /// печатает свой: сообщение об отказе диска обязано быть узнаваемым по
+    /// коду так же, как прежде.
+    fn write_failure(&self, error: &std::io::Error) -> Diagnostic;
 }
 
-/// Запускает генератор кода для заданного языка.
+/// Возвращает генератор языка.
 ///
-/// Выбирает нужный генератор по значению [`Language`] и вызывает его.
-/// Возвращает предупреждения цели (фича 0168) — см. [`Generator::generate`].
+/// Точка выбора — одна: и печать в память, и печать с записью на диск идут
+/// через неё, иначе списки целей разошлись бы (класс 0084).
+fn generator_of(l: &Language) -> Box<dyn Generator> {
+    match l {
+        Language::C => Box::new(c::Generator {}),
+        Language::PlantUML => Box::new(plantuml::Generator {}),
+        Language::ST => Box::new(st::Generator {}),
+        Language::Rust => Box::new(rust::Generator {}),
+        Language::SV => Box::new(sv::Generator { mmio: false }),
+        Language::SvMmio => Box::new(sv::Generator { mmio: true }),
+    }
+}
+
+/// Печатает вывод цели **в память** (фича 0531).
+///
+/// Вход потребителя, у которого нет файловой системы: модуля WebAssembly,
+/// теста, сверки двух прогонов. Запись на диск — [`generate`], та же печать
+/// плюс [`write_output`].
+pub fn generate_texts(
+    l: Language,
+    model: &ModelNode,
+    options: &GenerateOptions,
+) -> Result<Output, Diagnostic> {
+    // Позиция оператора — потоковое состояние (фича 0308): без сброса
+    // координата последнего оператора пережила бы вызов и досталась бы
+    // следующей генерации в том же потоке.
+    site::reset();
+    generator_of(&l).generate_texts(model, options)
+}
+
+/// Запускает генератор кода для заданного языка и пишет файлы на диск.
+///
+/// Возвращает предупреждения цели (фича 0168) — см. [`Generator::generate_texts`].
 pub fn generate(
     l: Language,
     model: &ModelNode,
     output_path: &str,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    // Позиция оператора — потоковое состояние (фича 0308): без сброса
-    // координата последнего оператора пережила бы вызов и досталась бы
-    // следующей генерации в том же потоке.
     site::reset();
-    match l {
-        Language::C => {
-            let generator = c::Generator {};
-            generator.generate(model, output_path, options)
+    let generator = generator_of(&l);
+    let output = generator.generate_texts(model, options)?;
+    write_output(&output.files, output_path, generator.as_ref())?;
+    Ok(output.warnings)
+}
+
+/// Кладёт файлы вывода в каталог `output_path`.
+///
+/// Каталог создаётся молча — как и прежде: отсутствие права на создание
+/// увидит сама запись, а существующий каталог ошибкой не является.
+fn write_output(
+    files: &[GeneratedFile],
+    output_path: &str,
+    generator: &dyn Generator,
+) -> Result<(), Diagnostic> {
+    let dir = std::path::Path::new(output_path);
+    let _ = std::fs::create_dir(dir);
+    for file in files {
+        std::fs::write(dir.join(&file.name), &file.text)
+            .map_err(|e| generator.write_failure(&e))?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::semantic::tree::construct_model;
+
+    /// Каталог теста уникален по ПОТОКУ И ПРОЦЕССУ (фичи 0190, 0429).
+    fn tmp(tag: &str) -> std::path::PathBuf {
+        let thread = std::thread::current()
+            .name()
+            .unwrap_or("main")
+            .replace("::", "_");
+        let dir = std::env::temp_dir()
+            .join(format!("takt_pid{}", std::process::id()))
+            .join(format!("takt_0531_{tag}_{thread}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("каталог теста");
+        dir
+    }
+
+    /// Строит модель с именем `Root` — как это делает `compile_to_*`.
+    fn model_of(src: &str) -> std::rc::Rc<std::cell::RefCell<ModelNode>> {
+        let (ast, _) = crate::parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some("Root".to_string());
+        model
+    }
+
+    /// Цель `c` отдаёт **два** файла — заголовок и исходник.
+    ///
+    /// Прежде их имена существовали только внутри `fs::write`, и потребитель без
+    /// файловой системы (модуль WebAssembly, фича 0531) узнать их не мог.
+    #[test]
+    fn c_output_carries_header_and_source() {
+        let model = model_of("start S;");
+        let output = generate_texts(Language::C, &model.borrow(), &GenerateOptions::default())
+            .expect("генерация c");
+        let names: Vec<&str> = output.files.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, vec!["root.h", "root.c"], "имена файлов цели `c`");
+        assert!(
+            output.files[0].text.contains("#ifndef"),
+            "первый файл — заголовок:\n{}",
+            output.files[0].text
+        );
+    }
+
+    /// Записанное на диск **совпадает байт в байт** с напечатанным в память.
+    ///
+    /// Сторож против расхождения двух путей вывода: печать одна, запись —
+    /// обёртка над ней, и никакая цель не вправе печатать на диск иначе, чем
+    /// отдаёт наружу.
+    #[test]
+    fn written_files_match_texts() {
+        let src = "var x: u8 := 0; start S { always { x := 1; } }";
+        // Язык берётся функцией, а не значением: `Language` намеренно не
+        // `Clone` (`#[non_exhaustive]`, расширяемый список), а нужен он дважды
+        // — печати в память и печати с записью.
+        fn language_of(tag: &str) -> Language {
+            match tag {
+                "c" => Language::C,
+                "plantuml" => Language::PlantUML,
+                "st" => Language::ST,
+                "rust" => Language::Rust,
+                _ => Language::SV,
+            }
         }
-        Language::PlantUML => {
-            let generator = plantuml::Generator {};
-            generator.generate(model, output_path, options)
-        }
-        Language::ST => {
-            let generator = st::Generator {};
-            generator.generate(model, output_path, options)
-        }
-        Language::Rust => {
-            let generator = rust::Generator {};
-            generator.generate(model, output_path, options)
-        }
-        Language::SV => {
-            let generator = sv::Generator { mmio: false };
-            generator.generate(model, output_path, options)
-        }
-        Language::SvMmio => {
-            let generator = sv::Generator { mmio: true };
-            generator.generate(model, output_path, options)
+        for tag in ["c", "plantuml", "st", "rust", "sv"] {
+            let dir = tmp(tag);
+            let path = dir.to_str().expect("путь каталога");
+            let model = model_of(src);
+            let options = GenerateOptions::default();
+            let output = generate_texts(language_of(tag), &model.borrow(), &options)
+                .unwrap_or_else(|d| panic!("генерация {tag}: {}", d.message));
+
+            let model = model_of(src);
+            generate(language_of(tag), &model.borrow(), path, &options)
+                .unwrap_or_else(|d| panic!("запись {tag}: {}", d.message));
+
+            for file in &output.files {
+                let written = std::fs::read_to_string(dir.join(&file.name))
+                    .unwrap_or_else(|e| panic!("файл {} цели {tag}: {e}", file.name));
+                assert_eq!(written, file.text, "цель {tag}, файл {}", file.name);
+            }
+            let count = std::fs::read_dir(&dir).expect("чтение каталога").count();
+            assert_eq!(
+                count,
+                output.files.len(),
+                "цель {tag} записала не те файлы, что напечатала"
+            );
+            let _ = std::fs::remove_dir_all(&dir);
         }
     }
 }
