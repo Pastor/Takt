@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Витрина контролов — Takt</title>
+<!-- ⚠️ Витрина стоит на ЖИВОМ `app.css`, а не на своей копии: третья копия
+     правды разошлась бы со страницей молча, и книга описывала бы то, чего на
+     странице нет (класс 0084). Отсюда же и то, что витрина НЕ собирается в
+     `web/dist`: это документ разработчика, а не часть сервиса. -->
+<link rel="stylesheet" href="../static/app.css">
+<style>
+  /* Собственных ЦВЕТОВ и КЕГЛЕЙ у витрины нет — только раскладка: иначе она
+     показывала бы не то оформление, которое проверяет.
+     ⚠️ Обычный поток документа возвращается: страница редактора держит
+     `display: flex`, `height: 100dvh` и `overflow: hidden` — прокрутка у неё
+     живёт внутри областей. Витрина длиннее экрана, и без этой строки она не
+     прокручивалась вовсе (нашлось её же прогоном). */
+  body { display: block; height: auto; overflow: visible; }
+  .shelf { padding: var(--gap); display: flex; flex-direction: column; gap: var(--gap); }
+  .case { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .case > .pane-head { border-bottom: 1px solid var(--border); }
+  .case-body { padding: var(--gap); display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+  .swatch { display: flex; align-items: center; gap: var(--gap-half); }
+  .chip { width: var(--h-control); height: var(--h-control); border-radius: var(--radius); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header class="bar">
+  <span class="brand">Takt</span>
+  <span class="muted">витрина контролов · web/design/BOOK.md</span>
+</header>
+
+<main class="shelf">
+
+  <section class="case" data-control="--pairs">
+    <div class="pane-head"><span>Реестр пар</span></div>
+    <div class="case-body">
+      <!-- ⚠️ Набор ОБРАЗЦОВ сверяется с реестром книги в обе стороны (гейт D3):
+           витрина, отставшая от книги, показывает не то оформление, которое
+           описано, — и понять это можно только сличением двух текстов. -->
+      <span class="swatch" data-pair="--surface/--on-surface"><span class="chip" style="background: var(--surface)"></span>surface / on-surface</span>
+      <span class="swatch" data-pair="--surface-raised/--on-surface"><span class="chip" style="background: var(--surface-raised)"></span>raised / on-surface</span>
+      <span class="swatch" data-pair="--surface-raised/--on-surface-soft"><span class="chip" style="background: var(--surface-raised)"></span>raised / on-surface-soft</span>
+      <span class="swatch" data-pair="--surface-sunken/--on-surface"><span class="chip" style="background: var(--surface-sunken)"></span>sunken / on-surface</span>
+      <span class="swatch" data-pair="--surface-sunken/--on-surface-soft"><span class="chip" style="background: var(--surface-sunken)"></span>sunken / on-surface-soft</span>
+      <span class="swatch" data-pair="--surface-accent/--on-surface-accent"><span class="chip" style="background: var(--surface-accent)"></span>accent / on-surface-accent</span>
+    </div>
+  </section>
+
+  <section class="case" data-control="button">
+    <div class="pane-head"><span>Кнопка — пять состояний</span></div>
+    <div class="case-body">
+      <button type="button">обычное</button>
+      <button type="button" class="show-hover">наведение</button>
+      <button type="button" class="show-active">нажатие</button>
+      <button type="button" autofocus>фокус (Tab)</button>
+      <button type="button" disabled>недоступное</button>
+    </div>
+  </section>
+
+  <section class="case" data-control="select">
+    <div class="pane-head"><span>Выпадающий список</span></div>
+    <div class="case-body">
+      <select><option>цель: c</option><option>цель: rust</option></select>
+      <select disabled><option>недоступный</option></select>
+    </div>
+  </section>
+
+  <section class="case" data-control="input">
+    <div class="pane-head"><span>Поле ввода</span></div>
+    <div class="case-body">
+      <input type="text" placeholder="например: --fsm=table">
+      <input type="number" value="200">
+      <input type="text" value="недоступное" disabled>
+    </div>
+  </section>
+
+  <section class="case" data-control="textarea">
+    <div class="pane-head"><span>Многострочное поле</span></div>
+    <div class="case-body">
+      <textarea class="scenario" spellcheck="false">[{"in_ports": {"temperature": 25}}]</textarea>
+    </div>
+  </section>
+
+  <section class="case" data-control=".tab">
+    <div class="pane-head"><span>Вкладка — вариант есть подмена пары</span></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" role="tab" aria-selected="true" type="button">Вывод цели</button>
+      <button class="tab" role="tab" aria-selected="false" type="button">Прогон</button>
+    </nav>
+  </section>
+
+  <section class="case" data-control=".row">
+    <div class="pane-head"><span>Строка списка</span></div>
+    <div class="list">
+      <div class="row row-error">3:5: [SE-004] имя 'temperatur' не объявлено</div>
+      <div class="row row-warning">[SE-036] переменная 'idle' объявлена и не используется</div>
+      <div class="row row-ok">Ошибок нет</div>
+      <div class="row row-trace">Шаг   1 (     0ms):  [Heating]  out:heater=1</div>
+    </div>
+  </section>
+
+  <section class="case" data-control=".notice">
+    <div class="pane-head"><span>Строка-уведомление</span></div>
+    <div class="notice">Сообщения инструментов пока только на русском</div>
+  </section>
+
+  <section class="case" data-control="--code">
+    <div class="pane-head"><span>Роли подсветки кода</span></div>
+    <pre class="file-text"><span class="tok tok-comment">// комментарий</span>
+<span class="tok tok-keyword">start</span> <span class="tok tok-class">Heating</span> {
+    <span class="tok tok-keyword">var</span> <span class="tok tok-variable">n</span>: <span class="tok tok-type">u8</span> <span class="tok tok-operator">:=</span> <span class="tok tok-number">0</span>;
+    <span class="tok tok-variable">m</span> <span class="tok tok-operator">:=</span> <span class="tok tok-enumMember">Idle</span>;
+    <span class="tok tok-function">step</span>(<span class="tok tok-string">"текст"</span>);
+}</pre>
+  </section>
+
+</main>
+</body>
+</html>
