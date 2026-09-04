@@ -20,6 +20,7 @@ use std::sync::Arc;
 use takt_web_server::auth::{self, Role};
 use takt_web_server::config::Config;
 use takt_web_server::db;
+use takt_web_server::module;
 use takt_web_server::rate::Window;
 use takt_web_server::routes::{self, AppState};
 
@@ -64,12 +65,23 @@ async fn main() -> anyhow::Result<()> {
     // Версии — из описи собранной статики: второго носителя у них нет, и
     // сервер не должен знать их числом (класс 0084).
     let (module_version, language_version) = versions(&config.static_dir);
+    // Модули `takt-wasm` из статики: ими собирается вывод целей в архиве
+    // (задача 09g). Нет статики — нет и модулей, и выгрузка с генерацией
+    // отказывает словами.
+    let modules = match module::Modules::new(&config.static_dir) {
+        Ok(modules) => Some(Arc::new(modules)),
+        Err(error) => {
+            tracing::warn!(%error, "модули takt-wasm недоступны — архив пойдёт без генерации");
+            None
+        }
+    };
     let state = Arc::new(AppState {
         config,
         pool,
         rate,
         module_version,
         language_version,
+        modules,
     });
 
     let listener = tokio::net::TcpListener::bind(listen).await?;

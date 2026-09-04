@@ -17,12 +17,15 @@
 //! бы не сервер, а его копия в тесте.
 
 pub mod access;
+pub mod archive;
+pub mod archive_api;
 pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
 pub mod grants;
 pub mod limits;
+pub mod module;
 pub mod projects;
 pub mod rate;
 pub mod routes;

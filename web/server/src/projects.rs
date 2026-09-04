@@ -651,7 +651,7 @@ pub(crate) async fn locked(
 ///
 /// ⚠️ Проект, недоступный вовсе, отвечает `404`, а не `403`: `403` означал бы
 /// «он есть, но не для вас», то есть ручка стала бы оракулом существования.
-async fn resolve(
+pub(crate) async fn resolve(
     client: &deadpool_postgres::Client,
     id: &str,
     viewer: Option<&User>,
