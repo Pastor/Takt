@@ -87,11 +87,27 @@ export function clear(storage) {
  */
 export function debounce(fn, delayMs) {
   let timer = null;
-  return (...args) => {
+  let pending = null;
+  const wrapped = (...args) => {
+    pending = args;
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      fn(...args);
+      fn(...pending);
     }, delayMs);
   };
+  /**
+   * Записывает немедленно, если запись отложена.
+   *
+   * ⚠️ Нужно там, где страницу вот-вот перезагрузят (выход на новую сборку):
+   * отложенная на 400 мс запись до перезагрузки не доживёт, и автор потеряет
+   * последние набранные строки.
+   */
+  wrapped.now = () => {
+    if (timer === null) return;
+    clearTimeout(timer);
+    timer = null;
+    fn(...pending);
+  };
+  return wrapped;
 }

@@ -11,8 +11,17 @@ import { encodeState, decodeState } from "./share.js";
 import * as i18n from "./i18n.js";
 import { t } from "./i18n.js";
 import { SAMPLE } from "./sample.js";
+import { enhance } from "./pick.js";
+import * as build from "./build.js";
+import * as shell from "./shell.js";
 
-/** Адрес модуля. Версия — в пути (решение A5): ссылка открывается СВОИМ модулем. */
+/**
+ * Адрес модуля, если описи сборки нет.
+ *
+ * Обычно адрес берётся из `version.json` — там он с версией в пути (решение
+ * A5): ссылка открывается СВОИМ модулем и через год. Умолчание нужно для
+ * случая «страницу открыли без собранной статики».
+ */
 const WASM_DEFAULT = "takt.wasm";
 
 /**
@@ -35,6 +44,8 @@ const state = {
   version: "",
   languageVersion: "",
   running: false,
+  build: null,
+  dirty: false,
 };
 
 const dom = {};
@@ -45,10 +56,14 @@ export async function main() {
   // Язык выбирается ДО модуля: он весит мегабайты, а подписи страницы обязаны
   // быть на месте с первого кадра — иначе оболочка успевает мигнуть чужим
   // языком.
+  shell.attach(dom.grip, localStorage);
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   fillLanguages();
+  enhance(dom.lang);
 
-  state.bridge = await Bridge.load(WASM_DEFAULT);
+  // Опись сборки читается ДО модуля: в ней адрес модуля с версией в пути.
+  state.build = await build.describe();
+  state.bridge = await Bridge.load(state.build.wasm ?? WASM_DEFAULT);
   const version = state.bridge.version();
   state.version = version.takt_lang ?? "";
   state.languageVersion = version.language ?? "";
@@ -57,6 +72,9 @@ export async function main() {
   dom.version.removeAttribute("data-i18n");
   showVersion();
   fillTargets(version.targets ?? []);
+  enhance(dom.target);
+  watchBuild();
+  for (const node of [dom.editor, dom.output, dom.diagnostics, dom.trace]) fade(node);
 
   state.editor = new Editor(dom.editor, onEdit);
   wire();
@@ -107,6 +125,30 @@ function redraw() {
   if (state.editor) refresh();
 }
 
+/**
+ * Следит за выходом новой сборки — ПО СОБЫТИЯМ, а не по таймеру.
+ *
+ * Вкладка редактора живёт часами, и опрос по таймеру был бы обращением к
+ * стенду каждые несколько минут ни за чем. Спрашиваем там, где ответ нужен:
+ * при открытии, при возвращении вкладки на глаза и перед публикацией ссылки.
+ */
+function watchBuild() {
+  const check = async () => {
+    if (dom.update.hidden === false) return;
+    if (await build.outdated(state.build)) dom.update.hidden = false;
+  };
+  check();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") check();
+  });
+  dom.update.addEventListener("click", () => {
+    // Сначала черновик, потом перезагрузка: обновление не должно стоить
+    // автору ни строки.
+    saveDraft.now();
+    location.reload();
+  });
+}
+
 /** Строка версии: язык Takt и версия модуля. */
 function showVersion() {
   dom.version.textContent = t("bar.version", {
@@ -128,12 +170,39 @@ function fillLanguages() {
   dom.lang.value = i18n.language();
 }
 
+/**
+ * Растворяющийся нижний край у прокручиваемой области (приём референса).
+ *
+ * Полос прокрутки на странице нет вовсе (решение заказчика 2026-09-04), и
+ * признак «внизу есть непрочитанное» несёт край: пока до конца не докрутили,
+ * содержимое плавно исчезает; у конца край становится резким.
+ *
+ * ⚠️ Высота растворения ставится в `--fade` КОДОМ, а не задана в стилях:
+ * маска обязана исчезать вместе с непрочитанным, иначе последняя строка
+ * списка навсегда останется полупрозрачной.
+ */
+function fade(node) {
+  const FADE = 24;
+  const update = () => {
+    const rest = node.scrollHeight - node.scrollTop - node.clientHeight;
+    const height = Math.max(0, Math.min(FADE, rest));
+    node.style.setProperty("--fade", `${height}px`);
+    node.classList.toggle("fade-bottom", height > 0);
+  };
+  node.addEventListener("scroll", update, { passive: true });
+  // Содержимое меняется чаще, чем прокрутка: перекраска редактора, новая
+  // трасса, другой вывод цели.
+  new ResizeObserver(update).observe(node);
+  new MutationObserver(update).observe(node, { childList: true, subtree: true });
+  update();
+}
+
 /** Находит узлы страницы один раз: поиск в обработчике — лишняя работа. */
 function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip",
   ]) {
     dom[id] = document.getElementById(id);
   }
@@ -208,15 +277,20 @@ function wire() {
 
   // Несохранённая работа не теряется молча (R13): подтверждение ухода —
   // единственное, что браузер позволяет здесь сделать.
+  //
+  // ⚠️ Спрашиваем, ПОКА работа расходится с сохранённым, а не «пока в
+  // редакторе есть текст». Текст есть всегда — с первого открытия там пример,
+  // — и безусловный вопрос приучает отвечать «уйти» не читая, то есть перестаёт
+  // защищать (задача 0531-07b).
   window.addEventListener("beforeunload", (event) => {
-    if (state.editor?.value()) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
+    if (!state.dirty) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
 }
 
 const saveDraft = draft.debounce(() => {
+  state.dirty = false;
   const problem = draft.save(localStorage, {
     source: state.editor.value(),
     scenario: state.scenario,
@@ -238,6 +312,9 @@ function applyState(restored) {
 
 /** Правка текста: подсветка, диагностики, вывод цели. */
 function onEdit() {
+  // Работа разошлась с сохранённым: запись черновика отложена, и до неё
+  // уходить со страницы без вопроса нельзя.
+  state.dirty = true;
   refresh();
   saveDraft();
 }
@@ -467,11 +544,13 @@ function run() {
   dom.stop.disabled = false;
 
   state.worker?.terminate();
-  state.worker = new Worker("worker.js", { type: "module" });
+  // Адрес — ОТ ЭТОГО МОДУЛЯ: собранная страница лежит в каталоге бандла, и
+  // адрес от документа увёл бы запрос в корень.
+  state.worker = new Worker(new URL("worker.js", import.meta.url), { type: "module" });
   state.worker.onmessage = (event) => onWorker(event.data ?? {});
   state.worker.postMessage({
     type: "run",
-    wasmUrl: new URL(WASM_DEFAULT, location.href).href,
+    wasmUrl: state.build?.wasm ?? new URL(WASM_DEFAULT, location.href).href,
     source: state.editor.value(),
     scenario: state.scenario,
     tickMs: 0,
@@ -529,6 +608,7 @@ async function share() {
     target: state.target,
     args: state.args,
   });
+  if (await build.outdated(state.build)) dom.update.hidden = false;
   const url = `${location.origin}${location.pathname}#${fragment}`;
   history.replaceState(null, "", `#${fragment}`);
   try {

@@ -16,32 +16,97 @@
  * высота мимо шкалы. Отказ гейта называет строку и правило.
  */
 
+/* ── Шрифты: свои файлы, а не чужие адреса ───────────────────────────────
+ * Внешних CDN у страницы нет (правило 8 книги): чужой адрес — это и отказ при
+ * недоступности, и обращение читателя к третьей стороне. Происхождение,
+ * версии и лицензии — `font/README.md`.
+ *
+ * ИНТЕРФЕЙС набирается чертёжным шрифтом по ГОСТ 2.304-81 тип Б — тем же, что
+ * у референса (решение заказчика 2026-09-04). КОД остаётся моноширинным Fira
+ * Code — тем же, которым набран документ `book/`: ГОСТ пропорционален, и в нём
+ * разъехались бы и колонки кода, и выравнивание трассы, и вид кода в PDF.
+ *
+ * ⚠️ `swap` у обоих: пока шрифт грузится, текст показывается системным.
+ * `block` дал бы невидимый код на медленной сети — худшее из возможных
+ * поведений для редактора. */
+@font-face {
+  font-family: "OpenGost Type B";
+  src: url("font/opengost-type-b.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fira Code Web";
+  src: url("font/FiraCode-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── Сырьё: светлая тема ────────────────────────────────────────────────── */
 :root {
-  --raw-ink: #1b1f24;
-  --raw-ink-soft: #5b6572;
-  --raw-paper: #fdfdfc;
-  --raw-paper-sunken: #f2f3f1;
-  --raw-paper-raised: #ffffff;
-  --raw-line: #d8dbd6;
-  --raw-accent: #1f6f4a;
-  --raw-accent-ink: #ffffff;
-  --raw-alarm: #a8331f;
-  --raw-warn: #8a6100;
-  --raw-yes: #1f6f4a;
+  /* Палитра «чертёжная бумага» взята у референса как есть (решение заказчика
+   * 2026-09-04): фон, карточка, поле, чернила, приглушённые чернила, границы и
+   * акцент — его числа. Заливки состояний (`-alarm`, `-warn`, `-yes`) тоже
+   * оттуда: у них своя пара чернил, и подобранные заново они разошлись бы с
+   * референсом по тону. */
+  --raw-ink: #2E332B;
+  --raw-ink-soft: #5A6154;
+  --raw-ink-off: #B4B9AF;
+  --raw-paper: #EDEDE7;
+  --raw-paper-sunken: #F1F2EA;
+  --raw-paper-raised: #FBFBF7;
+  --raw-field: #FDFDFA;
+  --raw-line: #D7DACF;
+  --raw-line-soft: #E1E3D9;
+  --raw-accent: #5F6E55;
+  --raw-accent-ink: #FBFBF7;
+  --raw-alarm: #C0705A;
+  --raw-alarm-ink: #8E4A34;
+  --raw-alarm-bg: #F5E7E1;
+  --raw-warn: #C6A24A;
+  --raw-warn-ink: #6F5713;
+  --raw-warn-bg: #F6EFDC;
+  --raw-yes: #E4EAD9;
+  --raw-yes-ink: #4E5749;
 
-  /* Роли: заливка и чернила парами. */
+  /* ── Роли: заливка и чернила ПАРАМИ ───────────────────────────────────
+   * Пара — не украшение, а механизм: слой отклика красится чернилами СВОЕЙ
+   * поверхности, поэтому светлая кнопка на наведение темнеет, а тёмная
+   * светлеет — одной формулой, без правила на каждую разновидность
+   * (устройство референса, замер 2026-09-04).
+   *
+   * ⚠️ У каждой поверхности СВОИ чернила, даже когда они совпадают с
+   * основными: пара, у которой чернила общие «пока что», однажды разойдётся
+   * с темой наполовину. */
   --surface: var(--raw-paper);
   --on-surface: var(--raw-ink);
   --surface-sunken: var(--raw-paper-sunken);
+  --on-surface-sunken: var(--raw-ink-soft);
   --surface-raised: var(--raw-paper-raised);
-  --on-surface-soft: var(--raw-ink-soft);
+  --on-surface-raised: var(--raw-ink);
+  --surface-field: var(--raw-field);
+  --on-surface-field: var(--raw-ink);
   --surface-accent: var(--raw-accent);
   --on-surface-accent: var(--raw-accent-ink);
-  --border: var(--raw-line);
+  --surface-alarm: var(--raw-alarm-bg);
+  --on-surface-alarm: var(--raw-alarm-ink);
+  --surface-warn: var(--raw-warn-bg);
+  --on-surface-warn: var(--raw-warn-ink);
+  --surface-yes: var(--raw-yes);
+  --on-surface-yes: var(--raw-yes-ink);
+
+  /* Одиночные чернила: ложатся на ту заливку, которая уже есть, и парой не
+   * являются — реестр их не перечисляет. */
+  --on-surface-soft: var(--raw-ink-soft);
+  --on-surface-off: var(--raw-ink-off);
   --alarm: var(--raw-alarm);
   --warn: var(--raw-warn);
-  --yes: var(--raw-yes);
+  --yes: var(--raw-accent);
+  --border: var(--raw-line);
+  --border-soft: var(--raw-line-soft);
 
   /* Роли подсветки кода. Виды токенов приходят от модуля — и у исходника на
    * Takt (`takt_tokens`), и у вывода цели (`takt_highlight`, задача 0531-06);
@@ -56,12 +121,12 @@
    * tango, белый фон), а у страницы две. Значения ниже свои.
    * ⚠️ Роли `variable` в теме нет намеренно: там это цвет текста по умолчанию,
    * и здесь он тоже взят у чернил страницы. */
-  --tok-keyword: #7a3ea3;
-  --tok-type: #1f5f8f;
-  --tok-number: #8a3d00;
-  --tok-constant: #8a2f5c;
-  --tok-string: #1f6f4a;
-  --tok-comment: #6b7280;
+  --tok-keyword: #6A4A8C;
+  --tok-type: #2C5F82;
+  --tok-number: #8A5218;
+  --tok-constant: #8A3B63;
+  --tok-string: #46683C;
+  --tok-comment: #61684F;
   --tok-function: #1f5f8f;
   --tok-operator: var(--on-surface-soft);
   --tok-variable: var(--on-surface);
@@ -81,8 +146,12 @@
    * там, где нет наведения; 32 px — контрол мыши; 24 px — служебная строка.
    * Шкала референса (48/40/32/24) не переносится числами: у редактора нет ни
    * крупных кнопок игры, ни его плотности. */
-  --h-touch: 44px;
-  --h-control: 32px;
+  /* ⚠️ 48 px — высота контрола у референса (решение заказчика 2026-09-04), и
+   * она же с запасом перекрывает предел цели нажатия WCAG 2.5.5 (44 px):
+   * отдельной ступени «для пальца» больше не нужно. 32 px — плотная строка
+   * (вкладка, полка режимов), 24 px — служебная шапка области. */
+  --h-control: 48px;
+  --h-dense: 32px;
   --h-compact: 24px;
 
   /* ── Шкала скруглений ─────────────────────────────────────────────────
@@ -98,6 +167,10 @@
   --gap-half: calc(var(--gap) / 2);
   --gap-quarter: calc(var(--gap) / 4);
 
+  /* Ширина оболочки. Умолчание — всё окно: ничего не меняется, пока читатель
+   * не сузит страницу сам (`shell.js` подменяет значение). */
+  --shell-w: 100vw;
+
   /* Плотность отклика — одна на проект (формула ниже). */
   --state-hover: 7%;
   --state-press: 14%;
@@ -106,8 +179,13 @@
    * `prefers-reduced-motion`. */
   --motion: 120ms;
 
-  --font-code: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Свой файл первым, установленный в систему — вторым, дальше системный
+   * стек: страница обязана читаться и без загрузки шрифта. */
+  --font-code: "Fira Code Web", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-ui: "OpenGost Type B", "GOST type B", "PT Sans Narrow", system-ui, sans-serif;
+  /* Наклон 15° от вертикали — требование ГОСТ 2.304-81; наклонного начертания
+   * в гарнитуре нет, и он даётся средствами CSS. */
+  --ui-slant: oblique 15deg;
 }
 
 /* ── Сырьё: тёмная тема ─────────────────────────────────────────────────── */
@@ -115,17 +193,28 @@
  * тема накрывает страницу наполовину (правило 2 книги референса). */
 @media (prefers-color-scheme: dark) {
   :root {
-    --raw-ink: #e6e8e6;
-    --raw-ink-soft: #9aa4b0;
-    --raw-paper: #14181c;
-    --raw-paper-sunken: #0f1317;
-    --raw-paper-raised: #1b2026;
-    --raw-line: #2c333a;
-    --raw-accent: #3f9d6d;
-    --raw-accent-ink: #0f1317;
-    --raw-alarm: #e08374;
-    --raw-warn: #d9ac52;
-    --raw-yes: #3f9d6d;
+    /* ⚠️ Тёмной темы у референса НЕТ вовсе (замер 2026-09-04). Она наша, и
+     * это ожидание, а не украшение: код читают долго. Тон взят у той же
+     * чертёжной бумаги — тёплый серо-зелёный, а не синий. */
+    --raw-ink: #E3E5DC;
+    --raw-ink-soft: #9AA093;
+    --raw-ink-off: #5F6559;
+    --raw-paper: #1C1F1A;
+    --raw-paper-sunken: #171A15;
+    --raw-paper-raised: #24281F;
+    --raw-field: #24281F;
+    --raw-line: #333829;
+    --raw-line-soft: #2A2E24;
+    --raw-accent: #8FA37F;
+    --raw-accent-ink: #171A15;
+    --raw-alarm: #D89279;
+    --raw-alarm-ink: #EFC3B1;
+    --raw-alarm-bg: #3A2620;
+    --raw-warn: #D9BC6A;
+    --raw-warn-ink: #EBD79B;
+    --raw-warn-bg: #3A3320;
+    --raw-yes: #2C3A26;
+    --raw-yes-ink: #BFD3AE;
 
     --tok-keyword: #c58af9;
     --tok-type: #7cb7e8;
@@ -139,6 +228,31 @@
 
 * { box-sizing: border-box; }
 
+/* ── Полос прокрутки нет вовсе (приём референса, решение заказчика) ───────
+ * Прокрутка остаётся полностью рабочей: колесо, палец, клавиши, `scrollTop`
+ * из кода. Правило намеренно широкое: прокручиваемых областей у редактора
+ * четыре (редактор, вывод, два списка), и своё правило каждой значит однажды
+ * забыть новую. Скрытие описано трижды — три семейства браузеров. */
+*, *::before, *::after { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Взамен полосы — растворяющийся нижний край: пока внизу есть непрочитанное,
+ * содержимое плавно исчезает, у конца — край резкий. Высоту ставит `app.js` в
+ * `--fade`, он же вешает и снимает класс. Маска, а не полоска тени: фон под
+ * областями разный, и любой заданный цвет где-нибудь да будет грязным. */
+.fade-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade, 0px)), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade, 0px)), transparent 100%);
+}
+
+/* Код набирается моноширинным и БЕЗ чертёжного наклона: наклон — свойство
+ * интерфейса, а наклонный код нечитаем. */
+.editor, .file-text, .list, .scenario, code, pre {
+  font-family: var(--font-code);
+  font-style: normal;
+  letter-spacing: normal;
+}
+
 /* ── Точки перелома (замер референса 2026-09-04, задача 0531-08) ──────────
  * 900 — две колонки кода: 2 × 40 символов Fira Code 0.9rem ≈ 700 px + поля.
  *       Число СВОЁ: у референса двух колонок нет вовсе.
@@ -151,6 +265,8 @@
 body {
   margin: 0;
   font-family: var(--font-ui);
+  font-style: var(--ui-slant);
+  letter-spacing: .02em;
   background: var(--surface);
   color: var(--on-surface);
   /* Высота — в экран, страница не прокручивается: прокрутка живёт внутри
@@ -177,6 +293,67 @@ body {
  * места, а этой же строкой сообщается отказ загрузки модуля. */
 #version { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Строка «доступна новая сборка»: кнопка, а не окно и не полоса — она зовёт,
+ * но не перебивает. Тон предупреждения: работать это не мешает. */
+.update {
+  height: var(--h-dense);
+  padding: 0 var(--gap);
+  font-size: var(--text-sm);
+  background: var(--surface-warn);
+  color: var(--on-surface-warn);
+  border-color: var(--warn);
+}
+.update[hidden] { display: none; }
+
+/* ── Оболочка: одна ширина на шапку, работу и полку ──────────────────────
+ * Приём референса: содержимое стоит колонкой по центру, а не растянуто во весь
+ * монитор. Ширину задаёт ЧИТАТЕЛЬ (`shell.js`) — у редактора две колонки кода,
+ * и «сколько нужно» зависит от монитора и от модели.
+ * ⚠️ Ширина ОДНА на все три полосы: разъедься они — вкладки перестали бы
+ * стоять над своей областью. */
+.bar, .work, .modes {
+  width: 100%;
+  max-width: var(--shell-w);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Ручка ширины: тонкая полоса у правого края оболочки. Оболочка стоит по
+ * центру, поэтому её место считается от края окна той же формулой. */
+.grip {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: calc((100vw - min(var(--shell-w), 100vw)) / 2);
+  width: var(--gap);
+  z-index: 20;
+  cursor: col-resize;
+  background: linear-gradient(to right, transparent, var(--border));
+  touch-action: none;
+}
+
+/* Отклик — той же формулой одной плотности, что у контролов: ручка не повод
+ * заводить восьмую заливку наведения. */
+.grip:hover {
+  background: linear-gradient(to right, transparent,
+    color-mix(in srgb, var(--on-surface) var(--state-press), var(--surface)));
+}
+
+/* Фокус — не отклик, а состояние: кольца у полосы во всю высоту не выйдет, и
+ * его место занимает акцент. */
+.grip:focus-visible {
+  outline: none;
+  background: linear-gradient(to right, transparent, var(--surface-accent));
+}
+
+/* ⚠️ На узком экране ручки нет вовсе: там область одна на экран, и сужать
+ * нечего. Скрыта она и там, где нет наведения: тянуть край пальцем — жест,
+ * который спорит с прокруткой. */
+@media (max-width: 900px), (hover: none) {
+  .grip { display: none; }
+  .bar, .work, .modes { max-width: none; }
+}
+
 /* ── Верхняя строка ─────────────────────────────────────────────────────── */
 .bar {
   display: flex;
@@ -200,8 +377,15 @@ button, select, input, textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
-  color: var(--on-surface);
+  color: var(--on-surface-raised);
   transition: background var(--motion), border-color var(--motion);
+}
+
+/* Поле ввода — своя пара: у референса поле светлее кнопки, и это различие
+ * говорит «сюда пишут», а не «сюда нажимают». */
+input, textarea {
+  background: var(--surface-field);
+  color: var(--on-surface-field);
 }
 
 button, select { cursor: pointer; }
@@ -255,7 +439,7 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   min-height: var(--h-compact);
   padding: var(--gap-half) var(--gap);
   font-size: var(--text-xs);
-  color: var(--on-surface-soft);
+  color: var(--on-surface-sunken);
   background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
 }
@@ -276,9 +460,89 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 
 .line { min-height: 1.5em; }
 
-/* Переключатель языка. Ширина по содержимому: самоназвания коротки, а
- * фиксированная обрезала бы длинное. */
-.lang { padding: 0 var(--gap-half); }
+/* ── Выпадающий список: кнопка и меню в стиле страницы ───────────────────
+ * Системный `<select>` рисуется операционной системой и выпадает из
+ * оформления (решение заказчика 2026-09-04). Он остаётся источником значения и
+ * с экрана уходит; поведение — `pick.js`.
+ * ⚠️ `min-width: 0` обязателен: без него обёртка не сжимается ниже своего
+ * содержимого и выталкивает соседа за край строки. */
+.pick { position: relative; display: inline-flex; min-width: 0; max-width: 100%; }
+
+/* Ширина не пляшет при смене значения: кнопка, сжатая по текущей подписи,
+ * прыгала бы с 39 px на «c» до 90 px на «plantuml», сдвигая соседей. */
+.controls .pick { min-width: 12ch; }
+.pick > select { position: absolute; inset: 0; width: 100%; opacity: 0; pointer-events: none; }
+
+.pick-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  text-align: left;
+  overflow: hidden;
+}
+
+/* Подпись выбранного — одной строкой с многоточием: длинное имя цели иначе
+ * рвёт кнопку на три строки. */
+.pick-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Указатель НАРИСОВАН рамкой: треугольника в чертёжной гарнитуре ГОСТ нет
+ * вовсе, и набранный символом он приехал бы системным глифом на чужой
+ * базовой линии. */
+.pick-btn::after {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--on-surface-soft);
+}
+
+.pick-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + var(--gap-half));
+  left: 0;
+  min-width: 100%;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: var(--gap-half);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-quarter);
+  background: var(--surface-raised);
+  color: var(--on-surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+
+/* ⚠️ `display: flex` сильнее атрибута `hidden`. */
+.pick-menu[hidden] { display: none; }
+
+/* Вариант: прозрачная поверхность, отклик — общая формула. `background: none`
+ * не годится — формуле не от чего считать. */
+.pick-opt {
+  --surface: transparent;
+  min-height: var(--h-dense);
+  height: auto;
+  border: none;
+  text-align: left;
+  background: transparent;
+  padding: var(--gap-half) var(--gap);
+}
+.pick-opt:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--on-surface) var(--state-hover), var(--surface-raised));
+}
+.pick-opt:active:not(:disabled) {
+  background: color-mix(in srgb, var(--on-surface) var(--state-press), var(--surface-raised));
+}
+/* Выбранный — подмена пары, и ничего больше. */
+.pick-opt[aria-selected="true"] {
+  background: var(--surface-yes);
+  color: var(--on-surface-yes);
+}
 
 /* Строка-граница: до фичи 0532 сообщения инструментов только по-русски, и при
  * другом языке оболочки это НАЗЫВАЕТСЯ. Тон предупреждения, а не ошибки:
@@ -286,8 +550,8 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 .notice {
   min-height: var(--h-compact);
   padding: var(--gap-half) var(--gap);
-  color: var(--warn);
-  background: color-mix(in srgb, var(--warn) var(--state-hover), transparent);
+  color: var(--on-surface-warn);
+  background: var(--surface-warn);
   border-bottom: 1px solid var(--border);
   font-size: var(--text-xs);
 }
@@ -324,14 +588,21 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   font-family: var(--font-code);
   font-size: var(--text-sm);
   background: var(--surface-sunken);
-  color: var(--on-surface);
+  color: var(--on-surface-sunken);
 }
 
 .trace { max-height: none; flex: 1; }
 
 .row { padding: var(--gap-quarter) var(--gap); white-space: pre-wrap; }
-.row-error { color: var(--alarm); cursor: pointer; }
-.row-warning { color: var(--warn); }
+/* Ошибка — ПАРА, а не одни чернила: строка диагностики читается как полоса,
+ * и по ней же кликают. Состояние передаётся не только цветом — рядом код и
+ * текст сообщения. */
+.row-error {
+  background: var(--surface-alarm);
+  color: var(--on-surface-alarm);
+  cursor: pointer;
+}
+.row-warning { color: var(--on-surface-warn); }
 .row-ok { color: var(--on-surface-soft); }
 .row-trace { color: var(--on-surface); }
 
@@ -382,8 +653,10 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   min-height: var(--h-compact);
   padding: var(--gap-half) var(--gap);
   font-size: var(--text-xs);
-  color: var(--on-surface-soft);
-  background: var(--surface-raised);
+  /* Строка с именем файла — служебная полоса, то есть УТОПЛЕННАЯ поверхность:
+   * та же пара, что у шапки области. */
+  color: var(--on-surface-sunken);
+  background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
 }
 
@@ -418,8 +691,8 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 
 .status { font-size: var(--text-sm); }
 .status-ok { color: var(--yes); }
-.status-warning { color: var(--warn); }
-.status-error { color: var(--alarm); }
+.status-warning { color: var(--on-surface-warn); }
+.status-error { color: var(--on-surface-alarm); }
 
 /* Движение гасится по просьбе системы. */
 @media (prefers-reduced-motion: reduce) {
@@ -449,14 +722,13 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
     background: var(--surface-raised);
   }
   /* Три равные цели во всю ширину: палец ищет по месту, а не по подписи. */
-  .modes .tab { flex: 1 1 0; min-width: var(--h-touch); border-radius: var(--radius); }
+  .modes .tab { flex: 1 1 0; min-width: var(--h-control); border-radius: var(--radius); }
 }
 
 /* ── Там, где нет наведения, цель нажатия крупнее ────────────────────────
  * 44 px — предел WCAG 2.5.5. Поля ввода не мельче 16 px: iOS иначе
  * увеличивает страницу при фокусе, и вёрстка «уезжает» сама собой. */
 @media (hover: none) {
-  :root { --h-control: var(--h-touch); }
   input, select, textarea, .scenario { font-size: var(--text-lg); }
   .row { padding: var(--gap) var(--gap); }
 }

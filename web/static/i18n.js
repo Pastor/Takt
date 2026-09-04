@@ -79,7 +79,10 @@ export async function load(lang, fetchJson = defaultFetch) {
 }
 
 async function defaultFetch(lang) {
-  const response = await fetch(`i18n/${lang}.json`);
+  // ⚠️ Адрес считается ОТ ЭТОГО МОДУЛЯ, а не от страницы: собранная статика
+  // лежит в каталоге бандла `b/<отпечаток>/`, и адрес от документа увёл бы
+  // запрос в корень. Нашлось прогоном страницы 2026-09-04.
+  const response = await fetch(new URL(`i18n/${lang}.json`, import.meta.url));
   if (!response.ok) throw new Error(`словарь ${lang}: ${response.status}`);
   return response.json();
 }
