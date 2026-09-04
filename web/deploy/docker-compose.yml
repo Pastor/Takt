@@ -1,0 +1,51 @@
+# Стенд сервиса проектов Takt (фича 0531, задача 07c).
+#
+# Две службы: PostgreSQL и сервер. nginx сюда НЕ входит — на стенде он общий и
+# ставится отдельно (шаблон рядом, `nginx.conf.template`): держать свой прокси в
+# каждом стеке значит спорить за 80-й порт.
+#
+# ⚠️ Пароля в дереве нет: он приходит файлом окружения (`.env` рядом, в
+# `.gitignore`). Умолчания годятся только для своей машины и названы так, чтобы
+# это бросалось в глаза.
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-takt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-пароль-для-своей-машины-не-для-стенда}
+      POSTGRES_DB: ${POSTGRES_DB:-takt_web}
+      # ⚠️ Локаль UTF-8 обязательна: при `C` кириллица не приводится к нижнему
+      # регистру, и поиск по витрине молча перестаёт находить (замер 09c).
+      LANG: C.UTF-8
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-takt} -d ${POSTGRES_DB:-takt_web}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ../..
+      dockerfile: web/deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TAKT_WEB_DB: postgresql://${POSTGRES_USER:-takt}:${POSTGRES_PASSWORD:-пароль-для-своей-машины-не-для-стенда}@db/${POSTGRES_DB:-takt_web}
+      TAKT_WEB_JWT_SECRET: ${TAKT_WEB_JWT_SECRET:?задайте секрет подписи: с умолчанием токен подпишет кто угодно}
+      TAKT_WEB_BASE_PATH: ${TAKT_WEB_BASE_PATH:-/}
+      TAKT_WEB_RETENTION_DAYS: ${TAKT_WEB_RETENTION_DAYS:-90}
+    ports:
+      - "${TAKT_WEB_BIND:-127.0.0.1:8730}:8730"
+    volumes:
+      - projects:/srv/takt/projects
+
+volumes:
+  db:
+  projects:
