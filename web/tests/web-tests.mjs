@@ -549,6 +549,22 @@ test("разделитель областей: незаданная доля —
   assert.equal(shell.panes({ getItem: () => { throw new Error("нет доступа"); } }), shell.HALF);
 });
 
+test("кегль страницы: шаг в единицу и обе границы названы", () => {
+  // ⚠️ Меняется КОРНЕВОЙ кегль: ступени шкалы заданы в `rem`, и страница
+  // растёт целиком, сохраняя пропорции. Свой кегль «только для кода» развалил
+  // бы шкалу на два набора, между которыми пришлось бы выбирать в каждом
+  // правиле.
+  assert.equal(shell.clampFont(shell.FONT_DEFAULT + 1), shell.FONT_DEFAULT + 1, "шаг в единицу");
+  assert.equal(shell.clampFont(0), shell.FONT_MIN, "ниже нижней границы нечитаемо");
+  assert.equal(shell.clampFont(999), shell.FONT_MAX, "выше верхней не помещается код");
+  assert.equal(shell.clampFont(NaN), shell.FONT_DEFAULT, "испорченная запись — умолчание");
+  assert.equal(shell.clampFont(12.4), 12, "кегль целый: полпикселя не бывает");
+  assert.equal(shell.fontSize({ getItem: () => null }), shell.FONT_DEFAULT);
+  assert.equal(shell.fontSize({ getItem: () => "13" }), 13);
+  assert.equal(shell.fontSize({ getItem: () => "не число" }), shell.FONT_DEFAULT);
+  assert.ok(shell.FONT_MIN < shell.FONT_DEFAULT && shell.FONT_DEFAULT < shell.FONT_MAX);
+});
+
 test("перенос строк: настройка своя у каждой области и по умолчанию выключена", () => {
   // ⚠️ Умолчание — НЕТ переноса: код читают столбцом, и включённый по
   // умолчанию перенос менял бы вид всякой модели у всякого читателя.

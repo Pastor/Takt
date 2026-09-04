@@ -67,6 +67,8 @@ export async function main() {
   // Перенос строк — настройка УЗКОЙ области, и потому своя у каждой.
   shell.attachWrap(dom.wrapsource, dom.editor, localStorage, shell.WRAP_KEYS.source);
   shell.attachWrap(dom.wrapoutput, dom.output, localStorage, shell.WRAP_KEYS.output);
+  // Кегль страницы: ±1 к корневому размеру, от которого считаются все ступени.
+  shell.attachFontSize(dom.fontless, dom.fontmore, dom.fontsize, localStorage);
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   fillLanguages();
   enhance(dom.lang);
@@ -270,7 +272,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "wrapsource", "wrapoutput", "project",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "wrapsource", "wrapoutput", "fontless", "fontmore", "fontsize", "project",
     "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",

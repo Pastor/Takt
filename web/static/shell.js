@@ -370,3 +370,76 @@ export function attachWrap(button, area, storage, key) {
   });
   apply(on);
 }
+
+/** Ключ хранилища кегля страницы. */
+export const FONT_KEY = "takt.font";
+
+/** Кегль страницы по умолчанию, px: тот же, что стоит в стилях. */
+export const FONT_DEFAULT = 16;
+
+/** Границы кегля, px. */
+export const FONT_MIN = 10;
+export const FONT_MAX = 28;
+
+/**
+ * Приводит кегль к допустимому.
+ *
+ * ⚠️ Границы названы обе: ниже нижней страница нечитаема, выше верхней в
+ * области кода перестают помещаться даже короткие строки, и читатель, нажавший
+ * «крупнее» двадцать раз, остаётся один на один с двумя словами на экран.
+ */
+export function clampFont(size) {
+  if (!Number.isFinite(size)) return FONT_DEFAULT;
+  return Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(size)));
+}
+
+/** Читает запомненный кегль; умолчание — [`FONT_DEFAULT`]. */
+export function fontSize(storage) {
+  try {
+    const raw = storage.getItem(FONT_KEY);
+    if (raw === null || raw === undefined || raw === "") return FONT_DEFAULT;
+    return clampFont(Number(raw));
+  } catch {
+    return FONT_DEFAULT;
+  }
+}
+
+/**
+ * Заводит выбор кегля страницы: «мельче», «крупнее» и текущее число.
+ *
+ * ⚠️ Меняется КОРНЕВОЙ кегль, а не кегль области: все ступени шкалы заданы в
+ * `rem`, поэтому страница растёт целиком и пропорции шкалы сохраняются. Свой
+ * кегль «только для кода» развалил бы шкалу на два набора.
+ *
+ * @param {HTMLElement} less кнопка «мельче»
+ * @param {HTMLElement} more кнопка «крупнее»
+ * @param {HTMLElement} label узел с текущим числом
+ * @param {Storage} storage хранилище настройки
+ */
+export function attachFontSize(less, more, label, storage) {
+  const root = less.ownerDocument.documentElement;
+  let size = fontSize(storage);
+
+  const apply = () => {
+    root.style.setProperty("--text-root", `${size}px`);
+    label.textContent = String(size);
+    // Кнопка у предела гасится: нажатие, которое ничего не меняет, читается
+    // как поломка.
+    less.disabled = size <= FONT_MIN;
+    more.disabled = size >= FONT_MAX;
+  };
+
+  const step = (delta) => {
+    size = clampFont(size + delta);
+    apply();
+    try {
+      storage.setItem(FONT_KEY, String(size));
+    } catch {
+      // Приватный режим: кегль действует до перезагрузки.
+    }
+  };
+
+  less.addEventListener("click", () => step(-1));
+  more.addEventListener("click", () => step(1));
+  apply();
+}
