@@ -54,6 +54,9 @@ mkdir -p "$TREE/scripts" "$TREE/web" "$TREE/takt-lang" "$TREE/book" "$TREE/targe
 cp -R "$ROOT/web/static" "$ROOT/web/tests" "$TREE/web/"
 cp "$ROOT/scripts/check-web.sh" "$ROOT/scripts/build-web.sh" "$ROOT/scripts/target-dir.sh" "$TREE/scripts/"
 cp "$ROOT/takt-lang/Cargo.toml" "$TREE/takt-lang/"
+# Версия ЯЗЫКА для описи сборки берётся из константы (0085), а не повторяется.
+mkdir -p "$TREE/takt-lang/src"
+cp "$ROOT/takt-lang/src/lib.rs" "$TREE/takt-lang/src/"
 # Тема документа: по ней проверяется реестр ролей подсветки (задача 06).
 # ⚠️ Копия дерева — не «весь проект»: файл, который тесты читают, а сторож не
 # кладёт, роняет B4 с чужой причиной (нашлось первым же прогоном 2026-09-04).
@@ -131,8 +134,19 @@ rm "$TREE/web/static/words.js"
 # стороны, — это документ и редактор, разошедшиеся глазами; сличить их может
 # только человек, и только положив две картинки рядом.
 cp "$TREE/web/static/app.css" "$WORK/app.css.bak"
-sed -i.bak 's|  --tok-comment: #6b7280;|  --tok-comment: #6b7280;\n  --tok-macro: #123456;|' \
-  "$TREE/web/static/app.css"
+# ⚠️ Роль дописывается ПОСЛЕ строки с любым значением: мутация, привязанная к
+# конкретному цвету, перестаёт мутировать при первой же правке палитры — и
+# сторож начинает докладывать об успехе, ничего не проверив (нашлось правкой
+# палитры 2026-09-04).
+python3 - "$TREE/web/static/app.css" <<'PYEOF'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
+at = next(i for i, l in enumerate(lines) if l.strip().startswith("--tok-comment:"))
+lines.insert(at + 1, "  --tok-macro: #123456;\n")
+p.write_text("".join(lines), encoding="utf-8")
+PYEOF
 if out="$(run_gate)"; then
   echo "  ПРОВАЛ: B6 роль вне темы документа не поймана"
   exit 1

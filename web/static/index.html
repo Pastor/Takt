@@ -23,6 +23,10 @@
   <span class="spacer"></span>
   <button id="format" type="button" data-i18n="bar.format">Формат</button>
   <button id="share" type="button" data-i18n="bar.share">Поделиться</button>
+  <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
+       Молча не перезагружаемся никогда — в редакторе несохранённая работа
+       (задача 0531-07b). -->
+  <button id="update" class="update" type="button" data-i18n="bar.update" hidden>доступна новая сборка — обновить</button>
   <!-- Переключатель языка. Самоназвания в списке НЕ переводятся: так читатель
        находит свой язык, не зная текущего (задача 0531-10a). -->
   <select id="lang" class="lang" data-i18n-attr="aria-label:bar.language"></select>
@@ -85,16 +89,12 @@
   <button class="tab" data-mode="trace" role="tab" aria-selected="false" type="button" data-i18n="modes.trace">Прогон</button>
 </nav>
 
-<script type="module">
-  import { main } from "./app.js";
-  import { t } from "./i18n.js";
-  main().catch((error) => {
-    // Отказ загрузки модуля обязан быть виден: пустая страница неотличима от
-    // работающей, пока автор не начнёт печатать.
-    document.getElementById("version").textContent = t("bar.moduleFailed", {
-      error: error?.message ?? error,
-    });
-  });
-</script>
+<!-- Ручка ширины оболочки: на широком экране читатель задаёт, какой колонкой
+     стоит страница (решение заказчика 2026-09-04). На узком её нет — там
+     область одна на экран. -->
+<div id="grip" class="grip" role="separator" aria-orientation="vertical"
+     data-i18n-attr="aria-label:bar.width" aria-label="Ширина страницы" tabindex="0"></div>
+
+<script type="module" src="boot.js"></script>
 </body>
 </html>

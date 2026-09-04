@@ -22,7 +22,10 @@
   .case > .pane-head { border-bottom: 1px solid var(--border); }
   .case-body { padding: var(--gap); display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
   .swatch { display: flex; align-items: center; gap: var(--gap-half); }
-  .chip { width: var(--h-control); height: var(--h-control); border-radius: var(--radius); border: 1px solid var(--border); }
+  .grip-case { position: relative; transform: translateZ(0); min-height: var(--h-control); }
+  .chip { display: inline-flex; align-items: center; justify-content: center;
+          width: var(--h-control); height: var(--h-control);
+          border-radius: var(--radius); border: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -39,12 +42,14 @@
       <!-- ⚠️ Набор ОБРАЗЦОВ сверяется с реестром книги в обе стороны (гейт D3):
            витрина, отставшая от книги, показывает не то оформление, которое
            описано, — и понять это можно только сличением двух текстов. -->
-      <span class="swatch" data-pair="--surface/--on-surface"><span class="chip" style="background: var(--surface)"></span>surface / on-surface</span>
-      <span class="swatch" data-pair="--surface-raised/--on-surface"><span class="chip" style="background: var(--surface-raised)"></span>raised / on-surface</span>
-      <span class="swatch" data-pair="--surface-raised/--on-surface-soft"><span class="chip" style="background: var(--surface-raised)"></span>raised / on-surface-soft</span>
-      <span class="swatch" data-pair="--surface-sunken/--on-surface"><span class="chip" style="background: var(--surface-sunken)"></span>sunken / on-surface</span>
-      <span class="swatch" data-pair="--surface-sunken/--on-surface-soft"><span class="chip" style="background: var(--surface-sunken)"></span>sunken / on-surface-soft</span>
-      <span class="swatch" data-pair="--surface-accent/--on-surface-accent"><span class="chip" style="background: var(--surface-accent)"></span>accent / on-surface-accent</span>
+      <span class="swatch" data-pair="--surface/--on-surface"><span class="chip" style="background: var(--surface); color: var(--on-surface)">Аа</span>surface</span>
+      <span class="swatch" data-pair="--surface-raised/--on-surface-raised"><span class="chip" style="background: var(--surface-raised); color: var(--on-surface-raised)">Аа</span>raised</span>
+      <span class="swatch" data-pair="--surface-sunken/--on-surface-sunken"><span class="chip" style="background: var(--surface-sunken); color: var(--on-surface-sunken)">Аа</span>sunken</span>
+      <span class="swatch" data-pair="--surface-field/--on-surface-field"><span class="chip" style="background: var(--surface-field); color: var(--on-surface-field)">Аа</span>field</span>
+      <span class="swatch" data-pair="--surface-accent/--on-surface-accent"><span class="chip" style="background: var(--surface-accent); color: var(--on-surface-accent)">Аа</span>accent</span>
+      <span class="swatch" data-pair="--surface-alarm/--on-surface-alarm"><span class="chip" style="background: var(--surface-alarm); color: var(--on-surface-alarm)">Аа</span>alarm</span>
+      <span class="swatch" data-pair="--surface-warn/--on-surface-warn"><span class="chip" style="background: var(--surface-warn); color: var(--on-surface-warn)">Аа</span>warn</span>
+      <span class="swatch" data-pair="--surface-yes/--on-surface-yes"><span class="chip" style="background: var(--surface-yes); color: var(--on-surface-yes)">Аа</span>yes</span>
     </div>
   </section>
 
@@ -59,11 +64,14 @@
     </div>
   </section>
 
-  <section class="case" data-control="select">
-    <div class="pane-head"><span>Выпадающий список</span></div>
+  <section class="case" data-control=".pick">
+    <div class="pane-head"><span>Выпадающий список — свой, поверх нативного</span></div>
     <div class="case-body">
-      <select><option>цель: c</option><option>цель: rust</option></select>
-      <select disabled><option>недоступный</option></select>
+      <label for="demo-target">Цель</label>
+      <select id="demo-target">
+        <option>c</option><option>c-hal</option><option>plantuml</option>
+        <option>st</option><option>rust</option><option>sv</option>
+      </select>
     </div>
   </section>
 
@@ -101,6 +109,14 @@
     </div>
   </section>
 
+  <section class="case" data-control=".grip">
+    <div class="pane-head"><span>Ручка ширины оболочки</span></div>
+    <!-- ⚠️ `.grip` объявлена `position: fixed` и на странице стоит у края окна.
+         `transform` на вместилище делает его containing block для fixed —
+         иначе ручка уехала бы из витрины к краю экрана. -->
+    <div class="case-body grip-case"><div class="grip" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Ширина страницы"></div></div>
+  </section>
+
   <section class="case" data-control=".notice">
     <div class="pane-head"><span>Строка-уведомление</span></div>
     <div class="notice">Сообщения инструментов пока только на русском</div>
@@ -117,5 +133,12 @@
   </section>
 
 </main>
+
+<script type="module">
+  // Витрина показывает ЖИВОЙ контрол, а не его картинку: список надстраивается
+  // тем же кодом, что на странице редактора.
+  import { enhance } from "../static/pick.js";
+  enhance(document.getElementById("demo-target"));
+</script>
 </body>
 </html>

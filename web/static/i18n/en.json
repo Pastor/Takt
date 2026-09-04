@@ -5,6 +5,8 @@
   "bar.format": "Format",
   "bar.share": "Share",
   "bar.language": "Interface language",
+  "bar.update": "a new build is available — reload",
+  "bar.width": "Page width",
   "bar.moduleFailed": "module not loaded: {error}",
 
   "source.title": "Model",

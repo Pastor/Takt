@@ -18,7 +18,10 @@
 // Запуск: node web/tests/web-tests.mjs <модуль.wasm>
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 
 import { encodeState, decodeState } from "../static/share.js";
@@ -27,6 +30,8 @@ import * as draft from "../static/draft.js";
 import { Bridge, spans } from "../static/bridge.js";
 import * as i18n from "../static/i18n.js";
 import { inlineScripts, literalsWithText, nodesWithoutKey } from "./strings.mjs";
+import { bundleOfUrl } from "../static/build.js";
+import * as shell from "../static/shell.js";
 
 const MODEL = `var level: u8 := 0;
 
@@ -290,7 +295,7 @@ test("язык: список выпуска равен составу катал
 test("язык: каждый ключ разметки есть в словаре, и мёртвых ключей нет", async () => {
   const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
   const scripts = await Promise.all(
-    ["app.js", "worker.js", "draft.js", "i18n.js", "editor.js", "share.js", "bridge.js"].map((name) =>
+    PAGE_SCRIPTS.map((name) =>
       readFile(new URL(`../static/${name}`, import.meta.url), "utf8")
     )
   );
@@ -321,11 +326,8 @@ test("язык: каждый ключ разметки есть в словар�
 test("язык: текста оболочки мимо словаря нет", async () => {
   // Строка, написанная в коде, не переводится никогда и не обнаруживается
   // ничем: страница выглядит рабочей, а подпись остаётся на чужом языке.
-  // Исключений ДВА, и оба названы:
-  //   `sample.js` — стартовая МОДЕЛЬ, то есть документ автора, а не оболочка;
-  //   `i18n.js` — самоназвания языков (они не переводятся ни на какой язык) и
-  //   отказ ЗАГРУЗКИ словаря: сообщить о нём словарём нечем — его нет.
-  const scripts = ["app.js", "worker.js", "draft.js", "editor.js", "share.js", "bridge.js"];
+  // Исключения названы в `TEXT_EXEMPT`.
+  const scripts = PAGE_SCRIPTS.filter((name) => !TEXT_EXEMPT.includes(name));
   for (const name of scripts) {
     const source = await readFile(new URL(`../static/${name}`, import.meta.url), "utf8");
     const found = literalsWithText(source);
@@ -374,6 +376,124 @@ test("язык: порядок выбора — сохранённый, брау
   assert.equal(i18n.pick(null, ["de-DE"]), i18n.BASE, "неизвестный язык — база");
   assert.equal(i18n.pick("de", ["en"]), "en", "сохранённый язык без словаря не берётся");
   assert.equal(i18n.pick(null, []), i18n.BASE);
+});
+
+/**
+ * Модули страницы. Список ЯВНЫЙ: обход каталога подхватил бы и то, чего в
+ * `index.html` нет, а забытый модуль остался бы без обеих проверок молча.
+ */
+const PAGE_SCRIPTS = [
+  "app.js", "boot.js", "bridge.js", "build.js", "draft.js", "editor.js",
+  "i18n.js", "pick.js", "sample.js", "share.js", "shell.js", "worker.js",
+];
+
+/**
+ * Модули, которым русский текст в литералах разрешён, и почему:
+ *   `sample.js` — стартовая МОДЕЛЬ, документ автора, а не оболочка;
+ *   `i18n.js` — самоназвания языков (они не переводятся ни на какой язык) и
+ *   отказ ЗАГРУЗКИ словаря: сообщить о нём словарём нечем — его нет.
+ */
+const TEXT_EXEMPT = ["sample.js", "i18n.js"];
+
+/** Путь к собранной статике; проверки сборки без него пропускаются. */
+const DIST = process.argv[3] ?? process.env.TAKT_WEB_DIST ?? null;
+
+test("сборка: разметка ссылается только в каталог бандла", { skip: !DIST }, async () => {
+  // «Содержимое задаёт адрес, адрес задаёт срок»: помеченное отпечатком живёт
+  // год и `immutable`. Ссылка мимо бандла — файл, который кеш обязан считать
+  // вечным, не будучи вечным, то есть молчаливая порча у всех, кто кешировал.
+  const html = await readFile(join(DIST, "index.html"), "utf8");
+  const links = [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(links.length > 0, "в разметке нет ссылок вовсе");
+  for (const link of links) {
+    if (/^(https?:|data:|#)/.test(link)) continue;
+    assert.match(link, /^b\/[0-9a-f]{6,}\//, `ссылка мимо каталога бандла: ${link}`);
+  }
+});
+
+test("сборка: идентификатор бандла один — в адресе и в описи", { skip: !DIST }, async () => {
+  // Носитель отпечатка ОДИН: страница читает свой из собственного адреса
+  // (`import.meta.url`), а выложенный — из `version.json`. Разъедься они —
+  // страница вечно звала бы обновиться либо не звала бы никогда.
+  const version = JSON.parse(await readFile(join(DIST, "version.json"), "utf8"));
+  const dirs = await readdir(join(DIST, "b"));
+  assert.deepEqual(dirs, [version.bundle], "каталог бандла не равен описи");
+  const html = await readFile(join(DIST, "index.html"), "utf8");
+  assert.ok(html.includes(`b/${version.bundle}/`), "разметка ведёт в другой бандл");
+  // Тот же разбор, которым страница узнаёт свой бандл.
+  assert.equal(bundleOfUrl(`http://x/b/${version.bundle}/app.js`), version.bundle);
+  assert.equal(bundleOfUrl("http://x/app.js"), null, "несобранная страница бандла не имеет");
+});
+
+test("сборка: опись модуля несёт его контрольную сумму", { skip: !DIST }, async () => {
+  // Адрес `wasm/<версия>/` обещает НЕИЗМЕННОСТЬ, и выложить под ним другой
+  // файл — порча у каждого, кто уже кешировал. Отказ выкладки на подмене
+  // (задача 07c) стоит на этой сумме, и посчитана она обязана быть верно.
+  const version = JSON.parse(await readFile(join(DIST, "version.json"), "utf8"));
+  const dir = join(DIST, "wasm", version.takt_lang);
+  const manifest = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8"));
+  const bytes = await readFile(join(dir, "takt.wasm"));
+  assert.equal(manifest.sha256, createHash("sha256").update(bytes).digest("hex"));
+  assert.equal(manifest.size, bytes.length);
+  assert.equal(manifest.takt_lang, version.takt_lang);
+  const index = JSON.parse(await readFile(join(DIST, "wasm", "index.json"), "utf8"));
+  assert.equal(index.latest, version.takt_lang);
+  assert.ok(index.versions.includes(version.takt_lang));
+});
+
+test("сборка: текстовые файлы предсжаты", { skip: !DIST }, async () => {
+  // Стенд ничего не считает на лету: модуль 3,3 МБ, и сжимать его каждому
+  // первому заходу — лишняя работа. ⚠️ Описи `no-cache` предсжатию НЕ
+  // подлежат: их читают ради свежести, а не ради объёма.
+  const version = JSON.parse(await readFile(join(DIST, "version.json"), "utf8"));
+  const must = [
+    join(DIST, "index.html"),
+    join(DIST, "b", version.bundle, "app.css"),
+    join(DIST, "b", version.bundle, "app.js"),
+    join(DIST, "wasm", version.takt_lang, "takt.wasm"),
+  ];
+  for (const file of must) {
+    assert.ok(existsSync(`${file}.gz`), `нет предсжатого: ${file}.gz`);
+  }
+  assert.ok(!existsSync(join(DIST, "version.json.gz")), "опись сборки предсжата зря");
+  assert.ok(!existsSync(join(DIST, "wasm", "index.json.gz")), "опись версий предсжата зря");
+});
+
+test("черновик: отложенную запись можно сделать немедленно", () => {
+  // Перед перезагрузкой на новую сборку черновик обязан лечь на диск: запись,
+  // отложенная на 400 мс, до перезагрузки не доживёт, и автор потеряет
+  // последние набранные строки.
+  let written = null;
+  const save = draft.debounce((value) => (written = value), 10_000);
+  save("первое");
+  save("второе");
+  assert.equal(written, null, "запись отложена");
+  save.now();
+  assert.equal(written, "второе", "записано последнее, а не первое");
+  save.now();
+  assert.equal(written, "второе", "повторный вызов ничего не пишет");
+});
+
+test("оболочка: ширина не выходит за окно и за наименьшую", () => {
+  // Наибольшая ширина — размер окна (решение заказчика 2026-09-04): шире
+  // монитора оболочки не бывает. Наименьшая — 640: уже неё две колонки кода
+  // не имеют смысла.
+  assert.equal(shell.clamp(2000, 1440), 1440, "шире окна оболочки не бывает");
+  assert.equal(shell.clamp(100, 1440), shell.MIN_WIDTH, "уже предела не сужается");
+  assert.equal(shell.clamp(900, 1440), 900, "внутри пределов — как просили");
+  // ⚠️ Окно уже наименьшей ширины: предел обязан победить окно, иначе
+  // оболочка схлопнется в ничто на узком мониторе.
+  assert.equal(shell.clamp(700, 400), shell.MIN_WIDTH);
+  assert.equal(shell.clamp(300, 400), shell.MIN_WIDTH);
+});
+
+test("оболочка: испорченная запись ширины не роняет страницу", () => {
+  const bad = { getItem: () => "не число" };
+  assert.equal(shell.stored(bad), null);
+  assert.equal(shell.stored({ getItem: () => null }), null);
+  assert.equal(shell.stored({ getItem: () => "0" }), null, "нулевая ширина — не ширина");
+  assert.equal(shell.stored({ getItem: () => "900" }), 900);
+  assert.equal(shell.stored({ getItem: () => { throw new Error("нет доступа"); } }), null);
 });
 
 test("адаптив: точки перелома перечислены в одном месте", async () => {
