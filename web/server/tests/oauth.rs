@@ -608,3 +608,122 @@ async fn the_fake_provider_catches_what_a_platform_would() {
         .expect("тело");
     assert!(answer.contains("invalid_client"), "{answer}");
 }
+
+#[tokio::test]
+async fn the_matrix_of_linking_and_unlinking_holds() {
+    let Some((stand, _fake)) = stand_with_fake("o_matrix").await else {
+        return skipped("матрица привязки");
+    };
+    // Человек с паролем: у него уже есть один способ войти.
+    let (_, body) = stand
+        .post(
+            "/api/register",
+            serde_json::json!({"login": "ivan", "password": "пароль-пароль"}),
+        )
+        .await;
+    let token = body["access_token"].as_str().expect("токен").to_string();
+
+    let mut wrong = Vec::new();
+
+    // Привязка свободной идентичности.
+    let (_, fragment) = walk_to_ticket(&stand, "yandex", Some(&token)).await;
+    if !fragment.contains("linked=1") {
+        wrong.push(format!("привязка свободной: {fragment}"));
+    }
+    // ⚠️ Повторная привязка ТОЙ ЖЕ площадки тем же человеком — идемпотентна:
+    // повторное нажатие кнопки не должно быть ошибкой.
+    let (_, fragment) = walk_to_ticket(&stand, "yandex", Some(&token)).await;
+    if !fragment.contains("linked=1") {
+        wrong.push(format!("повторная привязка своей: {fragment}"));
+    }
+    let (_, list) = stand.get_as("/api/oauth/identities", &token).await;
+    if list.as_array().expect("список").len() != 1 {
+        wrong.push(format!(
+            "связей стало {}",
+            list.as_array().expect("список").len()
+        ));
+    }
+
+    // Отвязка при живом пароле — можно.
+    let (status, _) = stand.delete_as("/api/me/identities/yandex", &token).await;
+    if status != StatusCode::NO_CONTENT {
+        wrong.push(format!("отвязка при пароле: {status}"));
+    }
+    // Отвязка того, чего нет, — тоже успех: предмет просьбы выполнен.
+    let (status, _) = stand.delete_as("/api/me/identities/yandex", &token).await;
+    if status != StatusCode::NO_CONTENT {
+        wrong.push(format!("отвязка отсутствующей: {status}"));
+    }
+
+    // Человек ТОЛЬКО с площадкой: пароля нет.
+    let (_, fragment) = walk_to_ticket(&stand, "vk", None).await;
+    let ticket = fragment
+        .split_once("#login=")
+        .expect("ticket")
+        .1
+        .to_string();
+    let (_, pair) = stand
+        .post(
+            "/api/oauth/complete",
+            serde_json::json!({"ticket": ticket, "login": "vera"}),
+        )
+        .await;
+    let hers = pair["access_token"].as_str().expect("токен").to_string();
+
+    // ⚠️ Отвязка ПОСЛЕДНЕГО способа войти отказывает: запись стала бы
+    // недостижимой, а восстановления по почте у нас нет вовсе.
+    let (status, body) = stand.delete_as("/api/me/identities/vk", &hers).await;
+    if status != StatusCode::CONFLICT || body["message"] != "last_login_method" {
+        wrong.push(format!("отвязка последнего: {status} {body}"));
+    }
+
+    // Задать пароль — и тогда отвязка разрешена.
+    let (status, _) = stand
+        .put_as(
+            "/api/me/password",
+            &hers,
+            serde_json::json!({"password": "новый-пароль"}),
+        )
+        .await;
+    if status != StatusCode::NO_CONTENT {
+        wrong.push(format!("задание пароля: {status}"));
+    }
+    // ⚠️ Пароль гасит живые сеансы (тот же носитель, что у сброса
+    // администратором), поэтому входим заново — уже паролем.
+    let (status, pair) = stand
+        .post(
+            "/api/token",
+            serde_json::json!({"grant_type": "password", "login": "vera", "password": "новый-пароль"}),
+        )
+        .await;
+    if status != StatusCode::OK {
+        wrong.push(format!("вход паролем после его задания: {status} {pair}"));
+    }
+    let hers = pair["access_token"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    let (status, _) = stand.delete_as("/api/me/identities/vk", &hers).await;
+    if status != StatusCode::NO_CONTENT {
+        wrong.push(format!("отвязка после пароля: {status}"));
+    }
+
+    // Задать пароль там, где он уже есть, — отказ: смена требует старого.
+    let (status, body) = stand
+        .put_as(
+            "/api/me/password",
+            &hers,
+            serde_json::json!({"password": "ещё-один-пароль"}),
+        )
+        .await;
+    if status != StatusCode::CONFLICT || body["message"] != "password_already_set" {
+        wrong.push(format!("повторное задание пароля: {status} {body}"));
+    }
+
+    assert!(
+        wrong.is_empty(),
+        "матрица разошлась:\n  {}",
+        wrong.join("\n  ")
+    );
+    stand.drop_schema().await;
+}
