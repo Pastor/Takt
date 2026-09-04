@@ -1495,7 +1495,7 @@ dependencies = [
 
 [[package]]
 name = "takt-lang"
-version = "0.57.0"
+version = "0.58.0"
 dependencies = [
  "criterion",
  "itertools 0.15.0",
@@ -1535,7 +1535,7 @@ dependencies = [
 
 [[package]]
 name = "takt-wasm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",

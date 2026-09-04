@@ -37,16 +37,27 @@
   --warn: var(--raw-warn);
   --yes: var(--raw-yes);
 
-  /* Роли подсветки кода. Виды токенов приходят от модуля (`takt_tokens`);
-   * страница лишь назначает им цвет. ⚠️ Задача 0531-06 обязана сверить эти
-   * роли с темой документа (`book/takt.tmTheme`), иначе код в PDF и в браузере
-   * разойдётся глазами. */
+  /* Роли подсветки кода. Виды токенов приходят от модуля — и у исходника на
+   * Takt (`takt_tokens`), и у вывода цели (`takt_highlight`, задача 0531-06);
+   * страница лишь назначает им цвет.
+   *
+   * РЕЕСТР РОЛЕЙ — тема документа `book/takt.tmTheme` (замер задачи 06):
+   * блоки кода в PDF и вкладка цели в браузере обязаны красить одни и те же
+   * виды токенов, иначе документ и редактор разойдутся глазами (класс 0298).
+   * Сверку держит тест «роли кода ↔ takt.tmTheme».
+   *
+   * ⚠️ Реестр ролей — да, источник ЦВЕТОВ — нет: тема одна и светлая (палитра
+   * tango, белый фон), а у страницы две. Значения ниже свои.
+   * ⚠️ Роли `variable` в теме нет намеренно: там это цвет текста по умолчанию,
+   * и здесь он тоже взят у чернил страницы. */
   --tok-keyword: #7a3ea3;
   --tok-type: #1f5f8f;
   --tok-number: #8a3d00;
+  --tok-constant: #8a2f5c;
   --tok-string: #1f6f4a;
   --tok-comment: #6b7280;
   --tok-function: #1f5f8f;
+  --tok-operator: var(--on-surface-soft);
   --tok-variable: var(--on-surface);
 
   /* Шкалы: высоты, скругления, отступы, плотность отклика. */
@@ -79,6 +90,7 @@
     --tok-keyword: #c58af9;
     --tok-type: #7cb7e8;
     --tok-number: #e0a06a;
+    --tok-constant: #e79bc4;
     --tok-string: #86d6a4;
     --tok-comment: #8b95a1;
     --tok-function: #7cb7e8;
@@ -223,8 +235,14 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 .tok-comment { color: var(--tok-comment); font-style: italic; }
 .tok-function { color: var(--tok-function); }
 .tok-variable { color: var(--tok-variable); }
-.tok-enumMember { color: var(--tok-number); }
-.tok-operator { color: var(--on-surface-soft); }
+/* Вариант перечисления и именованная константа целевого языка (`TRUE`, `NULL`)
+ * — одна роль: тема документа зовёт её `constant.language`. */
+.tok-enumMember { color: var(--tok-constant); }
+.tok-operator { color: var(--tok-operator); }
+/* Состояния и модели — роль `class` легенды LSP; тема документа красит их как
+ * тип (`entity.name.type`). Правила не было вовсе, и имена состояний в
+ * редакторе оставались без цвета. */
+.tok-class { color: var(--tok-type); }
 
 /* ── Списки: диагностики и трасса ───────────────────────────────────────── */
 .list {
@@ -294,6 +312,14 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   border-bottom: 1px solid var(--border);
 }
 
+/* Приписка у имени файла: язык, по правилам которого он покрашен, либо
+ * причина, по которой цвета нет. Молчаливо чёрный вывод читается как дефект
+ * вёрстки, а не как названная граница. */
+.file-note {
+  float: right;
+  font-style: italic;
+}
+
 .file-text {
   margin: 0;
   padding: var(--gap);
@@ -302,6 +328,10 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   white-space: pre;
   overflow-x: auto;
 }
+
+/* Строки вывода цели раскладывает тот же `paintCode`, что строки редактора, —
+ * значит и высота строки у них общая. */
+.file-text .line { min-height: 1.5em; }
 
 .scenario {
   height: 6.5em;

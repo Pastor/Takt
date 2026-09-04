@@ -7,7 +7,8 @@
 #   B2 — скрипт страницы не разбирается (сломанный синтаксис);
 #   B3 — в `web/` появился список ключевых слов Takt;
 #   B4 — согласованное дерево принимается (иначе гейт красен всегда);
-#   B5 — без `node` мягкий пропуск, под `PRECHECK_STRICT=1` — ошибка.
+#   B5 — без `node` мягкий пропуск, под `PRECHECK_STRICT=1` — ошибка;
+#   B6 — роли подсветки кода разошлись с темой документа `book/takt.tmTheme`.
 #
 # ⚠️ Мутации ставятся на КОПИИ дерева (`WEB_ROOT`), рабочие файлы не трогаются:
 # сторож, который правит проект, однажды оставит правку после падения.
@@ -47,10 +48,14 @@ trap 'rm -rf "$WORK"' EXIT
 
 # Копия дерева: только то, что гейту нужно.
 TREE="$WORK/tree"
-mkdir -p "$TREE/scripts" "$TREE/web" "$TREE/takt-lang" "$TREE/target/precheck/wasm32-unknown-unknown/$PROFILE"
+mkdir -p "$TREE/scripts" "$TREE/web" "$TREE/takt-lang" "$TREE/book" "$TREE/target/precheck/wasm32-unknown-unknown/$PROFILE"
 cp -R "$ROOT/web/static" "$ROOT/web/tests" "$TREE/web/"
 cp "$ROOT/scripts/check-web.sh" "$ROOT/scripts/build-web.sh" "$ROOT/scripts/target-dir.sh" "$TREE/scripts/"
 cp "$ROOT/takt-lang/Cargo.toml" "$TREE/takt-lang/"
+# Тема документа: по ней проверяется реестр ролей подсветки (задача 06).
+# ⚠️ Копия дерева — не «весь проект»: файл, который тесты читают, а сторож не
+# кладёт, роняет B4 с чужой причиной (нашлось первым же прогоном 2026-09-04).
+cp "$ROOT/book/takt.tmTheme" "$TREE/book/"
 cp "$WASM" "$TREE/target/precheck/wasm32-unknown-unknown/$PROFILE/"
 
 run_gate() {  # запускает гейт на копии дерева
@@ -118,6 +123,27 @@ else
 fi
 rm "$TREE/web/static/words.js"
 
+# ── B6: роли подсветки разошлись с темой документа ───────────────────────────
+# Реестр ролей — `book/takt.tmTheme` (замер задачи 06): блоки кода в PDF и
+# вкладка цели красят одни и те же виды токенов. Роль, заведённая только с одной
+# стороны, — это документ и редактор, разошедшиеся глазами; сличить их может
+# только человек, и только положив две картинки рядом.
+cp "$TREE/web/static/app.css" "$WORK/app.css.bak"
+sed -i.bak 's|  --tok-comment: #6b7280;|  --tok-comment: #6b7280;\n  --tok-macro: #123456;|' \
+  "$TREE/web/static/app.css"
+if out="$(run_gate)"; then
+  echo "  ПРОВАЛ: B6 роль вне темы документа не поймана"
+  exit 1
+fi
+if grep -q "роли кода" <<< "$out"; then
+  echo "  OK: B6 роль вне темы документа ловится"
+else
+  echo "  ПРОВАЛ: B6 отказ не про роли:"
+  echo "$out" | sed 's/^/    /'
+  exit 1
+fi
+cp "$WORK/app.css.bak" "$TREE/web/static/app.css"
+
 # ── B5: политика внешнего инструмента ────────────────────────────────────────
 if out="$(TAKT_NODE="$WORK/нет-такого-node" bash "$ROOT/scripts/check-web.sh" 2>&1)"; then
   if grep -q "пропуск" <<< "$out"; then
@@ -138,4 +164,4 @@ if out="$(PRECHECK_STRICT=1 TAKT_NODE="$WORK/нет-такого-node" bash "$RO
 fi
 echo "  OK: B5 под PRECHECK_STRICT=1 отсутствие node — ошибка"
 
-echo "  Сторож гейта веб-части: все проверки пройдены (B1…B5)."
+echo "  Сторож гейта веб-части: все проверки пройдены (B1…B6)."

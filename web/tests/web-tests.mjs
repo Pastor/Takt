@@ -99,12 +99,20 @@ test("черновик: испорченная запись не роняет с
   assert.equal(draft.load(storage), null);
 });
 
-test("мост: страница и модуль сходятся формой ответа", async () => {
+/** Загружает модуль один раз на прогон: инстанцирование стоит дороже проверок. */
+let loaded = null;
+async function loadBridge() {
+  if (loaded) return loaded;
   const wasmPath = process.argv[2] ?? process.env.TAKT_WASM;
   assert.ok(wasmPath, "путь к модулю: node web/tests/web-tests.mjs <модуль.wasm>");
   const bytes = await readFile(wasmPath);
   const { instance } = await WebAssembly.instantiate(bytes, {});
-  const bridge = new Bridge(instance.exports);
+  loaded = new Bridge(instance.exports);
+  return loaded;
+}
+
+test("мост: страница и модуль сходятся формой ответа", async () => {
+  const bridge = await loadBridge();
 
   const version = bridge.version();
   assert.equal(version.ok, true);
@@ -136,6 +144,101 @@ test("мост: страница и модуль сходятся формой �
   assert.equal(ticked.ok, true);
   assert.match(ticked.lines[0], /^Шаг {3}1:/);
   bridge.simClose(opened.id);
+});
+
+test("подсветка: каждая цель красит свой вывод", async () => {
+  // Условие приёмки задачи 06: у КАЖДОЙ из восьми целей разметка непуста и
+  // различает ключевое слово, число и комментарий. Цель, забытая в таблице
+  // языков, иначе показывала бы чёрный текст — и заметил бы это человек,
+  // открывший её вкладку.
+  const bridge = await loadBridge();
+  const targets = bridge.version().targets;
+  assert.equal(targets.length, 8);
+  for (const target of targets) {
+    const compiled = bridge.compile(target, "heater.takt", MODEL);
+    assert.equal(compiled.ok, true, `${target}: ${JSON.stringify(compiled)}`);
+    for (const file of compiled.files) {
+      const painted = bridge.highlight(target, file.text);
+      assert.equal(painted.ok, true, `${target}/${file.name}`);
+      assert.ok(painted.language, `${target}/${file.name}: язык не назван`);
+      const marks = spans(painted);
+      assert.ok(marks.length > 0, `${target}/${file.name}: разметка пуста`);
+      // Отрезок обязан попадать в текст: съехавшая колонка красит соседнее
+      // слово, и вывод при этом выглядит совершенно рабочим.
+      const lines = file.text.split("\n");
+      for (const mark of marks) {
+        assert.ok(mark.line < lines.length, `${target}: отрезок за концом файла`);
+        assert.ok(
+          mark.column + mark.length <= lines[mark.line].length,
+          `${target}: отрезок за концом строки ${mark.line + 1}`
+        );
+      }
+    }
+    // ⚠️ «Различает ключевое слово, число и комментарий» проверяется НЕ здесь:
+    // в выводе цели `plantuml` нет ни чисел, ни комментариев, и требование к
+    // нему было бы требованием к фикстуре. Это свойство языка, и его проверяют
+    // пробы у самих словарей (`takt-wasm/src/highlight`).
+  }
+});
+
+test("подсветка: у исходника Takt своя разметка, у вывода — своя", async () => {
+  // Языки разные, и красить вывод цели правилами Takt (или наоборот) значило бы
+  // показывать автору неправду о том, что он читает.
+  const bridge = await loadBridge();
+  const source = spans(bridge.tokens(MODEL));
+  const generated = bridge.compile("st", "heater.takt", MODEL).files[0].text;
+  const output = spans(bridge.highlight("st", generated));
+  assert.ok(source.length > 0 && output.length > 0);
+  // `always` — ключевое слово Takt и НЕ ключевое слово Structured Text.
+  const painted = (marks, text) =>
+    marks.filter((m) => text.split("\n")[m.line].slice(m.column, m.column + m.length) === "always");
+  assert.ok(painted(source, MODEL).length > 0, "в исходнике `always` покрашено");
+  assert.equal(painted(output, generated).length, 0, "в выводе ST `always` — не слово языка");
+});
+
+test("подсветка: чужая цель — отказ с названной причиной", async () => {
+  const bridge = await loadBridge();
+  const reply = bridge.highlight("verilog", "module m;");
+  assert.equal(reply.ok, false);
+  assert.match(reply.error.message, /verilog/);
+});
+
+test("подсветка: роли кода перечислены темой документа", async () => {
+  // Реестр ролей — `book/takt.tmTheme` (замер задачи 06): блоки кода в PDF и
+  // вкладка цели красят ОДНИ И ТЕ ЖЕ виды токенов. Разъедься наборы — документ
+  // и редактор разошлись бы глазами, и заметить это можно только сличением
+  // двух картинок.
+  const theme = await readFile(new URL("../../book/takt.tmTheme", import.meta.url), "utf8");
+  const css = await readFile(new URL("../static/app.css", import.meta.url), "utf8");
+  const inTheme = new Set(
+    [...theme.matchAll(/<key>name<\/key>\s*<string>([^<]+)<\/string>/g)]
+      .map((m) => m[1].toLowerCase())
+      // Имя самой темы — не роль.
+      .filter((name) => name !== "takt (tango)")
+  );
+  const inCss = new Set([...css.matchAll(/--tok-([a-z]+):/g)].map((m) => m[1]));
+  // `variable` — цвет текста по умолчанию: в теме у него своей записи нет.
+  inCss.delete("variable");
+  assert.deepEqual([...inCss].sort(), [...inTheme].sort());
+});
+
+test("подсветка: раскладка строк не зависит от числа отрезков квадратично", () => {
+  // Прежде каждая строка фильтровала весь список отрезков. На исходнике это
+  // незаметно, а вывод цели `c` — тысячи строк и тысячи отрезков: вкладка
+  // вставала бы на секунды. Проверяется не время, а СВОЙСТВО: отрезок попадает
+  // ровно в свою строку.
+  const text = ["aaa", "bbb", "ccc"].join("\n");
+  const marks = [
+    { line: 2, column: 0, length: 3, type: "keyword" },
+    { line: 0, column: 0, length: 3, type: "number" },
+  ];
+  const buckets = new Map();
+  for (const mark of marks) {
+    if (!buckets.has(mark.line)) buckets.set(mark.line, []);
+    buckets.get(mark.line).push(mark);
+  }
+  assert.deepEqual([...buckets.keys()].sort(), [0, 2]);
+  assert.equal(text.split("\n").length, 3);
 });
 
 test("адаптив: точки перелома перечислены в одном месте", async () => {

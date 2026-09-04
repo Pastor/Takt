@@ -33,6 +33,7 @@
 
 pub mod compile;
 pub mod editor;
+pub mod highlight;
 pub mod reply;
 pub mod sim;
 
@@ -118,6 +119,15 @@ struct SourceRequest {
     source: String,
 }
 
+/// Запрос подсветки вывода цели.
+#[derive(Debug, Deserialize)]
+struct HighlightRequest {
+    /// Имя цели, как в `taktc compile -t`: язык вывода знает она.
+    target: String,
+    /// Текст порождённого файла.
+    text: String,
+}
+
 /// Запрос с позицией курсора (строка и колонка с нуля, как в LSP).
 #[derive(Debug, Deserialize)]
 struct PositionRequest {
@@ -145,6 +155,14 @@ pub extern "C" fn takt_diagnostics(len: u32) -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn takt_tokens(len: u32) -> u32 {
     call(len, |r: SourceRequest| editor::tokens(&r.source))
+}
+
+/// Подсветка вывода цели: те же пятёрки, что у [`takt_tokens`].
+#[unsafe(no_mangle)]
+pub extern "C" fn takt_highlight(len: u32) -> u32 {
+    call(len, |r: HighlightRequest| {
+        highlight::highlight(&r.target, &r.text)
+    })
 }
 
 /// Подсказка при наведении.

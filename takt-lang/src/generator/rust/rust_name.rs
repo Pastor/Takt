@@ -24,27 +24,8 @@
 //! 2026-07-16 подтвердила; отдельной задачи не заводится.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::keywords;
 use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
-
-/// Ключевые слова Rust, которые **спасаются** raw-идентификатором (`r#type`).
-///
-/// Включая зарезервированные на будущее (`become`, `yield`, …): они не являются
-/// ошибкой сегодня, но `r#` делает вывод устойчивым к смене редакции.
-const KEYWORDS: &[&str] = &[
-    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "do", "dyn",
-    "else", "enum", "extern", "false", "final", "fn", "for", "if", "impl", "in", "let", "loop",
-    "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return", "static",
-    "struct", "trait", "true", "try", "type", "typeof", "unsafe", "unsized", "use", "virtual",
-    "where", "while", "yield",
-];
-
-/// Ключевые слова, которые raw-идентификатором **не спасаются**.
-///
-/// Проверено пробой 2026-07-16: `r#Self` отвергается отдельным правилом языка
-/// («`Self` cannot be a raw identifier»); то же для `crate`, `self`, `super`.
-/// Регистр приводится **до** проверки, поэтому исходные `Self` и `self` дают
-/// одну и ту же диагностику — каждое в своём пространстве имён.
-const CANNOT_BE_RAW: &[&str] = &["Self", "crate", "self", "super"];
 
 /// Строит диагностику `RS-004` — имя непредставимо в Rust.
 fn rs004(original: &str, produced: &str, loc: Location) -> Diagnostic {
@@ -95,13 +76,13 @@ fn rs005(first: &str, second: &str, produced: &str, kind: &str, loc: Location) -
 /// (практически: исходное имя `Self` или `self`, оба дают `Self`).
 pub(crate) fn rust_type_name(raw: &str, loc: Location) -> Result<String, Diagnostic> {
     let name = normalize_camelcase_name(raw);
-    if CANNOT_BE_RAW.contains(&name.as_str()) {
+    if keywords::RUST_NOT_RAW.contains(&name.as_str()) {
         return Err(rs004(raw, &name, loc));
     }
     // Все ключевые слова Rust, кроме `Self`, записаны строчными, поэтому
     // CamelCase их и так снимает (`type` → `Type`). Проверка оставлена как
     // сторож на случай смены правил регистра в `normalize_camelcase_name`.
-    if KEYWORDS.contains(&name.as_str()) {
+    if keywords::RUST.contains(&name.as_str()) {
         return Ok(format!("r#{}", name));
     }
     Ok(name)
@@ -113,10 +94,10 @@ pub(crate) fn rust_type_name(raw: &str, loc: Location) -> Result<String, Diagnos
 /// [`RS-004`], если результат — `self`/`crate`/`super`.
 pub(crate) fn rust_value_name(raw: &str, loc: Location) -> Result<String, Diagnostic> {
     let name = normalize_lowercase_snakecase(raw.to_string());
-    if CANNOT_BE_RAW.contains(&name.as_str()) {
+    if keywords::RUST_NOT_RAW.contains(&name.as_str()) {
         return Err(rs004(raw, &name, loc));
     }
-    if KEYWORDS.contains(&name.as_str()) {
+    if keywords::RUST.contains(&name.as_str()) {
         return Ok(format!("r#{}", name));
     }
     Ok(name)

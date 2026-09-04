@@ -84,25 +84,53 @@ export class Editor {
   highlight(tokens, diagnostics) {
     const offset = caretOffset(this.root);
     const marks = spans(tokens ?? {});
-    const lines = this.text.split("\n");
     const problems = new Map();
     for (const d of diagnostics ?? []) {
       const line = d.range?.start_line ?? 0;
       if (!problems.has(line)) problems.set(line, d.severity ?? "error");
     }
 
-    const fragment = document.createDocumentFragment();
-    for (let i = 0; i < lines.length; i += 1) {
-      const lineNode = document.createElement("div");
-      lineNode.className = "line";
-      const severity = problems.get(i);
-      if (severity) lineNode.classList.add(`has-${severity}`);
-      paintLine(lineNode, lines[i], marks.filter((m) => m.line === i));
-      fragment.appendChild(lineNode);
-    }
-    this.root.replaceChildren(fragment);
+    this.root.replaceChildren(paintCode(this.text, marks, problems));
     setCaretOffset(this.root, offset);
   }
+}
+
+/**
+ * Красит текст отрезками и отдаёт готовые строки-узлы.
+ *
+ * Общая точка для ДВУХ мест: исходник на Takt красится отрезками `takt_tokens`,
+ * вывод цели — отрезками `takt_highlight` (фича 0531, задача 06). Формы
+ * отрезков совпадают, и второй раскладчик строк здесь был бы вторым носителем
+ * правил вёрстки кода.
+ *
+ * ⚠️ Отрезки раскладываются по строкам ОДНИМ проходом. Прежде каждая строка
+ * фильтровала весь список (`marks.filter`), то есть работа росла квадратично:
+ * на исходнике в 30 строк это незаметно, а на выводе цели `c` — тысячи строк и
+ * тысячи отрезков, и вкладка вставала бы на секунды.
+ *
+ * @param {string} text текст документа
+ * @param {{line: number, column: number, length: number, type: string}[]} marks отрезки
+ * @param {Map<number, string>} [problems] строки с диагностикой: номер → уровень
+ * @returns {DocumentFragment} узлы-строки
+ */
+export function paintCode(text, marks, problems) {
+  const lines = text.split("\n");
+  const byLine = new Map();
+  for (const mark of marks ?? []) {
+    if (!byLine.has(mark.line)) byLine.set(mark.line, []);
+    byLine.get(mark.line).push(mark);
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineNode = document.createElement("div");
+    lineNode.className = "line";
+    const severity = problems?.get(i);
+    if (severity) lineNode.classList.add(`has-${severity}`);
+    paintLine(lineNode, lines[i], byLine.get(i) ?? []);
+    fragment.appendChild(lineNode);
+  }
+  return fragment;
 }
 
 /** Раскладывает отрезки токенов по одной строке. */

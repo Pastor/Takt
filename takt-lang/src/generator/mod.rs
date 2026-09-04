@@ -4,6 +4,7 @@ mod call_order;
 mod chain_site;
 pub(crate) mod enum_compare;
 mod indent;
+pub mod keywords;
 pub(crate) mod local_stub;
 pub(crate) mod mixed_sign;
 mod plantuml;
