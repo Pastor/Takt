@@ -105,5 +105,22 @@
   "oauth.error.unavailable": "the platform does not answer — try later",
   "oauth.error.identityTaken": "this platform is already linked to another account",
 
+  "showcase.title": "Public projects",
+  "showcase.query": "Search public projects",
+  "showcase.find": "Search",
+  "showcase.row": "{name} — {owner}",
+  "showcase.nothing": "nothing found",
+  "archive.download": "Download archive",
+  "archive.upload": "Upload archive",
+  "archive.downloaded": "the archive is built and downloaded",
+  "archive.imported": "project “{name}” loaded from the archive",
+  "profile.title": "Ways to sign in",
+  "profile.newPassword": "Password, if there is none",
+  "profile.setPassword": "Set password",
+  "profile.passwordSet": "the password is set; sessions are closed — sign in again",
+  "profile.linkedRow": "{provider} — click to unlink",
+  "profile.noLinks": "no platforms linked",
+  "profile.unlinked": "the platform is unlinked",
+
   "tools.russianOnly": "Tool messages are still Russian only"
 }

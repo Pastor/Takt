@@ -66,6 +66,25 @@ export function attach(nodes, callbacks) {
   dom.save.addEventListener("click", () => save());
   dom.reread.addEventListener("click", () => resolveConflict("reread"));
   dom.overwrite.addEventListener("click", () => resolveConflict("overwrite"));
+  dom.download.addEventListener("click", () => download());
+  dom.upload.addEventListener("change", (event) => upload(event.target.files?.[0]));
+  dom.setpass.addEventListener("click", () => setPassword());
+  dom.showcase.addEventListener("click", () => toggleShowcase());
+  dom.findbtn.addEventListener("click", () => search());
+  dom.query.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") search();
+  });
+  dom.found.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-open]");
+    // ⚠️ Обычный переход, а не открытие «внутри»: у живой страницы проекта
+    // свой адрес, и он обязан оказаться в адресной строке — иначе им нельзя
+    // поделиться, а ради этого витрина и существует.
+    if (row) location.assign(`${api.apiRoot()}p/${row.dataset.open}`);
+  });
+  dom.links.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-unlink]");
+    if (row) unlinkProvider(row.dataset.unlink);
+  });
   dom.pickok.addEventListener("click", () => {
     const login = dom.picklogin.value.trim();
     if (!login) {
@@ -92,6 +111,20 @@ export function attach(nodes, callbacks) {
   });
   refresh();
   fillProviders();
+}
+
+/**
+ * Принимает проект, открытый по адресу `/p/<id>` (задача 09c).
+ *
+ * ⚠️ Нужно ради архива: читатель видит чужой открытый проект и вправе его
+ * скачать — текст всё равно уже у него в браузере. Уровень при этом остаётся
+ * читательским: сохранять такой проект нельзя, и кнопки сохранения не будет.
+ */
+export function adopt(project) {
+  state.project = { id: project.id, name: project.name };
+  state.file = null;
+  state.level = "view";
+  refresh();
 }
 
 /** Открыт ли файл проекта (а не безымянный буфер). */
@@ -228,11 +261,153 @@ function oauthError(key) {
   return t("oauth.error.failed");
 }
 
+/** Показывает или прячет витрину. */
+async function toggleShowcase() {
+  const show = dom.finder.hidden;
+  dom.finder.hidden = !show;
+  if (show) await search();
+}
+
+/** Ищет по витрине открытых проектов. */
+async function search() {
+  try {
+    const page = await api.showcase(dom.query.value.trim(), null);
+    dom.found.replaceChildren();
+    for (const item of page.items ?? []) {
+      const node = document.createElement("div");
+      node.className = "row";
+      node.dataset.open = item.id;
+      node.textContent = t("showcase.row", { name: item.name, owner: item.owner });
+      dom.found.appendChild(node);
+    }
+    if ((page.items ?? []).length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "row row-ok";
+      empty.textContent = t("showcase.nothing");
+      dom.found.appendChild(empty);
+    }
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/**
+ * Скачивает открытый проект архивом.
+ *
+ * ⚠️ Байты приходят запросом, а файл отдаётся временной ссылкой: у закрытого
+ * проекта архив требует токена, а обычная ссылка заголовков не несёт.
+ */
+async function download() {
+  if (!state.project) {
+    host.say(t("account.nothingToSave"), "warning");
+    return;
+  }
+  try {
+    const bytes = await api.archive(state.project.id, host.target());
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${state.project.name || "takt-project"}.zip`;
+    link.click();
+    // Ссылка живёт до конца загрузки: снятая сразу, она отменила бы её.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    host.say(t("archive.downloaded"), "ok");
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/** Загружает проект из архива. */
+async function upload(file) {
+  if (!file) return;
+  try {
+    const bytes = await file.arrayBuffer();
+    const created = await api.importArchive(bytes);
+    host.say(t("archive.imported", { name: created.name }), "ok");
+    await list();
+    await openProject(created.id);
+  } catch (error) {
+    fail(error);
+  } finally {
+    // Тот же файл выбирают дважды: без сброса второе «выбрать» молчит.
+    dom.upload.value = "";
+  }
+}
+
+/** Задаёт пароль записи, у которой его не было. */
+async function setPassword() {
+  const password = dom.newpass.value;
+  if (!password) {
+    host.say(t("account.needBoth"), "warning");
+    return;
+  }
+  try {
+    await api.setPassword(password);
+    dom.newpass.value = "";
+    // ⚠️ Пароль гасит живые сеансы: вход придётся повторить, и сказать об
+    // этом надо здесь, а не оставить человека гадать, почему всё отказывает.
+    host.say(t("profile.passwordSet"), "ok");
+    await api.signOut();
+    refresh();
+    fillProviders();
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/** Отвязывает площадку. */
+async function unlinkProvider(provider) {
+  try {
+    await api.oauthUnlink(provider);
+    host.say(t("profile.unlinked"), "ok");
+    await fillProfile();
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/** Наполняет раздел профиля: связанные площадки и «задать пароль». */
+async function fillProfile() {
+  if (!api.signed()) {
+    dom.profile.hidden = true;
+    return;
+  }
+  dom.profile.hidden = false;
+  try {
+    // ⚠️ «Задать пароль» предлагается только тому, у кого пароля НЕТ: иначе
+    // человек узнавал бы об отказе нажатием, а не видом страницы.
+    const me = await api.refreshMe();
+    const needs = me !== null && me.has_password === false;
+    dom.newpass.hidden = !needs;
+    dom.setpass.hidden = !needs;
+    const list = await api.oauthIdentities();
+    dom.links.replaceChildren();
+    for (const item of list) {
+      const node = document.createElement("div");
+      node.className = "row";
+      node.dataset.unlink = item.provider;
+      node.textContent = t("profile.linkedRow", { provider: item.provider });
+      dom.links.appendChild(node);
+    }
+    if (list.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "row row-ok";
+      empty.textContent = t("profile.noLinks");
+      dom.links.appendChild(empty);
+    }
+  } catch (error) {
+    fail(error);
+  }
+}
+
 /** Показывает или прячет панель. */
 function toggle(force) {
   const show = force ?? dom.panel.hidden;
   dom.panel.hidden = !show;
-  if (show && api.signed()) list();
+  if (show && api.signed()) {
+    list();
+    fillProfile();
+  }
 }
 
 /** Вход или регистрация: обе ручки отвечают одинаково. */
@@ -249,6 +424,7 @@ async function enter(how) {
     host.say(t("account.hello", { login: me.login }), "ok");
     refresh();
     await list();
+    await fillProfile();
   } catch (error) {
     fail(error);
   }
@@ -466,6 +642,7 @@ function refresh() {
   dom.signedin.hidden = me === null;
   dom.whoami.textContent = me ? me.login : "";
   dom.account.textContent = me ? me.login : t("account.enter");
+  dom.download.hidden = state.project === null;
   const writable = editing() && (state.level === "edit" || state.level === "owner");
   dom.save.hidden = !writable;
   dom.openfile.hidden = !editing();

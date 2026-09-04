@@ -1,0 +1,4 @@
+var level: u8 := 0;
+
+start Run {
+}

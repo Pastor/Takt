@@ -50,7 +50,20 @@ export function configure(options = {}) {
 
 /** Кто вошёл; `null` — никто. */
 export function who() {
-  return session ? { login: session.login, role: session.role } : null;
+  return session
+    ? { login: session.login, role: session.role, has_password: session.has_password ?? true }
+    : null;
+}
+
+/** Обновляет сведения о себе — после того, как они могли измениться. */
+export async function refreshMe() {
+  if (!session) return null;
+  const me = await call("me");
+  session.login = me.login;
+  session.role = me.role;
+  session.has_password = me.has_password ?? true;
+  remember(session);
+  return who();
 }
 
 /** Вошли ли мы. */
@@ -138,6 +151,67 @@ export function apiRoot() {
   return root;
 }
 
+/**
+ * Витрина открытых проектов: список и поиск.
+ *
+ * ⚠️ Токен не нужен: открытый проект открыт и для того, у кого учётной записи
+ * нет вовсе. Курсор приходит от сервера и уходит обратно как есть — своей
+ * постраничности у страницы нет.
+ */
+export async function showcase(query, cursor) {
+  const search = new URLSearchParams();
+  if (query) search.set("q", query);
+  if (cursor) search.set("cursor", cursor);
+  const tail = search.toString();
+  return await call(`public${tail ? `?${tail}` : ""}`, {}, false);
+}
+
+/**
+ * Забирает архив проекта.
+ *
+ * ⚠️ Не ссылкой, а запросом: у закрытого проекта архив требует токена, а
+ * обычная ссылка заголовков не несёт. Возвращаются БАЙТЫ — страница сама
+ * отдаёт их как файл.
+ */
+export async function archive(id, target) {
+  const search = target ? `?target=${encodeURIComponent(target)}` : "";
+  const headers = {};
+  if (session?.access) headers.authorization = `Bearer ${session.access}`;
+  const response = await get(`${root}api/projects/${encodeURIComponent(id)}/archive${search}`, {
+    method: "GET",
+    headers,
+  });
+  if (!response.ok) {
+    let body = null;
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+    throw failure(response.status, body);
+  }
+  return await response.arrayBuffer();
+}
+
+/** Загружает проект из архива. */
+export async function importArchive(bytes) {
+  const headers = { "content-type": "application/zip" };
+  if (session?.access) headers.authorization = `Bearer ${session.access}`;
+  const response = await get(`${root}api/projects/import`, {
+    method: "POST",
+    headers,
+    body: bytes,
+  });
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  if (!response.ok) throw failure(response.status, body);
+  return body;
+}
+
 /** Мои проекты и выданные мне, каждый со своим уровнем. */
 export async function projects() {
   return await call("projects");
@@ -187,6 +261,7 @@ async function enter(path, body) {
   const me = await call("me");
   session.login = me.login;
   session.role = me.role;
+  session.has_password = me.has_password ?? true;
   remember(session);
   return { login: session.login, role: session.role };
 }

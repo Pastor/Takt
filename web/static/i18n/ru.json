@@ -105,5 +105,22 @@
   "oauth.error.unavailable": "площадка не отвечает — попробуйте позже",
   "oauth.error.identityTaken": "эта площадка уже привязана к другой записи",
 
+  "showcase.title": "Открытые проекты",
+  "showcase.query": "Поиск по открытым проектам",
+  "showcase.find": "Найти",
+  "showcase.row": "{name} — {owner}",
+  "showcase.nothing": "ничего не найдено",
+  "archive.download": "Скачать архивом",
+  "archive.upload": "Загрузить архив",
+  "archive.downloaded": "архив собран и скачан",
+  "archive.imported": "проект «{name}» загружен из архива",
+  "profile.title": "Способы входа",
+  "profile.newPassword": "Пароль, если его нет",
+  "profile.setPassword": "Задать пароль",
+  "profile.passwordSet": "пароль задан; сеансы погашены — войдите заново",
+  "profile.linkedRow": "{provider} — нажмите, чтобы отвязать",
+  "profile.noLinks": "площадки не привязаны",
+  "profile.unlinked": "площадка отвязана",
+
   "tools.russianOnly": "Сообщения инструментов пока только на русском"
 }

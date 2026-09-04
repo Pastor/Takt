@@ -35,10 +35,12 @@
        значит — автор не отличит свою запись от чужой (задача 0531-09e). -->
   <span id="openfile" class="muted" hidden></span>
   <span class="spacer"></span>
+  <button id="showcase" type="button" data-i18n="showcase.title">Открытые проекты</button>
   <button id="account" type="button" data-i18n="account.enter">Войти</button>
   <button id="save" type="button" hidden data-i18n="account.save">Сохранить</button>
   <button id="format" type="button" data-i18n="bar.format">Формат</button>
   <button id="share" type="button" data-i18n="bar.share">Поделиться</button>
+  <button id="download" type="button" hidden data-i18n="archive.download">Скачать архивом</button>
   <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
        Молча не перезагружаемся никогда — в редакторе несохранённая работа
        (задача 0531-07b). -->
@@ -84,10 +86,42 @@
                data-i18n-attr="placeholder:account.newName" placeholder="Имя нового проекта">
         <button id="newproject" type="button" data-i18n="account.newProject">Новый проект</button>
       </div>
+      <div id="profile" class="controls" hidden>
+        <span data-i18n="profile.title">Способы входа</span>
+        <input id="newpass" type="password" autocomplete="new-password"
+               data-i18n-attr="placeholder:profile.newPassword" placeholder="Пароль, если его нет">
+        <button id="setpass" type="button" data-i18n="profile.setPassword">Задать пароль</button>
+      </div>
+      <!-- Связанные площадки: строка — это и есть кнопка отвязки. -->
+      <div id="links" class="list" data-i18n-attr="aria-label:profile.title"
+           aria-label="Способы входа"></div>
       <div id="projects" class="list" data-i18n-attr="aria-label:account.projects"
            aria-label="Мои проекты"></div>
       <div id="files" class="list" data-i18n-attr="aria-label:account.files"
            aria-label="Файлы проекта"></div>
+
+      <!-- Архив проекта: выгрузка запросом (у закрытого нужен токен, а ссылка
+           заголовков не несёт) и загрузка обычным выбором файла. -->
+      <!-- Загрузка архива ЗАВОДИТ проект, значит требует входа, — и живёт в
+           панели. Скачивание же — действие над открытым проектом, доступное
+           всякому, кто его видит: его место в шапке, рядом с «Поделиться»
+           (нашлось прогоном страницы — в панели читатель его не искал бы). -->
+      <div class="controls">
+        <label for="upload" data-i18n="archive.upload">Загрузить архив</label>
+        <input id="upload" type="file" accept=".zip,application/zip">
+      </div>
+    </div>
+
+    <!-- Витрина открытых проектов: она и есть обещанное «выложить на всеобщее
+         обозрение». Токена не требует. -->
+    <div id="finder" class="account" hidden>
+      <div class="controls">
+        <input id="query" type="text" spellcheck="false"
+               data-i18n-attr="placeholder:showcase.query" placeholder="Поиск по открытым проектам">
+        <button id="findbtn" type="button" data-i18n="showcase.find">Найти</button>
+      </div>
+      <div id="found" class="list" data-i18n-attr="aria-label:showcase.title"
+           aria-label="Открытые проекты"></div>
     </div>
 
     <!-- Конфликт: обе стороны названы числами и датой, выбор делает автор.

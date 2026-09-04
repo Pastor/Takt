@@ -194,6 +194,12 @@ struct MeResponse {
     id: String,
     login: String,
     role: Role,
+    /// Есть ли у записи пароль (задача 09i).
+    ///
+    /// ⚠️ Нужно СТРАНИЦЕ: без этого она предлагала бы «задать пароль» тому, у
+    /// кого он есть, и узнавал бы человек об этом отказом. Само значение
+    /// секретом не является — оно и так видно попыткой входа.
+    has_password: bool,
 }
 
 async fn register(
@@ -267,10 +273,19 @@ async fn revoke(
 
 async fn me(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Response, ApiError> {
     let user = current_user(&state, &headers).await?;
+    let client = state.pool.get().await?;
+    let has_password: bool = client
+        .query_one(
+            "SELECT pass_hash IS NOT NULL FROM users WHERE id = $1",
+            &[&user.id],
+        )
+        .await?
+        .get(0);
     Ok(Json(MeResponse {
         id: user.id,
         login: user.login,
         role: user.role,
+        has_password,
     })
     .into_response())
 }

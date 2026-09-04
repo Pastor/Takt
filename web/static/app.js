@@ -96,6 +96,9 @@ export async function main() {
     // ⚠️ Черновик пишется НЕМЕДЛЕННО перед уходом на площадку: отложенная
     // запись до перехода не доживёт.
     keep: () => saveDraft.now(),
+    // Цель выгрузки — та, что открыта во вкладке вывода: архив «с генерацией»
+    // берёт выбранную цель (решение заказчика).
+    target: () => state.target,
     say,
   });
   // Возврат с площадки разбирается ДО восстановления состояния: во фрагменте
@@ -130,6 +133,8 @@ async function openProject() {
       owner: opened.owner,
     });
     dom.project.hidden = false;
+    // Читатель вправе скачать открытый проект архивом: текст всё равно у него.
+    account.adopt({ id, name: opened.name });
     return { source: opened.source, scenario: opened.scenario };
   } catch (error) {
     // Отказ виден строкой, а не пустой страницей: удалённый или закрытый
@@ -262,7 +267,9 @@ function cache() {
     "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",
-    "oauth", "pick", "picklogin", "pickok",
+    "oauth", "pick", "picklogin", "pickok", "profile", "links", "newpass",
+    "setpass", "download", "upload", "showcase", "finder", "query", "findbtn",
+    "found",
   ]) {
     dom[id] = document.getElementById(id);
   }
