@@ -33,5 +33,10 @@ components = ["rustfmt", "clippy", "rust-std"]
 # Запись живёт ЗДЕСЬ, а не своим `rust-toolchain.toml` расширения: второй файл
 # назвал бы версию второй раз, и два источника одного знания разъехались бы
 # при первом же подъёме (класс 0084/0193/0195).
-targets = ["wasm32-wasip1", "wasm32-wasip2"]
+#
+# `wasm32-unknown-unknown` — таргет крейта `takt-wasm` (фича 0531): компилятор,
+# слой LSP и эталон исполняются в браузере одним модулем. Это НЕ таргет Zed:
+# у расширения свой ABI (`wasip1`/`wasip2`), и модуль браузера в нём не
+# собирается — здесь нужен «голый» wasm без WASI.
+targets = ["wasm32-wasip1", "wasm32-wasip2", "wasm32-unknown-unknown"]
 profile = "minimal"
