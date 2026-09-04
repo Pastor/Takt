@@ -269,7 +269,7 @@ function cache() {
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",
     "oauth", "pick", "picklogin", "pickok", "profile", "links", "newpass",
     "setpass", "download", "upload", "showcase", "finder", "query", "findbtn",
-    "found",
+    "found", "more",
   ]) {
     dom[id] = document.getElementById(id);
   }

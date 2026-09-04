@@ -454,6 +454,36 @@ impl Stand {
             .expect("обход")
     }
 
+    /// Гоняет подметание осиротевших каталогов; возвращает, сколько убрано.
+    ///
+    /// ⚠️ Выдержка задаётся ПАРАМЕТРОМ (как срок хранения у `sweep`): ждать
+    /// час, чтобы увидеть работу обхода, значило бы мерить терпение прогона.
+    /// Оба значения — и «час», и «немедленно» — проверяются на одном и том же
+    /// состоянии диска.
+    pub async fn sweep_orphans(&self, grace_secs: i64) -> usize {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        takt_web_server::retention::sweep_orphans(&client, &self.store, grace_secs)
+            .await
+            .expect("подметание")
+    }
+
+    /// Убирает строку проекта мимо ручки — так, как это делает прямой
+    /// `DELETE` в базе либо обрыв между двумя шагами удаления.
+    pub async fn forget_project(&self, id: &str) {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        client
+            .execute("DELETE FROM projects WHERE id = $1", &[&id])
+            .await
+            .expect("строка проекта");
+    }
+
+    /// Есть ли на диске каталог владельца.
+    pub fn owner_dir_exists(&self, owner: &str) -> bool {
+        self.store.root().join(owner).is_dir()
+    }
+
     /// Свёрнут ли проект на диске.
     pub async fn is_packed(&self, id: &str) -> bool {
         let owner = self.owner_of(id).await;

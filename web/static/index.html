@@ -122,6 +122,12 @@
       </div>
       <div id="found" class="list" data-i18n-attr="aria-label:showcase.title"
            aria-label="Открытые проекты"></div>
+      <!-- «Ещё» — постраничность витрины: курсор даёт сервер, страница только
+           просит им следующую. Кнопки нет, пока сервер не сказал, что
+           продолжение есть. -->
+      <div class="controls">
+        <button id="more" type="button" data-i18n="showcase.more" hidden>Ещё</button>
+      </div>
     </div>
 
     <!-- Конфликт: обе стороны названы числами и датой, выбор делает автор.

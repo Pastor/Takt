@@ -34,6 +34,7 @@ import { bundleOfUrl } from "../static/build.js";
 import * as shell from "../static/shell.js";
 import * as project from "../static/project.js";
 import * as api from "../static/api.js";
+import { feed } from "../static/showcase.js";
 
 const MODEL = `var level: u8 := 0;
 
@@ -391,7 +392,7 @@ test("язык: порядок выбора — сохранённый, брау
 const PAGE_SCRIPTS = [
   "account.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js",
   "draft.js", "editor.js", "i18n.js", "pick.js", "project.js", "sample.js",
-  "share.js", "shell.js", "worker.js",
+  "share.js", "shell.js", "showcase.js", "worker.js",
 ];
 
 /**
@@ -878,6 +879,56 @@ test("витрина и архив: страница просит у серве�
   const created = await api.importArchive(new Uint8Array([80, 75]).buffer);
   assert.equal(created.name, "Копия");
   assert.ok(asked[3].startsWith("POST /api/projects/import"), asked[3]);
+});
+
+test("витрина: следующая страница просится курсором сервера и тем же словом", async () => {
+  // ⚠️ Предмет — ЛЕНТА, а не разметка: где остановиться, знает `showcase.js`,
+  // и это правило проверяется без браузера.
+  const asked = [];
+  const pages = {
+    null: { items: [{ id: "p1" }, { id: "p2" }], next_cursor: "c1" },
+    c1: { items: [{ id: "p3" }], next_cursor: null },
+  };
+  const ask = async (query, cursor) => {
+    asked.push([query, cursor]);
+    return pages[cursor ?? "null"];
+  };
+  const lane = feed(ask);
+
+  assert.equal(lane.hasMore(), false, "до первого запроса продолжения нет");
+  const first = await lane.first("термореле");
+  assert.deepEqual(first.map((item) => item.id), ["p1", "p2"]);
+  assert.ok(lane.hasMore(), "сервер дал курсор, а лента о нём забыла");
+
+  const second = await lane.next();
+  assert.deepEqual(second.map((item) => item.id), ["p3"]);
+  // ⚠️ Слово поиска едет со СЛЕДУЮЩЕЙ страницей: курсор задаёт место, а не
+  // отбор, и без слова читатель получил бы под своим поиском всю витрину.
+  assert.deepEqual(asked[1], ["термореле", "c1"], `спрошено ${JSON.stringify(asked[1])}`);
+  assert.equal(lane.hasMore(), false, "страница без курсора — последняя");
+
+  // За последней страницей не ходят: курсора нет, и запрос был бы впустую.
+  assert.deepEqual(await lane.next(), []);
+  assert.equal(asked.length, 2, `лишний запрос: ${JSON.stringify(asked)}`);
+});
+
+test("витрина: новый поиск начинается с первой страницы", async () => {
+  // ⚠️ Унесённый от прежнего поиска курсор отдал бы читателю чужую страницу:
+  // место в одной выдаче ничего не значит в другой.
+  const asked = [];
+  const ask = async (query, cursor) => {
+    asked.push([query, cursor]);
+    return { items: [{ id: "p1" }], next_cursor: "c1" };
+  };
+  const lane = feed(ask);
+  await lane.first("термореле");
+  await lane.next();
+  await lane.first("насос");
+  assert.deepEqual(asked[2], ["насос", null], `спрошено ${JSON.stringify(asked[2])}`);
+
+  // Пустое слово — не слово: список без отбора спрашивается без параметра.
+  await lane.first("");
+  assert.deepEqual(asked[3], [null, null], `спрошено ${JSON.stringify(asked[3])}`);
 });
 
 /** Хранилище в памяти — тот же интерфейс, что у `localStorage`. */

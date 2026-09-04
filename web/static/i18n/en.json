@@ -109,6 +109,7 @@
   "showcase.query": "Search public projects",
   "showcase.find": "Search",
   "showcase.row": "{name} — {owner}",
+  "showcase.more": "More",
   "showcase.nothing": "nothing found",
   "archive.download": "Download archive",
   "archive.upload": "Upload archive",
