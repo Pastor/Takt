@@ -203,7 +203,14 @@
            потребовала бы `innerHTML` из словаря, то есть лишнего пути в DOM.
            Ключ `-s` остался в строке, элемент `code` снят. -->
       <label for="scenario" data-i18n="trace.scenario">Сценарий входов (JSON, как файл -s у takt-sim)</label>
-      <textarea id="scenario" class="scenario" spellcheck="false" placeholder='[{"in_ports": {"temperature": 25}}]'></textarea>
+      <!-- Сценарий — такая же область КОДА, как модель и вывод: те же номера
+           строк тем же счётчиком. У `textarea` строк-узлов нет вовсе, и номер
+           пришлось бы рисовать второй колонкой, синхронизируя прокрутку. -->
+      <div id="scenario" class="editor scenario" data-i18n-attr="aria-label:trace.scenario"
+           aria-label="Сценарий входов"></div>
+      <!-- Разделитель рядов вкладки: сколько отдано сценарию, сколько трассе. -->
+      <div id="tsplit" class="split split-h" role="separator" aria-orientation="horizontal"
+           data-i18n-attr="aria-label:trace.rows" aria-label="Высота сценария" tabindex="0"></div>
       <div id="tools-lang-trace" class="notice" data-i18n="tools.russianOnly" hidden>Сообщения инструментов пока только на русском</div>
       <div id="trace" class="list trace" aria-live="polite"></div>
     </div>

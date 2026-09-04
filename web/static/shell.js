@@ -39,6 +39,9 @@ export const PANES_KEY = "takt.panes";
 /** Ключ хранилища долей рядов области (редактор и диагностики). */
 export const ROWS_KEY = "takt.rows";
 
+/** Ключ хранилища долей вкладки прогона (сценарий и трасса). */
+export const TRACE_KEY = "takt.rows.trace";
+
 /** Какими стрелками двигается разделитель каждой оси. */
 const ARROWS = { x: ["ArrowLeft", "ArrowRight"], y: ["ArrowUp", "ArrowDown"] };
 
@@ -61,6 +64,15 @@ export const HALF = 0.5;
  * тронувший, не должен обнаружить, что редактор ужался вдвое.
  */
 export const ROWS_DEFAULT = 0.7;
+
+/**
+ * Умолчание вкладки прогона: три десятых — сценарию.
+ *
+ * ⚠️ Не половина: сценарий короток (несколько строк JSON), а трасса длинна, и
+ * читатель, ничего не тронувший, не должен получить полупустое поле ввода над
+ * обрезанной трассой.
+ */
+export const TRACE_DEFAULT = 0.3;
 
 /**
  * Приводит долю к допустимой и отбрасывает мусор.
@@ -229,6 +241,26 @@ export function attachRows(split, storage) {
     // достаётся остаток, и он же задаёт высоту списка диагностик.
     apply: (ratio, root) => {
       root.style.setProperty("--rows-b", `${(1 - ratio) * 100}%`);
+    },
+  });
+}
+
+/**
+ * Заводит РЯДЫ вкладки прогона: сценарий сверху, трасса снизу.
+ *
+ * ⚠️ Ключ памяти свой: вкладку и область делят разные пары, и общий ключ
+ * таскал бы их друг за другом. Правило же одно — та же ручка.
+ */
+export function attachTraceRows(split, storage) {
+  attachDivider(split, {
+    storage,
+    key: TRACE_KEY,
+    axis: "y",
+    fallback: TRACE_DEFAULT,
+    box: () => split.parentElement.getBoundingClientRect(),
+    // Доля — часть высоты, отданная СЦЕНАРИЮ: он стоит сверху.
+    apply: (ratio, root) => {
+      root.style.setProperty("--trace-t", `${ratio * 100}%`);
     },
   });
 }

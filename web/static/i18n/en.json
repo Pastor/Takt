@@ -38,6 +38,7 @@
   "trace.budget": "Budget, ticks",
   "trace.run": "Run",
   "trace.stop": "Stop",
+  "trace.rows": "Scenario height",
   "trace.scenario": "Input scenario (JSON, same as the -s file of takt-sim)",
   "trace.notOpened": "the run did not open",
   "trace.tickFailed": "the tick did not execute",
