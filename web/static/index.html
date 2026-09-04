@@ -138,6 +138,10 @@
       <button id="overwrite" type="button" data-i18n="account.overwrite">Перезаписать</button>
     </div>
     <div id="editor" class="editor" data-i18n-attr="aria-label:source.editor" aria-label="Исходный текст модели"></div>
+    <!-- Разделитель рядов: сколько отдано редактору, сколько диагностикам.
+         Правила те же, что у разделителя колонок, ось другая. -->
+    <div id="hsplit" class="split split-h" role="separator" aria-orientation="horizontal"
+         data-i18n-attr="aria-label:bar.rows" aria-label="Высота диагностик" tabindex="0"></div>
     <div class="pane-head"><span data-i18n="diagnostics.title">Диагностики</span></div>
     <!-- Строка-граница: до фичи 0532 сообщения инструментов существуют только
            по-русски, и при другом языке оболочки смешение НАЗЫВАЕТСЯ, а не
@@ -146,6 +150,11 @@
       <div id="diagnostics" class="list" aria-live="polite"></div>
   </section>
 
+
+  <!-- Разделитель областей: доли задаёт читатель, как и ширину оболочки.
+       Клавиатура обязательна — разделитель без неё недоступен вовсе. -->
+  <div id="split" class="split" role="separator" aria-orientation="vertical"
+       data-i18n-attr="aria-label:bar.split" aria-label="Ширина областей" tabindex="0"></div>
   <section class="pane pane-result">
     <nav id="tabs" class="tabs" role="tablist">
       <button class="tab active" data-tab="output" role="tab" aria-selected="true" type="button" data-i18n="tabs.output">Вывод цели</button>

@@ -23,6 +23,12 @@
   .case-body { padding: var(--gap); display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
   .swatch { display: flex; align-items: center; gap: var(--gap-half); }
   .grip-case { position: relative; transform: translateZ(0); min-height: var(--h-control); }
+  /* ⚠️ Разделитель на странице тянется во всю высоту рабочей области, а линию
+     ему рисует зазор сетки. В витрине то и другое подменено: высота задана
+     шкалой, а зазор — рамкой вместилища. */
+  .split-case { min-height: var(--h-control); border-left: 1px solid var(--border);
+                border-right: 1px solid var(--border); padding: 0; }
+  .split-case .split { align-self: stretch; }
   .chip { display: inline-flex; align-items: center; justify-content: center;
           width: var(--h-control); height: var(--h-control);
           border-radius: var(--radius); border: 1px solid var(--border); }
@@ -115,6 +121,14 @@
          `transform` на вместилище делает его containing block для fixed —
          иначе ручка уехала бы из витрины к краю экрана. -->
     <div class="case-body grip-case"><div class="grip" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Ширина страницы"></div></div>
+  </section>
+
+  <section class="case" data-control=".split">
+    <div class="pane-head"><span>Разделитель областей</span></div>
+    <!-- ⚠️ Разделитель — обычный элемент сетки (в отличие от `.grip`), и в
+         витрине показан на полосе-заглушке: заливку ему даёт зазор сетки, а
+         своей у него нет. -->
+    <div class="case-body split-case"><div class="split" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Ширина областей"></div></div>
   </section>
 
   <section class="case" data-control=".notice">

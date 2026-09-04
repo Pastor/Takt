@@ -6,6 +6,8 @@
   "bar.share": "Share",
   "bar.language": "Interface language",
   "bar.update": "a new build is available — reload",
+  "bar.rows": "Diagnostics height",
+  "bar.split": "Pane width",
   "bar.width": "Page width",
   "bar.moduleFailed": "module not loaded: {error}",
 
