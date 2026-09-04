@@ -840,6 +840,46 @@ async function serverLabelKeys() {
   return [...source.matchAll(/label:\s*"([\w.]+)"/g)].map((match) => match[1]);
 }
 
+test("витрина и архив: страница просит у сервера ровно то, что нужно", async () => {
+  const storage = memoryStorage();
+  const asked = [];
+  const get = async (url, options) => {
+    asked.push(`${options?.method ?? "GET"} ${url}`);
+    if (url.includes("/api/public")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ items: [{ id: "p1", name: "Термореле", owner: "ivan" }] }),
+      };
+    }
+    if (url.includes("/archive")) {
+      return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([80, 75]).buffer };
+    }
+    return { ok: true, status: 201, json: async () => ({ id: "p2", name: "Копия" }) };
+  };
+  api.configure({ root: "/", fetch: get, storage });
+
+  // ⚠️ Витрина спрашивается БЕЗ токена: открытый проект открыт и для того, у
+  // кого учётной записи нет вовсе.
+  const page = await api.showcase("термореле", null);
+  assert.equal(page.items[0].name, "Термореле");
+  assert.ok(asked[0].includes("q=%D1%82"), `запрос без слова поиска: ${asked[0]}`);
+
+  // Курсор уходит обратно КАК ЕСТЬ: своей постраничности у страницы нет.
+  await api.showcase(null, "cursor-1");
+  assert.ok(asked[1].endsWith("cursor=cursor-1"), asked[1]);
+
+  // ⚠️ Архив забирается ЗАПРОСОМ, а не ссылкой: у закрытого проекта он требует
+  // токена, а обычная ссылка заголовков не несёт.
+  const bytes = await api.archive("p1", "c");
+  assert.equal(new Uint8Array(bytes)[0], 80, "пришли не байты архива");
+  assert.ok(asked[2].includes("/api/projects/p1/archive?target=c"), asked[2]);
+
+  const created = await api.importArchive(new Uint8Array([80, 75]).buffer);
+  assert.equal(created.name, "Копия");
+  assert.ok(asked[3].startsWith("POST /api/projects/import"), asked[3]);
+});
+
 /** Хранилище в памяти — тот же интерфейс, что у `localStorage`. */
 function memoryStorage() {
   const map = new Map();

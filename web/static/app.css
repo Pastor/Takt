@@ -663,6 +663,9 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
    половина панели входа показывалась бы вместе с видимой (урок задачи 03,
    повторно пойман прогоном страницы в задаче 09e). */
 .controls[hidden] { display: none; }
+/* ⚠️ Скрытый контрол ВНУТРИ полосы: у полосы `display: flex`, и её дети
+   раскладываются ею же — правило `[hidden]` нужно и им. */
+.controls > [hidden] { display: none; }
 .controls label { font-size: var(--text-sm); color: var(--on-surface-soft); }
 .controls input[type="text"] { flex: 1; min-width: 12ch; }
 
