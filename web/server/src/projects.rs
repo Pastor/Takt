@@ -31,9 +31,11 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::access::{self, Level};
 use crate::auth::User;
 use crate::db;
 use crate::error::ApiError;
+use crate::grants;
 use crate::limits;
 use crate::routes::{AppState, current_user, optional_user};
 use crate::showcase;
@@ -67,12 +69,33 @@ pub struct FileEntryJson {
     pub size_bytes: i64,
 }
 
+/// Запись списка проектов: сам проект и мой уровень доступа к нему.
+///
+/// ⚠️ Уровень назван **в каждой записи**: без него страница не знает, показать
+/// ли кнопку сохранения, и решала бы это по владельцу — то есть завела бы
+/// вторую копию правила (класс 0084).
+#[derive(Debug, Serialize)]
+pub struct ProjectListJson {
+    #[serde(flatten)]
+    pub project: ProjectJson,
+    pub level: &'static str,
+}
+
 /// Проект вместе со списком файлов.
 #[derive(Debug, Serialize)]
 pub struct ProjectWithFilesJson {
     #[serde(flatten)]
     pub project: ProjectJson,
     pub files: Vec<FileEntryJson>,
+    /// Мой уровень доступа: по нему страница решает, показывать ли сохранение.
+    pub level: &'static str,
+    /// Выданные права — **только владельцу**.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grants: Option<Vec<grants::GrantJson>>,
+    /// Сколько раз проект скопировали себе (владельцу; иначе 0).
+    pub forks: i64,
+    /// Открытые копии: закрытая копия — уже чужой проект.
+    pub open_forks: Vec<grants::ForkJson>,
 }
 
 /// Файл целиком.
@@ -154,17 +177,39 @@ async fn list(
 ) -> Result<Response, ApiError> {
     let user = current_user(&state, &headers).await?;
     let client = state.pool.get().await?;
+    // Свои И выданные мне — одним запросом с уровнем. ⚠️ Открытые чужие сюда
+    // НЕ попадают: «мои проекты» — это то, за что я отвечаю, а открытое чужое
+    // живёт в витрине. Смешай их — и список станет каталогом сервиса.
     let rows = client
         .query(
             "SELECT p.id, p.name, p.description, p.visibility, u.login AS owner,
                     p.takt_lang, p.language_version, p.main_file, p.revision,
-                    p.size_bytes, p.forked_from, p.created_at, p.updated_at
-             FROM projects p JOIN users u ON u.id = p.owner_id
-             WHERE p.owner_id = $1 ORDER BY p.updated_at DESC",
+                    p.size_bytes, p.forked_from, p.created_at, p.updated_at,
+                    g.level AS granted
+             FROM projects p
+             JOIN users u ON u.id = p.owner_id
+             LEFT JOIN project_grants g ON g.project_id = p.id AND g.user_id = $1
+             WHERE p.owner_id = $1 OR g.user_id = $1
+             ORDER BY p.updated_at DESC",
             &[&user.id],
         )
         .await?;
-    let projects: Vec<ProjectJson> = rows.iter().map(project_of).collect();
+    let projects: Vec<ProjectListJson> = rows
+        .iter()
+        .map(|row| {
+            let project = project_of(row);
+            let granted: Option<String> = row.get("granted");
+            let level = access::effective(
+                row.get::<_, String>("owner") == user.login,
+                &project.visibility,
+                granted.as_deref().and_then(Level::grantable),
+            );
+            ProjectListJson {
+                project,
+                level: level.as_str(),
+            }
+        })
+        .collect();
     Ok(Json(projects).into_response())
 }
 
@@ -231,7 +276,7 @@ async fn read(
 ) -> Result<Response, ApiError> {
     let viewer = optional_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let project = readable(&client, &id, viewer.as_ref()).await?;
+    let (project, level) = resolve(&client, &id, viewer.as_ref()).await?;
     let rows = client
         .query(
             "SELECT name, kind, size_bytes FROM project_files
@@ -247,7 +292,23 @@ async fn read(
             size_bytes: row.get(2),
         })
         .collect();
-    Ok(Json(ProjectWithFilesJson { project, files }).into_response())
+    // ⚠️ Права и копии показываются ТОЛЬКО владельцу: «кому я это открыл» —
+    // его дело, а читателю список тех, кто ещё имеет доступ, не принадлежит.
+    let (grants, forks, open_forks) = if level == Level::Owner {
+        let (count, open) = grants::forks_of(&client, &id).await?;
+        (Some(grants::of_project(&client, &id).await?), count, open)
+    } else {
+        (None, 0, Vec::new())
+    };
+    Ok(Json(ProjectWithFilesJson {
+        project,
+        files,
+        level: level.as_str(),
+        grants,
+        forks,
+        open_forks,
+    })
+    .into_response())
 }
 
 async fn patch(
@@ -259,18 +320,10 @@ async fn patch(
     let user = current_user(&state, &headers).await?;
     let mut client = state.pool.get().await?;
     let transaction = client.transaction().await?;
-    let row = transaction
-        .query_opt(
-            "SELECT owner_id FROM projects WHERE id = $1 FOR UPDATE",
-            &[&id],
-        )
-        .await?;
-    let Some(row) = row else {
-        return Err(ApiError::NotFound);
-    };
-    if row.get::<_, String>(0) != user.id {
-        return Err(ApiError::NotFound);
-    }
+    let (_, level) = locked(&transaction, &id, &user).await?;
+    // Метаданные — только владелец: `edit` правит СОДЕРЖИМОЕ, а видимость,
+    // права и версия модуля меняют, кому и чем проект открывается.
+    require_level(level, Level::Owner)?;
     if let Some(name) = &request.name {
         limits::check_project_name(name)?;
         transaction
@@ -354,7 +407,8 @@ async fn remove(
 ) -> Result<Response, ApiError> {
     let user = current_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    owned(&client, &id, &user).await?;
+    let (_, level) = resolve(&client, &id, Some(&user)).await?;
+    require_level(level, Level::Owner)?;
     // Файлы и права уходят каскадом (схема), копии — нет: у форка своя жизнь
     // (`forked_from` объявлен `ON DELETE SET NULL`).
     client
@@ -370,7 +424,7 @@ async fn read_file(
 ) -> Result<Response, ApiError> {
     let viewer = optional_user(&state, &headers).await?;
     let client = state.pool.get().await?;
-    let project = readable(&client, &id, viewer.as_ref()).await?;
+    let (project, _) = resolve(&client, &id, viewer.as_ref()).await?;
     let row = client
         .query_opt(
             "SELECT name, kind, text, size_bytes FROM project_files
@@ -406,19 +460,8 @@ async fn write_file(
     // предел числа файлов, предел размера и пересчёт суммы обязаны видеть одно
     // и то же состояние. Порознь их обходит вторая вкладка того же владельца.
     let transaction = client.transaction().await?;
-    let row = transaction
-        .query_opt(
-            "SELECT owner_id, revision FROM projects WHERE id = $1 FOR UPDATE",
-            &[&id],
-        )
-        .await?;
-    let Some(row) = row else {
-        return Err(ApiError::NotFound);
-    };
-    if row.get::<_, String>(0) != user.id {
-        return Err(ApiError::NotFound);
-    }
-    let revision: i64 = row.get(1);
+    let (revision, level) = locked(&transaction, &id, &user).await?;
+    require_level(level, Level::Edit)?;
     let existing: Option<i64> = transaction
         .query_opt(
             "SELECT size_bytes FROM project_files WHERE project_id = $1 AND name = $2",
@@ -500,18 +543,8 @@ async fn remove_file(
     let user = current_user(&state, &headers).await?;
     let mut client = state.pool.get().await?;
     let transaction = client.transaction().await?;
-    let row = transaction
-        .query_opt(
-            "SELECT owner_id FROM projects WHERE id = $1 FOR UPDATE",
-            &[&id],
-        )
-        .await?;
-    let Some(row) = row else {
-        return Err(ApiError::NotFound);
-    };
-    if row.get::<_, String>(0) != user.id {
-        return Err(ApiError::NotFound);
-    }
+    let (_, level) = locked(&transaction, &id, &user).await?;
+    require_level(level, Level::Edit)?;
     let affected = transaction
         .execute(
             "DELETE FROM project_files WHERE project_id = $1 AND name = $2",
@@ -563,66 +596,118 @@ async fn bump(
     })
 }
 
-/// Читает проект, доступный **для чтения** спрашивающему.
+/// Читает ревизию и уровень доступа, взяв строку проекта под замок.
 ///
-/// Правило одно на весь сервис (задача 09c):
+/// ⚠️ Право спрашивается **внутри той же транзакции**, что и запись: между
+/// отдельными запросами помещается отзыв права, и запись прошла бы по уже
+/// отобранному.
+pub(crate) async fn locked(
+    transaction: &tokio_postgres::Transaction<'_>,
+    id: &str,
+    user: &User,
+) -> Result<(i64, Level), ApiError> {
+    let row = transaction
+        .query_opt(
+            "SELECT owner_id, visibility, revision FROM projects WHERE id = $1 FOR UPDATE",
+            &[&id],
+        )
+        .await?;
+    let Some(row) = row else {
+        return Err(ApiError::NotFound);
+    };
+    let owner: String = row.get(0);
+    let visibility: String = row.get(1);
+    let revision: i64 = row.get(2);
+    let granted = transaction
+        .query_opt(
+            "SELECT level FROM project_grants WHERE project_id = $1 AND user_id = $2",
+            &[&id, &user.id],
+        )
+        .await?
+        .map(|row| row.get::<_, String>(0));
+    let level = access::effective(
+        user.id == owner,
+        &visibility,
+        granted.as_deref().and_then(Level::grantable),
+    );
+    if level == Level::None {
+        return Err(ApiError::NotFound);
+    }
+    Ok((revision, level))
+}
+
+/// Читает проект и уровень доступа к нему спрашивающего.
 ///
-/// | Видимость | Владелец | Всякий другой, в том числе без входа |
-/// |---|---|---|
-/// | `private` | читает | **`404`** |
-/// | `link` | читает | читает — идентификатор И ЕСТЬ секрет |
-/// | `public` | читает | читает, и проект виден в витрине |
+/// ⚠️ Уровень считает ОДИН носитель [`access::effective`]; здесь только сбор
+/// исходных данных. Ответь эта функция сама — правило стало бы жить в двух
+/// местах, и расхождение проявилось бы не отказом, а чужой записью в чужой
+/// проект.
 ///
-/// ⚠️ Чужой закрытый проект отвечает `404`, а не `403`: `403` означал бы «он
-/// есть, но не для вас», то есть ручка стала бы оракулом существования.
-///
-/// ⚠️ Выданных прав здесь ещё нет — это задача `09d`; до неё `view`/`fork`/`edit`
-/// в таблице `project_grants` **не действуют**, и граница названа, а не забыта.
-async fn readable(
+/// ⚠️ Проект, недоступный вовсе, отвечает `404`, а не `403`: `403` означал бы
+/// «он есть, но не для вас», то есть ручка стала бы оракулом существования.
+async fn resolve(
     client: &deadpool_postgres::Client,
     id: &str,
     viewer: Option<&User>,
-) -> Result<ProjectJson, ApiError> {
+) -> Result<(ProjectJson, Level), ApiError> {
     let row = client.query_opt(SELECT_PROJECT, &[&id]).await?;
     let Some(row) = row else {
         return Err(ApiError::NotFound);
     };
     let project = project_of(&row);
     let owner: String = row.get("owner_id");
-    let mine = viewer.is_some_and(|user| user.id == owner);
-    if mine || project.visibility == "link" || project.visibility == "public" {
-        Ok(project)
-    } else {
-        Err(ApiError::NotFound)
+    let level = level_of(client, id, &owner, &project.visibility, viewer).await?;
+    if level == Level::None {
+        return Err(ApiError::NotFound);
     }
+    Ok((project, level))
 }
 
-/// Читает проект и убеждается, что он принадлежит спрашивающему.
-///
-/// ⚠️ Чужой проект отвечает `404`, а не `403`: иначе ручка перечисляет чужие
-/// проекты по ответам.
-async fn owned(
+/// Считает уровень доступа, спросив выданное право.
+async fn level_of(
     client: &deadpool_postgres::Client,
     id: &str,
-    user: &User,
-) -> Result<ProjectJson, ApiError> {
-    let row = client.query_opt(SELECT_PROJECT, &[&id]).await?;
-    let Some(row) = row else {
-        return Err(ApiError::NotFound);
+    owner: &str,
+    visibility: &str,
+    viewer: Option<&User>,
+) -> Result<Level, ApiError> {
+    let Some(user) = viewer else {
+        // Без входа выданного права быть не может: оно выдаётся человеку.
+        return Ok(access::effective(false, visibility, None));
     };
-    let owner: String = row.get("owner_id");
-    if owner != user.id {
-        return Err(ApiError::NotFound);
-    }
-    Ok(project_of(&row))
+    let granted = client
+        .query_opt(
+            "SELECT level FROM project_grants WHERE project_id = $1 AND user_id = $2",
+            &[&id, &user.id],
+        )
+        .await?
+        .map(|row| row.get::<_, String>(0));
+    Ok(access::effective(
+        user.id == owner,
+        visibility,
+        granted.as_deref().and_then(Level::grantable),
+    ))
 }
 
-const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
+/// Требует уровня не ниже названного.
+///
+/// ⚠️ Здесь `403`, а не `404`: до этой точки доходит тот, кому проект **видно**,
+/// и прятать его уже незачем — а «не найдено» вместо «нет права» отправило бы
+/// человека искать опечатку в ссылке.
+pub(crate) fn require_level(level: Level, needed: Level) -> Result<(), ApiError> {
+    if level >= needed {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
+    }
+}
+
+pub(crate) const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
         u.login AS owner, p.takt_lang, p.language_version, p.main_file, p.revision,
         p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id
     FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1";
 
-fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
+pub(crate) fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
     ProjectJson {
         id: row.get("id"),
         name: row.get("name"),

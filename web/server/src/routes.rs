@@ -66,6 +66,10 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("PUT", "/api/projects/{id}/files/{name}"),
     ("DELETE", "/api/projects/{id}/files/{name}"),
     ("GET", "/api/public"),
+    ("POST", "/api/projects/{id}/fork"),
+    ("GET", "/api/projects/{id}/grants/{login}"),
+    ("PUT", "/api/projects/{id}/grants/{login}"),
+    ("DELETE", "/api/projects/{id}/grants/{login}"),
 ];
 
 /// Собирает роутер.
@@ -76,6 +80,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/revoke", post(revoke))
         .route("/me", get(me))
         .merge(crate::projects::router())
+        .merge(crate::grants::router())
         .merge(crate::showcase::router());
 
     // Статика: файлы отдаются как есть, а СТРАНИЦЫ собирает `page`.
@@ -464,8 +469,8 @@ mod tests {
         }
         assert_eq!(
             seen.len(),
-            14,
-            "пять ручек входа, восемь ручек проектов и витрина"
+            18,
+            "пять ручек входа, восемь ручек проектов, витрина, копия и права"
         );
     }
 }
