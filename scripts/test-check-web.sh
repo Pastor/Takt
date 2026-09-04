@@ -8,7 +8,9 @@
 #   B3 — в `web/` появился список ключевых слов Takt;
 #   B4 — согласованное дерево принимается (иначе гейт красен всегда);
 #   B5 — без `node` мягкий пропуск, под `PRECHECK_STRICT=1` — ошибка;
-#   B6 — роли подсветки кода разошлись с темой документа `book/takt.tmTheme`.
+#   B6 — роли подсветки кода разошлись с темой документа `book/takt.tmTheme`;
+#   B7 — словарь языка неполон (ключ есть в базовом и нет в переводе);
+#   B8 — текст оболочки написан в коде мимо словаря.
 #
 # ⚠️ Мутации ставятся на КОПИИ дерева (`WEB_ROOT`), рабочие файлы не трогаются:
 # сторож, который правит проект, однажды оставит правку после падения.
@@ -144,6 +146,50 @@ else
 fi
 cp "$WORK/app.css.bak" "$TREE/web/static/app.css"
 
+# ── B7: неполный словарь языка ───────────────────────────────────────────────
+# ⚠️ Замер референса 2026-09-04: у него 163 ключа есть только в `ru`, и
+# непереведённое молча падает на русский. Правило проекта иное — язык либо
+# полон, либо не заведён; держать его обязана машина, а не дисциплина.
+cp "$TREE/web/static/i18n/en.json" "$WORK/en.json.bak"
+"$NODE" -e '
+  const fs = require("fs");
+  const path = process.argv[1];
+  const dict = JSON.parse(fs.readFileSync(path, "utf8"));
+  delete dict["bar.format"];
+  fs.writeFileSync(path, JSON.stringify(dict, null, 2));
+' "$TREE/web/static/i18n/en.json"
+if out="$(run_gate)"; then
+  echo "  ПРОВАЛ: B7 неполный словарь не пойман"
+  exit 1
+fi
+if grep -q "состав" <<< "$out"; then
+  echo "  OK: B7 неполный словарь ловится"
+else
+  echo "  ПРОВАЛ: B7 отказ не про состав словаря:"
+  echo "$out" | sed 's/^/    /'
+  exit 1
+fi
+cp "$WORK/en.json.bak" "$TREE/web/static/i18n/en.json"
+
+# ── B8: текст оболочки мимо словаря ──────────────────────────────────────────
+# Самый тихий класс задачи 10a: строка, написанная в коде, не переводится
+# никогда и ничем не обнаруживается — страница выглядит рабочей, а одна подпись
+# остаётся на чужом языке.
+cp "$TREE/web/static/app.js" "$WORK/app.js.i18n.bak"
+printf '\nexport const ЗАГОЛОВОК = "Сохранить";\n' >> "$TREE/web/static/app.js"
+if out="$(run_gate)"; then
+  echo "  ПРОВАЛ: B8 текст мимо словаря не пойман"
+  exit 1
+fi
+if grep -q "мимо словаря" <<< "$out"; then
+  echo "  OK: B8 текст мимо словаря ловится"
+else
+  echo "  ПРОВАЛ: B8 отказ не про словарь:"
+  echo "$out" | sed 's/^/    /'
+  exit 1
+fi
+cp "$WORK/app.js.i18n.bak" "$TREE/web/static/app.js"
+
 # ── B5: политика внешнего инструмента ────────────────────────────────────────
 if out="$(TAKT_NODE="$WORK/нет-такого-node" bash "$ROOT/scripts/check-web.sh" 2>&1)"; then
   if grep -q "пропуск" <<< "$out"; then
@@ -164,4 +210,4 @@ if out="$(PRECHECK_STRICT=1 TAKT_NODE="$WORK/нет-такого-node" bash "$RO
 fi
 echo "  OK: B5 под PRECHECK_STRICT=1 отсутствие node — ошибка"
 
-echo "  Сторож гейта веб-части: все проверки пройдены (B1…B6)."
+echo "  Сторож гейта веб-части: все проверки пройдены (B1…B8)."

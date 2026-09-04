@@ -10,6 +10,12 @@
 // ⚠️ У воркера СВОЙ экземпляр модуля: память WebAssembly между потоками не
 // делится, и открытый прогон живёт там же, где тикает. Цена — второй модуль в
 // памяти; она принята ради того, чтобы страница оставалась отзывчивой.
+//
+// ⚠️ Текстов оболочки поток НЕ СТРОИТ: он возвращает ключ словаря и
+// подстановки, а печатает главный поток (задача 0531-10a). Иначе словарь
+// пришлось бы грузить дважды и держать согласованным в двух местах. Строки,
+// пришедшие ОТ МОДУЛЯ (трасса, сводка, текст отказа), проходят насквозь: это
+// не оболочка, а тексты инструментов — их язык заводит фича 0532.
 
 import { Bridge } from "./bridge.js";
 
@@ -30,9 +36,10 @@ self.onmessage = async (event) => {
         stopped = true;
         break;
       default:
-        post({ type: "failed", message: `неизвестная команда воркера: ${message.type}` });
+        post({ type: "failed", key: "trace.unknownCommand", params: { type: message.type } });
     }
   } catch (error) {
+    // Отказ среды исполнения — не строка словаря: он приходит от браузера.
     post({ type: "failed", message: String(error?.message ?? error) });
   }
 };
@@ -47,7 +54,7 @@ async function run({ wasmUrl, source, scenario, tickMs, budget, chunk }) {
 
   const opened = bridge.simOpen(source, scenario ?? "", tickMs ?? 0);
   if (!opened.ok) {
-    post({ type: "failed", message: opened.error?.message ?? "прогон не открыт", error: opened.error });
+    post({ type: "failed", message: opened.error?.message, key: "trace.notOpened", error: opened.error });
     return;
   }
   session = opened.id;
@@ -61,7 +68,7 @@ async function run({ wasmUrl, source, scenario, tickMs, budget, chunk }) {
   while (!stopped && done < limit) {
     const ticked = bridge.simTick(session, Math.min(portion, limit - done));
     if (!ticked.ok) {
-      post({ type: "failed", message: ticked.error?.message ?? "такт не выполнен", error: ticked.error });
+      post({ type: "failed", message: ticked.error?.message, key: "trace.tickFailed", error: ticked.error });
       close_();
       return;
     }
@@ -77,7 +84,8 @@ async function run({ wasmUrl, source, scenario, tickMs, budget, chunk }) {
   }
   post({
     type: "halted",
-    reason: stopped ? "остановлено автором" : `бюджет прогона исчерпан: ${limit} тактов`,
+    key: stopped ? "trace.stoppedByAuthor" : "trace.budgetSpent",
+    params: { steps: limit },
     steps: done,
   });
   close_();

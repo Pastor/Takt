@@ -223,6 +223,33 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
 
 .line { min-height: 1.5em; }
 
+/* Переключатель языка. Ширина по содержимому: самоназвания коротки, а
+ * фиксированная обрезала бы длинное. */
+.lang {
+  height: var(--h-control);
+  padding: 0 6px;
+  color: var(--on-surface);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+/* Строка-граница: до фичи 0532 сообщения инструментов только по-русски, и при
+ * другом языке оболочки это НАЗЫВАЕТСЯ. Тон предупреждения, а не ошибки:
+ * работать это не мешает. */
+.notice {
+  padding: 4px var(--gap);
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+/* ⚠️ `display: flex` сильнее атрибута `hidden` — урок прогона страницы
+ * 2026-09-04; правило нужно каждому узлу, который прячут атрибутом. */
+.notice[hidden] { display: none; }
+
 /* Строка с диагностикой помечена не только цветом — рядом список с текстом
  * (правило доступности книги референса). */
 .line.has-error { background: color-mix(in srgb, var(--alarm) 10%, transparent); }
@@ -393,6 +420,15 @@ button:disabled { color: var(--on-surface-soft); cursor: default; }
   :root { --gap: 6px; }
   .controls label { flex-basis: 100%; }
   .controls input[type="text"], .controls select { flex: 1 1 100%; min-width: 0; }
+
+  /* Шапка переносится в две строки: с переключателем языка (задача 10a)
+   * контролы перестали умещаться в 320 px — «Формат», «Поделиться» и
+   * «Русский» вместе шире экрана, и правый край уезжал за границу. Распорка
+   * `.spacer` становится ПЕРЕНОСОМ: своего числа перелома правило не заводит.
+   * ⚠️ Нашлось прогоном страницы на 320×568, а не тестами: ширину подписи
+   * знает только шрифт. */
+  .bar { flex-wrap: wrap; }
+  .spacer { flex-basis: 100%; height: 0; }
 }
 
 /* ── Ландшафт телефона: служебным строкам минимум ────────────────────────*/

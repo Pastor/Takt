@@ -82,6 +82,10 @@ export class Editor {
    * курсор в начало документа — то есть печатать было бы нельзя.
    */
   highlight(tokens, diagnostics) {
+    // Курсор возвращается ТОЛЬКО в редактор, в котором он и стоял: перекраска
+    // не должна забирать фокус. Иначе смена языка (она перерисовывает всё)
+    // уводила бы фокус с переключателя в текст — нашлось прогоном страницы.
+    const focused = this.root.contains(this.root.ownerDocument.activeElement);
     const offset = caretOffset(this.root);
     const marks = spans(tokens ?? {});
     const problems = new Map();
@@ -91,7 +95,7 @@ export class Editor {
     }
 
     this.root.replaceChildren(paintCode(this.text, marks, problems));
-    setCaretOffset(this.root, offset);
+    if (focused) setCaretOffset(this.root, offset);
   }
 }
 

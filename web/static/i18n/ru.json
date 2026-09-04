@@ -1,0 +1,55 @@
+{
+  "page.title": "Takt — онлайн-редактор",
+  "bar.loading": "загрузка модуля…",
+  "bar.version": "язык {language} · модуль {module}",
+  "bar.format": "Формат",
+  "bar.share": "Поделиться",
+  "bar.language": "Язык интерфейса",
+  "bar.moduleFailed": "модуль не загружен: {error}",
+
+  "source.title": "Модель",
+  "source.editor": "Исходный текст модели",
+  "diagnostics.title": "Диагностики",
+  "diagnostics.none": "Ошибок нет",
+
+  "tabs.output": "Вывод цели",
+  "tabs.trace": "Прогон",
+  "modes.label": "Область",
+  "modes.source": "Модель",
+  "modes.output": "Вывод",
+  "modes.trace": "Прогон",
+
+  "output.target": "Цель",
+  "output.args": "Ключи сборки",
+  "output.argsPlaceholder": "например: --fsm=table",
+  "output.refused": "отказ",
+  "output.noHighlight": "без подсветки: файл длиннее {limit} символов",
+  "output.highlightFailed": "подсветка недоступна",
+
+  "trace.budget": "Бюджет, тактов",
+  "trace.run": "Прогон",
+  "trace.stop": "Стоп",
+  "trace.scenario": "Сценарий входов (JSON, как файл -s у takt-sim)",
+  "trace.notOpened": "прогон не открыт",
+  "trace.tickFailed": "такт не выполнен",
+  "trace.stoppedByAuthor": "остановлено автором",
+  "trace.budgetSpent": "бюджет прогона исчерпан, тактов: {steps}",
+  "trace.unknownCommand": "неизвестная команда воркера: {type}",
+
+  "editor.noSymbol": "под курсором нет имени с объявлением",
+  "editor.declaration": "объявление в строке {line}; использований: {uses}",
+  "editor.renamePrompt": "Новое имя:",
+  "editor.renameUnavailable": "переименование недоступно",
+  "editor.renamed": "переименовано вхождений: {count}",
+  "editor.formatUnavailable": "форматирование недоступно",
+  "editor.formatted": "отформатировано",
+  "editor.alreadyFormatted": "документ уже в каноне",
+
+  "share.copied": "ссылка скопирована, символов: {length}",
+  "share.inAddressBar": "ссылка в адресной строке — скопируйте её",
+
+  "draft.tooBig": "черновик больше {limit} КиБ ({size} Б) — не сохранён",
+  "draft.notSaved": "черновик не сохранён: {error}",
+
+  "tools.russianOnly": "Сообщения инструментов пока только на русском"
+}

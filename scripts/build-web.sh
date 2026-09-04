@@ -35,9 +35,13 @@ fi
 # не должно (класс 0084).
 VERSION="$(awk -F'"' '/^version = /{print $2; exit}' "$ROOT/takt-lang/Cargo.toml")"
 
-mkdir -p "$DIST/wasm/$VERSION"
+mkdir -p "$DIST/wasm/$VERSION" "$DIST/i18n"
 cp "$ROOT"/web/static/*.html "$ROOT"/web/static/*.css "$ROOT"/web/static/*.js \
    "$ROOT"/web/static/*.svg "$DIST/"
+# Словари оболочки (задача 10a). Хеша в имени пока нет — раскладку кеша ведёт
+# задача 07b; здесь важно лишь то, что словарь ЛЕЖИТ рядом со страницей: без
+# него подписи выродятся в ключи, и заметит это только глаз.
+cp "$ROOT"/web/static/i18n/*.json "$DIST/i18n/"
 cp "$WASM" "$DIST/takt.wasm"
 cp "$WASM" "$DIST/wasm/$VERSION/takt.wasm"
 
