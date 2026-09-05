@@ -46,7 +46,7 @@
        вместе с действием: не вошёл — стрелка внутрь, вошёл — наружу. -->
   <button id="session" class="icon-btn" type="button"
           data-i18n-attr="data-tip:account.enter;aria-label:account.enter"
-          data-tip="Войти" aria-label="Войти"><svg id="icon-enter" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13.5 4.5H5.5v15h8"/><path d="M14 8l4 4-4 4"/><path d="M18 12H9.5"/></svg><svg id="icon-leave" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M13.5 4.5H5.5v15h8"/><path d="M17 8l4 4-4 4"/><path d="M21 12h-8.5"/></svg></button>
+          data-tip="Войти" aria-label="Войти"><svg id="icon-enter" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 4.5h4.5v15H14"/><path d="M9.5 8l4 4-4 4"/><path d="M13.5 12H3.5"/></svg><svg id="icon-leave" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M13.5 4.5H5.5v15h8"/><path d="M17 8l4 4-4 4"/><path d="M21 12h-8.5"/></svg></button>
 </header>
 
 <div class="bar bar-tools">
@@ -62,6 +62,12 @@
   <button id="format" class="icon-btn" type="button"
           data-i18n-attr="data-tip:bar.format;aria-label:bar.format"
           data-tip="Формат" aria-label="Формат"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M8 8.5 5.5 12 8 15.5"/></svg></button>
+  <!-- Перенос длинных строк — ОДНА залипающая кнопка на все области кода:
+       исходник, вывод цели, сценарий и трассу (решение заказчика). Нажатое
+       состояние видно (`aria-pressed`), иначе кнопка ничего не сообщает. -->
+  <button id="wrap" class="icon-btn" type="button" aria-pressed="false"
+          data-i18n-attr="data-tip:bar.wrap;aria-label:bar.wrap"
+          data-tip="Переносить длинные строки" aria-label="Переносить длинные строки"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6.5h16"/><path d="M4 12h12.5a3.5 3.5 0 0 1 0 7H9.5"/><path d="M12.5 16.5 9.5 19l3 2.5"/></svg></button>
   <button id="share" class="icon-btn" type="button"
           data-i18n-attr="data-tip:bar.share;aria-label:bar.share"
           data-tip="Поделиться" aria-label="Поделиться"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6.5" cy="12" r="2.5"/><circle cx="17.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M8.8 10.8 15.2 7.7M8.8 13.2l6.4 3.1"/></svg></button>
@@ -96,9 +102,6 @@
            горизонтальной прокрутке, а переключателем. Своя у каждой области:
            узкой бывает то одна, то другая. -->
       <span class="pane-tools">
-        <button id="wrapsource" class="chip" type="button" aria-pressed="false"
-                data-i18n="bar.wrap" data-i18n-attr="data-tip:bar.wrapHint"
-                data-tip="Переносить длинные строки">⏎</button>
         <span id="status" class="status"></span>
       </span>
     </div>
@@ -209,9 +212,6 @@
 
     <div data-panel="output" class="panel">
       <div class="controls">
-        <button id="wrapoutput" class="chip" type="button" aria-pressed="false"
-                data-i18n="bar.wrap" data-i18n-attr="data-tip:bar.wrapHint"
-                data-tip="Переносить длинные строки">⏎</button>
         <label for="target" data-i18n="output.target">Цель</label>
         <select id="target"></select>
         <label for="args" data-i18n="output.args">Ключи сборки</label>

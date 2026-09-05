@@ -69,9 +69,14 @@ export async function main() {
   shell.attachRows(dom.hsplit, localStorage);
   // Вкладка прогона делится так же: сценарий сверху, трасса снизу.
   shell.attachTraceRows(dom.tsplit, localStorage);
-  // Перенос строк — настройка УЗКОЙ области, и потому своя у каждой.
-  shell.attachWrap(dom.wrapsource, dom.editor, localStorage, shell.WRAP_KEYS.source);
-  shell.attachWrap(dom.wrapoutput, dom.output, localStorage, shell.WRAP_KEYS.output);
+  // Перенос строк — ОДНА настройка на все области кода: так человек читает код
+  // вообще, а не конкретную панель (решение заказчика 2026-09-05).
+  shell.attachWrap(
+    dom.wrap,
+    [dom.editor, dom.output, dom.scenario, dom.trace],
+    localStorage,
+    shell.WRAP_KEY
+  );
   // Кегль страницы: ±1 к корневому размеру, от которого считаются все ступени.
   shell.attachFontSize(dom.fontless, dom.fontmore, dom.fontsize, localStorage);
   // Прочие настройки интерфейса — оттуда же: вкладка и бюджет прогона.
@@ -296,7 +301,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "tsplit", "wrapsource", "wrapoutput", "fontless", "fontmore", "fontsize", "project",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "tsplit", "wrap", "fontless", "fontmore", "fontsize", "project",
     "account", "session", "icon-enter", "icon-leave",
     "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "whoami-bar",

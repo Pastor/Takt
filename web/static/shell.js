@@ -356,7 +356,15 @@ export function panes(storage, key = PANES_KEY, fallback = HALF) {
 }
 
 /** Ключи хранилища переноса строк: у каждой области свой. */
-export const WRAP_KEYS = { source: "takt.wrap.source", output: "takt.wrap.output" };
+/**
+ * Ключ переноса длинных строк — ОДИН на страницу.
+ *
+ * ⚠️ Настройка общая для всех областей кода (решение заказчика 2026-09-05:
+ * «кнопка софтврап действует на все — и исходник и сгенерированные»). Прежде
+ * их было две, по одной на область: перенос считался свойством УЗКОЙ панели, а
+ * оказался свойством того, как человек читает код вообще.
+ */
+export const WRAP_KEY = "takt.wrap";
 
 /**
  * Читает настройку переноса строк.
@@ -380,12 +388,13 @@ export function wrapped(storage, key) {
  * @param {Storage} storage хранилище настройки
  * @param {string} key ключ хранилища этой области
  */
-export function attachWrap(button, area, storage, key) {
+export function attachWrap(button, areas, storage, key) {
+  const boxes = [].concat(areas).filter(Boolean);
   const apply = (on) => {
     // ⚠️ Класс ставится ОБЛАСТИ, а не строкам: строки перестраивает покраска
     // (`paintCode`) на каждую правку, и настройка исчезала бы с первым же
     // нажатием клавиши.
-    area.classList.toggle("wrap", on);
+    for (const box of boxes) box.classList.toggle("wrap", on);
     button.setAttribute("aria-pressed", String(on));
   };
   let on = wrapped(storage, key);
