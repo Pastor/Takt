@@ -31,7 +31,16 @@ RUN cargo build --profile ${WASM_PROFILE} --target wasm32-unknown-unknown -p tak
 
 # Сервер — свой workspace (полторы сотни зависимостей не должны собираться на
 # каждой правке компилятора).
-RUN cd web/server && cargo build --release && cp target/release/takt-web-server /out/
+# ⚠️ Каталог сборки задаётся ЯВНО: `.cargo/config.toml` корня переносит его в
+# `target/precheck` (фича 0251), и конфигурация достаёт до `web/server` — тот же
+# класс, что у расширения Zed (0414). Без этого `cargo` собирает успешно, а
+# `cp` ищет бинарник по несуществующему пути: «No such file or directory» после
+# полутора сотен скомпилированных крейтов (выкладка на стенд 2026-09-05).
+# Переменная окружения сильнее конфигурации — этим и пользуемся.
+ARG SERVER_TARGET_DIR=/build/web-server
+RUN cd web/server \
+ && CARGO_TARGET_DIR=${SERVER_TARGET_DIR} cargo build --release \
+ && cp ${SERVER_TARGET_DIR}/release/takt-web-server /out/
 
 FROM debian:bookworm-slim AS runtime
 # `ca-certificates` — для исходящих обращений (вход через площадки, задача 09f);

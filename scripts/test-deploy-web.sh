@@ -169,4 +169,20 @@ grep -q 'TAKT_WASM_PROFILE=\${WASM_PROFILE}' "$ROOT/web/deploy/Dockerfile" || {
 }
 echo "  OK: E7 профиль модуля назван один раз и доезжает до сборки статики"
 
-echo "  Сторож выкладки: все проверки пройдены (E1…E7)."
+# ── E8: сервер собирается в НАЗВАННЫЙ каталог ───────────────────────────────
+# ⚠️ `.cargo/config.toml` корня переносит каталог сборки (`target/precheck`,
+# фича 0251) и достаёт до `web/server` — тот же класс, что у расширения Zed
+# (0414). Без явного `CARGO_TARGET_DIR` сборка проходит, а копирование
+# бинарника падает: «No such file or directory» уже на стенде.
+grep -q 'CARGO_TARGET_DIR=\${SERVER_TARGET_DIR} cargo build --release' "$ROOT/web/deploy/Dockerfile" || {
+  echo "  ПРОВАЛ: E8 сервер в образе собирается без явного CARGO_TARGET_DIR"
+  echo "          конфигурация корня уведёт бинарник, и cp его не найдёт"
+  exit 1
+}
+grep -q 'cp \${SERVER_TARGET_DIR}/release/takt-web-server /out/' "$ROOT/web/deploy/Dockerfile" || {
+  echo "  ПРОВАЛ: E8 копирование берёт бинарник не из того каталога, куда собирали"
+  exit 1
+}
+echo "  OK: E8 каталог сборки сервера назван один раз и оттуда же берётся бинарник"
+
+echo "  Сторож выкладки: все проверки пройдены (E1…E8)."
