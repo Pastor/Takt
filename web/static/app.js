@@ -49,6 +49,10 @@ const state = {
   scenario: "",
   /** Область сценария: тот же редактор, что у модели (номера строк, перенос). */
   scenarioEditor: null,
+  /** Открытая панель правой области: "output", "trace" либо null. */
+  panel: "output",
+  /** Вкладка внутри панели генерации. */
+  tab: "output",
   version: "",
   languageVersion: "",
   running: false,
@@ -84,6 +88,7 @@ export async function main() {
   // Прочие настройки интерфейса — оттуда же: вкладка и бюджет прогона.
   dom.budget.value = shell.setting(localStorage, shell.UI_KEYS.budget, dom.budget.value);
   selectTab(shell.setting(localStorage, shell.UI_KEYS.tab, "output"));
+  selectPanel(shell.setting(localStorage, shell.UI_KEYS.panel, "output"));
   // Подсказки — свои, а не нативные: `title` в разметке нет вовсе.
   tip.attach(document);
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
@@ -317,7 +322,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "tsplit", "wrap", "fontless", "fontmore", "fontsize", "project", "flags", "flags-applies",
+    "lang", "tools-lang", "tools-lang-trace", "update", "showgen", "showsim", "grip", "split", "hsplit", "tsplit", "wrap", "fontless", "fontmore", "fontsize", "project", "flags", "flags-applies",
     "account", "session", "icon-enter", "icon-leave",
     "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "whoami-bar",
@@ -372,6 +377,10 @@ function wire() {
   dom.budget.addEventListener("change", () =>
     shell.remember(localStorage, shell.UI_KEYS.budget, dom.budget.value)
   );
+  // Панель включается своей кнопкой и выключается ею же: нажатая ещё раз
+  // кнопка закрывает область — так автор освобождает экран под модель.
+  dom.showgen.addEventListener("click", () => selectPanel(state.panel === "output" ? null : "output"));
+  dom.showsim.addEventListener("click", () => selectPanel(state.panel === "trace" ? null : "trace"));
   dom.stop.addEventListener("click", stop);
   dom.share.addEventListener("click", share);
   dom.tabs.addEventListener("click", (event) => {
@@ -672,6 +681,13 @@ function renameSymbol() {
 
 /** Компилирует текущей целью и показывает вывод. */
 function compile() {
+  // ⚠️ Панель закрыта — генерации нет вовсе: печатать в невидимую область
+  // работа впустую (решение заказчика 2026-09-05). Диагностика при этом идёт
+  // как прежде: её показывает своя область под моделью.
+  // ⚠️ Мост может быть ещё не загружен: панель выбирается ДО модуля (страница
+  // помнит её с прошлого раза), и без этой проверки старт падал целиком —
+  // страница показывала «модуль не загрузился» при живом модуле.
+  if (!state.bridge || state.panel !== "output") return;
   const reply = state.bridge.compile(state.target, state.args, state.editor.value());
   dom.output.replaceChildren();
   if (!reply.ok) {
@@ -747,7 +763,7 @@ function format() {
 /** Запускает прогон в отдельном потоке. */
 function run() {
   if (state.running) return;
-  selectTab("trace");
+  selectPanel("trace");
   selectMode("trace");
   dom.trace.replaceChildren();
   state.running = true;
@@ -832,15 +848,49 @@ async function share() {
   }
 }
 
+/**
+ * Выбирает вкладку ВНУТРИ панели генерации: вывод цели либо ключи сборки.
+ *
+ * ⚠️ Симуляция вкладкой больше не является (решение заказчика 2026-09-05):
+ * у неё своя панель, и открывается она своей кнопкой.
+ */
 function selectTab(name) {
   for (const tab of dom.tabs.querySelectorAll("[data-tab]")) {
     const active = tab.dataset.tab === name;
     tab.classList.toggle("active", active);
     tab.setAttribute("aria-selected", String(active));
   }
-  for (const panel of document.querySelectorAll("[data-panel]")) {
+  for (const panel of document.querySelectorAll('[data-panel="output"], [data-panel="flags"]')) {
     panel.hidden = panel.dataset.panel !== name;
   }
+  state.tab = name;
+}
+
+/**
+ * Показывает панель правой области: генерацию, симуляцию либо ни одной.
+ *
+ * ⚠️ Скрытая генерация НЕ выполняется: при закрытой панели проверяются только
+ * синтаксис и семантика (решение заказчика 2026-09-05). Печатать вывод в
+ * невидимую область — работа впустую, а на большой модели она заметна.
+ *
+ * ⚠️ Панель ровно одна: область под них одна, и держать в ней два ответа
+ * сразу негде. Обе отжаты — область уходит целиком, и модель занимает экран.
+ */
+function selectPanel(name) {
+  state.panel = name;
+  dom.showgen.setAttribute("aria-pressed", String(name === "output"));
+  dom.showsim.setAttribute("aria-pressed", String(name === "trace"));
+  dom.tabs.hidden = name !== "output";
+  document.querySelector('[data-panel="trace"]').hidden = name !== "trace";
+  if (name === "output") selectTab(state.tab === "flags" ? "flags" : "output");
+  else for (const panel of document.querySelectorAll('[data-panel="output"], [data-panel="flags"]')) {
+    panel.hidden = true;
+  }
+  document.body.dataset.panel = name ?? "none";
+  shell.remember(localStorage, shell.UI_KEYS.panel, name ?? "");
+  // Открыли генерацию — вывод обязан быть свежим: пока панель была закрыта,
+  // правки модели в него не печатались.
+  if (name === "output") compile();
 }
 
 /**
@@ -858,7 +908,7 @@ function selectMode(name) {
     mode.classList.toggle("active", active);
     mode.setAttribute("aria-selected", String(active));
   }
-  if (name !== "source") selectTab(name);
+  if (name !== "source") selectPanel(name);
 }
 
 function row(text, kind) {

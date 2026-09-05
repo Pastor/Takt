@@ -18,11 +18,10 @@
   "diagnostics.title": "Диагностики",
   "diagnostics.none": "Ошибок нет",
   "tabs.output": "Вывод цели",
-  "tabs.trace": "Прогон",
   "modes.label": "Область",
   "modes.source": "Модель",
   "modes.output": "Вывод",
-  "modes.trace": "Прогон",
+  "modes.trace": "Симуляция",
   "output.target": "Цель",
   "output.refused": "отказ",
   "output.noHighlight": "без подсветки: файл длиннее {limit} символов",
@@ -136,5 +135,7 @@
   "bar.build": "сборка {number}",
   "bar.buildTip": "собрано {built} · коммит {commit} · ветка {branch}",
   "account.cancel": "Отмена",
-  "account.signinTitle": "Вход"
+  "account.signinTitle": "Вход",
+  "panel.generate": "Генерация",
+  "panel.simulate": "Симуляция"
 }

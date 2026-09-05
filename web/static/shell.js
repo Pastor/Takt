@@ -502,6 +502,8 @@ export const UI_KEYS = {
   tab: "takt.ui.tab",
   /** Бюджет прогона, тактов. */
   budget: "takt.ui.budget",
+  /** Открытая панель правой области: `output`, `trace` либо пусто. */
+  panel: "takt.ui.panel",
 };
 
 /** Читает настройку; `fallback` — если её нет либо хранилище недоступно. */

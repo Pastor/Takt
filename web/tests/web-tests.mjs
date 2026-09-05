@@ -729,6 +729,37 @@ test("редактор: перевод строки считается симв�
   assert.deepEqual(editor.lineOfOffset(lengths, 99), { index: 2, inLine: 5 });
 });
 
+test("панели: генерация и симуляция — одна область на двоих", async () => {
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../static/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../static/app.css", import.meta.url), "utf8");
+
+  // Кнопки залипающие и стоят в полосе управления справа.
+  const tools = html.slice(html.indexOf('<div class="bar bar-tools">'), html.indexOf("<main"));
+  for (const id of ["showgen", "showsim"]) {
+    assert.match(tools, new RegExp(`id="${id}"[^>]*aria-pressed`), `${id} не залипающая`);
+  }
+  assert.ok(tools.indexOf('class="spacer"') < tools.indexOf('id="showgen"'),
+    "кнопки панелей не прижаты вправо");
+
+  // ⚠️ Симуляция больше НЕ вкладка: у неё своя панель. Вкладка, оставшаяся в
+  // ряду, показывала бы панель в обход кнопки — и обе оказались бы открыты.
+  assert.ok(!html.includes('data-tab="trace"'), "симуляция осталась вкладкой");
+
+  // ⚠️ Скрытая генерация НЕ выполняется: печатать в невидимую область — работа
+  // впустую, и на большой модели она заметна (решение заказчика).
+  assert.match(app, /function compile\(\)[\s\S]{0,800}?state\.panel !== "output"[\s\S]{0,40}?return;/,
+    "генерация идёт при закрытой панели");
+  // ⚠️ …но и до загрузки модуля её звать нельзя: панель выбирается раньше, и
+  // страница падала целиком, показывая «модуль не загрузился» при живом модуле.
+  assert.match(app, /function compile\(\)[\s\S]{0,800}?!state\.bridge/,
+    "компиляция не защищена от вызова до моста");
+
+  // Обе отжаты — область уходит вместе со своим разделителем.
+  assert.match(css, /body\[data-panel="none"\][\s\S]{0,200}?display: none/,
+    "закрытая область остаётся на экране");
+});
+
 test("шапка: две полосы, и каждая отвечает на свой вопрос", async () => {
   // ⚠️ Предмет — СОСТАВ полос (раскладка заказчика 2026-09-05): верхняя
   // отвечает «что за страница» (имя, версия языка, время сборки, вход), нижняя
@@ -843,7 +874,7 @@ test("настройки интерфейса живут в localStorage и кл
   // читает, и читатель получит умолчание там, где выбирал сам.
   const keys = [
     shell.KEY, shell.PANES_KEY, shell.ROWS_KEY, shell.TRACE_KEY,
-    shell.FONT_KEY, shell.WRAP_KEY,
+    shell.FONT_KEY, shell.WRAP_KEY, shell.UI_KEYS.panel,
     shell.UI_KEYS.tab, shell.UI_KEYS.budget,
   ];
   assert.equal(new Set(keys).size, keys.length, `ключи совпали: ${keys.join(", ")}`);
