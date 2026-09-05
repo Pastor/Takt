@@ -152,4 +152,21 @@ else
   echo "  пропуск: E6 нет docker compose — разбор стека не проверен"
 fi
 
-echo "  Сторож выкладки: все проверки пройдены (E1…E6)."
+# ── E7: образ собирает модуль ТЕМ ЖЕ профилем, что ищет сборка статики ───────
+# ⚠️ `build-web.sh` ищет модуль по `TAKT_WASM_PROFILE` (умолчание `wasm`), а
+# образ собирал его `--release` — и сборка падала на «Модуль не собран» уже НА
+# СТЕНДЕ, после полутора сотен скомпилированных крейтов. Два носителя одного
+# знания разошлись молча (выкладка 2026-09-05).
+DOCKER_PROFILE="$(grep -oE 'cargo build --profile \$\{WASM_PROFILE\}|cargo build --release --target wasm32' "$ROOT/web/deploy/Dockerfile" | head -1)"
+if [[ "$DOCKER_PROFILE" != 'cargo build --profile ${WASM_PROFILE}' ]]; then
+  echo "  ПРОВАЛ: E7 образ собирает модуль не тем профилем, что ищет build-web.sh"
+  echo "          (нашлось: '${DOCKER_PROFILE:-ничего}')"
+  exit 1
+fi
+grep -q 'TAKT_WASM_PROFILE=\${WASM_PROFILE}' "$ROOT/web/deploy/Dockerfile" || {
+  echo "  ПРОВАЛ: E7 профиль не передан скрипту сборки статики — он возьмёт своё умолчание"
+  exit 1
+}
+echo "  OK: E7 профиль модуля назван один раз и доезжает до сборки статики"
+
+echo "  Сторож выкладки: все проверки пройдены (E1…E7)."
