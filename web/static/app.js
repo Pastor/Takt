@@ -14,6 +14,7 @@ import { SAMPLE } from "./sample.js";
 import { enhance } from "./pick.js";
 import * as build from "./build.js";
 import * as shell from "./shell.js";
+import * as tip from "./tip.js";
 import * as project from "./project.js";
 import * as api from "./api.js";
 import * as account from "./account.js";
@@ -76,6 +77,8 @@ export async function main() {
   // Прочие настройки интерфейса — оттуда же: вкладка и бюджет прогона.
   dom.budget.value = shell.setting(localStorage, shell.UI_KEYS.budget, dom.budget.value);
   selectTab(shell.setting(localStorage, shell.UI_KEYS.tab, "output"));
+  // Подсказки — свои, а не нативные: `title` в разметке нет вовсе.
+  tip.attach(document);
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   fillLanguages();
   enhance(dom.lang);
@@ -234,11 +237,17 @@ function watchBuild() {
   });
 }
 
-/** Строка версии: язык Takt и версия модуля. */
+/**
+ * Строка шапки: версия языка и время сборки.
+ *
+ * ⚠️ Версии модуля здесь нет (решение заказчика 2026-09-05): читателю она
+ * ничего не решает — им обоим важно, чей это язык и насколько свежа страница.
+ * Сама версия из описи не пропала: её показывает окно обновления.
+ */
 function showVersion() {
   dom.version.textContent = t("bar.version", {
     language: state.languageVersion,
-    module: state.version,
+    built: build.moment(state.build?.built_at),
   });
 }
 

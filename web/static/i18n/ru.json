@@ -1,7 +1,7 @@
 {
   "page.title": "Takt — онлайн-редактор",
   "bar.loading": "загрузка модуля…",
-  "bar.version": "язык {language} · модуль {module}",
+  "bar.version": "язык {language} · {built}",
   "bar.format": "Формат",
   "bar.share": "Поделиться",
   "bar.fontLess": "−",
@@ -15,26 +15,22 @@
   "bar.wrapHint": "Переносить длинные строки",
   "bar.width": "Ширина страницы",
   "bar.moduleFailed": "модуль не загружен: {error}",
-
   "source.title": "Модель",
   "source.editor": "Исходный текст модели",
   "diagnostics.title": "Диагностики",
   "diagnostics.none": "Ошибок нет",
-
   "tabs.output": "Вывод цели",
   "tabs.trace": "Прогон",
   "modes.label": "Область",
   "modes.source": "Модель",
   "modes.output": "Вывод",
   "modes.trace": "Прогон",
-
   "output.target": "Цель",
   "output.args": "Ключи сборки",
   "output.argsPlaceholder": "например: --fsm=table",
   "output.refused": "отказ",
   "output.noHighlight": "без подсветки: файл длиннее {limit} символов",
   "output.highlightFailed": "подсветка недоступна",
-
   "trace.budget": "Бюджет, тактов",
   "trace.run": "Прогон",
   "trace.stop": "Стоп",
@@ -45,7 +41,6 @@
   "trace.stoppedByAuthor": "остановлено автором",
   "trace.budgetSpent": "бюджет прогона исчерпан, тактов: {steps}",
   "trace.unknownCommand": "неизвестная команда воркера: {type}",
-
   "editor.noSymbol": "под курсором нет имени с объявлением",
   "editor.declaration": "объявление в строке {line}; использований: {uses}",
   "editor.renamePrompt": "Новое имя:",
@@ -54,17 +49,13 @@
   "editor.formatUnavailable": "форматирование недоступно",
   "editor.formatted": "отформатировано",
   "editor.alreadyFormatted": "документ уже в каноне",
-
   "share.copied": "ссылка скопирована, символов: {length}",
   "share.inAddressBar": "ссылка в адресной строке — скопируйте её",
-
   "draft.tooBig": "черновик больше {limit} КиБ ({size} Б) — не сохранён",
   "draft.notSaved": "черновик не сохранён: {error}",
-
   "project.open": "проект «{name}» · автор {owner}",
   "project.notFound": "проект не найден: он удалён либо закрыт",
   "project.failed": "проект не открылся: {error}",
-
   "account.enter": "Войти",
   "account.save": "Сохранить",
   "account.login": "Логин",
@@ -98,7 +89,6 @@
   "account.rereadDone": "перечитано, ревизия {revision}",
   "api.failed": "сервер отказал: {message}",
   "api.offline": "сервер не отвечает: {error}",
-
   "oauth.yandex": "Яндекс",
   "oauth.vk": "ВКонтакте",
   "oauth.mail": "Mail (через VK ID)",
@@ -112,7 +102,6 @@
   "oauth.error.csrf": "вход начат не в этом браузере — начните заново",
   "oauth.error.unavailable": "площадка не отвечает — попробуйте позже",
   "oauth.error.identityTaken": "эта площадка уже привязана к другой записи",
-
   "showcase.title": "Открытые проекты",
   "showcase.query": "Поиск по открытым проектам",
   "showcase.find": "Найти",
@@ -130,6 +119,5 @@
   "profile.linkedRow": "{provider} — нажмите, чтобы отвязать",
   "profile.noLinks": "площадки не привязаны",
   "profile.unlinked": "площадка отвязана",
-
   "tools.russianOnly": "Сообщения инструментов пока только на русском"
 }

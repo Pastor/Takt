@@ -1,7 +1,7 @@
 {
   "page.title": "Takt — online editor",
   "bar.loading": "loading the module…",
-  "bar.version": "language {language} · module {module}",
+  "bar.version": "language {language} · {built}",
   "bar.format": "Format",
   "bar.share": "Share",
   "bar.fontLess": "−",
@@ -15,26 +15,22 @@
   "bar.wrapHint": "Wrap long lines",
   "bar.width": "Page width",
   "bar.moduleFailed": "module not loaded: {error}",
-
   "source.title": "Model",
   "source.editor": "Model source text",
   "diagnostics.title": "Diagnostics",
   "diagnostics.none": "No errors",
-
   "tabs.output": "Target output",
   "tabs.trace": "Run",
   "modes.label": "Area",
   "modes.source": "Model",
   "modes.output": "Output",
   "modes.trace": "Run",
-
   "output.target": "Target",
   "output.args": "Build flags",
   "output.argsPlaceholder": "for example: --fsm=table",
   "output.refused": "refused",
   "output.noHighlight": "no highlighting: the file is longer than {limit} characters",
   "output.highlightFailed": "highlighting unavailable",
-
   "trace.budget": "Budget, ticks",
   "trace.run": "Run",
   "trace.stop": "Stop",
@@ -45,7 +41,6 @@
   "trace.stoppedByAuthor": "stopped by the author",
   "trace.budgetSpent": "run budget spent, ticks: {steps}",
   "trace.unknownCommand": "unknown worker command: {type}",
-
   "editor.noSymbol": "no name with a declaration under the cursor",
   "editor.declaration": "declared on line {line}; usages: {uses}",
   "editor.renamePrompt": "New name:",
@@ -54,17 +49,13 @@
   "editor.formatUnavailable": "formatting unavailable",
   "editor.formatted": "formatted",
   "editor.alreadyFormatted": "the document is already canonical",
-
   "share.copied": "link copied, characters: {length}",
   "share.inAddressBar": "the link is in the address bar — copy it",
-
   "draft.tooBig": "the draft is larger than {limit} KiB ({size} B) — not saved",
   "draft.notSaved": "the draft was not saved: {error}",
-
   "project.open": "project “{name}” · by {owner}",
   "project.notFound": "project not found: removed or closed",
   "project.failed": "project did not open: {error}",
-
   "account.enter": "Sign in",
   "account.save": "Save",
   "account.login": "Login",
@@ -98,7 +89,6 @@
   "account.rereadDone": "re-read, revision {revision}",
   "api.failed": "the server refused: {message}",
   "api.offline": "the server does not answer: {error}",
-
   "oauth.yandex": "Yandex",
   "oauth.vk": "VKontakte",
   "oauth.mail": "Mail (via VK ID)",
@@ -112,7 +102,6 @@
   "oauth.error.csrf": "the sign-in started in another browser — start over",
   "oauth.error.unavailable": "the platform does not answer — try later",
   "oauth.error.identityTaken": "this platform is already linked to another account",
-
   "showcase.title": "Public projects",
   "showcase.query": "Search public projects",
   "showcase.find": "Search",
@@ -130,6 +119,5 @@
   "profile.linkedRow": "{provider} — click to unlink",
   "profile.noLinks": "no platforms linked",
   "profile.unlinked": "the platform is unlinked",
-
   "tools.russianOnly": "Tool messages are still Russian only"
 }

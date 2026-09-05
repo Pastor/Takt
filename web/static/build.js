@@ -74,3 +74,24 @@ async function defaultFetch() {
   if (!response.ok) throw new Error(`version.json: ${response.status}`);
   return response.json();
 }
+
+/**
+ * Время сборки для шапки: `ГГГГ-ММ-ДД ЧЧ:ММ` по часам ЧИТАТЕЛЯ.
+ *
+ * ⚠️ Метка в описи — UTC (`built_at`), а показывается местное время: читатель
+ * сравнивает её со своими часами («это сегодняшняя сборка?»), а не с
+ * гринвичскими. Секунд нет — они ничего не решают и мельтешат.
+ *
+ * ⚠️ Неразобранная метка даёт ПУСТУЮ строку, а не «Invalid Date»: опись
+ * приходит с сервера, и старая её версия поля не несёт вовсе.
+ */
+export function moment(iso) {
+  if (!iso) return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}` +
+    ` ${pad(at.getHours())}:${pad(at.getMinutes())}`
+  );
+}

@@ -32,6 +32,8 @@ import * as i18n from "../static/i18n.js";
 import { inlineScripts, literalsWithText, nodesWithoutKey } from "./strings.mjs";
 import { bundleOfUrl } from "../static/build.js";
 import * as shell from "../static/shell.js";
+import * as tip from "../static/tip.js";
+import * as build from "../static/build.js";
 import * as project from "../static/project.js";
 import * as api from "../static/api.js";
 import { feed } from "../static/showcase.js";
@@ -318,7 +320,10 @@ test("язык: каждый ключ разметки есть в словар�
   // площадок в коде страницы нет намеренно. Ключи берутся у него же — иначе
   // сверка объявила бы их мёртвыми и подтолкнула бы завести список в вебе.
   for (const key of await serverLabelKeys()) used.add(key);
-  for (const [, a, b] of text.matchAll(/\?\s*"([\w.]+)"\s*:\s*"([\w.]+)"/g)) {
+  // ⚠️ Ключ ОБЯЗАН нести точку (`bar.format`): без этого условия тернарник над
+  // парой обычных слов (`fits ? "below" : "above"`) читается как выбор ключа, и
+  // сверка требует словарной статьи для слова, которое читателю не показывают.
+  for (const [, a, b] of text.matchAll(/\?\s*"(\w+\.[\w.]+)"\s*:\s*"(\w+\.[\w.]+)"/g)) {
     used.add(a);
     used.add(b);
   }
@@ -392,7 +397,7 @@ test("язык: порядок выбора — сохранённый, брау
 const PAGE_SCRIPTS = [
   "account.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js",
   "draft.js", "editor.js", "i18n.js", "pick.js", "project.js", "sample.js",
-  "share.js", "shell.js", "showcase.js", "worker.js",
+  "share.js", "shell.js", "showcase.js", "tip.js", "worker.js",
 ];
 
 /**
@@ -576,6 +581,81 @@ test("прокрутка: вложенная область кода не зап
   // И контроль: у ВНЕШНИХ областей `contain` обязан остаться — иначе жест в
   // конце списка потянет документ, и на телефоне это выглядит поломкой.
   assert.match(css, /\.editor,\s*\.output,\s*\.list,\s*\.scenario\s*\{[^}]*overscroll-behavior:\s*contain/);
+});
+
+test("шапка: время сборки читается по часам читателя", () => {
+  // ⚠️ Показывается МЕСТНОЕ время, а метка описи — UTC: читатель сравнивает её
+  // со своими часами («сегодняшняя ли сборка?»), а не с гринвичскими.
+  const was = process.env.TZ;
+  process.env.TZ = "UTC";
+  try {
+    assert.equal(build.moment("2026-09-05T12:14:26Z"), "2026-09-05 12:14");
+  } finally {
+    process.env.TZ = was;
+  }
+
+  // ⚠️ Опись прежней выкладки поля не несёт вовсе, а разбор чужой строки даёт
+  // «Invalid Date» — в шапку она попасть не должна: пусто честнее неверного.
+  for (const bad of [undefined, null, "", "позавчера"]) {
+    assert.equal(build.moment(bad), "", `метка ${JSON.stringify(bad)} дала текст`);
+  }
+});
+
+test("подсказка: своя, а нативной не остаётся", async () => {
+  // ⚠️ Предмет — ОТСУТСТВИЕ нативной. Оставь `title` рядом со своей панелью, и
+  // браузер нарисует вторую поверх первой, со своей задержкой и чужим шрифтом;
+  // на снимке экрана это заметно, а в тестах — нет, если их не написать.
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const natives = html.split("\n").flatMap((line, i) =>
+    /(?<![\w-])title="/.test(line) ? [`строка ${i + 1}`] : []
+  );
+  assert.deepEqual(natives, [], `в разметке остался title: ${natives.join(", ")}`);
+
+  // Каждая подсказка разметки переводится: подпись кнопки-значка — это ВСЁ,
+  // что читатель о ней узнаёт, и непереведённая оставляет её безымянной.
+  for (const [, node] of html.matchAll(/<[^>]*\bdata-tip="[^"]*"[^>]*>/g).map((m) => [0, m[0]])) {
+    assert.match(node, /data-i18n-attr="[^"]*data-tip:/, `подсказка без ключа: ${node.slice(0, 60)}…`);
+  }
+
+  // Приём референса: узел с `title` из кода перехватывается — атрибут снимается,
+  // текст переезжает в `data-tip`.
+  const node = {
+    attrs: { title: "Подпись" },
+    dataset: {},
+    hasAttribute(name) { return name in this.attrs; },
+    getAttribute(name) { return this.attrs[name]; },
+    removeAttribute(name) { delete this.attrs[name]; },
+  };
+  assert.equal(tip.claim(node), "Подпись");
+  assert.equal(node.hasAttribute("title"), false, "нативный title не снят");
+  assert.equal(tip.claim(node), "Подпись", "повторный показ теряет текст");
+});
+
+test("подсказка: место панели не выходит за окно", () => {
+  const view = { width: 400, height: 300 };
+  const box = { width: 120, height: 40 };
+
+  // Обычный случай: под элементом, по центру.
+  const middle = tip.place({ left: 100, top: 100, width: 40, height: 20, bottom: 120 }, box, view);
+  assert.equal(middle.side, "below");
+  assert.equal(middle.left, 100 + 20 - 60);
+  assert.equal(middle.top, 120 + tip.GAP);
+
+  // Элемент у нижнего края: панель переворачивается вверх.
+  const low = tip.place({ left: 100, top: 270, width: 40, height: 20, bottom: 290 }, box, view);
+  assert.equal(low.side, "above");
+  assert.equal(low.top, 270 - box.height - tip.GAP);
+
+  // Элемент у левого и правого края: панель прижимается, но не вылезает.
+  const left = tip.place({ left: 0, top: 10, width: 20, height: 20, bottom: 30 }, box, view);
+  assert.equal(left.left, tip.EDGE);
+  const right = tip.place({ left: 380, top: 10, width: 20, height: 20, bottom: 30 }, box, view);
+  assert.equal(right.left, view.width - box.width - tip.EDGE);
+
+  // ⚠️ Окно ниже панели: места нет нигде, и верх обязан упереться в край, а не
+  // уехать за него — иначе подсказка была бы обрезана невидимо для автора.
+  const tiny = tip.place({ left: 10, top: 5, width: 20, height: 20, bottom: 25 }, box, { width: 400, height: 50 });
+  assert.ok(tiny.top >= tip.EDGE, `панель за верхним краем: ${tiny.top}`);
 });
 
 test("настройки интерфейса живут в localStorage и ключи у них разные", async () => {
