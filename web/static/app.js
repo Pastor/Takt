@@ -457,69 +457,20 @@ function showDiagnostics(items) {
 }
 
 function jump(line, character) {
-  const offset = positionToOffset(state.editor.value(), line, character);
-  dom.editor.focus();
-  const selection = document.getSelection();
-  if (!selection) return;
-  const walker = document.createTreeWalker(dom.editor, NodeFilter.SHOW_TEXT);
-  let seen = 0;
-  let node = walker.nextNode();
-  while (node) {
-    if (seen + node.textContent.length >= offset) {
-      const range = document.createRange();
-      range.setStart(node, offset - seen);
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      return;
-    }
-    seen += node.textContent.length;
-    node = walker.nextNode();
-  }
+  // ⚠️ Своего обхода узлов здесь нет: правило «смещение ↔ точка DOM» живёт в
+  // редакторе одним носителем. Пока его считали по месту, три места считали
+  // по-разному, и переводы строк не знало ни одно (см. `editor.js`).
+  state.editor.moveTo(line, character);
 }
 
 /** Подсказка при наведении: тип и объявление под курсором мыши. */
 const onHover = draft.debounce((event) => {
-  const at = positionAt(event.clientX, event.clientY);
+  const at = state.editor.positionAt(event.clientX, event.clientY);
   if (!at) return;
   const reply = state.bridge.hover(state.editor.value(), at.line, at.character);
   // Пусто — не ошибка: под курсором просто нет имени, и молчание здесь верно.
   say(reply.ok ? (reply.contents ?? "") : "", "ok");
 }, 120);
-
-/** Позиция документа под точкой экрана. */
-function positionAt(x, y) {
-  const range = document.caretRangeFromPoint?.(x, y)
-    ?? document.caretPositionFromPoint?.(x, y);
-  if (!range) return null;
-  const node = range.startContainer ?? range.offsetNode;
-  const offsetInNode = range.startOffset ?? range.offset;
-  const walker = document.createTreeWalker(dom.editor, NodeFilter.SHOW_TEXT);
-  let seen = 0;
-  let current = walker.nextNode();
-  let lineBreaks = 0;
-  while (current) {
-    if (current === node) break;
-    seen += current.textContent.length;
-    // Узлы-строки блочные: перевод строки в тексте есть, а в узлах — нет.
-    const parent = current.parentElement?.closest(".line");
-    const nextParent = walker.currentNode?.parentElement?.closest(".line");
-    if (parent && nextParent && parent !== nextParent) lineBreaks += 1;
-    current = walker.nextNode();
-  }
-  const offset = seen + lineBreaks + offsetInNode;
-  const { line, character } = offsetToPositionSafe(state.editor.value(), offset);
-  return { line, character };
-}
-
-function offsetToPositionSafe(text, offset) {
-  const clamped = Math.max(0, Math.min(offset, text.length));
-  const before = text.slice(0, clamped);
-  return {
-    line: before.split("\n").length - 1,
-    character: clamped - (before.lastIndexOf("\n") + 1),
-  };
-}
 
 /** Переход к объявлению и показ использований символа под курсором. */
 function declarationAndUses() {

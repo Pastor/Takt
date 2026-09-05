@@ -617,13 +617,18 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
  * нумерацию вывода с последней строки исходника. */
 .editor, .output, .file-text { counter-reset: codeline; }
 
-.line { counter-increment: codeline; }
+/* ⚠️ Номер строки стоит ВНЕ ПОТОКА строки (`position: absolute`), а место под
+ * него даёт отступ. Сгенерированное содержимое в начале РЕДАКТИРУЕМОЙ строки
+ * участвует в её геометрии, и каретка встречает его как объект: стрелки в
+ * начале строки застревают, а место каретки считается по-разному в разных
+ * браузерах. Вне потока встречать нечего. */
+.line { counter-increment: codeline; position: relative; padding-left: calc(3ch + var(--gap)); }
 
 .line::before {
   content: counter(codeline);
-  display: inline-block;
-  min-width: 3ch;
-  margin-right: var(--gap);
+  position: absolute;
+  left: 0;
+  width: 3ch;
   text-align: right;
   color: var(--on-surface-soft);
   user-select: none;
