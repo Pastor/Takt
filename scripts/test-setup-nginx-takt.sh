@@ -147,4 +147,30 @@ if grep -qE '^\s+- "\$\{[A-Z_]*DB_PORT' "$ROOT/web/deploy/docker-compose.yml"; t
 fi
 echo "  OK: N8 стек изолирован именем проекта, порт базы наружу не публикуется"
 
-echo "  Сторож настройки nginx: все проверки пройдены (N1…N8)."
+# ── N9 ───────────────────────────────────────────────────────────────────────
+# ⚠️ Наш файл включается ВНУТРЬ server-блока соседа, и директива уровня блока в
+# нём — это директива В ЕГО блоке. Повтор client_max_body_size nginx считает
+# ошибкой («directive is duplicate»), и конфигурация перестаёт приниматься
+# ЦЕЛИКОМ: сосед не переживёт следующий reload. Замер 2026-09-05: у соседа на
+# стенде client_max_body_size 32m в его же snippet, включённом в оба блока.
+OUTSIDE="$(awk '
+  /^### \/etc\/nginx\/snippets\/takt-locations\.conf/ { inside = 1; next }
+  /^### / { inside = 0 }
+  inside {
+    line = $0
+    sub(/#.*/, "", line)
+    gsub(/^[ \t]+|[ \t]+$/, "", line)
+    if (line == "") next
+    if (depth == 0 && line !~ /^location/ && line !~ /^}/) print line
+    depth += gsub(/{/, "{", line) - gsub(/}/, "}", line)
+  }
+' "$WORK/conf")"
+if [[ -n "$OUTSIDE" ]]; then
+  echo "  ПРОВАЛ: N9 директива уровня блока в файле локейшенов:"
+  echo "$OUTSIDE" | sed 's/^/          /'
+  echo "          она попадёт в server-блок СОСЕДА — повтор ломает весь конфиг"
+  exit 1
+fi
+echo "  OK: N9 директив уровня блока нет — чужой server-блок не задет"
+
+echo "  Сторож настройки nginx: все проверки пройдены (N1…N9)."
