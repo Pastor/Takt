@@ -76,7 +76,7 @@ struct BatchCycle {
     } cycle_state;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(BatchCycle_Out_BitPort port, bool val, void *userdata);
+    void  (*write_bit)(BatchCycle_Out_BitPort port, uint8_t bit, bool val, void *userdata);
 };
 
 void BatchCycle_init(BatchCycle *main);

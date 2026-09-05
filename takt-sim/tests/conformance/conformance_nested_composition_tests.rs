@@ -88,7 +88,8 @@ fn generated_c_trace(dir: &Path) -> Vec<(i128, i128, i128)> {
 
 static long long reg[3] = {{0, 0, 0}};
 
-static void on_write(ConformanceNestedComposition_Out_NumericPort port, int64_t value, void *ud) {{
+static void on_write(ConformanceNestedComposition_Out_NumericPort port, uint8_t index, int64_t value, void *ud) {{
+    (void)index;
     (void)ud;
     reg[(int)port] = (long long)value;
 }}

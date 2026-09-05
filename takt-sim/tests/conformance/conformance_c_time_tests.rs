@@ -67,7 +67,8 @@ fn generated_c_dwell_tick(dir: &Path) -> usize {
 #include "conformance_after.h"
 
 static int done = 0;
-static void wr(ConformanceAfter_Out_BitPort port, bool v, void *ud) {
+static void wr(ConformanceAfter_Out_BitPort port, uint8_t bit, bool v, void *ud) {
+    (void)bit;
     (void)port;
     (void)ud;
     done = v;
@@ -225,7 +226,8 @@ static uint64_t fake_now = 0;
 static uint64_t clk(void *ud) { (void)ud; return fake_now; }
 
 static int done = 0;
-static void wr(ConformanceAfterClock_Out_BitPort port, bool v, void *ud) {
+static void wr(ConformanceAfterClock_Out_BitPort port, uint8_t bit, bool v, void *ud) {
+    (void)bit;
     (void)port;
     (void)ud;
     done = v;
@@ -322,7 +324,8 @@ fn after_clock_survives_counter_wraparound() {
 static uint64_t fake_now = 0;
 static uint64_t clk(void *ud) { (void)ud; return fake_now; }
 static int done = 0;
-static void wr(ConformanceAfterClock_Out_BitPort port, bool v, void *ud) {
+static void wr(ConformanceAfterClock_Out_BitPort port, uint8_t bit, bool v, void *ud) {
+    (void)bit;
     (void)port; (void)ud; done = v;
 }
 int main(void) {

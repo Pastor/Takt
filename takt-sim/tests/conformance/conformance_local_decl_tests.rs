@@ -91,7 +91,8 @@ fn generated_c_trace(dir: &Path) -> Vec<(i128, i128)> {
 static long probe_value = 0;
 static long mirror_value = 0;
 
-static void wr_num(ConformanceLocalDecl_Out_NumericPort port, int64_t v, void *ud) {{
+static void wr_num(ConformanceLocalDecl_Out_NumericPort port, uint8_t index, int64_t v, void *ud) {{
+    (void)index;
     (void)ud;
     if (port == CONFORMANCE_LOCAL_DECL_PORT_PROBE) {{
         probe_value = (long)v;

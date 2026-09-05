@@ -72,7 +72,21 @@ fn port_ctype(map: &CMap, model_name: &Name, port_name: &str) -> Option<String> 
     let VariableNode::Port { ty, .. } = borrowed.variables.get(port_name)? else {
         return None;
     };
-    c::get_c_type(ty, &borrowed, map.float_width())
+    // ⚠️ У МАССИВА-порта ширина доступа — ширина ЭЛЕМЕНТА (фича 0533): порт
+    // адресуется индексом, и регистр читается по одному элементу. Она же
+    // служит шагом: элемент `i` лежит по `addr + i * width`. Прежде массив
+    // разворачивался по листам и сюда не доходил; после отмены разворота тип
+    // массива в C не представим, и таблица адресов отказывала `CC-015` там,
+    // где вывод обязан быть.
+    let scalar = match ty {
+        crate::semantic::type_node::TypeNode::Array(_, elem)
+            if crate::semantic::bit_vector::is_bit_vector(ty).is_none() =>
+        {
+            elem.as_ref()
+        }
+        other => other,
+    };
+    c::get_c_type(scalar, &borrowed, map.float_width())
 }
 
 /// Фича 0020-05: эмитит таблицу адресов портов и дефолтную реализацию HAL.

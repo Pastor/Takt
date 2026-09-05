@@ -8,7 +8,6 @@ Main --> [*]
 state Pid {
     [*] --> Control
     Control --> Settled
-    Done --> [*]
     Settled --> Done
 }
 

@@ -59,7 +59,8 @@ fn generated_c_trace(dir: &Path) -> Vec<i128> {
 static uint64_t fake_now = 0;
 static uint64_t clk(void *ud) {{ (void)ud; return fake_now; }}
 static int64_t led = 0;
-static void wr(ConformanceEvery_Out_NumericPort port, int64_t v, void *ud) {{
+static void wr(ConformanceEvery_Out_NumericPort port, uint8_t index, int64_t v, void *ud) {{
+    (void)index;
     (void)port; (void)ud; led = v;
 }}
 

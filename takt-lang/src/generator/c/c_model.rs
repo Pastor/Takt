@@ -234,6 +234,14 @@ fn generate_extend_transition(
         printer.ident("break;").nl();
         return Ok(());
     }
+    // ⚠️ Состояние С ТЕЛОМ автомат НЕ завершает (фича 0534): рёбер у него может
+    // не быть вовсе, и уводить его в `END` нельзя — оно работает, пока его не
+    // увели. Признак общий с эталоном (`StateNode::is_terminated`), иначе
+    // прошивка замирала бы там, где модель считает дальше.
+    if next.local().is_empty() && !raw_state.is_terminated() {
+        printer.ident("break;").nl();
+        return Ok(());
+    }
     if next.local().is_empty() {
         // Переход в терминальное состояние: exit текущего → state = END → break
         generate_named_blocks(printer, raw_state, map, model, "exit")?;

@@ -86,7 +86,6 @@ impl FloatRegulatorFloatRegulator {
             }
             FloatRegulatorFloatRegulatorState::Done => {
                 hal.write_bit(OutBitPort::Ready, true);
-                self.state = FloatRegulatorFloatRegulatorState::End;
             }
             FloatRegulatorFloatRegulatorState::Settled => {
                 self.value = self.setpoint;

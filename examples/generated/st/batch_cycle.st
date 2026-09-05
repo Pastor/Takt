@@ -127,7 +127,6 @@ END_VAR
             END_CASE;
         2: (* Done *)
             ready := TRUE;
-            state := 3; (* END *)
         3: (* END *)
             state := 3;
     END_CASE;

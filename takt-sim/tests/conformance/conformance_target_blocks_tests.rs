@@ -113,7 +113,8 @@ fn c_target_matches_simulator() {
         r#"#include <stdio.h>
 #include "{UNIT}.h"
 static long long out;
-static void on_num(Targetblocks_Out_NumericPort p, int64_t v, void *u) {{
+static void on_num(Targetblocks_Out_NumericPort p, uint8_t index, int64_t v, void *u) {{
+    (void)index;
     (void)p; (void)u; out = (long long)v;
 }}
 int main(void) {{

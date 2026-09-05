@@ -152,9 +152,23 @@ pub(crate) fn emit_composition(
         return Ok(());
     }
 
+    // ⚠️ Тело ветви печатается В БУФЕР, и пустой `IF` не печатается вовсе
+    // (приём 0509/0473): состояние с телом автомат не завершает (0534), выхода
+    // у него нет — а пустого оператора MatIEC не знает и отвергает файл.
+    let mut body = String::new();
+    {
+        let mut inner = Printer::new(crate::generator::st::INDENT, &mut body);
+        inner.up();
+        emit_state_exit(&mut inner, map, state_name, state, model, next, table, out)?;
+    }
+    if body.trim().is_empty() {
+        return Ok(());
+    }
     p.ident(&format!("IF {} THEN", done)).nl();
     p.up();
-    emit_state_exit(p, map, state_name, state, model, next, table, out)?;
+    for line in body.lines() {
+        p.ident(line.trim_start()).nl();
+    }
     p.down();
     p.ident("END_IF;").nl();
     Ok(())
@@ -198,6 +212,12 @@ fn emit_state_exit(
         return Ok(());
     }
     if next.unique().is_empty() && !references.is_empty() {
+        return Ok(());
+    }
+    // ⚠️ Состояние С ТЕЛОМ автомат не завершает (фича 0534), и `exit` в нём не
+    // наступает: выхода нет. Проверка стоит ДО печати `exit` ниже — иначе он
+    // исполнялся бы каждый скан после завершения композиции.
+    if next.unique().is_empty() && !state.is_terminated() {
         return Ok(());
     }
     let target = if next.unique().is_empty() {

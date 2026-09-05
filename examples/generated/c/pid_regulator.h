@@ -51,7 +51,7 @@ struct PidRegulator {
     PidRegulatorPid main;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(PidRegulator_Out_BitPort port, bool val, void *userdata);
+    void  (*write_bit)(PidRegulator_Out_BitPort port, uint8_t bit, bool val, void *userdata);
 };
 
 void PidRegulator_init(PidRegulator *main);

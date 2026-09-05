@@ -129,7 +129,6 @@ END_VAR
                 loop_pid := PidLaw_pid_reset(loop_pid);
                 ctrl := 0.0;
             END_IF;
-            state := 2; (* END *)
         2: (* END *)
             state := 2;
     END_CASE;

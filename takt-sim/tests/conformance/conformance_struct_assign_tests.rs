@@ -54,7 +54,8 @@ fn generated_c_values(dir: &Path) -> (i128, i128) {
 static long sum_v = 0;
 static long ctl_v = 0;
 
-static void wr(ConformanceStructAssign_Out_NumericPort port, int64_t v, void *ud) {{
+static void wr(ConformanceStructAssign_Out_NumericPort port, uint8_t index, int64_t v, void *ud) {{
+    (void)index;
     (void)ud;
     if (port == CONFORMANCE_STRUCT_ASSIGN_PORT_O_SUM) {{
         sum_v = (long)v;

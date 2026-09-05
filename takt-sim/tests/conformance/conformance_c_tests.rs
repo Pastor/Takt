@@ -686,11 +686,13 @@ int main(void) {{
 fn per_tick_trace_matches_generated_c() {
     let vars = ["n"];
     let sim = simulate_trace(TICKS_FIXTURE, &vars);
-    // Пиннинг: n принимает 1 → 2 → 3, модель завершается за 3 такта. Возврат
-    // `break` в INIT-диспетчер сдвинул бы трассу и уронил бы это сравнение.
+    // Пиннинг: n принимает 1 → 2 → 3 и ДЕРЖИТСЯ: состояние `S2` имеет тело и
+    // потому автомат не завершает (правило стабильности состояния, фича 0534).
+    // Возврат `break` в INIT-диспетчер сдвинул бы трассу и уронил бы это
+    // сравнение.
     assert_eq!(
         sim,
-        vec![vec![1], vec![2], vec![3]],
+        held_trace(),
         "ожидаемая потактовая трасса симулятора: n = 1, 2, 3"
     );
 
@@ -723,6 +725,12 @@ fn per_tick_trace_matches_generated_c() {
 // собой, а не в одноимённом каталоге (приём фичи 0088).
 #[path = "conformance_c_tests/overflow.rs"]
 mod overflow;
+
+// Пиннинги потактовых трасс — тем же приёмом: значения названы один раз, и в
+// теле проверок остаётся только их смысл.
+#[path = "conformance_c_tests/traces.rs"]
+mod traces;
+use traces::{held_trace, q_trace, wrap_trace};
 
 // Model-level `always` у модели-композиции (фича 0194) — тем же приёмом
 // подмодуля и по той же причине: файл упирается в лимит размера.
@@ -770,11 +778,11 @@ fn model_level_always_matches_generated_c() {
 #[test]
 fn per_tick_shift_is_zero_under_wrapping() {
     let vars = ["n"];
-    // Симулятор эталон моментности не менял — обёрнутая трасса та же [1,2,3].
+    // Симулятор эталон моментности не менял — обёрнутая трасса та же.
     let sim_wrapped = simulate_trace("tests/data/eval/conformance_ticks_wrapped.takt", &vars);
     assert_eq!(
         sim_wrapped,
-        vec![vec![1], vec![2], vec![3]],
+        held_trace(),
         "обёртка не должна менять трассу симулятора"
     );
 
@@ -797,7 +805,7 @@ fn per_tick_shift_is_zero_under_wrapping() {
     );
     assert_eq!(
         c_wrapped,
-        vec![vec![1], vec![2], vec![3]],
+        held_trace(),
         "лишний уровень иерархии НЕ должен сдвигать потактовую трассу C (R2/A4).\nC={c_wrapped:?}"
     );
 }
@@ -818,10 +826,12 @@ const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.takt";
 fn fixed_point_arithmetic_matches_generated_c() {
     let vars = ["acc"];
     let sim = simulate_trace(FIXED_FIXTURE, &vars);
-    // Пиннинг представлений q(8,8): -3.0, -1.5, -2·2⁻⁸ (floor!), +2.0-ish.
+    // Пиннинг представлений q(8,8): -3.0, -1.5, -2·2⁻⁸ (floor!), +2.0-ish —
+    // и дальше накопление продолжается: состояние с телом автомат не
+    // завершает (фича 0534).
     assert_eq!(
         sim,
-        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        q_trace(),
         "трасса представлений q(8,8) — эталон Q-арифметики симулятора"
     );
 
@@ -856,7 +866,7 @@ fn fixed_point_addition_wraps_matches_generated_c() {
     let sim = simulate_trace(fixture, &vars);
     assert_eq!(
         sim,
-        vec![vec![-32768]],
+        wrap_trace(),
         "q(8,8): 32767 + 1 → −32768 (перенос, правило 3 ADR)"
     );
 
@@ -956,7 +966,7 @@ fn float_embedded_q_matches_generated_c() {
     let sim = simulate_trace_float_q(FLOAT_Q_FIXTURE, 8, 8, &vars);
     assert_eq!(
         sim,
-        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        q_trace(),
         "Q-эталон float→q(8,8) обязан совпасть с трассой явной q-версии (0061)"
     );
 

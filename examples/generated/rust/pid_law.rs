@@ -137,7 +137,6 @@ impl PidLaw {
                     self.loop_pid = pid_reset(self.loop_pid);
                     self.ctrl = 0.0;
                 }
-                self.state = PidLawState::End;
             }
             PidLawState::End => {}
             PidLawState::Init => {}

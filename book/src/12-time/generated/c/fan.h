@@ -52,8 +52,8 @@ struct Fan {
     FanFan main;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(Fan_Out_BitPort port, bool val, void *userdata);
-    bool  (*read_bit )(Fan_In_BitPort port, void *userdata);
+    void  (*write_bit)(Fan_Out_BitPort port, uint8_t bit, bool val, void *userdata);
+    bool  (*read_bit )(Fan_In_BitPort port, uint8_t bit, void *userdata);
 };
 
 void Fan_init(Fan *main);

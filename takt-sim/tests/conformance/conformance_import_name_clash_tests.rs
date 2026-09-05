@@ -72,7 +72,8 @@ fn generated_c_trace(dir: &Path) -> Vec<i128> {
 
 static long last_beat = 0;
 
-static void wr_num(ClashApp_Out_NumericPort port, int64_t v, void *ud) {{
+static void wr_num(ClashApp_Out_NumericPort port, uint8_t index, int64_t v, void *ud) {{
+    (void)index;
     (void)port;
     (void)ud;
     last_beat = (long)v;

@@ -69,7 +69,6 @@ module regulator (
                     end
                     REGULATOR_REGULATOR_DONE: begin
                         ready_next = 1;
-                        regulator_regulator_state_next = REGULATOR_REGULATOR_END;
                     end
                     REGULATOR_REGULATOR_SETTLED: begin
                         regulator_regulator_value_next = regulator_regulator_setpoint_next;

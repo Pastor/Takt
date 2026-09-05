@@ -14,7 +14,8 @@ state A {
 
 state B {
     [*] --> Start
-    Start --> [*]
+    Done --> [*]
+    Start --> Done
 }
 
 state C {

@@ -61,7 +61,8 @@ fn generated_c_trace(dir: &Path) -> Vec<i128> {
 
 static long last;
 
-static void write_numeric(ConformanceBlockPlaces_Out_NumericPort port, int64_t val, void *ud) {{
+static void write_numeric(ConformanceBlockPlaces_Out_NumericPort port, uint8_t index, int64_t val, void *ud) {{
+    (void)index;
     (void)ud; (void)port;
     last = (long)val;
 }}

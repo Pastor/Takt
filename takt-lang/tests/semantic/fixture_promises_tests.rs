@@ -121,8 +121,11 @@ fn enum_fixture_carries_its_variants() {
 #[test]
 fn array_access_fixture_has_subscript() {
     let model = build("tests/data/semantic/valid/array_access.takt");
-    // Индексация стоит в ИНИЦИАЛИЗАТОРАХ объявлений (`var bit0 := buf[0];`),
+    // Индексация стоит в ИНИЦИАЛИЗАТОРАХ объявлений (`var second := bus[1];`),
     // а не в теле состояния: смотреть надо туда, где она написана.
+    // ⚠️ База — массив НЕ битов: у упакованного `[bit;N]` индекс означает
+    // разряд и сводится к `BitAccess` (фича 0533), поэтому обещание фикстуры
+    // «здесь есть индексация элемента» держит именно `bus`.
     let printed = format!("{:?}", model.borrow().variables);
     assert!(
         printed.contains("ArraySubscript"),

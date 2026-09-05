@@ -516,7 +516,7 @@ fn fixed_point_arithmetic_matches_generated_st() {
     let sim = simulate_fixed_trace();
     assert_eq!(
         sim,
-        vec![-768, -384, -2, 510],
+        vec![-768, -384, -2, 510, 1022, 1534, 2046, 2558],
         "трасса представлений q(8,8) — эталон Q-арифметики симулятора"
     );
 

@@ -126,13 +126,10 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
         .states
         .iter()
         .filter_map(|(name, state)| {
-            let is_terminal = match state {
-                StateNode::Simple { references, .. } => references.is_empty(),
-                StateNode::Implement {
-                    references, next, ..
-                } => references.is_empty() && next.is_none(),
-                StateNode::Unresolved => false,
-            };
+            // Правило одно на проект (`semantic::terminal`, фича 0534): тело
+            // считается наравне с рёбрами, и `always` без переходов автомат не
+            // завершает.
+            let is_terminal = state.is_terminated();
             if is_terminal {
                 Some(name.clone())
             } else {

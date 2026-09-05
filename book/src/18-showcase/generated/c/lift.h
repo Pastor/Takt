@@ -40,9 +40,9 @@ struct Lift {
     } state;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(Lift_Out_BitPort port, bool val, void *userdata);
-    void    (*write_numeric)(Lift_Out_NumericPort port, int64_t val, void *userdata);
-    int64_t (*read_numeric )(Lift_In_NumericPort port, void *userdata);
+    void  (*write_bit)(Lift_Out_BitPort port, uint8_t bit, bool val, void *userdata);
+    void    (*write_numeric)(Lift_Out_NumericPort port, uint8_t index, int64_t val, void *userdata);
+    int64_t (*read_numeric )(Lift_In_NumericPort port, uint8_t index, void *userdata);
 };
 
 void Lift_init(Lift *main);

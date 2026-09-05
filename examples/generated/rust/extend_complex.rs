@@ -126,6 +126,7 @@ impl ExtendComplexA {
 enum ExtendComplexBState {
     /// Модель создана, но стартовое состояние ещё не занято.
     Init,
+    Done,
     Start,
     /// Автомат завершён (`is_done`).
     End,
@@ -158,6 +159,9 @@ impl ExtendComplexB {
             self.state = ExtendComplexBState::Start;
         }
         match self.state {
+            ExtendComplexBState::Done => {
+                self.state = ExtendComplexBState::End;
+            }
             ExtendComplexBState::Start => {
                 if hal.read_bit(InBitPort::Wait) {
                     hal.write_bit(OutBitPort::Work, false);
@@ -166,7 +170,7 @@ impl ExtendComplexB {
                     hal.write_bit(OutBitPort::Idle, false);
                     hal.write_bit(OutBitPort::Work, true);
                 }
-                self.state = ExtendComplexBState::End;
+                self.state = ExtendComplexBState::Done;
             }
             ExtendComplexBState::End => {}
             ExtendComplexBState::Init => {}

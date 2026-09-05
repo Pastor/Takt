@@ -40,9 +40,9 @@ struct Lift {
     } state;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(Lift_Out_BitPort port, bool val, void *userdata);
-    void    (*write_numeric)(Lift_Out_NumericPort port, int64_t val, void *userdata);
-    int64_t (*read_numeric )(Lift_In_NumericPort port, void *userdata);
+    void  (*write_bit)(Lift_Out_BitPort port, uint8_t bit, bool val, void *userdata);
+    void    (*write_numeric)(Lift_Out_NumericPort port, uint8_t index, int64_t val, void *userdata);
+    int64_t (*read_numeric )(Lift_In_NumericPort port, uint8_t index, void *userdata);
 };
 
 void Lift_init(Lift *main);
@@ -67,10 +67,11 @@ static const Lift_PortBinding Lift_Out_NumericPort__ADDR[] = {
     [LIFT_PORT_DISPLAY] = { (uintptr_t)0x50000014u, -1, 1 },
 };
 
-static void Lift_default_write_bit(Lift_Out_BitPort p, bool val, void *userdata) {
+static void Lift_default_write_bit(Lift_Out_BitPort p, uint8_t bit, bool val, void *userdata) {
     (void)userdata;
     Lift_PortBinding b = Lift_Out_BitPort__ADDR[p];
-    int s = b.bit;
+    /* Разряд порта смещает позицию в регистре: у скалярного порта bit = 0. */
+    int s = b.bit + (int)bit;
     switch (b.width) {
         case 2: {
             volatile uint16_t *r = (volatile uint16_t*)b.addr;
@@ -94,24 +95,28 @@ static void Lift_default_write_bit(Lift_Out_BitPort p, bool val, void *userdata)
         } break;
     }
 }
-static int64_t Lift_default_read_numeric(Lift_In_NumericPort p, void *userdata) {
+static int64_t Lift_default_read_numeric(Lift_In_NumericPort p, uint8_t index, void *userdata) {
     (void)userdata;
     Lift_PortBinding b = Lift_In_NumericPort__ADDR[p];
+    /* Элемент лежит через шаг в ширину значения: у скалярного порта index = 0. */
+    uintptr_t at = b.addr + (uintptr_t)index * b.width;
     switch (b.width) {
-        case 1: return (int64_t)*(volatile uint8_t*)b.addr;
-        case 2: return (int64_t)*(volatile uint16_t*)b.addr;
-        case 8: return (int64_t)*(volatile uint64_t*)b.addr;
-        default: return (int64_t)*(volatile uint32_t*)b.addr;
+        case 1: return (int64_t)*(volatile uint8_t*)at;
+        case 2: return (int64_t)*(volatile uint16_t*)at;
+        case 8: return (int64_t)*(volatile uint64_t*)at;
+        default: return (int64_t)*(volatile uint32_t*)at;
     }
 }
-static void Lift_default_write_numeric(Lift_Out_NumericPort p, int64_t val, void *userdata) {
+static void Lift_default_write_numeric(Lift_Out_NumericPort p, uint8_t index, int64_t val, void *userdata) {
     (void)userdata;
     Lift_PortBinding b = Lift_Out_NumericPort__ADDR[p];
+    /* Элемент лежит через шаг в ширину значения: у скалярного порта index = 0. */
+    uintptr_t at = b.addr + (uintptr_t)index * b.width;
     switch (b.width) {
-        case 1: *(volatile uint8_t*)b.addr = (uint8_t)val; break;
-        case 2: *(volatile uint16_t*)b.addr = (uint16_t)val; break;
-        case 8: *(volatile uint64_t*)b.addr = (uint64_t)val; break;
-        default: *(volatile uint32_t*)b.addr = (uint32_t)val; break;
+        case 1: *(volatile uint8_t*)at = (uint8_t)val; break;
+        case 2: *(volatile uint16_t*)at = (uint16_t)val; break;
+        case 8: *(volatile uint64_t*)at = (uint64_t)val; break;
+        default: *(volatile uint32_t*)at = (uint32_t)val; break;
     }
 }
 

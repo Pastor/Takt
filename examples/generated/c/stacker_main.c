@@ -75,7 +75,8 @@ typedef struct {
    Коллбэки портов
    ════════════════════════════════════════════════════════════════════════════ */
 
-static bool sim_read_bit(Stacker_In_BitPort port, void *ud) {
+static bool sim_read_bit(Stacker_In_BitPort port, uint8_t bit, void *ud) {
+    (void)bit;
     SimState *s = (SimState *)ud;
     switch (port) {
         case STACKER_PORT_SENSE_AT_CHARGE:   return s->sense_at_charge;
@@ -87,7 +88,8 @@ static bool sim_read_bit(Stacker_In_BitPort port, void *ud) {
     return false;
 }
 
-static void sim_write_bit(Stacker_Out_BitPort port, bool val, void *ud) {
+static void sim_write_bit(Stacker_Out_BitPort port, uint8_t bit, bool val, void *ud) {
+    (void)bit;
     SimState *s = (SimState *)ud;
     switch (port) {
         case STACKER_PORT_CMD_ACK:
@@ -104,7 +106,8 @@ static void sim_write_bit(Stacker_Out_BitPort port, bool val, void *ud) {
     }
 }
 
-static int64_t sim_read_numeric(Stacker_In_NumericPort port, void *ud) {
+static int64_t sim_read_numeric(Stacker_In_NumericPort port, uint8_t index, void *ud) {
+    (void)index;
     SimState *s = (SimState *)ud;
     switch (port) {
         case STACKER_PORT_POS_STACK:       return s->pos_stack;
@@ -117,7 +120,8 @@ static int64_t sim_read_numeric(Stacker_In_NumericPort port, void *ud) {
     return 0;
 }
 
-static void sim_write_numeric(Stacker_Out_NumericPort port, int64_t val, void *ud) {
+static void sim_write_numeric(Stacker_Out_NumericPort port, uint8_t index, int64_t val, void *ud) {
+    (void)index;
     SimState *s = (SimState *)ud;
     switch (port) {
         case STACKER_PORT_CMD_TARGET_STACK:   s->cmd_target_stack   = (uint8_t)val; break;

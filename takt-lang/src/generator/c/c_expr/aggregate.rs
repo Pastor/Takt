@@ -60,6 +60,57 @@ pub(in crate::generator::c) fn emit(
     let ExpressionNode::Variable(var) = target.as_ref() else {
         return Ok(false);
     };
+    // ⚠️ ПОРТ-массив принимает агрегат по ЭЛЕМЕНТАМ (фича 0533): порт не
+    // переменная, у него нет места, куда присвоить, — есть обращение к HAL с
+    // индексом. Прежде порт разворачивался по листам, и агрегат раздавали им;
+    // без разворота он печатался целиком — `write_numeric(PORT, 0, {a, b}, ud)`,
+    // «expected expression» у `cc` при нулевом коде возврата.
+    if let VariableNode::Port {
+        direction,
+        name,
+        ty,
+        upper,
+        ..
+    } = &*var.borrow()
+        && matches!(ty, TypeNode::Array(..))
+        && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+    {
+        let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) else {
+            return Ok(false);
+        };
+        let variant = crate::generator::c::c_names::port_enum_variant(
+            &Name::from(model_rc),
+            name,
+            *direction,
+            crate::parser::ast::PortDirection::Out,
+        );
+        let ptr = if has_model && !owner.name().eq(&map.root_name()) {
+            "main"
+        } else {
+            "model"
+        };
+        let cls = PortClass::from_type(ty);
+        for (index, item) in items.iter().enumerate() {
+            let mut element = String::new();
+            {
+                let mut tmp = Printer::new(4, &mut element);
+                generate_expr(&mut tmp, map, owner, params.clone(), item, 0, has_model)?;
+            }
+            printer
+                .ident(&format!(
+                    "{};",
+                    crate::generator::c::c_port_call::write(
+                        cls,
+                        ptr,
+                        &variant,
+                        &index.to_string(),
+                        &element,
+                    )
+                ))
+                .nl();
+        }
+        return Ok(true);
+    }
     let (ty, owner_model) = match &*var.borrow() {
         VariableNode::Simple { ty, upper, .. } => (ty.clone(), upper.clone()),
         _ => return Ok(false),

@@ -251,7 +251,14 @@ fn per_tick_trace_matches_generated_sv_mmio() {
     // Пиннинг: counter 1→2→3, flag встаёт в 1 на терминальном шаге.
     assert_eq!(
         sim,
-        vec![vec![1, 0], vec![2, 0], vec![3, 1]],
+        vec![
+            vec![1, 0],
+            vec![2, 0],
+            vec![3, 1],
+            vec![3, 1],
+            vec![3, 1],
+            vec![3, 1],
+        ],
         "ожидаемая трасса симулятора: (counter, flag)"
     );
 

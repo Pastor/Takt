@@ -260,7 +260,7 @@ fn per_tick_trace_matches_generated_rust() {
     // «подстроится» под прошивку.
     assert_eq!(
         sim,
-        vec![1, 2, 3],
+        vec![1, 2, 3, 3, 3, 3],
         "ожидаемая трасса симулятора: n = 1, 2, 3"
     );
 
@@ -441,6 +441,9 @@ fn fixed_wrap_to_width_matches_generated_rust() {
             (-26.0f64).to_bits(),
             (-18.0f64).to_bits(),
             (-10.0f64).to_bits(),
+            (-2.0f64).to_bits(),
+            (6.0f64).to_bits(),
+            (14.0f64).to_bits(),
         ],
         "q(6,6): 1920 + 512 = 2432 → перенос к 12 битам даёт −26.0; \
          перенос к 16 битам дал бы 38.0"
@@ -481,6 +484,7 @@ fn fixed_saturation_matches_generated_rust() {
             (7.984375f64).to_bits(),
             (-16.015625f64).to_bits(),
             (-32.0f64).to_bits(),
+            (-32.0f64).to_bits(),
         ],
         "q(6,6) sat: 1536 + 1536 = 3072 → прижато к 2047 (31.984375); перенос дал \
          бы −1024 (−16.0). Снизу: −2561 → −2048 (−32.0)"
@@ -504,7 +508,9 @@ fn fixed_point_arithmetic_matches_generated_rust() {
     let dir = build_dir("rsfixed");
     let fixture = Path::new("tests/data/eval/conformance_fixed_probe.takt");
     let sim = simulate_f64_trace(fixture, "probe");
-    // Пиннинг битов: -3.0, -1.5, -0.0078125, 1.9921875 (все точны в f64).
+    // Пиннинг битов: -3.0, -1.5, -0.0078125, 1.9921875 (все точны в f64) — и
+    // дальше накопление продолжается: состояние с телом автомат не завершает
+    // (фича 0534, правило стабильности состояния).
     assert_eq!(
         sim,
         vec![
@@ -512,6 +518,8 @@ fn fixed_point_arithmetic_matches_generated_rust() {
             (-1.5f64).to_bits(),
             (-0.0078125f64).to_bits(),
             (1.9921875f64).to_bits(),
+            (3.9921875f64).to_bits(),
+            (5.9921875f64).to_bits(),
         ],
         "трасса probe (repr q(8,8) / 256) — эталон Q-арифметики симулятора"
     );

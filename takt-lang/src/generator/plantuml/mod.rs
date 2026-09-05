@@ -78,8 +78,15 @@ fn extend_annotation(extend: &StateExtend) -> String {
 /// - [`Element::StateExtend`]: аннотация расширения (если есть) + стрелка к `next` или `[*]`.
 fn write_state_transitions(element: &Element, out: &mut String, indent: &str) {
     match element {
-        Element::State { name, references } => {
-            if references.is_empty() {
+        Element::State {
+            name,
+            references,
+            terminal,
+        } => {
+            // ⚠️ Стрелка в `[*]` — только у ТЕРМИНАЛЬНОГО состояния (фича
+            // 0534): состояние с телом и без рёбер работает вечно, и рисовать
+            // ему конец значило бы показывать автомат, которого нет.
+            if *terminal {
                 out.push_str(&format!("{}{} --> [*]\n", indent, name.local()));
             } else {
                 for r in references {

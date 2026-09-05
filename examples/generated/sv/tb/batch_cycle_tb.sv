@@ -86,9 +86,11 @@ module tb;
         if (!saw_drain) $error("batch_cycle: фаза слива не наблюдалась (stage=3)");
         if (!order_ok)  $error("batch_cycle: фазы прошли НЕ по порядку — `+` ведёт себя как `|`");
         if (!saw_ready) $error("batch_cycle: ready не поднялся — цикл не завершился");
-        if (!saw_done)  $error("batch_cycle: is_done не поднялся");
+        // ⚠️ `is_done` больше не наблюдается: конечное состояние несёт
+        // `always { ready := 1; }`, и автомат в нём остаётся — состояние
+        // стабильно. Признак завершения цикла — поднятый и удерживаемый `ready`.
 
-        if (saw_dose && saw_mix && saw_drain && order_ok && saw_ready && saw_done)
+        if (saw_dose && saw_mix && saw_drain && order_ok && saw_ready)
             $display("batch_cycle_tb: OK (три фазы по порядку, затем ready и is_done)");
         $finish;
     end

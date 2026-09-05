@@ -76,10 +76,12 @@ VAR CONSTANT
     ENABLED : BOOL := TRUE;
 END_VAR
     IF state = 0 THEN (* первый скан *)
-        state := 1; (* Start *)
+        state := 2; (* Start *)
     END_IF;
     CASE state OF
-        1: (* Start *)
+        1: (* Done *)
+            state := 3; (* END *)
+        2: (* Start *)
             IF wait THEN
                 work := FALSE;
                 idle := TRUE;
@@ -87,11 +89,11 @@ END_VAR
                 idle := FALSE;
                 work := TRUE;
             END_IF;
-            state := 2; (* END *)
-        2: (* END *)
-            state := 2;
+            state := 1; (* Done *)
+        3: (* END *)
+            state := 3;
     END_CASE;
-    is_done := state = 2;
+    is_done := state = 3;
 END_FUNCTION_BLOCK
 
 FUNCTION_BLOCK ExtendComplexCC1

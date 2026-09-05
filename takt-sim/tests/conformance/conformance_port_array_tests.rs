@@ -89,10 +89,14 @@ fn generated_c_trace(dir: &Path) -> Vec<(i128, i128)> {
 static long long bus0 = -1;
 static long long bus1 = -1;
 
-static void on_write(ConformancePortArray_Out_NumericPort port, int64_t value, void *ud) {{
+static void on_write(ConformancePortArray_Out_NumericPort port, uint8_t index, int64_t value, void *ud) {{
+    (void)index;
     (void)ud;
-    if (port == CONFORMANCE_PORT_ARRAY_PORT_BUS_0) {{ bus0 = (long long)value; }}
-    if (port == CONFORMANCE_PORT_ARRAY_PORT_BUS_1) {{ bus1 = (long long)value; }}
+    /* ⚠️ Порт-массив — ОДИН порт, элемент выбирает индекс (фича 0533):
+       прежде здесь стояли листья `_0` и `_1`, и разворот по листам не выражал
+       переменного индекса. */
+    if (port == CONFORMANCE_PORT_ARRAY_PORT_BUS && index == 0) {{ bus0 = (long long)value; }}
+    if (port == CONFORMANCE_PORT_ARRAY_PORT_BUS && index == 1) {{ bus1 = (long long)value; }}
 }}
 
 int main(void) {{
@@ -191,9 +195,21 @@ fn leaf_addresses_follow_the_base() {
     // Таблица адресов HAL живёт в заголовке — там и проверяется раскладка.
     let text =
         std::fs::read_to_string(dir.join(format!("{UNIT}.h"))).expect("чтение заголовка HAL");
+    // ⚠️ С фичи 0533 порт-массив НЕ разворачивается по листам: адрес в таблице
+    // ОДИН — базовый, — а элемент `i` находит реализация HAL шагом в ширину
+    // элемента. Предмет проверки прежний («второй элемент лежит за первым»),
+    // свидетель другой: не две строки таблицы, а формула шага и ширина.
     assert!(
-        text.contains("0x200") && text.contains("0x201"),
-        "элементы обязаны лечь по базовому адресу и следующему за ним:\n{text}"
+        text.contains("0x200"),
+        "базовый адрес массива-порта обязан быть в таблице:\n{text}"
+    );
+    assert!(
+        text.contains("b.addr + (uintptr_t)index * b.width"),
+        "элемент обязан находиться шагом от базового адреса:\n{text}"
+    );
+    assert!(
+        text.contains("0x200u, -1, 1 }"),
+        "ширина доступа — ширина ЭЛЕМЕНТА (u8 → 1 байт), она же шаг:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -127,7 +127,6 @@ impl PidRegulatorPid {
             }
             PidRegulatorPidState::Done => {
                 hal.write_bit(OutBitPort::Ready, true);
-                self.state = PidRegulatorPidState::End;
             }
             PidRegulatorPidState::Settled => {
                 self.meas = self.target;

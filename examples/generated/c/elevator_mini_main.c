@@ -110,13 +110,15 @@ static const int out_port_count = (int)(sizeof(out_port_table) / sizeof(out_port
 
 /* ─── Функции портов (callbacks) ───────────────────────────────────────────── */
 
-static bool sim_read_bit(ElevatorMini_In_BitPort port, void *userdata) {
+static bool sim_read_bit(ElevatorMini_In_BitPort port, uint8_t bit, void *userdata) {
+    (void)bit;
     (void)userdata;
     if (current_tick < 1 || current_tick > total_ticks) return false;
     return inputs[current_tick - 1][(int)port];
 }
 
-static void sim_write_bit(ElevatorMini_Out_BitPort port, bool val, void *userdata) {
+static void sim_write_bit(ElevatorMini_Out_BitPort port, uint8_t bit, bool val, void *userdata) {
+    (void)bit;
     (void)userdata;
     outputs[(int)port] = val;
 }

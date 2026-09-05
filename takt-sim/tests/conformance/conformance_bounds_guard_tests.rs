@@ -120,10 +120,12 @@ fn c_trace(dir: &Path) -> Vec<(i128, i128)> {
 #include <stdbool.h>
 #include "{UNIT}.h"
 static long long num, fault;
-static void on_num(Boundsguard_Out_NumericPort p, int64_t v, void *u) {{
+static void on_num(Boundsguard_Out_NumericPort p, uint8_t index, int64_t v, void *u) {{
+    (void)index;
     (void)p; (void)u; num = (long long)v;
 }}
-static void on_bit(Boundsguard_Out_BitPort p, bool v, void *u) {{
+static void on_bit(Boundsguard_Out_BitPort p, uint8_t bit, bool v, void *u) {{
+    (void)bit;
     (void)p; (void)u; fault = v ? 1 : 0;
 }}
 int main(void) {{

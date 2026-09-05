@@ -78,7 +78,8 @@ fn c_trace(dir: &Path) -> Vec<(i128, i128)> {
         r#"#include <stdio.h>
 #include "{UNIT}.h"
 static long long probe, phase;
-static void on_write(Condcall_Out_NumericPort p, int64_t v, void *u) {{
+static void on_write(Condcall_Out_NumericPort p, uint8_t index, int64_t v, void *u) {{
+    (void)index;
     (void)u;
     if (p == CONDCALL_COND_CALL_PORT_PROBE) probe = (long long)v; else phase = (long long)v;
 }}

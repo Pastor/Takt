@@ -85,7 +85,8 @@ fn generated_c_trace(dir: &Path) -> Vec<(i128, i128)> {
 
 static long long lo = 0, hi = 0;
 
-static void wr(ConformancePortSplit_Out_NumericPort port, int64_t value, void *ud) {{
+static void wr(ConformancePortSplit_Out_NumericPort port, uint8_t index, int64_t value, void *ud) {{
+    (void)index;
     (void)ud;
     if (port == CONFORMANCE_PORT_SPLIT_PORT_PO_LO) lo = value;
     if (port == CONFORMANCE_PORT_SPLIT_PORT_PO_HI) hi = value;

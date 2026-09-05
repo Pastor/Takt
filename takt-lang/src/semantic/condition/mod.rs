@@ -190,6 +190,18 @@ pub fn resolve_condition(
                 .with_code("SE-117"));
             }
             let resolved_idx = resolve_condition(idx_cond, model.clone())?;
+            // Индекс по упакованному вектору — РАЗРЯД: правило живёт одним
+            // носителем `semantic::bit_vector` (фича 0533), общим с выражениями.
+            if crate::semantic::bit_vector::indexes_a_bit(
+                base::cond_base_type(&base, &model.borrow()).as_ref(),
+            ) && let ConditionNode::Number(bit) = resolved_idx
+                && bit >= 0
+            {
+                return Ok(ConditionNode::BitAccess(
+                    Box::new(base),
+                    crate::parser::ast::Member::Number(bit),
+                ));
+            }
             Ok(ConditionNode::ArraySubscript(
                 Box::new(base),
                 Box::new(resolved_idx),
@@ -700,7 +712,7 @@ mod tests {
     /// ```
     #[test]
     fn array_subscript_on_array_resolves() {
-        let node = build("var buf: [bit; 8]; cond C = buf[3];").unwrap();
+        let node = build("var bus: [u8; 8]; cond C = bus[3];").unwrap();
         assert!(
             matches!(cond_val(&node, "C"), ConditionNode::ArraySubscript(_, ref idx) if matches!(**idx, ConditionNode::Number(3))),
             "ожидалось ArraySubscript(_, 3)"

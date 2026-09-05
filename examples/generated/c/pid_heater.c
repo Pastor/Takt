@@ -41,7 +41,7 @@ void PidHeaterHeater_init(PidHeaterHeater *model, PidHeater *main) {
     model->loop_pid = (PidState){0.5, 0.0625, 0.25, 1.0, 0.0, 32.0, 0.0, 0.0, 0.0};
     model->release = 38.0;
     model->setpoint = 40.0;
-    (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, 0.0, main->userdata);
+    (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, 0, 0.0, main->userdata);
 }
 
 /// Функция обработки модели Heater (PidHeater:Heater)
@@ -62,7 +62,7 @@ void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main) {
             main->ctrl = model->loop_pid.output;
             model->err = main->target - main->meas;
             main->meas = main->meas + main->gain * main->ctrl - main->loss * (main->meas - main->ambient);
-            (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, main->meas, main->userdata);
+            (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, 0, main->meas, main->userdata);
             if (model->err <= 0.0) {
                 main->ctrl = 0.0;
                 model->state = PID_HEATER_HEATER_HOLDING;
@@ -72,7 +72,7 @@ void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main) {
         }
         case PID_HEATER_HEATER_HOLDING: {
             main->meas = main->meas - main->loss * (main->meas - main->ambient);
-            (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, main->meas, main->userdata);
+            (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, 0, main->meas, main->userdata);
             if (main->meas <= model->release) {
                 model->state = PID_HEATER_HEATER_DONE;
                 break;
