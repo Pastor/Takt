@@ -67,7 +67,12 @@ git push origin "$BRANCH"
 
 # ── 3. Подъём на стенде ──────────────────────────────────────────────────────
 echo "  Поднимаем на стенде..."
-ssh "$STAND" "set -euo pipefail
+# ⚠️ У ssh стоят «живые» пробы: оборванный канал иначе висит бесконечно, и
+# выкладка выглядит вечной сборкой — так и было 2026-09-05, когда удалённая
+# сторона умерла, а локальный клиент этого не заметил.
+SSH=(ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15)
+
+"${SSH[@]}" "$STAND" "set -euo pipefail
   cd $DIR
   git fetch --prune origin
   git checkout $BRANCH
