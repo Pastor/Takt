@@ -35,12 +35,27 @@
        значит — автор не отличит свою запись от чужой (задача 0531-09e). -->
   <span id="openfile" class="muted" hidden></span>
   <span class="spacer"></span>
-  <button id="showcase" type="button" data-i18n="showcase.title">Открытые проекты</button>
-  <button id="account" type="button" data-i18n="account.enter">Войти</button>
-  <button id="save" type="button" hidden data-i18n="account.save">Сохранить</button>
-  <button id="format" type="button" data-i18n="bar.format">Формат</button>
-  <button id="share" type="button" data-i18n="bar.share">Поделиться</button>
-  <button id="download" type="button" hidden data-i18n="archive.download">Скачать архивом</button>
+  <button id="showcase" class="icon-btn" type="button"
+          data-i18n-attr="title:showcase.title;aria-label:showcase.title"
+          title="Открытые проекты" aria-label="Открытые проекты"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6.5h6l2 2.5h10v9.5H3z"/></svg></button>
+  <button id="account" class="icon-btn" type="button"
+          data-i18n-attr="title:account.enter;aria-label:account.enter"
+          title="Войти" aria-label="Войти"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/></svg></button>
+  <!-- Логин показывается ПОДПИСЬЮ рядом, а не в кнопке: кнопка-значок текста не
+       несёт, а знать, кто вошёл, читателю надо. -->
+  <span id="whoami-bar" class="muted" hidden></span>
+  <button id="save" class="icon-btn" type="button" hidden
+          data-i18n-attr="title:account.save;aria-label:account.save"
+          title="Сохранить" aria-label="Сохранить"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4h12l4 4v12H4z"/><path d="M8 4v6h8V4"/><path d="M8 20v-6h8v6"/></svg></button>
+  <button id="format" class="icon-btn" type="button"
+          data-i18n-attr="title:bar.format;aria-label:bar.format"
+          title="Формат" aria-label="Формат"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16"/><path d="M4 11h10"/><path d="M4 16h13"/><path d="M4 21h7"/></svg></button>
+  <button id="share" class="icon-btn" type="button"
+          data-i18n-attr="title:bar.share;aria-label:bar.share"
+          title="Поделиться" aria-label="Поделиться"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.4 1.4"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.4-1.4"/></svg></button>
+  <button id="download" class="icon-btn" type="button" hidden
+          data-i18n-attr="title:archive.download;aria-label:archive.download"
+          title="Скачать архивом" aria-label="Скачать архивом"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 17.5v3h15v-3"/></svg></button>
   <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
        Молча не перезагружаемся никогда — в редакторе несохранённая работа
        (задача 0531-07b). -->

@@ -578,6 +578,37 @@ test("прокрутка: вложенная область кода не зап
   assert.match(css, /\.editor,\s*\.output,\s*\.list,\s*\.scenario\s*\{[^}]*overscroll-behavior:\s*contain/);
 });
 
+test("настройки интерфейса живут в localStorage и ключи у них разные", async () => {
+  // ⚠️ Предмет — ПОЛНОТА: настройка, которую читатель выбрал, обязана
+  // пережить перезагрузку (решение заказчика 2026-09-05). Ключи собраны в
+  // одном месте: придуманный по месту однажды разойдётся с тем, кто его
+  // читает, и читатель получит умолчание там, где выбирал сам.
+  const keys = [
+    shell.KEY, shell.PANES_KEY, shell.ROWS_KEY, shell.TRACE_KEY,
+    shell.FONT_KEY, shell.WRAP_KEYS.source, shell.WRAP_KEYS.output,
+    shell.UI_KEYS.tab, shell.UI_KEYS.budget,
+  ];
+  assert.equal(new Set(keys).size, keys.length, `ключи совпали: ${keys.join(", ")}`);
+  for (const key of keys) assert.match(key, /^takt\./, `ключ вне пространства: ${key}`);
+
+  // Чтение: пусто — умолчание, значение — оно само, отказ хранилища — умолчание.
+  const box = memoryStorage();
+  assert.equal(shell.setting(box, shell.UI_KEYS.tab, "output"), "output");
+  shell.remember(box, shell.UI_KEYS.tab, "trace");
+  assert.equal(shell.setting(box, shell.UI_KEYS.tab, "output"), "trace");
+  const locked = { getItem() { throw new Error("нет доступа"); }, setItem() { throw new Error("нет доступа"); } };
+  assert.equal(shell.setting(locked, shell.UI_KEYS.budget, "200"), "200");
+  shell.remember(locked, shell.UI_KEYS.budget, 999); // не роняет страницу
+
+  // ⚠️ Каждая настройка интерфейса ЧИТАЕТСЯ страницей: ключ, который только
+  // пишут, — мёртвая настройка, и читатель не поймёт, почему его выбор пропал.
+  const app = await readFile(new URL("../static/app.js", import.meta.url), "utf8");
+  for (const name of ["UI_KEYS.tab", "UI_KEYS.budget"]) {
+    assert.ok(app.includes(`setting(localStorage, shell.${name}`), `${name} не читается страницей`);
+    assert.ok(app.includes(`remember(localStorage, shell.${name}`), `${name} не пишется страницей`);
+  }
+});
+
 test("кегль страницы: шаг в единицу и обе границы названы", () => {
   // ⚠️ Меняется КОРНЕВОЙ кегль: ступени шкалы заданы в `rem`, и страница
   // растёт целиком, сохраняя пропорции. Свой кегль «только для кода» развалил
