@@ -25,8 +25,17 @@ COPY . .
 # «Модуль не собран», сборка образа падает. Профиль назван ОДИН раз, здесь же и
 # передаётся скрипту: два носителя одного знания уже разошлись однажды
 # (выкладка на стенд 2026-09-05).
+# ⚠️ Кеш cargo ЖИВЁТ МЕЖДУ СБОРКАМИ (`--mount=type=cache`). Дерево копируется
+# целиком и раньше сборки, поэтому строка в журнале рушит слой и заставляет
+# собирать всё заново: реестр, `lalrpop` из git и порождённую им грамматику в
+# 68 015 строк. Кеш этого не отменяет, но пересобирает только изменившееся.
+# ⚠️ Каталог `target` кешируется ОТДЕЛЬНО от серверного (`sharing=locked`):
+# профили у них разные, и общий каталог заставлял бы их вытеснять друг друга.
 ARG WASM_PROFILE=wasm
-RUN cargo build --profile ${WASM_PROFILE} --target wasm32-unknown-unknown -p takt-wasm \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/src/target,sharing=locked \
+    cargo build --profile ${WASM_PROFILE} --target wasm32-unknown-unknown -p takt-wasm \
  && TAKT_WASM_PROFILE=${WASM_PROFILE} TAKT_WEB_DIST=/out/static scripts/build-web.sh
 
 # Сервер — свой workspace (полторы сотни зависимостей не должны собираться на
@@ -38,7 +47,10 @@ RUN cargo build --profile ${WASM_PROFILE} --target wasm32-unknown-unknown -p tak
 # полутора сотен скомпилированных крейтов (выкладка на стенд 2026-09-05).
 # Переменная окружения сильнее конфигурации — этим и пользуемся.
 ARG SERVER_TARGET_DIR=/build/web-server
-RUN cd web/server \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/build/web-server,sharing=locked \
+    cd web/server \
  && CARGO_TARGET_DIR=${SERVER_TARGET_DIR} cargo build --release \
  && cp ${SERVER_TARGET_DIR}/release/takt-web-server /out/
 
@@ -69,7 +81,12 @@ EXPOSE 8730
 
 # ⚠️ Живость спрашивает БАЗУ (`/health` ходит в неё): сервис, у которого базы
 # нет, живым не является, и оркестратор обязан узнать об этом сам.
+# ⚠️ Префикс входит в АДРЕС проверки: сервер вкладывает под него весь роутер, и
+# при `TAKT_WEB_BASE_PATH=/takt` ручка живёт по `/takt/health`. Проверка без
+# префикса отвечала 404, и живой контейнер вечно числился нездоровым — замечено
+# разбором «долгой выкладки» 2026-09-05. Корневой префикс `/` даёт `//health`,
+# поэтому одиночная косая срезается.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8730/health || exit 1
+  CMD curl -fsS "http://127.0.0.1:8730${TAKT_WEB_BASE_PATH%/}/health" || exit 1
 
 ENTRYPOINT ["takt-web-server"]
