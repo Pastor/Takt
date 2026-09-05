@@ -475,3 +475,41 @@ export function attachFontSize(less, more, label, storage) {
   more.addEventListener("click", () => step(1));
   apply();
 }
+
+/**
+ * Простые настройки интерфейса, которые переживают перезагрузку.
+ *
+ * ⚠️ Ключи собраны В ОДНОМ месте: настройка, чей ключ придуман по месту,
+ * однажды разойдётся с тем, кто её читает, — и читатель получит умолчание там,
+ * где сам выбирал (решение заказчика 2026-09-05: настройки UI хранятся в
+ * `localStorage`).
+ *
+ * ⚠️ Что сюда НЕ входит: текст модели, сценарий и выбранная цель — они
+ * принадлежат РАБОТЕ, а не интерфейсу, и живут в черновике (`draft.js`),
+ * который ключуется проектом и файлом.
+ */
+export const UI_KEYS = {
+  /** Открытая вкладка области вывода: `output` либо `trace`. */
+  tab: "takt.ui.tab",
+  /** Бюджет прогона, тактов. */
+  budget: "takt.ui.budget",
+};
+
+/** Читает настройку; `fallback` — если её нет либо хранилище недоступно. */
+export function setting(storage, key, fallback) {
+  try {
+    const raw = storage.getItem(key);
+    return raw === null || raw === "" ? fallback : raw;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Запоминает настройку. Отказ хранилища не роняет страницу. */
+export function remember(storage, key, value) {
+  try {
+    storage.setItem(key, String(value));
+  } catch {
+    // Приватный режим либо запрет сайту: настройка действует до перезагрузки.
+  }
+}

@@ -675,7 +675,13 @@ function refresh() {
   dom.signedout.hidden = me !== null;
   dom.signedin.hidden = me === null;
   dom.whoami.textContent = me ? me.login : "";
-  dom.account.textContent = me ? me.login : t("account.enter");
+  // ⚠️ Кнопка учётной записи — ЗНАЧОК, и текста не несёт: логин показывается
+  // подписью рядом, а в саму кнопку уходит подпись для диктора и всплывающая.
+  const label = me ? me.login : t("account.enter");
+  dom.account.title = label;
+  dom.account.setAttribute("aria-label", label);
+  dom["whoami-bar"].textContent = me ? me.login : "";
+  dom["whoami-bar"].hidden = me === null;
   dom.download.hidden = state.project === null;
   const writable = editing() && (state.level === "edit" || state.level === "owner");
   dom.save.hidden = !writable;

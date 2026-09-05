@@ -73,6 +73,9 @@ export async function main() {
   shell.attachWrap(dom.wrapoutput, dom.output, localStorage, shell.WRAP_KEYS.output);
   // Кегль страницы: ±1 к корневому размеру, от которого считаются все ступени.
   shell.attachFontSize(dom.fontless, dom.fontmore, dom.fontsize, localStorage);
+  // Прочие настройки интерфейса — оттуда же: вкладка и бюджет прогона.
+  dom.budget.value = shell.setting(localStorage, shell.UI_KEYS.budget, dom.budget.value);
+  selectTab(shell.setting(localStorage, shell.UI_KEYS.tab, "output"));
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   fillLanguages();
   enhance(dom.lang);
@@ -286,6 +289,7 @@ function cache() {
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
     "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "tsplit", "wrapsource", "wrapoutput", "fontless", "fontmore", "fontsize", "project",
     "account", "save", "openfile", "panel", "signedout", "signedin", "whoami",
+    "whoami-bar",
     "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",
     "oauth", "pick", "picklogin", "pickok", "profile", "links", "newpass",
@@ -326,11 +330,18 @@ function wire() {
   });
   dom.format.addEventListener("click", format);
   dom.run.addEventListener("click", run);
+  dom.budget.addEventListener("change", () =>
+    shell.remember(localStorage, shell.UI_KEYS.budget, dom.budget.value)
+  );
   dom.stop.addEventListener("click", stop);
   dom.share.addEventListener("click", share);
   dom.tabs.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-tab]");
-    if (tab) selectTab(tab.dataset.tab);
+    if (tab) {
+      selectTab(tab.dataset.tab);
+      // Открытая вкладка — настройка читателя: он вернётся туда, где работал.
+      shell.remember(localStorage, shell.UI_KEYS.tab, tab.dataset.tab);
+    }
   });
   dom.modes.addEventListener("click", (event) => {
     const mode = event.target.closest("[data-mode]");
