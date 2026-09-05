@@ -96,9 +96,6 @@
   --on-surface-warn: var(--raw-warn-ink);
   --surface-yes: var(--raw-yes);
   --on-surface-yes: var(--raw-yes-ink);
-  /* Главная кнопка разговора: одна на окно, и звучит громче прочих. */
-  --surface-primary: var(--raw-accent);
-  --on-surface-primary: var(--raw-accent-ink);
 
   /* Одиночные чернила: ложатся на ту заливку, которая уже есть, и парой не
    * являются — реестр их не перечисляет. */
@@ -649,6 +646,17 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   border-color: var(--border);
 }
 
+/* Панели правой области. Обе отжаты — область уходит целиком вместе со своим
+ * разделителем, и модель занимает экран (решение заказчика 2026-09-05).
+ * ⚠️ Правило смотрит на СОСТОЯНИЕ страницы (`body[data-panel]`), а не прячет
+ * узлы по одному: иначе разделитель остался бы висеть у края. */
+body[data-panel="none"] .pane-result,
+body[data-panel="none"] > .work > #split { display: none; }
+body[data-panel="none"] .work { grid-template-columns: 1fr; }
+
+/* Вкладки нужны только генерации: у симуляции панель одна. */
+.tabs[hidden] { display: none; }
+
 /* ── Модальное окно ──────────────────────────────────────────────────────
  * Разговор, из которого выходят с ответом: вход, и ничего больше. Затемнение
  * закрывает страницу целиком — окно не «ещё одна панель», и работать в обход
@@ -688,11 +696,15 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
  * важность, которой между «войти» и «отмена» нет. */
 .modal-actions { display: flex; gap: var(--gap-half); flex-wrap: wrap; align-items: center; }
 .modal-actions .pair { min-width: 8rem; justify-content: center; }
+/* ⚠️ Главная кнопка — та же светлая пара, что «выбранное», и отличается
+ * РАМКОЙ акцента, а не тёмной заливкой (замечание заказчика 2026-09-05):
+ * тёмный прямоугольник в светлом окне читается как чужой, а выделить главную
+ * достаточно контуром. */
 .modal-actions .primary {
   margin-left: auto;
-  background: var(--surface-primary);
-  color: var(--on-surface-primary);
-  border-color: var(--surface-primary);
+  background: var(--surface-yes);
+  color: var(--on-surface-yes);
+  border-color: var(--accent);
 }
 .modal-brands { display: flex; flex-direction: column; gap: var(--gap-half); }
 .modal-brands[hidden], .modal-body[hidden] { display: none; }

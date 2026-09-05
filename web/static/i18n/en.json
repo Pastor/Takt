@@ -18,11 +18,10 @@
   "diagnostics.title": "Diagnostics",
   "diagnostics.none": "No errors",
   "tabs.output": "Target output",
-  "tabs.trace": "Run",
   "modes.label": "Area",
   "modes.source": "Model",
   "modes.output": "Output",
-  "modes.trace": "Run",
+  "modes.trace": "Simulation",
   "output.target": "Target",
   "output.refused": "refused",
   "output.noHighlight": "no highlighting: the file is longer than {limit} characters",
@@ -136,5 +135,7 @@
   "bar.build": "build {number}",
   "bar.buildTip": "built {built} · commit {commit} · branch {branch}",
   "account.cancel": "Cancel",
-  "account.signinTitle": "Sign in"
+  "account.signinTitle": "Sign in",
+  "panel.generate": "Generation",
+  "panel.simulate": "Simulation"
 }

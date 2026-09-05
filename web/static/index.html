@@ -89,6 +89,15 @@
             data-i18n="bar.fontMore" data-i18n-attr="data-tip:bar.fontHint" data-tip="Крупнее">+</button>
   </span>
   <span class="spacer"></span>
+  <!-- Панели правой области: генерация ЛИБО симуляция, либо ни одной. Кнопки
+       залипающие и взаимоисключающие — область одна, и держать в ней два
+       ответа сразу негде (решение заказчика 2026-09-05). -->
+  <button id="showgen" class="icon-btn" type="button" aria-pressed="true"
+          data-i18n-attr="data-tip:panel.generate;aria-label:panel.generate"
+          data-tip="Генерация" aria-label="Генерация"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 8.5 4.5 12 9 15.5"/><path d="M15 8.5 19.5 12 15 15.5"/></svg></button>
+  <button id="showsim" class="icon-btn" type="button" aria-pressed="false"
+          data-i18n-attr="data-tip:panel.simulate;aria-label:panel.simulate"
+          data-tip="Симуляция" aria-label="Симуляция"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 16h3v-8h5v8h5v-8h4"/></svg></button>
   <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
        Молча не перезагружаемся никогда — в редакторе несохранённая работа
        (задача 0531-07b). -->
@@ -190,7 +199,6 @@
   <section class="pane pane-result">
     <nav id="tabs" class="tabs" role="tablist">
       <button class="tab active" data-tab="output" role="tab" aria-selected="true" type="button" data-i18n="tabs.output">Вывод цели</button>
-      <button class="tab" data-tab="trace" role="tab" aria-selected="false" type="button" data-i18n="tabs.trace">Прогон</button>
       <button class="tab" data-tab="flags" role="tab" aria-selected="false" type="button" data-i18n="tabs.flags">Ключи сборки</button>
     </nav>
 
