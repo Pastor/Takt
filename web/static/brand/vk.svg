@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-hidden="true">
+  <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <text x="12" y="15.8" text-anchor="middle" font-family="Fira Code, monospace"
+        font-size="8" fill="currentColor">VK</text>
+</svg>

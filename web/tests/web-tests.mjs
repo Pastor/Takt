@@ -1247,6 +1247,35 @@ test("язык: подписи площадок объявляет сервер,
   }
 });
 
+test("вход: окно, и значки площадок объявлены сервером", async () => {
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const modal = html.slice(html.indexOf('<div id="signin-modal"'), html.indexOf("</body>"));
+
+  // ⚠️ Вход — РАЗГОВОР: у него есть все три исхода, и «отменить» тоже. Окно без
+  // выхода запирает страницу, а закрыть его мышью мимо кнопки нельзя.
+  for (const id of ["login", "password", "signin", "signup", "signin-cancel", "oauth"]) {
+    assert.ok(modal.includes(`id="${id}"`), `окно входа без '${id}'`);
+  }
+  assert.match(modal, /role="dialog"[\s\S]{0,80}aria-modal="true"/, "окно не объявлено модальным");
+
+  const account = await readFile(new URL("../static/account.js", import.meta.url), "utf8");
+  assert.match(account, /Escape[\s\S]{0,60}closeSignin/, "окно не закрывается клавишей");
+
+  // ⚠️ Значок приходит ИМЕНЕМ ФАЙЛА от сервера — как и подпись: своего списка
+  // площадок у страницы нет. Файл обязан существовать: сервер объявит значок,
+  // которого нет, и кнопка выйдет пустой — сверка двух сторон, как у подписей.
+  const api = await readFile(new URL("../server/src/oauth/api.rs", import.meta.url), "utf8");
+  const icons = [...api.matchAll(/icon:\s*"([\w.-]+)"/g)].map((m) => m[1]);
+  assert.ok(icons.length > 0, "сервер не объявляет значков — сверка выродилась в успех");
+  const files = await readdir(new URL("../static/brand/", import.meta.url));
+  for (const icon of icons) {
+    assert.ok(files.includes(icon), `значок ${icon} объявлен сервером, а файла нет`);
+  }
+  for (const file of files) {
+    assert.ok(icons.includes(file), `значок ${file} лежит в статике, а сервер о нём не знает`);
+  }
+});
+
 test("страница не знает имён площадок", async () => {
   // ⚠️ Приём тот же, что «нет списка ключевых слов Takt в вебе»: свой список
   // площадок разошёлся бы с настройкой стенда молча, и кнопка вела бы в никуда.

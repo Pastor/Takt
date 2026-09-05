@@ -58,6 +58,10 @@ pub struct ProviderJson {
     pub id: &'static str,
     /// Ключ словаря для подписи кнопки — **не текст**: текст переводится.
     pub label: &'static str,
+    /// Имя файла значка в `web/static/brand/` — **не путь**: путь строит
+    /// страница. Приём тот же, что у подписи: имён площадок в коде страницы
+    /// нет, их объявляет сервер (задача 09f-3).
+    pub icon: &'static str,
     /// Кнопка «Mail» — тот же VK ID с другим параметром.
     pub via: Option<&'static str>,
 }
@@ -131,6 +135,7 @@ async fn providers(State(state): State<Arc<AppState>>) -> Response {
         out.push(ProviderJson {
             id: "yandex",
             label: "oauth.yandex",
+            icon: "yandex.svg",
             via: None,
         });
     }
@@ -138,6 +143,7 @@ async fn providers(State(state): State<Arc<AppState>>) -> Response {
         out.push(ProviderJson {
             id: "vk",
             label: "oauth.vk",
+            icon: "vk.svg",
             via: None,
         });
     }
@@ -145,6 +151,7 @@ async fn providers(State(state): State<Arc<AppState>>) -> Response {
         out.push(ProviderJson {
             id: "vk",
             label: "oauth.mail",
+            icon: "mail.svg",
             via: Some("mail"),
         });
     }

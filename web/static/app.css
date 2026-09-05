@@ -87,6 +87,9 @@
    * заливка ручки под фокусом, текста на нём не бывает. Парой он был, пока
    * ею красилась выбранная вкладка; теперь выбранное — своя пара (§ 4). */
   --accent: var(--raw-accent);
+  /* Затемнение под модальным окном: чернила страницы, разбавленные до
+   * прозрачности. Своего цвета не заводит — берёт существующие. */
+  --scrim: color-mix(in srgb, var(--raw-ink) 28%, transparent);
   --surface-alarm: var(--raw-alarm-bg);
   --on-surface-alarm: var(--raw-alarm-ink);
   --surface-warn: var(--raw-warn-bg);
@@ -624,6 +627,48 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   color: var(--on-surface-yes);
   border-color: var(--border);
 }
+
+/* ── Модальное окно ──────────────────────────────────────────────────────
+ * Разговор, из которого выходят с ответом: вход, и ничего больше. Затемнение
+ * закрывает страницу целиком — окно не «ещё одна панель», и работать в обход
+ * него нельзя.
+ * ⚠️ `display: flex` сильнее атрибута `hidden` — правило гашения обязательно
+ * (четвёртый такой случай за фичу). */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap);
+  background: var(--scrim);
+}
+
+.modal[hidden] { display: none; }
+
+.modal-box {
+  width: min(26rem, 100%);
+  background: var(--surface-raised);
+  color: var(--on-surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--gap-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.modal-head { font-size: var(--text-lg); }
+.modal-body { display: flex; flex-direction: column; gap: var(--gap-half); }
+.modal-actions { display: flex; gap: var(--gap-half); flex-wrap: wrap; }
+.modal-brands { display: flex; flex-direction: column; gap: var(--gap-half); }
+.modal-brands[hidden], .modal-body[hidden] { display: none; }
+
+/* Кнопка площадки: значок и подпись. Значок приходит именем файла от сервера —
+ * своего списка площадок у страницы нет. */
+.brand-btn { display: flex; align-items: center; gap: var(--gap-half); width: 100%; }
+.brand-mark { width: var(--h-compact); height: var(--h-compact); flex: none; }
 
 /* ── Ключи сборки: карточка на ключ ──────────────────────────────────────
  * Ключ включается флажком, у ключа со значением рядом появляется его выбор.
