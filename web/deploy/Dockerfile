@@ -20,8 +20,14 @@ COPY . .
 
 # Статика: модуль + страница. Она же нужна серверу — из неё он берёт
 # `wasm/<версия>/takt.wasm` для архива.
-RUN cargo build --release --target wasm32-unknown-unknown -p takt-wasm \
- && TAKT_WEB_DIST=/out/static scripts/build-web.sh
+# ⚠️ Профиль — `wasm`, а не `release`: `build-web.sh` ищет модуль по
+# `TAKT_WASM_PROFILE` (умолчание `wasm`), и собранный `release` он не находит —
+# «Модуль не собран», сборка образа падает. Профиль назван ОДИН раз, здесь же и
+# передаётся скрипту: два носителя одного знания уже разошлись однажды
+# (выкладка на стенд 2026-09-05).
+ARG WASM_PROFILE=wasm
+RUN cargo build --profile ${WASM_PROFILE} --target wasm32-unknown-unknown -p takt-wasm \
+ && TAKT_WASM_PROFILE=${WASM_PROFILE} TAKT_WEB_DIST=/out/static scripts/build-web.sh
 
 # Сервер — свой workspace (полторы сотни зависимостей не должны собираться на
 # каждой правке компилятора).
