@@ -44,6 +44,11 @@
   <!-- Вход и выход — ОДНА кнопка: состояние у них одно, и две кнопки, из
        которых всегда видна одна, читателю ничего не добавляют. Значок меняется
        вместе с действием: не вошёл — стрелка внутрь, вошёл — наружу. -->
+  <!-- Переключатель языка — рядом со входом и размером с кнопку: в списке
+       самоназвания («Русский», «English»), на кнопке — код языка (задача
+       0531-09l, решение заказчика). Самоназвания НЕ переводятся: так читатель
+       находит свой язык, не зная текущего. -->
+  <select id="lang" class="lang" data-i18n-attr="aria-label:bar.language"></select>
   <button id="session" class="icon-btn" type="button"
           data-i18n-attr="data-tip:account.enter;aria-label:account.enter"
           data-tip="Войти" aria-label="Войти"><svg id="icon-enter" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 4.5h4.5v15H14"/><path d="M9.5 8l4 4-4 4"/><path d="M13.5 12H3.5"/></svg><svg id="icon-leave" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M13.5 4.5H5.5v15h8"/><path d="M17 8l4 4-4 4"/><path d="M21 12h-8.5"/></svg></button>
@@ -83,9 +88,6 @@
     <button id="fontmore" class="chip" type="button"
             data-i18n="bar.fontMore" data-i18n-attr="data-tip:bar.fontHint" data-tip="Крупнее">+</button>
   </span>
-  <!-- Переключатель языка. Самоназвания в списке НЕ переводятся: так читатель
-       находит свой язык, не зная текущего (задача 0531-10a). -->
-  <select id="lang" class="lang" data-i18n-attr="aria-label:bar.language"></select>
   <span class="spacer"></span>
   <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
        Молча не перезагружаемся никогда — в редакторе несохранённая работа
@@ -208,6 +210,7 @@
     <nav id="tabs" class="tabs" role="tablist">
       <button class="tab active" data-tab="output" role="tab" aria-selected="true" type="button" data-i18n="tabs.output">Вывод цели</button>
       <button class="tab" data-tab="trace" role="tab" aria-selected="false" type="button" data-i18n="tabs.trace">Прогон</button>
+      <button class="tab" data-tab="flags" role="tab" aria-selected="false" type="button" data-i18n="tabs.flags">Ключи сборки</button>
     </nav>
 
     <div data-panel="output" class="panel">
@@ -241,6 +244,16 @@
            data-i18n-attr="aria-label:trace.rows" aria-label="Высота сценария" tabindex="0"></div>
       <div id="tools-lang-trace" class="notice" data-i18n="tools.russianOnly" hidden>Сообщения инструментов пока только на русском</div>
       <div id="trace" class="list trace" aria-live="polite"></div>
+    </div>
+    <!-- Ключи сборки выбором: та же строка, что в поле «Ключи сборки», только
+         собранная контролами. Список ключей строит `flags.js` и сверяет с
+         разбором аргументов сторож — свой список разошёлся бы молча. -->
+    <div data-panel="flags" class="panel" hidden>
+      <div class="controls">
+        <span class="muted" data-i18n="flags.title">Ключи сборки — выбором</span>
+        <span id="flags-applies" class="muted"></span>
+      </div>
+      <div id="flags" class="flags"></div>
     </div>
   </section>
 </main>

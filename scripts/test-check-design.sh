@@ -108,7 +108,7 @@ import re, sys
 from pathlib import Path
 p = Path(sys.argv[1])
 s = p.read_text(encoding="utf-8")
-p.write_text(re.sub(r'\s*<span class="swatch" data-pair="--surface-accent[^\n]*\n', "\n", s, count=1), encoding="utf-8")
+p.write_text(re.sub(r'\s*<span class="swatch" data-pair="--surface-yes[^\n]*\n', "\n", s, count=1), encoding="utf-8")
 PYEOF
 expect_caught "G7b пара книги без образца" "D3"
 

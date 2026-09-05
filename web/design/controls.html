@@ -56,10 +56,9 @@
       <span class="swatch" data-pair="--surface-raised/--on-surface-raised"><span class="chip" style="background: var(--surface-raised); color: var(--on-surface-raised)">Аа</span>raised</span>
       <span class="swatch" data-pair="--surface-sunken/--on-surface-sunken"><span class="chip" style="background: var(--surface-sunken); color: var(--on-surface-sunken)">Аа</span>sunken</span>
       <span class="swatch" data-pair="--surface-field/--on-surface-field"><span class="chip" style="background: var(--surface-field); color: var(--on-surface-field)">Аа</span>field</span>
-      <span class="swatch" data-pair="--surface-accent/--on-surface-accent"><span class="chip" style="background: var(--surface-accent); color: var(--on-surface-accent)">Аа</span>accent</span>
       <span class="swatch" data-pair="--surface-alarm/--on-surface-alarm"><span class="chip" style="background: var(--surface-alarm); color: var(--on-surface-alarm)">Аа</span>alarm</span>
       <span class="swatch" data-pair="--surface-warn/--on-surface-warn"><span class="chip" style="background: var(--surface-warn); color: var(--on-surface-warn)">Аа</span>warn</span>
-      <span class="swatch" data-pair="--surface-yes/--on-surface-yes"><span class="chip" style="background: var(--surface-yes); color: var(--on-surface-yes)">Аа</span>yes</span>
+      <span class="swatch" data-pair="--surface-yes/--on-surface-yes"><span class="chip" style="background: var(--surface-yes); color: var(--on-surface-yes)">Аа</span>выбранное</span>
     </div>
   </section>
 
@@ -83,6 +82,32 @@
       <button class="icon-btn" type="button" title="Формат" aria-label="Формат"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M8 8.5 5.5 12 8 15.5"/></svg></button>
       <button class="icon-btn" type="button" title="Поделиться" aria-label="Поделиться"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6.5" cy="12" r="2.5"/><circle cx="17.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M8.8 10.8 15.2 7.7M8.8 13.2l6.4 3.1"/></svg></button>
       <button class="icon-btn" type="button" title="Скачать архивом" aria-label="Скачать архивом"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 4.5h17v4h-17z"/><path d="M5 8.5v11h14v-11"/><path d="M10 12h4"/></svg></button>
+    </div>
+  </section>
+
+  <section class="case" data-control=".seg">
+    <div class="pane-head"><span>Сегменты выбора</span></div>
+    <div class="case-body">
+      <span class="seg">
+        <button type="button" aria-pressed="true">switch</button>
+        <button type="button" aria-pressed="false">table</button>
+        <button type="button" aria-pressed="false" disabled>apb</button>
+      </span>
+    </div>
+  </section>
+
+  <section class="case" data-control=".flag">
+    <div class="pane-head"><span>Карточка ключа сборки</span></div>
+    <div class="case-body">
+      <div class="flag on" style="max-width: 22rem">
+        <label class="flag-head"><input type="checkbox" checked><span class="flag-name">--fsm</span></label>
+        <div class="flag-why">Форма автомата: разбор случая или таблица переходов</div>
+        <div class="flag-value"><span class="seg">
+          <button type="button" aria-pressed="false">switch</button>
+          <button type="button" aria-pressed="true">table</button>
+        </span></div>
+        <div class="flag-note">цель plantuml этот ключ не принимает</div>
+      </div>
     </div>
   </section>
 

@@ -60,8 +60,11 @@
   --raw-warn: #C6A24A;
   --raw-warn-ink: #6F5713;
   --raw-warn-bg: #F6EFDC;
-  --raw-yes: #E4EAD9;
-  --raw-yes-ink: #4E5749;
+  /* ⚠️ ВЫБРАННОЕ — светлая заливка с тёмными чернилами (решение заказчика
+   * 2026-09-05, вариант C из четырёх показанных): вкладка и залипающая кнопка
+   * были залиты насыщенным зелёным слишком громко. */
+  --raw-yes: #DFE6D5;
+  --raw-yes-ink: #414A39;
 
   /* ── Роли: заливка и чернила ПАРАМИ ───────────────────────────────────
    * Пара — не украшение, а механизм: слой отклика красится чернилами СВОЕЙ
@@ -80,8 +83,10 @@
   --on-surface-raised: var(--raw-ink);
   --surface-field: var(--raw-field);
   --on-surface-field: var(--raw-ink);
-  --surface-accent: var(--raw-accent);
-  --on-surface-accent: var(--raw-accent-ink);
+  /* ⚠️ Акцент — ОДИНОЧНЫЙ цвет, а не пара: им рисуются кольцо фокуса и
+   * заливка ручки под фокусом, текста на нём не бывает. Парой он был, пока
+   * ею красилась выбранная вкладка; теперь выбранное — своя пара (§ 4). */
+  --accent: var(--raw-accent);
   --surface-alarm: var(--raw-alarm-bg);
   --on-surface-alarm: var(--raw-alarm-ink);
   --surface-warn: var(--raw-warn-bg);
@@ -231,8 +236,8 @@
     --raw-warn: #D9BC6A;
     --raw-warn-ink: #EBD79B;
     --raw-warn-bg: #3A3320;
-    --raw-yes: #2C3A26;
-    --raw-yes-ink: #BFD3AE;
+    --raw-yes: #333D2E;
+    --raw-yes-ink: #D8E0CE;
 
     --tok-keyword: #c58af9;
     --tok-type: #7cb7e8;
@@ -380,7 +385,7 @@ body {
  * его место занимает акцент. */
 .grip:focus-visible {
   outline: none;
-  background: linear-gradient(to right, transparent, var(--surface-accent));
+  background: linear-gradient(to right, transparent, var(--accent));
 }
 
 /* ⚠️ На узком экране ручки нет вовсе: там область одна на экран, и сужать
@@ -451,7 +456,7 @@ body {
  * исключение § 6, что у `.grip`). */
 .split:focus-visible {
   outline: none;
-  background: var(--surface-accent);
+  background: var(--accent);
 }
 
 /* Разделитель РЯДОВ — тот же контрол, другая ось: полоса во всю ширину
@@ -488,6 +493,10 @@ body {
 /* ⚠️ Значок гасится атрибутом: у кнопки входа их два (внутрь и наружу), и
  * видимым обязан быть ровно один. */
 .icon[hidden] { display: none; }
+
+/* Переключатель языка в шапке: кнопка со значками рядом, поэтому и он ростом
+ * с них. Список при этом остаётся широким — в нём полные самоназвания. */
+.lang-pick .pick-btn { min-width: var(--h-control); padding: 0 var(--gap-half); }
 
 .brand { font-weight: 700; letter-spacing: 0.02em; font-size: var(--text-xl); }
 .muted { color: var(--on-surface-soft); font-size: var(--text-sm); }
@@ -536,7 +545,7 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 
 /* Фокус виден всегда и одинаково: доступность — не украшение. */
 :focus-visible {
-  outline: 2px solid var(--surface-accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -607,14 +616,60 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
  * строке, чтобы шапка не росла второй. */
 .pane-tools { display: flex; align-items: center; gap: var(--gap-half); }
 
-/* Залипающая кнопка: нажатое состояние — акцентная пара. Без него кнопка
+/* Залипающая кнопка: нажатое состояние — пара «выбранное». Без него кнопка
  * ничего не сообщает, и включён ли перенос, видно только по самому тексту. */
 .chip[aria-pressed="true"],
 .icon-btn[aria-pressed="true"] {
-  background: var(--surface-accent);
-  color: var(--on-surface-accent);
-  border-color: var(--surface-accent);
+  background: var(--surface-yes);
+  color: var(--on-surface-yes);
+  border-color: var(--border);
 }
+
+/* ── Ключи сборки: карточка на ключ ──────────────────────────────────────
+ * Ключ включается флажком, у ключа со значением рядом появляется его выбор.
+ * Неприменимый к цели гаснет и говорит почему — иначе читатель ставит ключ,
+ * который компилятор отвергнет. */
+.flags {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--gap-half);
+  padding: var(--gap);
+}
+
+.flag {
+  background: var(--surface-raised);
+  color: var(--on-surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: var(--gap-half) var(--gap);
+}
+
+.flag.unusable { color: var(--on-surface-off); }
+
+.flag-head { display: flex; align-items: center; gap: var(--gap-half); cursor: pointer; }
+.flag-name { font-weight: 700; }
+.flag-why { color: var(--on-surface-soft); font-size: var(--text-xs); margin-top: var(--gap-quarter); }
+.flag-value { display: flex; align-items: center; gap: var(--gap-half); margin-top: var(--gap-half); flex-wrap: wrap; }
+.flag-number { display: inline-flex; align-items: center; gap: var(--gap-quarter); }
+.flag-number input { width: 6rem; }
+
+.flag-note {
+  margin-top: var(--gap-half);
+  padding: var(--gap-quarter) var(--gap-half);
+  border-radius: var(--radius-sm);
+  background: var(--surface-warn);
+  color: var(--on-surface-warn);
+  font-size: var(--text-xs);
+}
+
+/* Сегменты выбора: кнопки в одной обойме, выбранная — пара «выбранное». */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.seg > button { border: none; border-radius: 0; height: var(--h-compact); }
+.seg > button + button { border-left: 1px solid var(--border); }
+.seg > button[aria-pressed="true"] { background: var(--surface-yes); color: var(--on-surface-yes); }
 
 /* ── Номера строк в панелях кода ─────────────────────────────────────────
  * Номер печатает СЧЁТЧИК CSS, а не разметка: строки красит один носитель
@@ -753,7 +808,8 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 .pick-opt:active:not(:disabled) {
   background: color-mix(in srgb, var(--on-surface) var(--state-press), var(--surface-raised));
 }
-/* Выбранный — подмена пары, и ничего больше. */
+/* Выбранный — подмена пары, и ничего больше. Пара та же, что у вкладки и
+ * залипающей кнопки: «выбранное» на странице выглядит одинаково. */
 .pick-opt[aria-selected="true"] {
   background: var(--surface-yes);
   color: var(--on-surface-yes);
@@ -864,9 +920,9 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 
 .tab { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .tab.active {
-  background: var(--surface-accent);
-  color: var(--on-surface-accent);
-  border-color: var(--surface-accent);
+  background: var(--surface-yes);
+  color: var(--on-surface-yes);
+  border-color: var(--border);
 }
 
 .panel {

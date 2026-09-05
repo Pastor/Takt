@@ -34,7 +34,7 @@
 export function enhance(select) {
   const document_ = select.ownerDocument;
   const box = document_.createElement("div");
-  box.className = "pick";
+  box.className = "pick" + (select.classList.contains("lang") ? " lang-pick" : "");
   const button = document_.createElement("button");
   button.type = "button";
   button.className = "pick-btn";
@@ -64,7 +64,11 @@ export function enhance(select) {
   }
 
   function refresh() {
-    label.textContent = select.selectedOptions[0]?.textContent ?? "";
+    // ⚠️ Кнопка показывает КОРОТКУЮ метку, если вариант её несёт
+    // (`data-short`): переключатель языка стоит рядом со значками шапки и
+    // обязан быть им под стать. В списке при этом остаётся полное название.
+    const picked = select.selectedOptions[0];
+    label.textContent = picked?.dataset.short ?? picked?.textContent ?? "";
     menu.replaceChildren();
     for (const option of select.options) {
       const item = document_.createElement("button");
@@ -158,7 +162,11 @@ export function enhance(select) {
   // Значение могли поменять извне (ссылка, черновик) — подпись обязана
   // догнать: иначе кнопка показывает одно, а собирается другое.
   select.addEventListener("change", () => {
-    label.textContent = select.selectedOptions[0]?.textContent ?? "";
+    // ⚠️ Кнопка показывает КОРОТКУЮ метку, если вариант её несёт
+    // (`data-short`): переключатель языка стоит рядом со значками шапки и
+    // обязан быть им под стать. В списке при этом остаётся полное название.
+    const picked = select.selectedOptions[0];
+    label.textContent = picked?.dataset.short ?? picked?.textContent ?? "";
   });
 
   refresh();

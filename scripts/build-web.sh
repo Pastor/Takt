@@ -97,6 +97,21 @@ cp "$WASM" "$DIST/wasm/$VERSION/takt.wasm"
 WASM_SHA="$(sha256 "$DIST/wasm/$VERSION/takt.wasm")"
 WASM_SIZE="$(wc -c < "$DIST/wasm/$VERSION/takt.wasm" | tr -d ' ')"
 
+# ── Номер сборки сервиса ─────────────────────────────────────────────────────
+# Инкрементальный номер, как у референса: читателю он говорит «свежее или
+# старее», а версия языка и версия модуля отвечают на другой вопрос.
+#
+# ⚠️ Номер считается ЧИСЛОМ КОММИТОВ ветки, а не файлом-счётчиком: файл пришлось
+# бы коммитить каждой сборкой (шум в истории и гонка при двух сборках подряд), а
+# счёт коммитов монотонен, воспроизводим и не требует записи в дерево.
+#
+# ⚠️ Вне git (сборка из архива, без истории) номер не выдумывается: пустое поле
+# честнее придуманного, и страница тогда показывает время сборки.
+if BUILD_NUMBER="${TAKT_BUILD_NUMBER:-$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null)}"; then :; fi
+BUILD_NUMBER="${BUILD_NUMBER:-}"
+BUILD_COMMIT="$(git -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo "")"
+BUILD_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+
 # Опись модуля: по ней выкладка отказывает, если под уже занятым адресом
 # `wasm/<версия>/` лежит ДРУГОЙ файл. Адрес обещает неизменность, и подмена
 # под ним — молчаливая порча у всех, кто уже кешировал.
@@ -129,7 +144,10 @@ cat > "$DIST/version.json" <<JSON
   "takt_lang": "$VERSION",
   "language": "$LANGUAGE",
   "wasm": "wasm/$VERSION/takt.wasm",
-  "built_at": "$BUILT_AT"
+  "built_at": "$BUILT_AT",
+  "build": "$BUILD_NUMBER",
+  "commit": "$BUILD_COMMIT",
+  "branch": "$BUILD_BRANCH"
 }
 JSON
 
