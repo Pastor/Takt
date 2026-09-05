@@ -98,13 +98,20 @@ export class Editor {
    * узел, в котором он стоял, и без сохранения каждая покраска отправляла бы
    * курсор в начало документа — то есть печатать было бы нельзя.
    */
+  /**
+   * Красит текст ответом модуля.
+   *
+   * ⚠️ Готовые отрезки принимаются как есть (`{ marks: [...] }`): сценарий —
+   * это JSON, и его размечает `json.js`, а не компилятор. Второго раскладчика
+   * строк при этом не заводится — он один на все области кода.
+   */
   highlight(tokens, diagnostics) {
     // Курсор возвращается ТОЛЬКО в редактор, в котором он и стоял: перекраска
     // не должна забирать фокус. Иначе смена языка (она перерисовывает всё)
     // уводила бы фокус с переключателя в текст — нашлось прогоном страницы.
     const focused = this.root.contains(this.root.ownerDocument.activeElement);
     const offset = caretOffset(this.root);
-    const marks = spans(tokens ?? {});
+    const marks = Array.isArray(tokens?.marks) ? tokens.marks : spans(tokens ?? {});
     const problems = new Map();
     for (const d of diagnostics ?? []) {
       const line = d.range?.start_line ?? 0;

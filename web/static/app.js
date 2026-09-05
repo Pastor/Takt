@@ -15,6 +15,8 @@ import { enhance } from "./pick.js";
 import * as build from "./build.js";
 import * as shell from "./shell.js";
 import * as tip from "./tip.js";
+import * as jsonSpans from "./json.js";
+import * as flags from "./flags.js";
 import * as project from "./project.js";
 import * as api from "./api.js";
 import * as account from "./account.js";
@@ -105,11 +107,12 @@ export async function main() {
 
   state.editor = new Editor(dom.editor, onEdit);
   // Сценарий — такая же область кода: тот же носитель строк, те же номера.
-  // ⚠️ Подсветки у него нет (это JSON, а не Takt), и красить его словами
-  // компилятора было бы неверно — строки печатаются как есть.
+  // ⚠️ Красится он СВОИМ разбором (`json.js`), а не словами компилятора: это
+  // JSON, а не Takt. Знание о Takt в вебе по-прежнему запрещено — у JSON же
+  // второго носителя в проекте нет, расходиться не с чем.
   state.scenarioEditor = new Editor(dom.scenario, () => {
     state.scenario = state.scenarioEditor.value();
-    state.scenarioEditor.highlight(null, []);
+    paintScenario();
     saveDraft();
   });
   wire();
@@ -243,16 +246,27 @@ function watchBuild() {
 }
 
 /**
- * Строка шапки: версия языка и время сборки.
+ * Строка шапки: версия языка и НОМЕР сборки сервиса.
  *
  * ⚠️ Версии модуля здесь нет (решение заказчика 2026-09-05): читателю она
- * ничего не решает — им обоим важно, чей это язык и насколько свежа страница.
- * Сама версия из описи не пропала: её показывает окно обновления.
+ * ничего не решает. Номер сборки решает — он говорит «свежее или старее»
+ * одним взглядом, тогда как дата требует счёта в уме.
+ *
+ * ⚠️ Дата, коммит и ветка ушли в ПОДСКАЗКУ: они нужны, когда о сборке
+ * спрашивают предметно («какой это коммит?»), и в строке шапки только шумели
+ * бы. Номера нет (сборка вне git) — показывается время, как прежде.
  */
 function showVersion() {
+  const at = build.moment(state.build?.built_at);
+  const number = state.build?.build;
   dom.version.textContent = t("bar.version", {
     language: state.languageVersion,
-    built: build.moment(state.build?.built_at),
+    built: number ? t("bar.build", { number }) : at,
+  });
+  dom.version.dataset.tip = t("bar.buildTip", {
+    built: at || "—",
+    commit: state.build?.commit || "—",
+    branch: state.build?.branch || "—",
   });
 }
 
@@ -262,8 +276,10 @@ function fillLanguages() {
   for (const [code, name] of Object.entries(i18n.LANGUAGES)) {
     const option = document.createElement("option");
     option.value = code;
-    // Самоназвание: оно не переводится (см. `i18n.js`).
+    // Самоназвание: оно не переводится (см. `i18n.js`). Кнопка при этом
+    // показывает КОД (`data-short`) — она размером с соседние значки.
     option.textContent = name;
+    option.dataset.short = i18n.SHORT[code] ?? code;
     dom.lang.appendChild(option);
   }
   dom.lang.value = i18n.language();
@@ -301,7 +317,7 @@ function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
     "scenario", "budget", "share", "run", "stop", "format", "status", "tabs", "modes",
-    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "tsplit", "wrap", "fontless", "fontmore", "fontsize", "project",
+    "lang", "tools-lang", "tools-lang-trace", "update", "grip", "split", "hsplit", "tsplit", "wrap", "fontless", "fontmore", "fontsize", "project", "flags", "flags-applies",
     "account", "session", "icon-enter", "icon-leave",
     "save", "openfile", "panel", "signedout", "signedin", "whoami",
     "whoami-bar",
@@ -329,11 +345,19 @@ function fillTargets(targets) {
 function wire() {
   dom.target.addEventListener("change", () => {
     state.target = dom.target.value;
+    // ⚠️ Ключи перестраиваются вместе с целью: применимость — свойство ЦЕЛИ, и
+    // ключ, которого новая цель не принимает, обязан уйти из строки сразу.
+    state.args = flags.line(flags.parse(state.args), state.target);
+    dom.args.value = state.args;
+    drawFlags();
     compile();
     saveDraft();
   });
   dom.args.addEventListener("input", () => {
     state.args = dom.args.value;
+    // ⚠️ Конструктор перечитывает СТРОКУ: величина одна, способов задать два,
+    // и своё состояние у конструктора завело бы расхождение с полем.
+    drawFlags();
     compile();
     saveDraft();
   });
@@ -421,11 +445,132 @@ function applyState(restored) {
   state.scenario = restored.scenario ?? "";
   dom.target.value = state.target;
   dom.args.value = state.args;
+  drawFlags();
   state.scenarioEditor.setValue(state.scenario);
+  paintScenario();
   state.editor.setValue(restored.source ?? SAMPLE);
 }
 
 /** Правка текста: подсветка, диагностики, вывод цели. */
+/**
+ * Строит вкладку ключей сборки по строке `state.args`.
+ *
+ * ⚠️ Состояние берётся ИЗ СТРОКИ на каждую перерисовку: строка — единственная
+ * величина, а конструктор лишь её вид. Ключ, которого опись не знает, едет
+ * обратно как есть (`rest`) — страница не вправе терять то, чего не знает.
+ */
+function drawFlags() {
+  if (!dom.flags) return;
+  const parsed = flags.parse(state.args);
+  const target = state.target;
+  dom.flags.replaceChildren();
+
+  const change = () => {
+    state.args = flags.line(parsed, target);
+    dom.args.value = state.args;
+    drawFlags();
+    compile();
+    saveDraft();
+  };
+
+  for (const spec of flags.FLAGS) {
+    const chosen = parsed.chosen.get(spec.key) ?? { on: false };
+    parsed.chosen.set(spec.key, chosen);
+    const usable = flags.applicable(spec, target);
+
+    const box = document.createElement("div");
+    box.className = "flag" + (chosen.on ? " on" : "") + (usable ? "" : " unusable");
+
+    const head = document.createElement("label");
+    head.className = "flag-head";
+    const box_ = document.createElement("input");
+    box_.type = "checkbox";
+    box_.checked = Boolean(chosen.on);
+    box_.disabled = !usable;
+    box_.addEventListener("change", () => {
+      chosen.on = box_.checked;
+      if (chosen.on && spec.clash) {
+        const other = parsed.chosen.get(spec.clash);
+        if (other) other.on = false;
+      }
+      change();
+    });
+    const name = document.createElement("span");
+    name.className = "flag-name";
+    name.textContent = spec.key;
+    head.append(box_, name);
+    box.append(head);
+
+    const why = document.createElement("div");
+    why.className = "flag-why";
+    why.textContent = t(spec.label);
+    box.append(why);
+
+    if (chosen.on && usable) box.append(flagValue(spec, chosen, target, change));
+    if (!usable) box.append(notice(t("flags.notForTarget", { target })));
+    else if (chosen.on && spec.choices && !flags.allows(spec, chosen.value ?? spec.fallback, target)) {
+      box.append(notice(t("flags.valueNotForTarget", { value: chosen.value ?? spec.fallback })));
+    }
+    dom.flags.append(box);
+  }
+
+  const usable = flags.FLAGS.filter((spec) => flags.applicable(spec, target)).length;
+  dom["flags-applies"].textContent = t("flags.applies", { n: usable, all: flags.FLAGS.length });
+}
+
+/** Выбор значения ключа: сегменты для набора, поля для чисел. */
+function flagValue(spec, chosen, target, change) {
+  const row = document.createElement("div");
+  row.className = "flag-value";
+  if (spec.choices) {
+    const group = document.createElement("div");
+    group.className = "seg";
+    for (const value of spec.choices) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = value;
+      button.setAttribute("aria-pressed", String((chosen.value ?? spec.fallback) === value));
+      button.disabled = !flags.allows(spec, value, target);
+      button.addEventListener("click", () => {
+        chosen.value = value;
+        change();
+      });
+      group.append(button);
+    }
+    row.append(group);
+  }
+  for (const number of spec.numbers ?? []) {
+    const label = document.createElement("label");
+    label.className = "flag-number";
+    label.append(document.createTextNode(number.name));
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = number.min;
+    input.max = number.max;
+    input.value = chosen[number.name] ?? number.fallback;
+    input.addEventListener("change", () => {
+      chosen[number.name] = Number(input.value);
+      change();
+    });
+    label.append(input);
+    row.append(label);
+  }
+  return row;
+}
+
+/** Строка-замечание внутри карточки ключа. */
+function notice(text) {
+  const node = document.createElement("div");
+  node.className = "flag-note";
+  node.textContent = text;
+  return node;
+}
+
+/** Красит сценарий как JSON: разбор свой, раскладчик строк общий. */
+function paintScenario() {
+  state.scenarioEditor.highlight({ marks: jsonSpans.spans(state.scenario) }, []);
+}
+
 function onEdit() {
   // Работа разошлась с сохранённым: запись черновика отложена, и до неё
   // уходить со страницы без вопроса нельзя.

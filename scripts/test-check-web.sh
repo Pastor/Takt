@@ -65,6 +65,13 @@ cp "$ROOT/takt-lang/Cargo.toml" "$TREE/takt-lang/"
 # читала `lib.rs`, поле `language` описей выходило пустым (задача 09c).
 mkdir -p "$TREE/takt-lang/src"
 cp "$ROOT/takt-lang/src/lib.rs" "$ROOT/takt-lang/src/version.rs" "$TREE/takt-lang/src/"
+# Разбор аргументов: по нему сверяется опись ключей сборки (задача 09m).
+# ⚠️ Копия дерева — не «весь проект», и файл, который тесты читают, а сторож не
+# кладёт, роняет B4 с чужой причиной (нашлось прогоном 2026-09-04 и повторилось
+# 2026-09-05 на этих самых ключах).
+mkdir -p "$TREE/takt-lang/src/compile_cli"
+cp "$ROOT/takt-lang/src/compile_cli/mod.rs" "$ROOT/takt-lang/src/compile_cli/target_flags.rs" \
+   "$TREE/takt-lang/src/compile_cli/"
 # Тема документа: по ней проверяется реестр ролей подсветки (задача 06).
 # ⚠️ Копия дерева — не «весь проект»: файл, который тесты читают, а сторож не
 # кладёт, роняет B4 с чужой причиной (нашлось первым же прогоном 2026-09-04).

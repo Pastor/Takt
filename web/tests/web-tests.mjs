@@ -34,6 +34,8 @@ import { bundleOfUrl } from "../static/build.js";
 import * as shell from "../static/shell.js";
 import * as tip from "../static/tip.js";
 import * as editor from "../static/editor.js";
+import * as json from "../static/json.js";
+import * as flags from "../static/flags.js";
 import * as build from "../static/build.js";
 import * as project from "../static/project.js";
 import * as api from "../static/api.js";
@@ -314,6 +316,9 @@ test("язык: каждый ключ разметки есть в словар�
   }
   const text = [html, ...scripts].join("\n");
   for (const [, key] of text.matchAll(/\bt\(\s*"([\w.]+)"/g)) used.add(key);
+  // Подписи ключей сборки объявлены ОПИСЬЮ (`flags.js`), а не разметкой: они
+  // приходят в текст через `t(spec.label)`.
+  for (const [, key] of text.matchAll(/label:\s*"([\w.]+)"/g)) used.add(key);
   // Ключи, которые страница строит не буквально: воркер и черновик возвращают
   // их полем `key`.
   for (const [, key] of text.matchAll(/key:\s*"([\w.]+)"/g)) used.add(key);
@@ -398,7 +403,7 @@ test("язык: порядок выбора — сохранённый, брау
 const PAGE_SCRIPTS = [
   "account.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js",
   "draft.js", "editor.js", "i18n.js", "pick.js", "project.js", "sample.js",
-  "share.js", "shell.js", "showcase.js", "tip.js", "worker.js",
+  "flags.js", "json.js", "share.js", "shell.js", "showcase.js", "tip.js", "worker.js",
 ];
 
 /**
@@ -602,6 +607,92 @@ test("шапка: время сборки читается по часам чи�
   }
 });
 
+test("ключи сборки: опись страницы сверена с разбором аргументов", async () => {
+  // ⚠️ Предмет — СОГЛАСИЕ двух сторон. Опись живёт в вебе (модуль её не
+  // отдаёт), и без сверки она разошлась бы с компилятором молча: страница
+  // предложила бы ключ, которого нет, либо умолчала о появившемся. Тот же
+  // класс, из-за которого в `web/` запрещён список ключевых слов Takt.
+  const cli = await readFile(new URL("../../takt-lang/src/compile_cli/mod.rs", import.meta.url), "utf8");
+  const restricted = await readFile(
+    new URL("../../takt-lang/src/compile_cli/target_flags.rs", import.meta.url), "utf8"
+  );
+
+  for (const spec of flags.FLAGS) {
+    assert.ok(cli.includes(`"${spec.key}`), `ключ ${spec.key} разбором аргументов не принимается`);
+    // Значения ключа — те же, что перечисляет разбор своего `parse_*`.
+    for (const value of spec.choices ?? []) {
+      assert.ok(cli.includes(`"${value}" =>`), `значение ${spec.key}=${value} разбор не знает`);
+    }
+    // Ограничение по целям совпадает с таблицей применимости компилятора.
+    for (const [value, targets] of Object.entries(spec.only ?? {})) {
+      const entry = restricted.match(
+        new RegExp(`flag: "${spec.key}=${value}",[\\s\\S]*?targets: &\\[([^\\]]*)\\]`)
+      );
+      assert.ok(entry, `${spec.key}=${value} объявлен ограниченным, а таблица целей о нём молчит`);
+      const listed = [...entry[1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+      assert.deepEqual(targets.slice().sort(), listed.sort(),
+        `цели у ${spec.key}=${value} разошлись с таблицей компилятора`);
+    }
+  }
+
+  // Обратная сторона: ограниченный компилятором ключ обязан быть в описи с тем
+  // же ограничением — иначе страница предложит сборку, которую он отвергнет.
+  for (const m of restricted.matchAll(/flag: "(--[a-z-]+)=([a-z]+)"/g)) {
+    const spec = flags.flag(m[1]);
+    assert.ok(spec?.only?.[m[2]], `ограничение ${m[1]}=${m[2]} в описи страницы не отражено`);
+  }
+});
+
+test("ключи сборки: строка — единственная величина", () => {
+  // Разбор и сборка — обращение друг друга на всех формах ключа.
+  const line = "--fsm=table --bounds-check --float-as-q=8.8 --tick-hz=500";
+  assert.equal(flags.line(flags.parse(line), "c"), line);
+
+  // ⚠️ Неизвестный ключ едет ОБРАТНО как есть: он мог появиться в компиляторе
+  // раньше, чем в описи, и терять его страница не вправе.
+  const withUnknown = "--fsm=switch --какой-то-новый=1";
+  assert.equal(flags.line(flags.parse(withUnknown), "c"), withUnknown);
+
+  // ⚠️ Ключ, чьё значение цель не принимает, в строку не идёт: иначе страница
+  // обещала бы сборку, которую компилятор отвергнет.
+  assert.equal(flags.line(flags.parse("--fsm=table"), "plantuml"), "");
+  assert.equal(flags.line(flags.parse("--fsm=switch"), "plantuml"), "--fsm=switch");
+  assert.equal(flags.line(flags.parse("--bus=apb"), "sv"), "");
+  assert.equal(flags.line(flags.parse("--bus=apb"), "sv-mmio"), "--bus=apb");
+});
+
+test("сценарий: JSON красится своим разбором, и разбор терпим к недописанному", () => {
+  // ⚠️ Свой разбор здесь ЗАКОНЕН, в отличие от Takt: грамматику JSON задаёт
+  // RFC 8259, второго носителя у неё в проекте нет — расходиться не с чем.
+  const text = '[{"in_ports": {"t": 25, "ok": true, "off": null}}]';
+  const marks = json.spans(text);
+  const at = (needle) => marks.find((m) => m.column === text.indexOf(needle));
+
+  // Имя поля от значения отличает двоеточие следом — тот же признак, по
+  // которому их различает человек.
+  assert.equal(at('"in_ports"').type, "type", "имя поля не отличено от строки");
+  assert.equal(at('"t"').type, "type");
+  assert.equal(at("25").type, "number");
+  assert.equal(at("true").type, "constant");
+  assert.equal(at("null").type, "constant");
+  assert.equal(at("[").type, "operator");
+
+  // Отрезки не выходят за свою строку — иначе раскладчик строк красит чужое.
+  const rows = text.split("\n");
+  for (const mark of marks) {
+    assert.ok(mark.column + mark.length <= rows[mark.line].length,
+      `отрезок за краем строки: ${JSON.stringify(mark)}`);
+  }
+
+  // ⚠️ Сценарий красится, ПОКА его набирают, то есть почти всегда
+  // недописанным: разбор не вправе ни падать, ни терять остаток текста.
+  for (const broken of ['[{"a', '{"a": ', '[1, 2,', '"\\"', '{', '']) {
+    assert.doesNotThrow(() => json.spans(broken), `разбор упал на ${JSON.stringify(broken)}`);
+  }
+  const unclosed = json.spans('{"a": "хвост');
+  assert.ok(unclosed.some((m) => m.type === "string"), "незакрытая строка не покрашена");
+});
+
 test("редактор: перевод строки считается символом, и правило одно", () => {
   // ⚠️ Узлы-строки БЛОЧНЫЕ: перевода строки между ними в DOM нет, а в тексте
   // есть. Пока это правило считали по месту, сохранение каретки о переводах не
@@ -648,11 +739,13 @@ test("шапка: две полосы, и каждая отвечает на с�
   const brand = html.slice(html.indexOf('<header class="bar bar-brand">'), html.indexOf("</header>"));
   const tools = html.slice(html.indexOf('<div class="bar bar-tools">'), html.indexOf("<main"));
 
-  for (const id of ["version", "project", "openfile", "whoami-bar", "session"]) {
+  // ⚠️ Переключатель языка стоит НАВЕРХУ, рядом со входом (решение заказчика
+  // 2026-09-05): он не действие над моделью, а свойство самой страницы.
+  for (const id of ["version", "project", "openfile", "whoami-bar", "session", "lang"]) {
     assert.ok(brand.includes(`id="${id}"`), `верхняя полоса без '${id}'`);
   }
   for (const id of ["account", "showcase", "save", "format", "wrap",
-                    "share", "download", "lang"]) {
+                    "share", "download"]) {
     assert.ok(tools.includes(`id="${id}"`), `полоса управления без '${id}'`);
     assert.ok(!brand.includes(`id="${id}"`), `'${id}' остался в верхней полосе`);
   }
