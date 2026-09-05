@@ -56,6 +56,14 @@ pub struct ProjectJson {
     pub takt_lang: String,
     pub language_version: String,
     pub main_file: Option<String>,
+    /// Цель сборки, выбранная автором (задача 09p).
+    ///
+    /// ⚠️ Свойство ПРОЕКТА, а не файла (решение заказчика 2026-09-05): проект
+    /// с библиотекой и прошивкой собирается одной целью. Страница берёт её
+    /// умолчанием при открытии, а черновик автора её перекрывает.
+    pub build_target: String,
+    /// Ключи сборки одной строкой — те же, что у `taktc compile`.
+    pub build_args: String,
     pub revision: i64,
     pub size_bytes: i64,
     pub forked_from: Option<String>,
@@ -133,6 +141,12 @@ pub struct PatchRequest {
     pub visibility: Option<String>,
     #[serde(default)]
     pub main_file: Option<String>,
+    /// Цель сборки; проверяется вместе с ключами (задача 09p).
+    #[serde(default)]
+    pub build_target: Option<String>,
+    /// Ключи сборки одной строкой.
+    #[serde(default)]
+    pub build_args: Option<String>,
     /// Подъём версии модуля — **явное действие владельца** (решение A5):
     /// после него вывод целей может измениться.
     #[serde(default)]
@@ -185,7 +199,8 @@ async fn list(
     let rows = client
         .query(
             "SELECT p.id, p.name, p.description, p.visibility, u.login AS owner,
-                    p.takt_lang, p.language_version, p.main_file, p.revision,
+                    p.takt_lang, p.language_version, p.main_file,
+                    p.build_target, p.build_args, p.revision,
                     p.size_bytes, p.forked_from, p.created_at, p.updated_at,
                     g.level AS granted
              FROM projects p
@@ -388,6 +403,32 @@ async fn patch(
             .execute(
                 "UPDATE projects SET takt_lang = $1 WHERE id = $2",
                 &[takt_lang, &id],
+            )
+            .await?;
+    }
+    // ⚠️ Цель и ключи проверяются ПАРОЙ, а не по отдельности: применимость
+    // ключа — свойство пары (`--bus=apb` годится `sv-mmio` и не годится
+    // `rust`), и смена одной половины делает негодной другую. Отсюда чтение
+    // недостающей половины из базы.
+    if request.build_target.is_some() || request.build_args.is_some() {
+        let current = transaction
+            .query_one(
+                "SELECT build_target, build_args, takt_lang FROM projects WHERE id = $1",
+                &[&id],
+            )
+            .await?;
+        let target = request
+            .build_target
+            .clone()
+            .unwrap_or_else(|| current.get(0));
+        let args = request.build_args.clone().unwrap_or_else(|| current.get(1));
+        let version: String = current.get(2);
+        limits::check_build_args(&args)?;
+        check_build(&state, &version, &target, &args)?;
+        transaction
+            .execute(
+                "UPDATE projects SET build_target = $1, build_args = $2 WHERE id = $3",
+                &[&target, &args, &id],
             )
             .await?;
     }
@@ -817,8 +858,34 @@ pub(crate) fn require_level(level: Level, needed: Level) -> Result<(), ApiError>
     }
 }
 
+/// Проверяет цель и ключи сборки — разбором самого компилятора.
+///
+/// ⚠️ Решение заказчика 2026-09-05: негодные ключи отвергаются при записи, а
+/// не при сборке. Своего списка ключей у сервера при этом НЕ появляется:
+/// спрашивается модуль проекта (`takt_flags`), то есть тот же
+/// `parse_compile_args`, что у `taktc`. Заведи разбор здесь — он разошёлся бы
+/// с компилятором молча (класс 0084/0466).
+///
+/// ⚠️ Модуля нет — **отказ, а не молчаливый приём**: непроверенное значение
+/// доехало бы до страницы читателя и отказало бы там, где он ничего не
+/// выбирал.
+pub(crate) fn check_build(
+    state: &Arc<AppState>,
+    version: &str,
+    target: &str,
+    args: &str,
+) -> Result<(), ApiError> {
+    let modules = state.modules.as_ref().ok_or_else(|| {
+        ApiError::BadRequest("ключи сборки проверить нечем: модуля нет в статике".to_string())
+    })?;
+    modules
+        .check_flags(version, target, args)
+        .map_err(|error| ApiError::BadRequest(format!("ключи сборки: {error}")))
+}
+
 pub(crate) const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
-        u.login AS owner, p.takt_lang, p.language_version, p.main_file, p.revision,
+        u.login AS owner, p.takt_lang, p.language_version, p.main_file,
+        p.build_target, p.build_args, p.revision,
         p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id,
         p.touched_at, p.archived_at
     FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1";
@@ -833,6 +900,8 @@ pub(crate) fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
         takt_lang: row.get("takt_lang"),
         language_version: row.get("language_version"),
         main_file: row.get("main_file"),
+        build_target: row.get("build_target"),
+        build_args: row.get("build_args"),
         revision: row.get("revision"),
         size_bytes: row.get("size_bytes"),
         forked_from: row.get("forked_from"),

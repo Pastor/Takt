@@ -113,6 +113,26 @@ pub extern "C" fn takt_compile(len: u32) -> u32 {
     })
 }
 
+/// Запрос проверки ключей сборки.
+#[derive(Debug, Deserialize)]
+struct FlagsRequest {
+    /// Имя цели, как в `taktc compile -t`.
+    target: String,
+    /// Ключи сборки одной строкой; пусто — умолчания.
+    #[serde(default)]
+    args: String,
+}
+
+/// Проверяет цель и ключи сборки, ничего не компилируя.
+///
+/// ⚠️ Операция заведена ради сервера (задача `0531-09p`): цель и ключи стали
+/// свойством проекта, и негодные отвергаются при записи. Отвечает тот же
+/// разбор, что у сборки, — второго списка ключей в проекте нет.
+#[unsafe(no_mangle)]
+pub extern "C" fn takt_flags(len: u32) -> u32 {
+    call(len, |r: FlagsRequest| compile::check(&r.target, &r.args))
+}
+
 /// Запрос, которому нужен только текст документа.
 #[derive(Debug, Deserialize)]
 struct SourceRequest {

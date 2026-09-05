@@ -193,7 +193,8 @@ async fn fork(
 
     let source = transaction
         .query_one(
-            "SELECT name, takt_lang, language_version, main_file, owner_id
+            "SELECT name, takt_lang, language_version, main_file, owner_id,
+                    build_target, build_args
              FROM projects WHERE id = $1",
             &[&id],
         )
@@ -228,13 +229,19 @@ async fn fork(
     let takt_lang: String = source.get("takt_lang");
     let language_version: String = source.get("language_version");
     let main_file: Option<String> = source.get("main_file");
+    // ⚠️ Цель и ключи копируются вместе с проектом (задача 09p): копия — тот же
+    // код, и собираться он обязан так же. Проверять их заново нечего — они уже
+    // проверены при записи в исходный проект.
+    let build_target: String = source.get("build_target");
+    let build_args: String = source.get("build_args");
     transaction
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
-                                  takt_lang, language_version, main_file, revision,
+                                  takt_lang, language_version, main_file,
+                                  build_target, build_args, revision,
                                   size_bytes, forked_from, created_at, updated_at,
                                   touched_at)
-             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, 0, 0, $7, $8, $8, $8)",
+             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, $7, $8, 0, 0, $9, $10, $10, $10)",
             &[
                 &copy,
                 &user.id,
@@ -242,6 +249,8 @@ async fn fork(
                 &takt_lang,
                 &language_version,
                 &main_file,
+                &build_target,
+                &build_args,
                 &id,
                 &now,
             ],

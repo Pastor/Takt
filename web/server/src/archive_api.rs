@@ -45,7 +45,11 @@ pub struct ExportQuery {
     /// Цель генерации; пусто — архив только с исходниками.
     #[serde(default)]
     pub target: Option<String>,
-    /// Ключи сборки, как у `taktc compile`.
+    /// Ключи сборки, как у `taktc compile`; пусто — ключи ПРОЕКТА.
+    ///
+    /// ⚠️ Умолчание — не пустая строка (задача 09p): проект несёт выбор
+    /// автора, и архив, собранный без его ключей, показывал бы вывод, которого
+    /// автор не видел.
     #[serde(default)]
     pub args: Option<String>,
     /// Какой файл компилировать; пусто — активный.
@@ -123,7 +127,11 @@ async fn export(
             // ⚠️ Имя файла — часть вывода: имя корневой модели берётся из него
             // (0195). Оно передаётся модулю позиционным аргументом, ровно как в
             // командной строке.
-            let args = format!("{} {}", request.args.clone().unwrap_or_default(), chosen);
+            let chosen_args = request
+                .args
+                .clone()
+                .unwrap_or_else(|| project.build_args.clone());
+            let args = format!("{chosen_args} {chosen}");
             let modules = state.modules.as_ref().ok_or_else(|| {
                 ApiError::BadRequest(
                     "сборка с генерацией недоступна: модуля нет в статике".to_string(),
@@ -143,15 +151,7 @@ async fn export(
         }
     };
 
-    let manifest = archive::manifest_of(
-        &project.name,
-        &project.description,
-        &project.takt_lang,
-        &project.language_version,
-        project.main_file.clone(),
-        &sources,
-        target,
-    );
+    let manifest = archive::manifest_of(&project, &sources, target);
     let bytes = archive::pack(&Export {
         manifest,
         sources,
@@ -218,6 +218,15 @@ async fn import(
     } else {
         state.module_version.clone()
     };
+    // Цель и ключи автора (задача 09p) ПРОВЕРЯЮТСЯ, когда есть чем: архив —
+    // чужой вход, и негодная пара показала бы читателю сборку, которой нет.
+    // Не прошла проверку либо проверить нечем — берутся умолчания: терять
+    // проект из-за строки ключей несоразмерно. Тот же приём, что у версии
+    // модуля строкой выше.
+    let (build_target, build_args) = match build_pair(&state, &takt_lang, &parsed.manifest) {
+        Some(pair) => pair,
+        None => (DEFAULT_TARGET.to_string(), String::new()),
+    };
     // Активный файл обязан существовать среди загруженных: иначе страница
     // откроет проект, показывая пустоту.
     let main_file = parsed
@@ -235,9 +244,10 @@ async fn import(
     transaction
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
-                                  takt_lang, language_version, main_file, revision,
+                                  takt_lang, language_version, main_file,
+                                  build_target, build_args, revision,
                                   size_bytes, created_at, updated_at, touched_at)
-             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, 1, $8, $9, $9, $9)",
+             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, $8, $9, 1, $10, $11, $11, $11)",
             &[
                 &id,
                 &user.id,
@@ -246,6 +256,8 @@ async fn import(
                 &takt_lang,
                 &state.language_version,
                 &main_file,
+                &build_target,
+                &build_args,
                 &size,
                 &now,
             ],
@@ -272,4 +284,34 @@ async fn import(
     let created: ProjectJson = projects::project_of(&row);
     transaction.commit().await?;
     Ok((StatusCode::CREATED, Json(created)).into_response())
+}
+
+/// Цель по умолчанию: ею открывается проект, у которого выбора нет.
+///
+/// ⚠️ Значение то же, что в схеме (`build_target ... DEFAULT 'c'`), и это
+/// сознательное повторение одной величины в двух видах: база отвечает за
+/// строку, уже лежащую в ней, а эта константа — за строку, которую сервер
+/// подставляет сам. Сторож — проверка загрузки архива без пары.
+const DEFAULT_TARGET: &str = "c";
+
+/// Цель и ключи из архива, если они прошли проверку.
+///
+/// `None` — пары в архиве нет (прежняя версия формата), она не прошла разбор
+/// либо проверить её нечем.
+fn build_pair(
+    state: &Arc<AppState>,
+    version: &str,
+    manifest: &archive::Manifest,
+) -> Option<(String, String)> {
+    if manifest.build_target.is_empty() {
+        return None;
+    }
+    if limits::check_build_args(&manifest.build_args).is_err() {
+        return None;
+    }
+    let modules = state.modules.as_ref()?;
+    modules
+        .check_flags(version, &manifest.build_target, &manifest.build_args)
+        .ok()?;
+    Some((manifest.build_target.clone(), manifest.build_args.clone()))
 }

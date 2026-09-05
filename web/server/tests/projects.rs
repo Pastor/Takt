@@ -496,3 +496,88 @@ async fn projects_need_a_token() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     stand.drop_schema().await;
 }
+
+#[tokio::test]
+async fn the_build_target_and_flags_are_checked_as_a_pair() {
+    // ⚠️ Проверка ключей идёт МОДУЛЕМ (задача 09p): своего списка ключей у
+    // сервера нет и быть не должно. Значит и здесь нужна собранная статика —
+    // ровно как проверкам генерации в архиве.
+    if std::env::var("TAKT_WEB_TEST_STATIC").is_err() {
+        return skipped("ключи сборки: не задан TAKT_WEB_TEST_STATIC — модуля нет");
+    }
+    let Some(stand) = Stand::open("p_flags").await else {
+        return skipped("ключи сборки");
+    };
+    let token = owner(&stand, "ivan").await;
+    let id = project(&stand, &token, "Термореле").await;
+
+    // Умолчание названо: проект без выбора собирается целью `c` без ключей.
+    let (_, body) = stand.get_as(&format!("/api/projects/{id}"), &token).await;
+    assert_eq!(body["build_target"], "c", "{body}");
+    assert_eq!(body["build_args"], "", "{body}");
+
+    // Годная пара принимается и переживает чтение.
+    let (status, body) = stand
+        .patch_as(
+            &format!("/api/projects/{id}"),
+            &token,
+            serde_json::json!({"build_target": "sv-mmio", "build_args": "--bus=apb"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, body) = stand.get_as(&format!("/api/projects/{id}"), &token).await;
+    assert_eq!(body["build_target"], "sv-mmio");
+    assert_eq!(body["build_args"], "--bus=apb");
+
+    // ⚠️ Половина пары делает негодной другую: `--bus=apb` годится `sv-mmio` и
+    // не годится `rust`. Проверяй сервер только присланное поле — эта смена
+    // прошла бы молча, и проект собирался бы отказом.
+    let (status, body) = stand
+        .patch_as(
+            &format!("/api/projects/{id}"),
+            &token,
+            serde_json::json!({"build_target": "rust"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(
+        body["message"].as_str().expect("текст").contains("--bus"),
+        "причина обязана называть ключ: {body}"
+    );
+
+    // Неизвестный ключ и неизвестная цель — тоже отказ.
+    for wrong in [
+        serde_json::json!({"build_args": "--нет-такого"}),
+        serde_json::json!({"build_target": "verilog"}),
+    ] {
+        let (status, body) = stand
+            .patch_as(&format!("/api/projects/{id}"), &token, wrong.clone())
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{wrong} → {body}");
+    }
+
+    // ⚠️ Контроль: отказ не сплошной. Смена ОБЕИХ половин разом законна, и без
+    // этой проверки «отвергать всё» выглядело бы работающим правилом.
+    let (status, body) = stand
+        .patch_as(
+            &format!("/api/projects/{id}"),
+            &token,
+            serde_json::json!({"build_target": "rust", "build_args": ""}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["build_target"], "rust");
+
+    // Длина строки ключей ограничена — до разбора: работа, объём которой
+    // задаёт отправитель, границы не имеет.
+    let (status, body) = stand
+        .patch_as(
+            &format!("/api/projects/{id}"),
+            &token,
+            serde_json::json!({"build_args": "x".repeat(limits::BUILD_ARGS_CHARS + 1)}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{body}");
+
+    stand.drop_schema().await;
+}

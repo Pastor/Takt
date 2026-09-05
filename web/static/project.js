@@ -54,7 +54,8 @@ export function apiRoot(pathname) {
  * @param {string} root корень API
  * @param {typeof fetch} [get] способ сходить за данными (подменяется в тестах)
  * @returns {Promise<{name: string, owner: string, visibility: string,
- *   version: string, source: string, scenario: string}>}
+ *   version: string, target: string, args: string, source: string,
+ *   scenario: string}>}
  */
 export async function read(id, root, get = fetch) {
   const meta = await ask(get, `${root}api/projects/${encodeURIComponent(id)}`);
@@ -75,6 +76,12 @@ export async function read(id, root, get = fetch) {
     // вместе с компилятором, и чужой образец обязан открываться тем модулем,
     // которым его писали.
     version: meta.takt_lang ?? "",
+    // Цель и ключи сборки — тоже свойство проекта (задача 09p): чужой образец
+    // обязан открываться СБОРКОЙ АВТОРА. Прежде читатель видел его своей
+    // последней целью, и модель на `sv-mmio` с `--bus=apb` показывалась как
+    // `c` без ключей — то есть не тем, что имел в виду автор.
+    target: meta.build_target ?? "",
+    args: meta.build_args ?? "",
     source,
     scenario,
   };
