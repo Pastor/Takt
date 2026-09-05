@@ -130,4 +130,26 @@ if TAKT_NODE=такого-нет PRECHECK_STRICT=1 "$0" >/dev/null 2>&1; then
 fi
 echo "  OK: E5 под PRECHECK_STRICT=1 отсутствие node — ошибка"
 
-echo "  Сторож выкладки: все проверки пройдены (E1…E5)."
+# ── E6: стек РАЗБИРАЕТСЯ ─────────────────────────────────────────────────────
+# ⚠️ Предмет — не «файл на месте», а «docker его читает». Значение с двоеточием
+# и пробелом (адрес базы, текст отказа `:?`) без кавычек YAML читает как
+# отображение, и стек не поднимается вовсе: «mapping values are not allowed in
+# this context». Класс нашла выкладка на стенд 2026-09-05 — дома стек не
+# поднимали ни разу, и гейты его не читали.
+if docker compose version >/dev/null 2>&1; then
+  if TAKT_WEB_JWT_SECRET=проба-сторожа docker compose -p takt-guard \
+       --project-directory "$ROOT/web/deploy" \
+       -f "$ROOT/web/deploy/docker-compose.yml" config -q >/dev/null 2>&1; then
+    echo "  OK: E6 стек разбирается docker compose"
+  else
+    echo "  ПРОВАЛ: E6 стек не разбирается — на стенде он не поднимется:"
+    TAKT_WEB_JWT_SECRET=проба-сторожа docker compose -p takt-guard \
+      --project-directory "$ROOT/web/deploy" \
+      -f "$ROOT/web/deploy/docker-compose.yml" config -q 2>&1 | head -3 | sed 's/^/    /'
+    exit 1
+  fi
+else
+  echo "  пропуск: E6 нет docker compose — разбор стека не проверен"
+fi
+
+echo "  Сторож выкладки: все проверки пройдены (E1…E6)."
