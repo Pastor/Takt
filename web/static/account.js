@@ -678,7 +678,7 @@ function refresh() {
   // ⚠️ Кнопка учётной записи — ЗНАЧОК, и текста не несёт: логин показывается
   // подписью рядом, а в саму кнопку уходит подпись для диктора и всплывающая.
   const label = me ? me.login : t("account.enter");
-  dom.account.title = label;
+  dom.account.dataset.tip = label;
   dom.account.setAttribute("aria-label", label);
   dom["whoami-bar"].textContent = me ? me.login : "";
   dom["whoami-bar"].hidden = me === null;

@@ -32,6 +32,10 @@
   .chip { display: inline-flex; align-items: center; justify-content: center;
           width: var(--h-control); height: var(--h-control);
           border-radius: var(--radius); border: 1px solid var(--border); }
+  /* ⚠️ На витрине панель показана НА МЕСТЕ: живая считается от окна
+     (`position: fixed`) и уехала бы в угол. Значений это не заводит —
+     переопределён только способ размещения. */
+  .case-tip .tip { position: static; display: inline-block; }
 </style>
 </head>
 <body>
@@ -79,6 +83,13 @@
       <button class="icon-btn" type="button" title="Формат" aria-label="Формат"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M8 8.5 5.5 12 8 15.5"/></svg></button>
       <button class="icon-btn" type="button" title="Поделиться" aria-label="Поделиться"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6.5" cy="12" r="2.5"/><circle cx="17.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M8.8 10.8 15.2 7.7M8.8 13.2l6.4 3.1"/></svg></button>
       <button class="icon-btn" type="button" title="Скачать архивом" aria-label="Скачать архивом"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 4.5h17v4h-17z"/><path d="M5 8.5v11h14v-11"/><path d="M10 12h4"/></svg></button>
+    </div>
+  </section>
+
+  <section class="case" data-control=".tip">
+    <div class="pane-head"><span>Подсказка</span></div>
+    <div class="case-body case-tip">
+      <span class="tip">Открытые проекты</span>
     </div>
   </section>
 

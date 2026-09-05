@@ -237,7 +237,7 @@
     --tok-number: #e0a06a;
     --tok-constant: #e79bc4;
     --tok-string: #86d6a4;
-    --tok-comment: #969894;
+    --tok-comment: #7E827C;
     --tok-function: #7cb7e8;
   }
 }
@@ -657,6 +657,37 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   border-right: 4px solid transparent;
   border-top: 5px solid var(--on-surface-soft);
 }
+
+/* ── Подсказка: своя, а не нативная ─────────────────────────────────────
+ * Нативную (`title`) браузер рисует сам — чужим шрифтом, мимо темы страницы и
+ * со своей задержкой. Панель одна на страницу, место ей считает `tip.js`;
+ * здесь только вид.
+ *
+ * ⚠️ `position: fixed` — панель считается от ОКНА: элемент может лежать в
+ * прокручиваемой области, и абсолютные координаты уехали бы вместе с ней.
+ * ⚠️ `pointer-events: none` обязательны: панель встаёт под курсором, и без
+ * этого наведение на неё же снимало бы наведение с кнопки — подсказка
+ * мигала бы.
+ * ⚠️ Вид взят у референса (приподнятая поверхность с рамкой), но БЕЗ тени:
+ * теней в этой системе нет вовсе, и одна на подсказке завела бы вторую
+ * шкалу — у референса она есть, у нас плоско. */
+.tip {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  max-width: 20rem;
+  padding: var(--gap-half) var(--gap);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  background: var(--surface-raised);
+  color: var(--on-surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+
+/* ⚠️ Панель показывается сменой `hidden`, а `display` сильнее атрибута —
+ * правило гашения обязательно (третий такой случай за фичу). */
+.tip[hidden] { display: none; }
 
 .pick-menu {
   position: absolute;
