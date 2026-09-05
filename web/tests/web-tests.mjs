@@ -601,6 +601,36 @@ test("шапка: время сборки читается по часам чи�
   }
 });
 
+test("шапка: две полосы, и каждая отвечает на свой вопрос", async () => {
+  // ⚠️ Предмет — СОСТАВ полос (раскладка заказчика 2026-09-05): верхняя
+  // отвечает «что за страница» (имя, версия языка, время сборки, вход), нижняя
+  // — «что я могу сделать». Уехавшая вниз кнопка входа не ломает ничего
+  // машинно и потому невидима всем прочим проверкам.
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const brand = html.slice(html.indexOf('<header class="bar bar-brand">'), html.indexOf("</header>"));
+  const tools = html.slice(html.indexOf('<div class="bar bar-tools">'), html.indexOf("<main"));
+
+  for (const id of ["version", "project", "openfile", "whoami-bar", "session"]) {
+    assert.ok(brand.includes(`id="${id}"`), `верхняя полоса без '${id}'`);
+  }
+  for (const id of ["account", "showcase", "save", "format", "share", "download", "lang"]) {
+    assert.ok(tools.includes(`id="${id}"`), `полоса управления без '${id}'`);
+    assert.ok(!brand.includes(`id="${id}"`), `'${id}' остался в верхней полосе`);
+  }
+  assert.ok(!tools.includes('id="session"'), "кнопка входа уехала в управление");
+
+  // ⚠️ Значка у кнопки входа ДВА, и видимым обязан быть ровно один: правило
+  // гашения по атрибуту без этого молчит, а на экране рядом стоят вход и выход.
+  assert.ok(brand.includes('id="icon-enter"') && brand.includes('id="icon-leave"'));
+  const css = await readFile(new URL("../static/app.css", import.meta.url), "utf8");
+  assert.match(css, /\.icon\[hidden\]\s*\{[^}]*display:\s*none/, "значок не гасится атрибутом");
+
+  // Кнопка одна на оба действия: страница решает по тому, вошли ли.
+  const account = await readFile(new URL("../static/account.js", import.meta.url), "utf8");
+  assert.match(account, /session\.addEventListener\("click",[\s\S]{0,80}?api\.who\(\)\s*\?\s*leave\(\)/,
+    "кнопка входа не различает вход и выход");
+});
+
 test("подсказка: своя, а нативной не остаётся", async () => {
   // ⚠️ Предмет — ОТСУТСТВИЕ нативной. Оставь `title` рядом со своей панелью, и
   // браузер нарисует вторую поверх первой, со своей задержкой и чужим шрифтом;

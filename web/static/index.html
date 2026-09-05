@@ -24,7 +24,10 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body data-mode="source">
-<header class="bar">
+<!-- Шапка из ДВУХ полос (раскладка заказчика 2026-09-05): наверху — кто мы и
+     что за сборка, плюс вход; ниже — управление. Полосы разведены потому, что
+     это разные вопросы читателя: «что за страница» и «что я могу сделать». -->
+<header class="bar bar-brand">
   <span class="brand">Takt</span>
   <span id="version" class="muted" data-i18n="bar.loading">загрузка модуля…</span>
   <!-- Чей образец открыт: страница `/p/<id>` показывает чужой проект, и
@@ -35,15 +38,24 @@
        значит — автор не отличит свою запись от чужой (задача 0531-09e). -->
   <span id="openfile" class="muted" hidden></span>
   <span class="spacer"></span>
-  <button id="showcase" class="icon-btn" type="button"
-          data-i18n-attr="data-tip:showcase.title;aria-label:showcase.title"
-          data-tip="Открытые проекты" aria-label="Открытые проекты"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 5.5h7v7h-7zM13.5 5.5h7v7h-7zM3.5 15.5h7v5h-7zM13.5 15.5h7v5h-7z"/></svg></button>
-  <button id="account" class="icon-btn" type="button"
-          data-i18n-attr="data-tip:account.enter;aria-label:account.enter"
-          data-tip="Войти" aria-label="Войти"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="9.5" r="2.5"/><path d="M6.5 19c1-2.5 3-3.8 5.5-3.8s4.5 1.3 5.5 3.8"/></svg></button>
   <!-- Логин показывается ПОДПИСЬЮ рядом, а не в кнопке: кнопка-значок текста не
        несёт, а знать, кто вошёл, читателю надо. -->
   <span id="whoami-bar" class="muted" hidden></span>
+  <!-- Вход и выход — ОДНА кнопка: состояние у них одно, и две кнопки, из
+       которых всегда видна одна, читателю ничего не добавляют. Значок меняется
+       вместе с действием: не вошёл — стрелка внутрь, вошёл — наружу. -->
+  <button id="session" class="icon-btn" type="button"
+          data-i18n-attr="data-tip:account.enter;aria-label:account.enter"
+          data-tip="Войти" aria-label="Войти"><svg id="icon-enter" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13.5 4.5H5.5v15h8"/><path d="M14 8l4 4-4 4"/><path d="M18 12H9.5"/></svg><svg id="icon-leave" class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden><path d="M13.5 4.5H5.5v15h8"/><path d="M17 8l4 4-4 4"/><path d="M21 12h-8.5"/></svg></button>
+</header>
+
+<div class="bar bar-tools">
+  <button id="account" class="icon-btn" type="button"
+          data-i18n-attr="data-tip:account.projects;aria-label:account.projects"
+          data-tip="Мои проекты" aria-label="Мои проекты"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="9.5" r="2.5"/><path d="M6.5 19c1-2.5 3-3.8 5.5-3.8s4.5 1.3 5.5 3.8"/></svg></button>
+  <button id="showcase" class="icon-btn" type="button"
+          data-i18n-attr="data-tip:showcase.title;aria-label:showcase.title"
+          data-tip="Открытые проекты" aria-label="Открытые проекты"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 5.5h7v7h-7zM13.5 5.5h7v7h-7zM3.5 15.5h7v5h-7zM13.5 15.5h7v5h-7z"/></svg></button>
   <button id="save" class="icon-btn" type="button" hidden
           data-i18n-attr="data-tip:account.save;aria-label:account.save"
           data-tip="Сохранить" aria-label="Сохранить"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5v10"/><path d="M8 10l4 4 4-4"/><path d="M4.5 16v4.5h15V16"/></svg></button>
@@ -56,12 +68,6 @@
   <button id="download" class="icon-btn" type="button" hidden
           data-i18n-attr="data-tip:archive.download;aria-label:archive.download"
           data-tip="Скачать архивом" aria-label="Скачать архивом"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 4.5h17v4h-17z"/><path d="M5 8.5v11h14v-11"/><path d="M10 12h4"/></svg></button>
-  <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
-       Молча не перезагружаемся никогда — в редакторе несохранённая работа
-       (задача 0531-07b). -->
-  <button id="update" class="update" type="button" data-i18n="bar.update" hidden>доступна новая сборка — обновить</button>
-  <!-- Переключатель языка. Самоназвания в списке НЕ переводятся: так читатель
-       находит свой язык, не зная текущего (задача 0531-10a). -->
   <!-- Кегль страницы: ±1 к корневому размеру. Все ступени шкалы считаются от
        него, поэтому меняется страница целиком — и код, и контролы. -->
   <span class="pane-tools">
@@ -71,8 +77,15 @@
     <button id="fontmore" class="chip" type="button"
             data-i18n="bar.fontMore" data-i18n-attr="data-tip:bar.fontHint" data-tip="Крупнее">+</button>
   </span>
+  <!-- Переключатель языка. Самоназвания в списке НЕ переводятся: так читатель
+       находит свой язык, не зная текущего (задача 0531-10a). -->
   <select id="lang" class="lang" data-i18n-attr="aria-label:bar.language"></select>
-</header>
+  <span class="spacer"></span>
+  <!-- Строка «доступна новая сборка»: ненавязчиво, без окна и без повтора.
+       Молча не перезагружаемся никогда — в редакторе несохранённая работа
+       (задача 0531-07b). -->
+  <button id="update" class="update" type="button" data-i18n="bar.update" hidden>доступна новая сборка — обновить</button>
+</div>
 
 <main class="work">
   <section class="pane pane-source">
