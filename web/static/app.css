@@ -176,9 +176,13 @@
    * она же с запасом перекрывает предел цели нажатия WCAG 2.5.5 (44 px):
    * отдельной ступени «для пальца» больше не нужно. 32 px — плотная строка
    * (вкладка, полка режимов), 24 px — служебная шапка области. */
-  --h-control: 48px;
-  --h-dense: 32px;
-  --h-compact: 24px;
+  /* ⚠️ Ступени считаются ОТ КЕГЛЯ (`rem`), а не пишутся пикселями: читатель
+   * меняет кегль страницы кнопками ±1, и контрол постоянной высоты либо
+   * обрезал бы выросшую строку, либо оставлял бы вокруг мелкой пустоту
+   * (просьба заказчика 2026-09-05). При базовых 16 px это те же 48/32/24. */
+  --h-control: 3rem;
+  --h-dense: 2rem;
+  --h-compact: 1.5rem;
 
   /* ── Шкала скруглений ─────────────────────────────────────────────────
    * Одно значение — и это замер, а не упрощение: в редакторе нет ни карточек,
@@ -510,7 +514,7 @@ body {
 
 /* Переключатель языка в шапке: кнопка со значками рядом, поэтому и он ростом
  * с них. Список при этом остаётся широким — в нём полные самоназвания. */
-.lang-pick .pick-btn { min-width: var(--h-control); padding: 0 var(--gap-half); }
+.lang-pick .pick-btn { min-width: var(--h-dense); }
 
 .brand { font-weight: 700; letter-spacing: 0.02em; font-size: var(--text-xl); }
 .muted { color: var(--on-surface-soft); font-size: var(--text-sm); }
@@ -629,6 +633,12 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 /* Полоса инструментов шапки области: переключатель и состояние в одной
  * строке, чтобы шапка не росла второй. */
 .pane-tools { display: flex; align-items: center; gap: var(--gap-half); }
+
+/* Выбор кегля — те же плотные контролы, что списки: ±1 нажимают часто, но
+ * цель нажатия у них рядом с числом, и рост до кнопки действия здесь лишний. */
+.pane-tools .chip { height: var(--h-dense); min-width: var(--h-dense); padding: 0 var(--gap-half);
+  display: inline-flex; align-items: center; justify-content: center; }
+.pane-tools .status { display: inline-flex; align-items: center; min-width: 2.5ch; justify-content: center; }
 
 /* Залипающая кнопка: нажатое состояние — пара «выбранное». Без него кнопка
  * ничего не сообщает, и включён ли перенос, видно только по самому тексту. */
@@ -779,13 +789,16 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 .controls .pick { min-width: 12ch; }
 .pick > select { position: absolute; inset: 0; width: 100%; opacity: 0; pointer-events: none; }
 
+/* ⚠️ Контрол ВЫБОРА ниже кнопки действия (решение заказчика 2026-09-05):
+ * кнопка — цель нажатия и остаётся 48, а список читают глазами и открывают
+ * реже. Содержимое по центру, ширина — по нему же с небольшим отступом. */
 .pick-btn {
-  width: 100%;
-  display: flex;
+  height: var(--h-dense);
+  padding: 0 var(--gap-half);
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--gap);
-  text-align: left;
+  justify-content: center;
+  gap: var(--gap-half);
   overflow: hidden;
 }
 
