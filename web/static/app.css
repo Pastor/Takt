@@ -96,6 +96,9 @@
   --on-surface-warn: var(--raw-warn-ink);
   --surface-yes: var(--raw-yes);
   --on-surface-yes: var(--raw-yes-ink);
+  /* Главная кнопка разговора: одна на окно, и звучит громче прочих. */
+  --surface-primary: var(--raw-accent);
+  --on-surface-primary: var(--raw-accent-ink);
 
   /* Одиночные чернила: ложатся на ту заливку, которая уже есть, и парой не
    * являются — реестр их не перечисляет. */
@@ -182,6 +185,10 @@
    * ни всплывающих окон, которым нужен второй радиус. Появятся — ступень
    * заводится здесь, а не числом в правиле. */
   --radius: 8px;
+  /* Малое скругление — для того, что вложено в скруглённое: обойма сегментов
+   * внутри карточки. ⚠️ Оно тоже употреблялось раньше объявления, и сегменты
+   * выходили прямоугольными. */
+  --radius-sm: 5px;
 
   /* ── Отступы ──────────────────────────────────────────────────────────
    * Половина и четверть считаются ОТ базового: в «кармане» база ужимается, и
@@ -189,6 +196,10 @@
   --gap: 8px;
   --gap-half: calc(var(--gap) / 2);
   --gap-quarter: calc(var(--gap) / 4);
+  /* Двойной — для полей окна: там отступ отделяет разговор от его рамки, и
+   * базового мало. ⚠️ Он ИСПОЛЬЗОВАЛСЯ раньше, чем был объявлен, и окно вышло
+   * вовсе без полей: неизвестное свойство браузер отбрасывает молча. */
+  --gap-lg: calc(var(--gap) * 2);
 
   /* Ширина оболочки. Умолчание — всё окно: ничего не меняется, пока читатель
    * не сузит страницу сам (`shell.js` подменяет значение). */
@@ -659,9 +670,20 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   gap: var(--gap);
 }
 
-.modal-head { font-size: var(--text-lg); }
+/* Заголовок разговора: по центру и жирным — он называет, о чём окно. */
+.modal-head { font-size: var(--text-lg); font-weight: 700; text-align: center; }
 .modal-body { display: flex; flex-direction: column; gap: var(--gap-half); }
-.modal-actions { display: flex; gap: var(--gap-half); flex-wrap: wrap; }
+/* Ряд кнопок: подтвердить и отменить — слева и одной ширины (пара равных
+ * исходов), главная — справа. Разная ширина у пары читается как разная
+ * важность, которой между «войти» и «отмена» нет. */
+.modal-actions { display: flex; gap: var(--gap-half); flex-wrap: wrap; align-items: center; }
+.modal-actions .pair { min-width: 8rem; justify-content: center; }
+.modal-actions .primary {
+  margin-left: auto;
+  background: var(--surface-primary);
+  color: var(--on-surface-primary);
+  border-color: var(--surface-primary);
+}
 .modal-brands { display: flex; flex-direction: column; gap: var(--gap-half); }
 .modal-brands[hidden], .modal-body[hidden] { display: none; }
 

@@ -57,7 +57,7 @@
   "account.login": "Login",
   "account.password": "Password",
   "account.signIn": "Sign in",
-  "account.signUp": "Create account",
+  "account.signUp": "Register",
   "account.signOut": "Sign out",
   "account.newName": "New project name",
   "account.newProject": "New project",
@@ -135,5 +135,6 @@
   "flags.tickHz": "Tick rate: after and every delays are counted from it",
   "bar.build": "build {number}",
   "bar.buildTip": "built {built} · commit {commit} · branch {branch}",
-  "account.cancel": "Cancel"
+  "account.cancel": "Cancel",
+  "account.signinTitle": "Sign in"
 }
