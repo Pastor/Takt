@@ -75,7 +75,6 @@ void PidLaw_tick(PidLaw *model) {
                 model->loop_pid = PidLaw_pid_reset(model->loop_pid);
                 model->ctrl = 0.0;
             }
-            model->state = PID_LAW_END;
             break;
         }
         case PID_LAW_END: {

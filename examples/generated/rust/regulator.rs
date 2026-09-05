@@ -86,7 +86,6 @@ impl RegulatorRegulator {
             }
             RegulatorRegulatorState::Done => {
                 hal.write_bit(OutBitPort::Ready, true);
-                self.state = RegulatorRegulatorState::End;
             }
             RegulatorRegulatorState::Settled => {
                 self.value = self.setpoint;

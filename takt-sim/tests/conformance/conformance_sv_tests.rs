@@ -238,7 +238,7 @@ fn per_tick_trace_matches_generated_sv() {
     // а не «подстроиться» под RTL.
     assert_eq!(
         sim,
-        vec![vec![1], vec![2], vec![3]],
+        held_trace(),
         "ожидаемая потактовая трасса симулятора: n = 1, 2, 3"
     );
 
@@ -397,7 +397,7 @@ fn bit_is_within_conformance_scope() {
     let sim = simulate_trace(path.to_str().expect("путь в UTF-8"), &["f"]);
     assert_eq!(
         sim,
-        vec![vec![1], vec![0]],
+        vec![vec![1], vec![0], vec![0], vec![0], vec![0], vec![0]],
         "симулятор: f принимает 1, затем 0"
     );
 
@@ -742,7 +742,7 @@ fn fixed_point_arithmetic_matches_generated_sv() {
     let sim = simulate_trace("tests/data/eval/conformance_fixed.takt", &vars);
     assert_eq!(
         sim,
-        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        q_trace(),
         "трасса представлений q(8,8) — эталон Q-арифметики симулятора"
     );
 
@@ -815,7 +815,7 @@ fn float_as_q_matches_generated_sv() {
     let sim = simulate_trace_float_q("tests/data/eval/conformance_float_q.takt", 8, 8, &["acc"]);
     assert_eq!(
         sim,
-        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        q_trace(),
         "Q-эталон float→q(8,8) обязан совпасть с трассой явной q-версии (0061)"
     );
 
@@ -981,6 +981,10 @@ endmodule
 // лимит размера модуля, а правило требует делить по логике.
 #[path = "conformance_sv_tests/fixed_width.rs"]
 mod fixed_width;
+
+#[path = "conformance_sv_tests/traces.rs"] // пиннинги трасс — тем же приёмом
+mod traces;
+use traces::{held_trace, q_trace};
 
 // Насыщение q(m, n) sat (фича 0170) — тем же приёмом подмодуля.
 #[path = "conformance_sv_tests/fixed_sat.rs"]

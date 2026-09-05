@@ -96,7 +96,8 @@ fn c_trace(dir: &Path, fixture: &str, unit: &str, ticks: usize, inline: InlinePo
         r#"#include <stdio.h>
 #include "{unit}.h"
 static long long probe;
-static void on_num({camel}_Out_NumericPort port, int64_t value, void *userdata) {{
+static void on_num({camel}_Out_NumericPort port, uint8_t index, int64_t value, void *userdata) {{
+    (void)index;
     (void)userdata;
     if (port == {upper}_WORKER_PORT_PROBE) {{ probe = (long long)value; }}
 }}

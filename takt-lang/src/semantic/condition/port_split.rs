@@ -249,9 +249,20 @@ fn is_composite(ty: &TypeNode, what: PortSplit) -> bool {
         // массив: разворачивать его значило бы превратить упакованное слово в
         // набор портов. У цели, адресующей элемент индексом (`StructsOnly`),
         // не разворачивается и обычный массив.
-        TypeNode::Array(..) => {
-            what != PortSplit::StructsOnly
-                && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+        TypeNode::Array(_, elem) => {
+            if crate::semantic::bit_vector::is_bit_vector(ty).is_some() {
+                return false;
+            }
+            match what {
+                // ⚠️ У цели, адресующей элемент индексом, массив СКАЛЯРОВ
+                // остаётся одним портом, а массив составного разворачивается:
+                // индекс в обращении HAL один, и второй уровень им не выразить.
+                PortSplit::StructsOnly => {
+                    matches!(**elem, TypeNode::Array(..) | TypeNode::Struct(_))
+                        && crate::semantic::bit_vector::is_bit_vector(elem).is_none()
+                }
+                _ => true,
+            }
         }
         _ => false,
     }

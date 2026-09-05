@@ -63,7 +63,8 @@ fn generated_c_trace(dir: &Path) -> Vec<(i128, i128)> {
 
 static long last_lo, last_hi;
 
-static void write_numeric(ConformancePostfixIndex_Out_NumericPort port, int64_t val, void *ud) {{
+static void write_numeric(ConformancePostfixIndex_Out_NumericPort port, uint8_t index, int64_t val, void *ud) {{
+    (void)index;
     (void)ud;
     if (port == CONFORMANCE_POSTFIX_INDEX_PORT_LO) last_lo = (long)val; else last_hi = (long)val;
 }}

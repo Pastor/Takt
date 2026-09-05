@@ -67,7 +67,7 @@ struct PidHeater {
     } pid_heater_state;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_float)(PidHeater_Out_RationalPort port, float val, void *userdata);
+    void  (*write_float)(PidHeater_Out_RationalPort port, uint8_t index, float val, void *userdata);
 };
 
 void PidHeater_init(PidHeater *main);

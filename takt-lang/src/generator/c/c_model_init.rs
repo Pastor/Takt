@@ -9,10 +9,8 @@
 use super::c_blocks::generate_scalar_init;
 use super::c_expr::generate_expr;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::c::PortClass;
 use crate::generator::c::c_map::CMap;
-use crate::generator::c::{
-    FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC, PortClass,
-};
 use crate::generator::indent::Printer;
 use crate::semantic::extend::ParameterArgument;
 use crate::semantic::minimap::{Element, Name, StateExtend};
@@ -164,6 +162,37 @@ fn generate_port_initial_values(
             *direction,
             crate::parser::ast::PortDirection::Out,
         );
+        let cls = PortClass::from_type(ty);
+        // ⚠️ Начальное значение МАССИВА-порта раздаётся по элементам (фича
+        // 0533): агрегат `{4, 5, 6}` целиком означал бы `write_numeric(PORT, 0,
+        // {4, 5, 6}, ud)` — «expected expression» у `cc` при нулевом коде
+        // возврата. Прежде значение раздавалось листьям (0451); листьев больше
+        // нет — есть индексы, и раздача идёт по ним.
+        if let ExpressionNode::Array(items) | ExpressionNode::Initializer(items) = init
+            && matches!(ty, crate::semantic::type_node::TypeNode::Array(..))
+            && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+        {
+            for (index, item) in items.iter().enumerate() {
+                let mut element = String::new();
+                {
+                    let mut tmp = Printer::new(0, &mut element);
+                    generate_expr(&mut tmp, map, model, vec![], item, 0, true)?;
+                }
+                printer
+                    .ident(&format!(
+                        "{};",
+                        crate::generator::c::c_port_call::write(
+                            cls,
+                            hal_ptr,
+                            &variant,
+                            &index.to_string(),
+                            &element,
+                        )
+                    ))
+                    .nl();
+            }
+            continue;
+        }
         // ⚠️ Начальное значение печатается ЧЕРЕЗ ТОТ ЖЕ носитель, что и запись
         // в такте (0533): разойдись они — старт писал бы порт вызовом с другим
         // числом аргументов, и `cc` отвергал бы файл при нулевом коде возврата.
@@ -176,7 +205,7 @@ fn generate_port_initial_values(
             .ident(&format!(
                 "{};",
                 crate::generator::c::c_port_call::write(
-                    PortClass::from_type(ty),
+                    cls,
                     hal_ptr,
                     &variant,
                     crate::generator::c::c_port_call::SCALAR_INDEX,

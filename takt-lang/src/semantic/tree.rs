@@ -1120,7 +1120,7 @@ pub fn construct_states(
             }
             let kind = match kind {
                 None => {
-                    if references.is_empty() {
+                    if crate::semantic::terminal::is_end(&references, &def.elements) {
                         StateNodeKind::End
                     } else {
                         StateNodeKind::Simple

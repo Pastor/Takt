@@ -117,10 +117,10 @@ struct Stacker {
     } stacker;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(Stacker_Out_BitPort port, bool val, void *userdata);
-    bool  (*read_bit )(Stacker_In_BitPort port, void *userdata);
-    void    (*write_numeric)(Stacker_Out_NumericPort port, int64_t val, void *userdata);
-    int64_t (*read_numeric )(Stacker_In_NumericPort port, void *userdata);
+    void  (*write_bit)(Stacker_Out_BitPort port, uint8_t bit, bool val, void *userdata);
+    bool  (*read_bit )(Stacker_In_BitPort port, uint8_t bit, void *userdata);
+    void    (*write_numeric)(Stacker_Out_NumericPort port, uint8_t index, int64_t val, void *userdata);
+    int64_t (*read_numeric )(Stacker_In_NumericPort port, uint8_t index, void *userdata);
 };
 
 void Stacker_init(Stacker *main);

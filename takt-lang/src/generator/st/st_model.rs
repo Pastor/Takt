@@ -168,24 +168,25 @@ pub(crate) fn emit_body(
         let state = raw_state(model, name)?;
         p.ident(&format!("{}: (* {} *)", number, name.local())).nl();
         p.up();
-        if map.fsm_table() {
-            // Табличная форма (фича 0440): переходы ушли в таблицу, и тело
-            // ветви может остаться пустым — а пустая ветвь `CASE` в IEC
-            // недопустима («invalid statement in case element»). Заполняется
-            // тем же само-присваиванием, что и терминальная ветвь.
-            let mut body = String::new();
-            {
-                let mut buffered = p.fork(&mut body);
-                emit_state(&mut buffered, map, name, &state, model, table, &mut out)?;
-            }
-            if body.trim().is_empty() {
-                p.ident(&format!("state := {}; (* тело ветви пусто *)", number))
-                    .nl();
-            } else {
-                p.print(&body);
-            }
+        // Тело ветви печатается В БУФЕР и, если оказалось пустым, заменяется
+        // само-присваиванием: пустая ветвь `CASE` в IEC недопустима («invalid
+        // statement in case element»).
+        //
+        // ⚠️ Пустой ветвь бывает у ДВУХ форм: табличная (фича 0440 — переходы
+        // ушли в таблицу) и состояние, у которого всё тело — `enter`
+        // (исполняется на входе) при отсутствии рёбер. Второе появилось с
+        // фичей 0534: прежде такое состояние уходило в `END`, и ветвь пустой не
+        // оставалась.
+        let mut body = String::new();
+        {
+            let mut buffered = p.fork(&mut body);
+            emit_state(&mut buffered, map, name, &state, model, table, &mut out)?;
+        }
+        if body.trim().is_empty() {
+            p.ident(&format!("state := {}; (* тело ветви пусто *)", number))
+                .nl();
         } else {
-            emit_state(p, map, name, &state, model, table, &mut out)?;
+            p.print(&body);
         }
         p.down();
     }
@@ -328,8 +329,12 @@ fn emit_state(
         return Ok(());
     }
 
-    if references.is_empty() {
-        // Состояние без исходящих переходов терминально: исполняет `exit` и
+    // ⚠️ Признак терминальности — ОБЩИЙ (`StateNode::is_terminated`, фича
+    // 0534): состояние С ТЕЛОМ переходов не требует и автомат не завершает.
+    // Пока цель судила по одним рёбрам, `always` без переходов исполнялся
+    // ровно один скан, тогда как эталон крутит его вечно.
+    if state.is_terminated() {
+        // Состояние без переходов и без тела терминально: исполняет `exit` и
         // уходит в `END` — как `case B` в зонде `exit_probe` (Ф8).
         emit_block(p, state, "exit", model, &mut out.stmt)?;
         p.ident(&format!("state := {}; (* END *)", table.end)).nl();

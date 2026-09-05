@@ -26,7 +26,6 @@ END_VAR
             END_IF;
         2: (* Done *)
             ready := TRUE;
-            state := 4; (* END *)
         3: (* Settled *)
             value := setpoint;
             state := 2; (* Done *)

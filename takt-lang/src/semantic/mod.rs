@@ -43,6 +43,7 @@ pub mod minimap;
 mod named_block;
 pub(crate) mod named_blocks;
 mod named_code_block;
+pub mod terminal;
 pub use match_node::{MatchArmNode, MatchPatternNode};
 pub use {named_code_block::NamedCodeBlockDefinitionNode, reference::ReferenceNode};
 pub(crate) mod match_arms;
@@ -838,14 +839,13 @@ impl StateNode {
         }
     }
 
+    /// Завершает ли состояние автомат (правило — `semantic::terminal`).
+    ///
+    /// ⚠️ Тело считается наравне с рёбрами (фича 0534): состояние с `always`
+    /// работает вечно, и уводить из него автомат нельзя — автор написал
+    /// «всегда», а не «однажды».
     pub(crate) fn is_terminated(&self) -> bool {
-        match self {
-            StateNode::Unresolved => false,
-            StateNode::Simple { references, .. } => references.is_empty(),
-            StateNode::Implement {
-                references, next, ..
-            } => references.is_empty() && next.is_none(),
-        }
+        crate::semantic::terminal::node_is_terminal(self)
     }
 
     /// Возвращает срез формул, связанных с состоянием.

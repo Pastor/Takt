@@ -72,7 +72,10 @@ const CONTRACTS: &[Contract] = &[
         file: "regulator.takt",
         chain: &["Adjust", "Settled", "Done"],
         budget: 50,
-        must_terminate: true,
+        // ⚠️ `state Done { always { ready := 1; } }` — состояние С ТЕЛОМ, и с
+        // фичей 0534 оно автомат НЕ завершает: «держи выход поднятым» значит
+        // каждый такт, а не однажды. Цепочка состояний прежняя, завершения нет.
+        must_terminate: false,
     },
     // ПИД-регулятор на ПРОЗРАЧНОМ float (фича 0097 поверх 0096): симулятор считает
     // нативным f64, сходится с anti-windup и завершается. q(8, 8) формируется под
@@ -81,7 +84,9 @@ const CONTRACTS: &[Contract] = &[
         file: "pid_regulator.takt",
         chain: &["Control", "Settled", "Done"],
         budget: 300,
-        must_terminate: true,
+        // ⚠️ Конечное состояние С ТЕЛОМ (`always { ready := 1; }`) автомат не
+        // завершает (фича 0534): «держи выход поднятым» значит каждый такт.
+        must_terminate: false,
     },
     // Регулятор на ПРОЗРАЧНОМ float (фича 0096): симулятор считает нативным f64
     // (native-режим), сходится так же, как q-версия, и завершается.
@@ -89,7 +94,9 @@ const CONTRACTS: &[Contract] = &[
         file: "float_regulator.takt",
         chain: &["Adjust", "Settled", "Done"],
         budget: 50,
-        must_terminate: true,
+        // ⚠️ Конечное состояние С ТЕЛОМ (`always { ready := 1; }`) автомат не
+        // завершает (фича 0534): «держи выход поднятым» значит каждый такт.
+        must_terminate: false,
     },
     // Технологический цикл на ПОСЛЕДОВАТЕЛЬНОЙ композиции `+` (фича 0166).
     //
@@ -117,7 +124,8 @@ const CONTRACTS: &[Contract] = &[
             "Done",
         ],
         budget: 40,
-        must_terminate: true,
+        // ⚠️ Конечное состояние С ТЕЛОМ автомат не завершает (фича 0534).
+        must_terminate: false,
     },
     // Применение библиотечного регулятора (фича 0182, фикс 0182-01): контур
     // замыкается в такте объекта — по измерению считается воздействие, по
@@ -666,7 +674,11 @@ fn pid_integral_stays_bounded_and_converges() {
             pv.abs() <= 2.0 * SP,
             "PV разошёлся: {pv} (регулятор неустойчив?)"
         );
-        if result == TickResult::Terminated {
+        // ⚠️ Признак сходимости — ПОПАДАНИЕ в конечное состояние, а не
+        // завершение автомата: с фичей 0534 состояние `Done` имеет тело
+        // (`always { ready := 1; }`) и потому работает вечно — «держи выход
+        // поднятым» значит каждый такт.
+        if unit.active_states().iter().any(|state| state == "Done") {
             converged = true;
             // На завершении PV доведён до уставки (состояние Settled: meas := target).
             assert!(

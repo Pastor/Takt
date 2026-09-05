@@ -88,13 +88,15 @@ fn generated_c_trace(dir: &Path) -> Vec<i128> {
 
 static long long reg = 0;
 
-static int64_t on_read(ConformanceInoutPort_In_NumericPort port, void *ud) {{
+static int64_t on_read(ConformanceInoutPort_In_NumericPort port, uint8_t index, void *ud) {{
+    (void)index;
     (void)ud;
     (void)port;
     return (int64_t)reg;
 }}
 
-static void on_write(ConformanceInoutPort_Out_NumericPort port, int64_t value, void *ud) {{
+static void on_write(ConformanceInoutPort_Out_NumericPort port, uint8_t index, int64_t value, void *ud) {{
+    (void)index;
     (void)ud;
     (void)port;
     reg = (long long)value;

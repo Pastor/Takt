@@ -314,7 +314,6 @@ impl<H: Hal> BatchCycle<H> {
             }
             BatchCycleState::Done => {
                 self.hal.write_bit(OutBitPort::Ready, true);
-                self.state = BatchCycleState::End;
             }
             BatchCycleState::End => {}
             BatchCycleState::Init => {}

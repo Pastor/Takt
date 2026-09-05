@@ -403,13 +403,11 @@ pub(in crate::generator::c) fn generate_condition_expr(
                             };
                             return match cls {
                                 // Разряд адресуется самим вызовом (0533).
-                                PortClass::Bit => Ok(
-                                    crate::generator::c::c_port_call::read_bit(
-                                        ptr,
-                                        &variant,
-                                        &n.to_string(),
-                                    ),
-                                ),
+                                PortClass::Bit => Ok(crate::generator::c::c_port_call::read_bit(
+                                    ptr,
+                                    &variant,
+                                    &n.to_string(),
+                                )),
                                 PortClass::Numeric => {
                                     let read = crate::generator::c::c_port_call::read_numeric(
                                         ptr,

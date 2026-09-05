@@ -53,7 +53,8 @@ fn generated_c_values(dir: &Path) -> (i128, i128, i128) {
 
 static long v[3] = {{0, 0, 0}};
 
-static void wr(ConformanceArrayParam_Out_NumericPort port, int64_t value, void *ud) {{
+static void wr(ConformanceArrayParam_Out_NumericPort port, uint8_t index, int64_t value, void *ud) {{
+    (void)index;
     (void)ud;
     switch (port) {{
         case CONFORMANCE_ARRAY_PARAM_PORT_O_HEAD: v[0] = (long)value; break;

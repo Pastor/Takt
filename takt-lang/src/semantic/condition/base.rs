@@ -91,3 +91,19 @@ fn cond_field_type(
         .find(|(f, _)| *f == field.name)
         .map(|(_, t)| t.clone())
 }
+
+/// Тип базы условия, если он объявлен: нужен сведению индекса к разряду.
+///
+/// ⚠️ Отвечает **только** про имя и поле — то же, о чём судит
+/// [`cond_base_is_array`]: у прочих форм (вызов, арифметика) типа здесь нет, и
+/// «неизвестно» обязано значить «не сводим», а не «сведём наугад».
+pub(super) fn cond_base_type(base: &ConditionNode, model: &ModelNode) -> Option<TypeNode> {
+    match base {
+        ConditionNode::Variable(var, _) => declared_type(&var.borrow()),
+        ConditionNode::Parenthesis(inner) => cond_base_type(inner, model),
+        ConditionNode::BitAccess(inner, crate::parser::ast::Member::Identifier(field)) => {
+            cond_field_type(inner, field, model)
+        }
+        _ => None,
+    }
+}

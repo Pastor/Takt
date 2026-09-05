@@ -33,7 +33,11 @@ const FIXTURE: &str = "tests/data/eval/conformance_composition_blocks.takt";
 const UNIT: &str = "compblocks";
 const TICKS: usize = 6;
 /// Ожидание: `always` даёт 1, 2, 3, 4-й такт — и `exit` добавляет 10 однажды.
-const EXPECTED: [i128; TICKS] = [1, 2, 3, 14, 14, 14];
+// ⚠️ Значения изменились с фичей 0534: у состояния-композиции `All` есть тело,
+// и потому автомат в нём ОСТАЁТСЯ, когда композиция отработала, — `always`
+// продолжает считать (4, 5, 6), а `exit` не наступает вовсе. Прежде состояние
+// без рёбер завершало работу, `exit` прибавлял десятку и трасса замирала на 14.
+const EXPECTED: [i128; TICKS] = [1, 2, 3, 4, 5, 6];
 
 fn tool(bin: &str) -> bool {
     Command::new(bin)
@@ -97,7 +101,8 @@ fn c_trace(dir: &Path) -> Vec<i128> {
         r#"#include <stdio.h>
 #include "{UNIT}.h"
 static long long reg;
-static void on_write(Compblocks_Out_NumericPort p, int64_t v, void *u) {{
+static void on_write(Compblocks_Out_NumericPort p, uint8_t index, int64_t v, void *u) {{
+    (void)index;
     (void)p; (void)u; reg = (long long)v;
 }}
 int main(void) {{
@@ -343,7 +348,7 @@ fn reference_values_are_named() {
     assert_eq!(
         simulator_trace(),
         EXPECTED.to_vec(),
-        "`always` исполняется каждый такт, `exit` — один раз при завершении"
+        "`always` исполняется каждый такт, и состояние с телом не завершается"
     );
 }
 
@@ -414,10 +419,15 @@ fn composition_blocks_match_generated_st() {
 /// у всех четырёх целей.
 #[test]
 fn plain_terminal_state_runs_exit_too() {
+    // ⚠️ ТЕРМИНАЛЬНО состояние без тела (фича 0534): `exit` телом не считается —
+    // он про уход, а не про пребывание, и состояние с одним лишь `exit`
+    // остаётся концом. Иначе его блок стал бы мёртвым кодом.
     let src = "var hits: u8 := 0;\n\
                out probe: u8 at 0x100;\n\
                start Go {\n\
-                   always { hits := hits + 1; }\n\
+                   ref Stop: true;\n\
+               }\n\
+               state Stop {\n\
                    exit { hits := hits + 10; probe := hits; }\n\
                }\n";
     let (ast, _) = takt_lang::parse(src, 0).expect("разбор");
@@ -430,5 +440,36 @@ fn plain_terminal_state_runs_exit_too() {
             reg = v;
         }
     }
-    assert_eq!(reg, 11, "уход в терминал — тоже выход из состояния");
+    assert_eq!(reg, 10, "уход в терминал — тоже выход из состояния");
+}
+
+/// Контроль к предыдущему: состояние С ТЕЛОМ автомат НЕ завершает, и `exit` в
+/// нём не наступает вовсе (фича 0534, решение заказчика 2026-09-05).
+///
+/// ⚠️ Без этой проверки правило было бы декоративным: `plain_terminal_state…`
+/// один держит только половину — «пустое состояние кончает», — а вторая
+/// половина («состояние с телом работает вечно») осталась бы без свидетеля.
+#[test]
+fn a_state_with_a_body_keeps_running_and_never_exits() {
+    let src = "var hits: u8 := 0;\n\
+               out probe: u8 at 0x100;\n\
+               start Go {\n\
+                   always { hits := hits + 1; probe := hits; }\n\
+                   exit { probe := 99; }\n\
+               }\n";
+    let (ast, _) = takt_lang::parse(src, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение Unit");
+    let mut reg = 0i128;
+    for _ in 0..4 {
+        let _ = unit.tick();
+        if let Some(Value::Number(v)) = unit.variable("probe") {
+            reg = v;
+        }
+    }
+    assert_eq!(reg, 4, "`always` обязан идти каждый такт, а не однажды");
+    assert!(
+        !unit.is_terminal(),
+        "состояние с телом автомат не завершает"
+    );
 }

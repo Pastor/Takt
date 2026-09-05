@@ -34,7 +34,8 @@ void scan_floor_buttons() {
 struct Ports {
 };
 
-static int64_t port_read_numeric(Elevator_In_NumericPort port, void *userdata) {
+static int64_t port_read_numeric(Elevator_In_NumericPort port, uint8_t index, void *userdata) {
+    (void)index;
     struct Ports *ports = (struct Ports *) userdata;
     (void) port;
     (void) ports;

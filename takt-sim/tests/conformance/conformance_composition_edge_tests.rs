@@ -51,7 +51,9 @@ const SRC_FIRES: &str = "var flag: u8 := 0;\n\
     \x20   var k: u8 := 0;\n\n\
     \x20   start Loop {\n\
     \x20       always { k := k + 1; }\n\
-    \x20   }\n\
+    \x20       ref Stop: k = 2;\n\
+    \x20   }\n\n\
+    \x20   state Stop;\n\
     }\n\n\
     start Entry = Worker | Idler {\n\
     \x20   ref Finish: flag = 3;\n\

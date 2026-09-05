@@ -210,6 +210,14 @@ pub fn construct_expression(
             // параметр, ломался тем же образом.
             let resolved_idx =
                 construct_expression(*idx_expr.clone(), params.clone(), model.clone())?;
+            // Индекс по упакованному вектору — РАЗРЯД: правило живёт одним
+            // носителем `semantic::bit_vector` (фича 0533), общим с условиями.
+            if crate::semantic::bit_vector::indexes_a_bit(base_ty.as_ref())
+                && let Some(bit) = static_index(idx_expr.as_ref(), &model.borrow())
+                && bit >= 0
+            {
+                return Ok(ExpressionNode::BitAccess(base, ast::Member::Number(bit)));
+            }
             Ok(ExpressionNode::ArraySubscript(base, Box::new(resolved_idx)))
         }
         ast::Expression::ArraySlice(loc, base_expr, start, end) => {

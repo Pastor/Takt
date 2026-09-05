@@ -4,7 +4,6 @@ title BatchCycle
 [*] --> Cycle
 Cycle : Dose + Mix + Drain
 Cycle --> Done
-Done --> [*]
 
 state Dose {
     [*] --> Fill

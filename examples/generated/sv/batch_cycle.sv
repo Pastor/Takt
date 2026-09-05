@@ -151,7 +151,6 @@ module batch_cycle (
             end
             BATCH_CYCLE_DONE: begin
                 ready_next = 1;
-                state_next = BATCH_CYCLE_END;
             end
             BATCH_CYCLE_END: begin end
         endcase

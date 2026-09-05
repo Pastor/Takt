@@ -126,18 +126,18 @@ fn generate(tag: &str, target: &str) -> String {
 fn c_access_matches_contract() {
     let text = generate("cacc", "c");
     assert!(
-        text.contains("(*model->read_numeric)(CACC_PORT_LEVEL, model->userdata)"),
-        "чтение числового входа — колбэком `read_numeric`:\n{text}"
+        text.contains("(*model->read_numeric)(CACC_PORT_LEVEL, 0, model->userdata)"),
+        "чтение числового входа — колбэком `read_numeric` с индексом элемента (0533):\n{text}"
     );
     assert!(
         text.contains(
-            "(*model->write_numeric)(CACC_PORT_VALUE, model->seen + 1, model->userdata);"
+            "(*model->write_numeric)(CACC_PORT_VALUE, 0, model->seen + 1, model->userdata);"
         ),
-        "запись числового выхода — оператором с колбэком `write_numeric`:\n{text}"
+        "запись числового выхода — колбэк с индексом элемента (0533):\n{text}"
     );
     assert!(
-        text.contains("(*model->write_bit)(CACC_PORT_LED, (*model->read_bit)(CACC_PORT_BTN, model->userdata), model->userdata);"),
-        "проводка бита — чтение внутри записи, обе формы контрактные:\n{text}"
+        text.contains("(*model->write_bit)(CACC_PORT_LED, 0, (*model->read_bit)(CACC_PORT_BTN, 0, model->userdata), model->userdata);"),
+        "проводка бита — чтение внутри записи, у обеих номер разряда (0533):\n{text}"
     );
 }
 
@@ -147,8 +147,8 @@ fn c_access_matches_contract() {
 fn c_hal_access_matches_contract() {
     let text = generate("chalacc", "c-hal");
     assert!(
-        text.contains("(*model->read_numeric)(CHALACC_PORT_LEVEL, model->userdata)")
-            && text.contains("(*model->write_numeric)(CHALACC_PORT_VALUE,"),
+        text.contains("(*model->read_numeric)(CHALACC_PORT_LEVEL, 0, model->userdata)")
+            && text.contains("(*model->write_numeric)(CHALACC_PORT_VALUE, 0,"),
         "цель c-hal обязана печатать тот же доступ, что и c:\n{text}"
     );
 }

@@ -28,15 +28,18 @@ const TICKS: usize = 3;
 
 /// Наблюдаемое: имя порта у эталона и перечислитель у цели `c`.
 ///
-/// ⚠️ Составной порт эталон держит **целым**, а цель — по листам: сверка
-/// сравнивает лист с соответствующей частью значения эталона.
-const LEAVES: [(&str, usize, &str); 6] = [
-    ("bus", 0, "WORKER_PORT_BUS_0"),
-    ("bus", 1, "WORKER_PORT_BUS_1"),
-    ("bus", 2, "WORKER_PORT_BUS_2"),
-    ("pair", 0, "WORKER_PORT_PAIR_LO"),
-    ("pair", 1, "WORKER_PORT_PAIR_HI"),
-    ("mode", usize::MAX, "WORKER_PORT_MODE"),
+/// ⚠️ Составной порт эталон держит **целым**. Цель `c` с фичи 0533 держит
+/// целым и МАССИВ (элемент выбирает индекс обращения), а структуру
+/// по-прежнему разворачивает по полям — индекс в HAL один, и второй уровень им
+/// не выразить. Поэтому наблюдаемое у массива — пара «перечислитель, индекс»,
+/// а у структуры и перечисления — перечислитель листа с индексом 0.
+const LEAVES: [(&str, usize, &str, usize); 6] = [
+    ("bus", 0, "WORKER_PORT_BUS", 0),
+    ("bus", 1, "WORKER_PORT_BUS", 1),
+    ("bus", 2, "WORKER_PORT_BUS", 2),
+    ("pair", 0, "WORKER_PORT_PAIR_LO", 0),
+    ("pair", 1, "WORKER_PORT_PAIR_HI", 0),
+    ("mode", usize::MAX, "WORKER_PORT_MODE", 0),
 ];
 
 fn tool(bin: &str) -> bool {
@@ -78,7 +81,7 @@ fn simulator_trace() -> Vec<Vec<i128>> {
             "эталон не обрывает прогон: {result:?}"
         );
         let mut row = Vec::new();
-        for (port, index, _) in LEAVES {
+        for (port, index, _, _) in LEAVES {
             let value = unit.variable(port).expect("порт есть у эталона");
             row.push(leaf_value(&value, index));
         }
@@ -120,8 +123,13 @@ fn c_trace(dir: &Path) -> Vec<Vec<i128>> {
     let arms = LEAVES
         .iter()
         .enumerate()
-        .map(|(slot, (_, _, variant))| {
-            format!("        case {upper}_{variant}: reg[{slot}] = (long long)value; break;")
+        .map(|(slot, (_, _, variant, index))| {
+            // ⚠️ Ветвь различает не только ПОРТ, но и ИНДЕКС: у массива-порта
+            // перечислитель один на все элементы (0533), и `case` по одному
+            // имени записал бы все три значения в одну ячейку.
+            format!(
+                "        if (port == {upper}_{variant} && index == {index})                  {{ reg[{slot}] = (long long)value; }}"
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -130,12 +138,9 @@ fn c_trace(dir: &Path) -> Vec<Vec<i128>> {
         r#"#include <stdio.h>
 #include "{UNIT}.h"
 static long long reg[{width}];
-static void on_num(ConformancePortAggregateInit_Out_NumericPort port, int64_t value, void *userdata) {{
+static void on_num(ConformancePortAggregateInit_Out_NumericPort port, uint8_t index, int64_t value, void *userdata) {{
     (void)userdata;
-    switch (port) {{
 {arms}
-        default: break;
-    }}
 }}
 int main(void) {{
     ConformancePortAggregateInit m = {{0}};

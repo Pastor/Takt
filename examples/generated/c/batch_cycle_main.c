@@ -28,7 +28,8 @@ static void check(int condition, const char *what) {
     }
 }
 
-static void write_bit(BatchCycle_Out_BitPort port, bool val, void *userdata) {
+static void write_bit(BatchCycle_Out_BitPort port, uint8_t bit, bool val, void *userdata) {
+    (void)bit;
     (void)port;
     (void)userdata;
     if (val) {
@@ -61,7 +62,10 @@ int main(void) {
 
     check(phases == 3, "фаз обязано быть три: дозирование, перемешивание, слив");
     check(ready_seen, "готовность обязана подняться после последней фазы");
-    check(BatchCycle_is_done(&fsm), "автомат обязан завершиться");
+    /* ⚠️ Завершения больше не ждём: конечное состояние несёт
+       `always { ready := 1; }`, и автомат в нём ОСТАЁТСЯ — состояние
+       стабильно, покидают его только по переходу. Признак окончания цикла —
+       поднятая и удерживаемая готовность (проверена выше). */
 
     if (failures != 0) {
         fprintf(stderr, "Цикл: проверок провалено: %d\n", failures);

@@ -47,14 +47,17 @@ module tb;
         @(posedge clk);
         rst_n <= 1'b1;
 
-        // Регулятор сходится и завершается сам; 40 тактов с запасом.
+        // Регулятор сходится и ДЕРЖИТ выход; 40 тактов с запасом.
+        //
+        // ⚠️ Наблюдаемое — `ready`, а не `is_done`: конечное состояние несёт
+        // `always { ready := 1; }`, и автомат в нём остаётся — состояние
+        // стабильно, покидают его только по переходу.
         for (i = 0; i < 40; i = i + 1) @(posedge clk);
 
         if (!saw_ready) $error("regulator: ready не поднялся — регулятор не сошёлся");
-        if (!saw_done)  $error("regulator: is_done не поднялся — не завершился");
 
-        if (saw_ready && saw_done)
-            $display("regulator_tb: OK (регулятор сошёлся: ready и is_done)");
+        if (saw_ready)
+            $display("regulator_tb: OK (регулятор сошёлся: ready поднят и держится)");
         $finish;
     end
 endmodule

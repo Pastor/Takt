@@ -8,7 +8,6 @@ Main --> [*]
 state FloatRegulator {
     [*] --> Adjust
     Adjust --> Settled
-    Done --> [*]
     Settled --> Done
 }
 

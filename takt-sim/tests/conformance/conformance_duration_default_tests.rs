@@ -63,14 +63,16 @@ fn generated_c_trace(dir: &Path) -> Vec<i128> {
 
 static long last_ms;
 
-static void write_numeric(ConformanceDurationDefault_Out_NumericPort port, int64_t val, void *ud) {{
+static void write_numeric(ConformanceDurationDefault_Out_NumericPort port, uint8_t index, int64_t val, void *ud) {{
+    (void)index;
     (void)port; (void)ud;
     last_ms = (long)val;
 }}
 
 /* Битовый порт `late` в трассу не идёт, но колбэк обязан быть привязан:
    без него запись из тела — вызов по нулевому указателю. */
-static void write_bit(ConformanceDurationDefault_Out_BitPort port, bool val, void *ud) {{
+static void write_bit(ConformanceDurationDefault_Out_BitPort port, uint8_t bit, bool val, void *ud) {{
+    (void)bit;
     (void)port; (void)val; (void)ud;
 }}
 

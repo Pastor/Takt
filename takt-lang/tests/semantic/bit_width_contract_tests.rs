@@ -123,3 +123,26 @@ fn variable_bit_index_is_left_to_runtime() {
          start Run { always { o := n; i := i + 1; probe := o; } ref Run; }\n";
     assert_eq!(code_of(src), None, "переменный индекс проверке не подлежит");
 }
+
+/// Индекс по упакованному вектору — РАЗРЯД, и в условии тоже (фича 0533).
+///
+/// ⚠️ Правило одно с выражениями: условие и тело говорят об одном месте.
+/// Разойдись они — `ref Done: src[3];` печаталось бы целями индексацией
+/// значения, которое значением не является: `cc` отвечает «subscripted value
+/// is not an array», `iec2c` — «Array variable not declared», и обе жалобы
+/// приходят при НУЛЕВОМ коде возврата `taktc`.
+#[test]
+fn a_bit_vector_index_in_a_condition_is_a_bit() {
+    let source = "var buf: [bit; 8] := 0;\ncond C = buf[3];\nstart S { always { buf.0 := 1; } }\n";
+    let (ast, _) = takt_lang::parse(source, 0).expect("разбор");
+    let model = takt_lang::semantic::tree::construct_model(&ast, None, &[]).expect("дерево");
+    let printed = format!("{:?}", model.borrow().conditions);
+    assert!(
+        printed.contains("BitAccess"),
+        "индекс по бит-вектору в условии обязан сводиться к разряду:\n{printed}"
+    );
+    assert!(
+        !printed.contains("ArraySubscript"),
+        "индексного узла в условии остаться не должно:\n{printed}"
+    );
+}

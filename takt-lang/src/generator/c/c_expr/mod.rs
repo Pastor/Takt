@@ -7,10 +7,6 @@
 use super::{PortClass, c_type_or_diagnostic, typed_variable_or_diagnostic};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c::c_map::CMap;
-use crate::generator::c::{
-    FUNCTION_PORT_READ_BIT, FUNCTION_PORT_READ_FLOAT, FUNCTION_PORT_READ_NUMERIC,
-    FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC,
-};
 use crate::generator::indent::Printer;
 use crate::parser::ast::Member;
 use crate::semantic::extend::Extend;
@@ -30,6 +26,7 @@ pub(in crate::generator::c) mod condition;
 mod expr;
 mod fixed;
 mod names;
+mod port_element;
 mod precedence;
 mod resolve;
 mod stmt;

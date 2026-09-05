@@ -41,7 +41,7 @@ struct FloatRegulator {
     FloatRegulatorFloatRegulator main;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(FloatRegulator_Out_BitPort port, bool val, void *userdata);
+    void  (*write_bit)(FloatRegulator_Out_BitPort port, uint8_t bit, bool val, void *userdata);
 };
 
 void FloatRegulator_init(FloatRegulator *main);

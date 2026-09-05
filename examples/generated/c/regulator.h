@@ -41,7 +41,7 @@ struct Regulator {
     RegulatorRegulator main;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
-    void  (*write_bit)(Regulator_Out_BitPort port, bool val, void *userdata);
+    void  (*write_bit)(Regulator_Out_BitPort port, uint8_t bit, bool val, void *userdata);
 };
 
 void Regulator_init(Regulator *main);

@@ -89,7 +89,8 @@ fn generated_c_trace(dir: &Path) -> Vec<i128> {
 #include "conformance_port_init.h"
 
 static int64_t led = -1;
-static void wr(ConformancePortInit_Out_NumericPort port, int64_t v, void *ud) {{
+static void wr(ConformancePortInit_Out_NumericPort port, uint8_t index, int64_t v, void *ud) {{
+    (void)index;
     (void)port; (void)ud; led = v;
 }}
 

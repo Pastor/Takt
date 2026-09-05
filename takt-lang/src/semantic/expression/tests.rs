@@ -329,9 +329,42 @@ fn type_inference_from_variable() {
 #[test]
 fn array_subscript_in_var_initializer() {
     assert!(
-        matches!(body_expr("var buf: [bit;8] := 0;", "buf[3]"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(3))),
+        matches!(body_expr("var buf: [u8;8];", "buf[3]"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(3))),
         "инициализатор x должен быть ArraySubscript(buf, 3)"
     );
+}
+
+/// Индекс по УПАКОВАННОМУ вектору `[bit;N]` — это разряд (фича 0533).
+///
+/// ⚠️ Предмет — ОДИН узел на две записи: `x[3]` и `x.3` означают одно, и пока
+/// узлов было два, каждая цель печатала индексную форму по-своему — вплоть до
+/// кода, который не собирает ни один компилятор C, при нулевом коде возврата.
+///
+/// # Пример (Takt)
+/// ```but
+/// var buf: [bit; 8];
+/// var x: bit = buf[3];   // то же, что buf.3
+/// ```
+#[test]
+fn a_bit_vector_index_is_a_bit_and_not_an_element() {
+    assert!(
+        matches!(
+            body_expr("var buf: [bit;8] := 0;", "buf[3]"),
+            ExpressionNode::BitAccess(_, crate::parser::ast::Member::Number(3))
+        ),
+        "индекс по бит-вектору обязан сводиться к разряду"
+    );
+    // Обе записи дают ОДИН узел — иначе правило было бы декоративным.
+    assert_eq!(
+        body_expr("var buf: [bit;8] := 0;", "buf[3]"),
+        body_expr("var buf: [bit;8] := 0;", "buf.3")
+    );
+    // ⚠️ Массив НЕ битов сведению не подлежит: у него индекс — элемент, и
+    // подмена превратила бы `bus[1]` в разряд числа.
+    assert!(matches!(
+        body_expr("var bus: [u8;4];", "bus[1]"),
+        ExpressionNode::ArraySubscript(..)
+    ));
 }
 
 /// Контрпример: индексирование несуществующего массива — ошибка.
@@ -350,7 +383,7 @@ fn array_subscript_unknown_var_is_error() {
 #[test]
 fn array_subscript_valid_index() {
     assert!(
-        matches!(body_expr("var buf: [bit;8] := 0;", "buf[0]"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(0))),
+        matches!(body_expr("var buf: [u8;8];", "buf[0]"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(0))),
         "x должен быть ArraySubscript(buf, 0)"
     );
 }
@@ -359,7 +392,7 @@ fn array_subscript_valid_index() {
 #[test]
 fn array_subscript_last_valid_index() {
     assert!(
-        matches!(body_expr("var buf: [bit;8] := 0;", "buf[7]"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(7))),
+        matches!(body_expr("var buf: [u8;8];", "buf[7]"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(7))),
         "x должен быть ArraySubscript(buf, 7)"
     );
 }

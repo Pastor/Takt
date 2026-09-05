@@ -58,13 +58,15 @@ fn generated_c_values(dir: &Path) -> (i128, i128) {
 static unsigned long ms_value = 0;
 static int late_value = 0;
 
-static void wr_num(ConformanceDurationValue_Out_NumericPort port, int64_t v, void *ud) {
+static void wr_num(ConformanceDurationValue_Out_NumericPort port, uint8_t index, int64_t v, void *ud) {
+    (void)index;
     (void)port;
     (void)ud;
     ms_value = (unsigned long)v;
 }
 
-static void wr_bit(ConformanceDurationValue_Out_BitPort port, bool v, void *ud) {
+static void wr_bit(ConformanceDurationValue_Out_BitPort port, uint8_t bit, bool v, void *ud) {
+    (void)bit;
     (void)port;
     (void)ud;
     late_value = v;
@@ -224,7 +226,8 @@ fn generated_c_dynamic_tick(dir: &Path) -> usize {
 #include "conformance_dynamic_dwell.h"
 
 static int done = 0;
-static void wr(ConformanceDynamicDwell_Out_BitPort port, bool v, void *ud) {
+static void wr(ConformanceDynamicDwell_Out_BitPort port, uint8_t bit, bool v, void *ud) {
+    (void)bit;
     (void)port;
     (void)ud;
     done = v;

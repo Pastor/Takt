@@ -111,7 +111,8 @@ fn c_trace(dir: &Path, fixture: &str, unit: &str, ticks: usize, fsm: FsmForm) ->
         r#"#include <stdio.h>
 #include "{unit}.h"
 static long long probe;
-static void on_num({camel}_Out_NumericPort port, int64_t value, void *userdata) {{
+static void on_num({camel}_Out_NumericPort port, uint8_t index, int64_t value, void *userdata) {{
+    (void)index;
     (void)userdata;
     if (port == {upper}_PORT_PROBE) {{ probe = (long long)value; }}
 }}
@@ -295,7 +296,8 @@ fn chain_c_trace(dir: &Path, fsm: FsmForm) -> Vec<[i128; 3]> {
         r#"#include <stdio.h>
 #include "{CHAIN_UNIT}.h"
 static long long first, second, line;
-static void on_num({camel}_Out_NumericPort port, int64_t value, void *userdata) {{
+static void on_num({camel}_Out_NumericPort port, uint8_t index, int64_t value, void *userdata) {{
+    (void)index;
     (void)userdata;
     if (port == {upper}_FIRST_PORT_FIRST_PROBE) {{ first = (long long)value; }}
     else if (port == {upper}_SECOND_PORT_SECOND_PROBE) {{ second = (long long)value; }}

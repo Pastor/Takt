@@ -19,33 +19,33 @@ void FanFan_tick(FanFan *model, Fan *main) {
     assert(0 != model);
     assert(0 != main);
     if (model->state == FAN_FAN_INIT) {
-        (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, main->userdata);
+        (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, 0, main->userdata);
         model->state = FAN_FAN_IDLE;
     }
     switch (model->state) {
         case FAN_FAN_IDLE: {
-            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, main->userdata) == 1) {
-                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 1, main->userdata);
+            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, 0, main->userdata) == 1) {
+                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, 1, main->userdata);
                 model->state = FAN_FAN_WORKING;
                 break;
             }
             break;
         }
         case FAN_FAN_OVERRUN: {
-            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, main->userdata) == 1) {
-                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 1, main->userdata);
+            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, 0, main->userdata) == 1) {
+                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, 1, main->userdata);
                 model->state = FAN_FAN_WORKING;
                 break;
             }
             if (model->takt_dwell >= 180000) {
-                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, main->userdata);
+                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, 0, main->userdata);
                 model->state = FAN_FAN_IDLE;
                 break;
             }
             break;
         }
         case FAN_FAN_WORKING: {
-            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, main->userdata) == 0) {
+            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, 0, main->userdata) == 0) {
                 model->state = FAN_FAN_OVERRUN;
                 break;
             }

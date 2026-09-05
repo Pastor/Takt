@@ -87,7 +87,8 @@ fn c_trace(dir: &Path) -> Vec<(i128, i128)> {
         r#"#include <stdio.h>
 #include "{UNIT}.h"
 static long long sig, probe;
-static void on_num(Durationport_Out_NumericPort p, int64_t v, void *u) {{
+static void on_num(Durationport_Out_NumericPort p, uint8_t index, int64_t v, void *u) {{
+    (void)index;
     (void)u;
     if (p == DURATIONPORT_DURATION_PORT_PORT_SIG) sig = (long long)v; else probe = (long long)v;
 }}

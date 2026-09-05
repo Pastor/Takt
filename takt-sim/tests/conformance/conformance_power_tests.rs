@@ -81,7 +81,8 @@ fn generated_c_trace(dir: &Path) -> Vec<(i128, i128)> {
 static unsigned long long probe_value = 0;
 static unsigned long long cube_value = 0;
 
-static void wr_num(ConformancePower_Out_NumericPort port, int64_t v, void *ud) {{
+static void wr_num(ConformancePower_Out_NumericPort port, uint8_t index, int64_t v, void *ud) {{
+    (void)index;
     (void)ud;
     if (port == CONFORMANCE_POWER_PORT_PROBE) {{
         probe_value = (unsigned long long)v;

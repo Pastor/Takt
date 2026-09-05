@@ -121,7 +121,8 @@ fn c_trace(dir: &Path) -> Vec<[i128; 4]> {
 
 static long long reg[4] = {{0, 0, 0, 0}};
 
-static void on_write(Nestedready_Out_NumericPort port, int64_t value, void *ud) {{
+static void on_write(Nestedready_Out_NumericPort port, uint8_t index, int64_t value, void *ud) {{
+    (void)index;
     (void)ud;
     reg[(int)port] = (long long)value;
 }}

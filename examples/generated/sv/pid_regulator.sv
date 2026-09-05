@@ -108,7 +108,6 @@ module pid_regulator (
                     end
                     PID_REGULATOR_PID_DONE: begin
                         ready_next = 1;
-                        pid_regulator_pid_state_next = PID_REGULATOR_PID_END;
                     end
                     PID_REGULATOR_PID_SETTLED: begin
                         pid_regulator_pid_meas_next = pid_regulator_pid_target_next;

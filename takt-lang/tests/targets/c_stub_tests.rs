@@ -156,7 +156,7 @@ fn u8_bit_access_generates_transitions() {
     // Строка захвачена зондом, не угадана.
     assert!(
         source.contains(
-            "if ((((*model->read_numeric)(U8_BIT_ACCESS_PORT_FLAGS, model->userdata) >> 0) & 1u) == 1) {"
+            "if ((((*model->read_numeric)(U8_BIT_ACCESS_PORT_FLAGS, 0, model->userdata) >> 0) & 1u) == 1) {"
         ),
         "переход по биту 0 обязан быть на месте:\n{source}"
     );

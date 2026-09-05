@@ -671,6 +671,37 @@ impl Unit {
         out
     }
 
+    /// Есть ли у состояния ТЕЛО: именованный блок либо периодическое действие.
+    ///
+    /// ⚠️ Признак нужен двоим — [`Unit::is_terminal`] и уходу в терминал на
+    /// такте, — и обязан быть у них общим: разойдись они, автомат объявлялся бы
+    /// завершённым в одном месте и работающим в другом.
+    pub(crate) fn state_has_body(&self, state: &str) -> bool {
+        match &self.0 {
+            UnitKind::Node {
+                state_executions,
+                state_every,
+                ..
+            } => {
+                state_executions.get(state).is_some_and(|blocks| {
+                    blocks
+                        .iter()
+                        // ⚠️ Удерживает то, что исполняется КАЖДЫЙ ТАКТ:
+                        // `enter` и `exit` одноразовы — первый про вход, второй
+                        // про уход. Правило общее с компилятором
+                        // (`takt_lang::semantic::terminal::holds_machine`), и
+                        // разойтись им нельзя.
+                        .any(|(name, fns)| {
+                            !matches!(name.as_str(), "enter" | "exit") && !fns.is_empty()
+                        })
+                }) || state_every
+                    .get(state)
+                    .is_some_and(|every| !every.is_empty())
+            }
+            _ => false,
+        }
+    }
+
     pub fn is_terminal(&self) -> bool {
         match &self.0 {
             UnitKind::None => true,
@@ -693,9 +724,15 @@ impl Unit {
                 {
                     return false;
                 }
-                state_transitions
+                // ⚠️ Тело считается наравне с переходами (фича 0534, решение
+                // заказчика 2026-09-05): состояние с `always` работает вечно —
+                // автор написал «всегда», а не «однажды». Правило то же, что у
+                // компилятора (`semantic::terminal`), и разойтись им нельзя:
+                // расхождение эталона с целями — худший класс проекта.
+                let has_edges = state_transitions
                     .get(state_name)
-                    .is_none_or(|t| t.is_empty())
+                    .is_some_and(|t| !t.is_empty());
+                !has_edges && !self.state_has_body(state_name)
             }
             UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
                 units.iter().all(|u| u.borrow().is_terminal())

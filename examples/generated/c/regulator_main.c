@@ -6,7 +6,8 @@
 #include "regulator.h"
 #include <stdio.h>
 
-static void write_bit(Regulator_Out_BitPort port, bool val, void *userdata) {
+static void write_bit(Regulator_Out_BitPort port, uint8_t bit, bool val, void *userdata) {
+    (void)bit;
     (void)port;
     (void)userdata;
     printf("ready=%d\n", (int)val);

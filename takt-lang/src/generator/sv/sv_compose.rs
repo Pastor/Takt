@@ -282,6 +282,13 @@ fn emit_parent_transition(
     if next.local().is_empty() && !state.references().is_empty() {
         return Ok(());
     }
+    // ⚠️ Состояние С ТЕЛОМ автомат не завершает (фича 0534), и `exit` в нём не
+    // наступает: выхода нет. Проверка стоит ДО печати `exit` — иначе он шёл бы
+    // каждый такт после завершения композиции, тогда как эталон не исполняет
+    // его ни разу.
+    if next.local().is_empty() && !state.is_terminated() {
+        return Ok(());
+    }
     emit_named_blocks(p, state, fsm, "exit")?;
     let reg = fsm
         .state_reg

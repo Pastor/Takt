@@ -74,8 +74,9 @@ fn generated_c_trace(dir: &Path) -> Vec<Vec<i128>> {
 
 static int64_t seen[4];
 
-static void write_numeric(ConformanceFixedLiteralBody_Out_NumericPort port, int64_t value,
+static void write_numeric(ConformanceFixedLiteralBody_Out_NumericPort port, uint8_t index, int64_t value,
                           void *userdata) {{
+    (void)index;
     (void)userdata;
     if (port == CONFORMANCE_FIXED_LITERAL_BODY_PORT_SET_V) {{ seen[0] = value; }}
     if (port == CONFORMANCE_FIXED_LITERAL_BODY_PORT_ARG_V) {{ seen[1] = value; }}
