@@ -24,8 +24,6 @@
   "modes.output": "Output",
   "modes.trace": "Run",
   "output.target": "Target",
-  "output.args": "Build flags",
-  "output.argsPlaceholder": "for example: --fsm=table",
   "output.refused": "refused",
   "output.noHighlight": "no highlighting: the file is longer than {limit} characters",
   "output.highlightFailed": "highlighting unavailable",
@@ -136,5 +134,6 @@
   "flags.floatAsQ": "Represent float as fixed point q(m, n)",
   "flags.tickHz": "Tick rate: after and every delays are counted from it",
   "bar.build": "build {number}",
-  "bar.buildTip": "built {built} · commit {commit} · branch {branch}"
+  "bar.buildTip": "built {built} · commit {commit} · branch {branch}",
+  "account.cancel": "Cancel"
 }

@@ -111,25 +111,6 @@
     <!-- Панель учётной записи и проектов. Скрыта, пока её не позвали: без
          входа страница работает как прежде (проработка §5). -->
     <div id="panel" class="account" hidden>
-      <div id="signedout" class="controls">
-        <input id="login" type="text" autocomplete="username" spellcheck="false"
-               data-i18n-attr="placeholder:account.login" placeholder="Логин">
-        <input id="password" type="password" autocomplete="current-password"
-               data-i18n-attr="placeholder:account.password" placeholder="Пароль">
-        <button id="signin" type="button" data-i18n="account.signIn">Войти</button>
-        <button id="signup" type="button" data-i18n="account.signUp">Завести запись</button>
-      </div>
-      <!-- Кнопки площадок строятся ПО ОТВЕТУ СЕРВЕРА: имён площадок в коде
-           страницы нет, иначе список разошёлся бы с настройкой стенда молча
-           (задача 0531-09f-3). -->
-      <div id="oauth" class="controls" hidden></div>
-      <!-- Первый вход через площадку: логин выбирает человек — имени с
-           площадки мы не читаем и не храним. -->
-      <div id="pick" class="controls" hidden>
-        <input id="picklogin" type="text" spellcheck="false"
-               data-i18n-attr="placeholder:oauth.loginPlaceholder" placeholder="Логин (3…32, латиница)">
-        <button id="pickok" type="button" data-i18n="oauth.pickOk">Продолжить</button>
-      </div>
       <div id="signedin" class="controls" hidden>
         <span id="whoami" class="muted"></span>
         <button id="signout" type="button" data-i18n="account.signOut">Выйти</button>
@@ -217,8 +198,10 @@
       <div class="controls">
         <label for="target" data-i18n="output.target">Цель</label>
         <select id="target"></select>
-        <label for="args" data-i18n="output.args">Ключи сборки</label>
-        <input id="args" type="text" data-i18n-attr="placeholder:output.argsPlaceholder" placeholder="например: --fsm=table" spellcheck="false">
+        <!-- ⚠️ Поле ключей с экрана убрано (решение заказчика 2026-09-05): их
+             задаёт вкладка «Ключи сборки». Узел остаётся носителем СТРОКИ —
+             величина одна, и конструктор пишет именно в неё. -->
+        <input id="args" type="hidden" value="">
       </div>
       <div id="output" class="output"></div>
     </div>
@@ -273,5 +256,37 @@
      data-i18n-attr="aria-label:bar.width" aria-label="Ширина страницы" tabindex="0"></div>
 
 <script type="module" src="boot.js"></script>
+<!-- Вход — МОДАЛЬНОЕ окно (решение заказчика 2026-09-05): вход это не «ещё
+     одна панель страницы», а короткий разговор, из которого выходят с ответом
+     «вошёл» либо «отменил». Панель учётной записи осталась своим — проектами,
+     файлами и профилем.
+     ⚠️ Кнопки площадок строятся ПО ОТВЕТУ СЕРВЕРА: имён площадок в коде
+     страницы нет, их объявляет он же — и подпись, и значок. -->
+<div id="signin-modal" class="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true"
+       data-i18n-attr="aria-label:account.enter" aria-label="Войти">
+    <div class="modal-head" data-i18n="account.enter">Войти</div>
+    <div id="signedout" class="modal-body">
+      <input id="login" type="text" autocomplete="username" spellcheck="false"
+             data-i18n-attr="placeholder:account.login" placeholder="Логин">
+      <input id="password" type="password" autocomplete="current-password"
+             data-i18n-attr="placeholder:account.password" placeholder="Пароль">
+      <div class="modal-actions">
+        <button id="signin" type="button" data-i18n="account.signIn">Войти</button>
+        <button id="signup" type="button" data-i18n="account.signUp">Завести запись</button>
+        <button id="signin-cancel" type="button" data-i18n="account.cancel">Отменить</button>
+      </div>
+    </div>
+    <div id="oauth" class="modal-brands" hidden></div>
+    <!-- Первый вход через площадку: логин выбирает человек — имени с
+         площадки мы не читаем и не храним. -->
+    <div id="pick" class="modal-body" hidden>
+      <input id="picklogin" type="text" spellcheck="false"
+             data-i18n-attr="placeholder:oauth.loginPlaceholder" placeholder="Логин (3…32, латиница)">
+      <button id="pickok" type="button" data-i18n="oauth.pickOk">Продолжить</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

@@ -165,7 +165,7 @@ export function apply(root = document) {
     node.textContent = t(node.dataset.i18n);
   }
   for (const node of root.querySelectorAll("[data-i18n-attr]")) {
-    // Запись `placeholder:output.argsPlaceholder` — атрибут и ключ через
+    // Запись `placeholder:account.login` — атрибут и ключ через
     // двоеточие; несколько пар через точку с запятой.
     for (const pair of node.dataset.i18nAttr.split(";")) {
       const [attribute, key] = pair.split(":").map((s) => s.trim());

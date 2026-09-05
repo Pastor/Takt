@@ -72,7 +72,16 @@ export function attach(nodes, callbacks) {
   // ⚠️ Кнопка ОДНА на вход и выход: пока не вошли — открывает панель со
   // формой, после входа — выходит. Двух кнопок, из которых всегда видна одна,
   // читателю не нужно (раскладка заказчика 2026-09-05).
-  dom.session.addEventListener("click", () => (api.who() ? leave() : toggle(true)));
+  dom.session.addEventListener("click", () => (api.who() ? leave() : openSignin()));
+  dom["signin-cancel"].addEventListener("click", closeSignin);
+  // Окно закрывается щелчком по затемнению и клавишей Escape — как всякое
+  // модальное: из разговора обязан быть выход, не требующий попадания в кнопку.
+  dom["signin-modal"].addEventListener("click", (event) => {
+    if (event.target === dom["signin-modal"]) closeSignin();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !dom["signin-modal"].hidden) closeSignin();
+  });
   dom.signin.addEventListener("click", () => enter(api.signIn));
   dom.signup.addEventListener("click", () => enter(api.register));
   dom.signout.addEventListener("click", () => leave());
@@ -180,7 +189,20 @@ async function fillProviders() {
   for (const item of list) {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = t(item.label);
+    button.className = "brand-btn";
+    // ⚠️ Значок приходит ИМЕНЕМ ФАЙЛА от сервера, путь строит страница: имён
+    // площадок в её коде нет — тем же приёмом, что и подписи (задача 09f-3).
+    if (item.icon) {
+      const mark = document.createElement("img");
+      mark.className = "brand-mark";
+      // ⚠️ Адрес считается от МОДУЛЯ (`import.meta.url`), а не от документа:
+      // страница живёт и по адресу `/p/<id>`, и относительный путь увёл бы в
+      // корень — файл приехал бы 404 при пустой на вид кнопке (класс 07b).
+      mark.src = new URL(`brand/${encodeURIComponent(item.icon)}`, import.meta.url).href;
+      mark.alt = "";
+      button.appendChild(mark);
+    }
+    button.appendChild(document.createTextNode(t(item.label)));
     button.addEventListener("click", () => leaveTo(item));
     dom.oauth.appendChild(button);
   }
@@ -439,6 +461,23 @@ async function fillProfile() {
 }
 
 /** Показывает или прячет панель. */
+/**
+ * Открывает окно входа.
+ *
+ * ⚠️ Фокус уходит в поле логина: модальное окно, забирающее внимание, но не
+ * фокус, для клавиатуры не открылось вовсе.
+ */
+function openSignin() {
+  dom["signin-modal"].hidden = false;
+  dom.login.focus();
+}
+
+/** Закрывает окно входа, не трогая набранное: вернуться в него — обычное дело. */
+function closeSignin() {
+  dom["signin-modal"].hidden = true;
+  dom.session.focus();
+}
+
 function toggle(force) {
   const show = force ?? dom.panel.hidden;
   dom.panel.hidden = !show;
@@ -459,6 +498,8 @@ async function enter(how) {
   try {
     const me = await how(login, password);
     dom.password.value = "";
+    // Разговор окончен ответом «вошёл» — окно закрывается само.
+    closeSignin();
     host.say(t("account.hello", { login: me.login }), "ok");
     refresh();
     await list();
