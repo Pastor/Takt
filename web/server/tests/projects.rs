@@ -437,7 +437,7 @@ async fn a_new_project_gets_the_module_version_of_the_service() {
     let (_, created) = stand
         .post_as("/api/projects", &token, serde_json::json!({"name": "П"}))
         .await;
-    assert_eq!(created["takt_lang"], "0.58.0", "версия сервиса");
+    assert_eq!(created["takt_lang"], stand.module_version, "версия сервиса");
     let id = created["id"].as_str().expect("идентификатор").to_string();
 
     let (_, patched) = stand
