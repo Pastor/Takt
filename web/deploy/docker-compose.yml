@@ -30,8 +30,13 @@ services:
     # ⚠️ Порт базы наружу НЕ публикуется: на стенде 5432 уже занят соседним
     # сервисом, а сервер ходит в базу по внутренней сети стека. Публиковать
     # его — значит спорить за порт ни за чем.
+    # ⚠️ Том монтируется в `/var/lib/postgresql`, а НЕ в `.../data`: образ 18+
+    # раскладывает данные по подкаталогу с номером версии, и при монтировании в
+    # `data` он отказывается стартовать вовсе («there appears to be PostgreSQL
+    # data in /var/lib/postgresql/data (unused mount/volume)»). Раскладка от 17-й
+    # версии дожила до стенда потому, что дома стек не поднимали (2026-09-05).
     volumes:
-      - db:/var/lib/postgresql/data
+      - db:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-takt} -d ${POSTGRES_DB:-takt_web}"]
       interval: 10s

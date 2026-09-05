@@ -185,4 +185,21 @@ grep -q 'cp \${SERVER_TARGET_DIR}/release/takt-web-server /out/' "$ROOT/web/depl
 }
 echo "  OK: E8 каталог сборки сервера назван один раз и оттуда же берётся бинарник"
 
-echo "  Сторож выкладки: все проверки пройдены (E1…E8)."
+# ── E9: том базы смонтирован по раскладке образа ────────────────────────────
+# ⚠️ `postgres:18+` держит данные в подкаталоге с номером версии и при
+# монтировании тома в `/var/lib/postgresql/data` НЕ стартует вовсе: «there
+# appears to be PostgreSQL data in /var/lib/postgresql/data (unused
+# mount/volume)». Раскладка от 17-й версии дожила до стенда — дома стек не
+# поднимали ни разу (2026-09-05).
+if grep -qE '^\s+- db:/var/lib/postgresql/data' "$ROOT/web/deploy/docker-compose.yml"; then
+  echo "  ПРОВАЛ: E9 том базы смонтирован в /var/lib/postgresql/data"
+  echo "          образ 18+ с такой раскладкой не стартует — стек не поднимется"
+  exit 1
+fi
+grep -qE '^\s+- db:/var/lib/postgresql$' "$ROOT/web/deploy/docker-compose.yml" || {
+  echo "  ПРОВАЛ: E9 том базы не смонтирован в /var/lib/postgresql"
+  exit 1
+}
+echo "  OK: E9 том базы смонтирован по раскладке образа"
+
+echo "  Сторож выкладки: все проверки пройдены (E1…E9)."
