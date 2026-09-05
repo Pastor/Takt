@@ -312,6 +312,46 @@ async fn every_listed_route_answers_something() {
     stand.drop_schema().await;
 }
 
+/// Под префиксом работают ОБА адреса корня — и с косой, и без (задача 07d).
+///
+/// ⚠️ Предмет — не косметика: на `<префикс>/` ведёт наш же редирект в nginx, и
+/// именно этот адрес открывает читатель. `nest` такой адрес НЕ сопоставляет —
+/// запрос до вложенного роутера не доходит вовсе и получает 404 снаружи.
+/// Замер 2026-09-05 (выкладка на стенд): `/takt` — 200, `/takt/` — 404, и весь
+/// сервис оказался недоступен, хотя стек был здоров и `/health` изнутри отвечал.
+#[tokio::test]
+async fn both_forms_of_the_prefixed_root_are_served() {
+    // ⚠️ Проверке нужна СОБРАННАЯ статика: страница читается с диска, и без неё
+    // обе формы корня одинаково дали бы 404 — то есть сторож молчал бы и при
+    // регрессе. Путь задаётся `TAKT_WEB_TEST_STATIC`, как у проверок архива.
+    let Ok(static_dir) = std::env::var("TAKT_WEB_TEST_STATIC") else {
+        eprintln!("пропуск (страница под префиксом): не задан TAKT_WEB_TEST_STATIC");
+        return;
+    };
+    let Some(stand) = Stand::open_with("prefix", |config| {
+        config.base_path = "/takt".to_string();
+        config.static_dir = static_dir.into();
+    })
+    .await
+    else {
+        return skipped("страница под префиксом");
+    };
+
+    for path in ["/takt", "/takt/", "/takt/health"] {
+        let (status, _) = stand.get(path).await;
+        assert_eq!(status, StatusCode::OK, "адрес '{path}' под префиксом");
+    }
+    // ⚠️ Промах по ФАЙЛУ обязан остаться промахом: страницу вместо файла
+    // отдавать нельзя — вкладка откроется без стилей и без модуля (0531-09c).
+    let (status, _) = stand.get("/takt/b/нет-такого.css").await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "промах по файлу — промах");
+    // И корень домена сервису не принадлежит: под префиксом он там не отвечает.
+    let (status, _) = stand.get("/").await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "корень домена — не наш");
+
+    stand.drop_schema().await;
+}
+
 #[tokio::test]
 async fn user_row_holds_nothing_personal() {
     // ⚠️ Предмет проверки — ОБЕЩАНИЕ, а не удобство: почты нет потому, что
