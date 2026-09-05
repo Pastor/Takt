@@ -127,10 +127,17 @@ pub fn router(state: Arc<AppState>) -> Router {
 
     // Префикс за обратным прокси. `/` — не префикс, и вкладывать в него ничего
     // не надо: `nest("/")` у axum запрещён.
+    //
+    // ⚠️ `nest_service`, а не `nest`: `nest` НЕ сопоставляет адрес с
+    // завершающей косой — запрос `/takt/` до вложенного роутера не доходит
+    // вовсе и получает 404 снаружи. А ведь именно на `/takt/` ведёт наш же
+    // редирект в nginx, и именно этот адрес открывает читатель. Замер
+    // 2026-09-05 (выкладка на стенд): `/takt` — 200, `/takt/` — 404, и до
+    // middleware доходил только первый.
     if state.config.base_path == "/" {
         app
     } else {
-        Router::new().nest(&state.config.base_path, app)
+        Router::new().nest_service(&state.config.base_path, app)
     }
 }
 
