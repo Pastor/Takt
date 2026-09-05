@@ -479,6 +479,16 @@ body {
   background: var(--surface-raised);
 }
 
+/* Верхняя полоса — «что за страница»: имя, версия языка, время сборки и вход.
+ * Нижняя — «что я могу сделать»: управление. Разведены по вопросу читателя, а
+ * не по вместимости (раскладка заказчика 2026-09-05). */
+.bar-brand { border-bottom-color: var(--border-soft); }
+.bar-tools { flex-wrap: wrap; }
+
+/* ⚠️ Значок гасится атрибутом: у кнопки входа их два (внутрь и наружу), и
+ * видимым обязан быть ровно один. */
+.icon[hidden] { display: none; }
+
 .brand { font-weight: 700; letter-spacing: 0.02em; font-size: var(--text-xl); }
 .muted { color: var(--on-surface-soft); font-size: var(--text-sm); }
 .spacer { flex: 1; }

@@ -69,6 +69,10 @@ export function attach(nodes, callbacks) {
   dom = nodes;
   host = callbacks;
   dom.account.addEventListener("click", () => toggle());
+  // ⚠️ Кнопка ОДНА на вход и выход: пока не вошли — открывает панель со
+  // формой, после входа — выходит. Двух кнопок, из которых всегда видна одна,
+  // читателю не нужно (раскладка заказчика 2026-09-05).
+  dom.session.addEventListener("click", () => (api.who() ? leave() : toggle(true)));
   dom.signin.addEventListener("click", () => enter(api.signIn));
   dom.signup.addEventListener("click", () => enter(api.register));
   dom.signout.addEventListener("click", () => leave());
@@ -675,11 +679,14 @@ function refresh() {
   dom.signedout.hidden = me !== null;
   dom.signedin.hidden = me === null;
   dom.whoami.textContent = me ? me.login : "";
-  // ⚠️ Кнопка учётной записи — ЗНАЧОК, и текста не несёт: логин показывается
-  // подписью рядом, а в саму кнопку уходит подпись для диктора и всплывающая.
-  const label = me ? me.login : t("account.enter");
-  dom.account.dataset.tip = label;
-  dom.account.setAttribute("aria-label", label);
+  // ⚠️ Кнопки шапки — ЗНАЧКИ, и текста не несут: логин показывается подписью
+  // рядом, а в саму кнопку уходит подпись для диктора и всплывающая.
+  const label = me ? t("account.signOut") : t("account.enter");
+  dom.session.dataset.tip = label;
+  dom.session.setAttribute("aria-label", label);
+  // Значок следует за действием: не вошёл — стрелка внутрь, вошёл — наружу.
+  dom["icon-enter"].hidden = me !== null;
+  dom["icon-leave"].hidden = me === null;
   dom["whoami-bar"].textContent = me ? me.login : "";
   dom["whoami-bar"].hidden = me === null;
   dom.download.hidden = state.project === null;
