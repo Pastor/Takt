@@ -644,22 +644,40 @@ test("шапка: две полосы, и каждая отвечает на с�
   // — «что я могу сделать». Уехавшая вниз кнопка входа не ломает ничего
   // машинно и потому невидима всем прочим проверкам.
   const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../static/app.css", import.meta.url), "utf8");
   const brand = html.slice(html.indexOf('<header class="bar bar-brand">'), html.indexOf("</header>"));
   const tools = html.slice(html.indexOf('<div class="bar bar-tools">'), html.indexOf("<main"));
 
   for (const id of ["version", "project", "openfile", "whoami-bar", "session"]) {
     assert.ok(brand.includes(`id="${id}"`), `верхняя полоса без '${id}'`);
   }
-  for (const id of ["account", "showcase", "save", "format", "share", "download", "lang"]) {
+  for (const id of ["account", "showcase", "save", "format", "wrap",
+                    "share", "download", "lang"]) {
     assert.ok(tools.includes(`id="${id}"`), `полоса управления без '${id}'`);
     assert.ok(!brand.includes(`id="${id}"`), `'${id}' остался в верхней полосе`);
   }
   assert.ok(!tools.includes('id="session"'), "кнопка входа уехала в управление");
 
+  // Порядок в полосе управления назван заказчиком: перенос строк идёт сразу
+  // за форматированием.
+  const order = ["format", "wrap", "share"].map((id) => tools.indexOf(`id="${id}"`));
+  assert.deepEqual(order.slice().sort((a, b) => a - b), order, "перенос строк не следует за форматом");
+
+  // ⚠️ Кнопка ЗАЛИПАЮЩАЯ, и нажатое состояние обязано быть видно: без правила
+  // она сообщает только заголовком, а включён ли перенос — вопрос к самому
+  // тексту, то есть к тому, ради чего её и нажимают.
+  assert.match(tools, /id="wrap"[^>]*aria-pressed/, "кнопка переноса без aria-pressed");
+  // ⚠️ Настройка ОДНА на все области кода: правило переноса обязано покрыть и
+  // сценарий с трассой, иначе кнопка на них молчит (решение заказчика).
+  for (const area of [".editor.wrap", ".output.wrap", ".scenario.wrap", ".trace.wrap"]) {
+    assert.ok(css.includes(area), `перенос не действует на ${area}`);
+  }
+  assert.match(css, /\.icon-btn\[aria-pressed="true"\][\s\S]{0,120}?background:/,
+    "нажатое состояние кнопки-значка не показано");
+
   // ⚠️ Значка у кнопки входа ДВА, и видимым обязан быть ровно один: правило
   // гашения по атрибуту без этого молчит, а на экране рядом стоят вход и выход.
   assert.ok(brand.includes('id="icon-enter"') && brand.includes('id="icon-leave"'));
-  const css = await readFile(new URL("../static/app.css", import.meta.url), "utf8");
   assert.match(css, /\.icon\[hidden\]\s*\{[^}]*display:\s*none/, "значок не гасится атрибутом");
 
   // Кнопка одна на оба действия: страница решает по тому, вошли ли.
@@ -732,7 +750,7 @@ test("настройки интерфейса живут в localStorage и кл
   // читает, и читатель получит умолчание там, где выбирал сам.
   const keys = [
     shell.KEY, shell.PANES_KEY, shell.ROWS_KEY, shell.TRACE_KEY,
-    shell.FONT_KEY, shell.WRAP_KEYS.source, shell.WRAP_KEYS.output,
+    shell.FONT_KEY, shell.WRAP_KEY,
     shell.UI_KEYS.tab, shell.UI_KEYS.budget,
   ];
   assert.equal(new Set(keys).size, keys.length, `ключи совпали: ${keys.join(", ")}`);
@@ -793,15 +811,14 @@ test("вкладка прогона: у сценария своя доля и с
 test("перенос строк: настройка своя у каждой области и по умолчанию выключена", () => {
   // ⚠️ Умолчание — НЕТ переноса: код читают столбцом, и включённый по
   // умолчанию перенос менял бы вид всякой модели у всякого читателя.
-  assert.equal(shell.wrapped({ getItem: () => null }, shell.WRAP_KEYS.source), false);
-  assert.equal(shell.wrapped({ getItem: () => "0" }, shell.WRAP_KEYS.source), false);
-  assert.equal(shell.wrapped({ getItem: () => "1" }, shell.WRAP_KEYS.output), true);
+  assert.equal(shell.wrapped({ getItem: () => null }, shell.WRAP_KEY), false);
+  assert.equal(shell.wrapped({ getItem: () => "0" }, shell.WRAP_KEY), false);
+  assert.equal(shell.wrapped({ getItem: () => "1" }, shell.WRAP_KEY), true);
   // Ключи РАЗНЫЕ: узкой бывает то одна область, то другая, и общий ключ
   // переносил бы строки там, где места хватает.
-  assert.notEqual(shell.WRAP_KEYS.source, shell.WRAP_KEYS.output);
   // Запрет хранилища не роняет страницу — настройка живёт до перезагрузки.
   assert.equal(
-    shell.wrapped({ getItem: () => { throw new Error("нет доступа"); } }, shell.WRAP_KEYS.source),
+    shell.wrapped({ getItem: () => { throw new Error("нет доступа"); } }, shell.WRAP_KEY),
     false
   );
 });

@@ -589,22 +589,31 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
 .line { min-height: 1.5em; }
 
 /* ── Перенос длинных строк (настройка читателя) ──────────────────────────
- * Узкой бывает то одна область, то другая, поэтому настройка СВОЯ у каждой:
- * общая заставляла бы переносить там, где места хватает.
+ * Настройка ОДНА на все области кода — исходник, вывод цели, сценарий и трассу
+ * (решение заказчика 2026-09-05): так человек читает код вообще, а не
+ * конкретную панель.
  * ⚠️ `overflow-wrap: anywhere` обязателен: строки кода бывают без единого
  * пробела (длинный вызов, путь), и без него `pre-wrap` их не разорвёт. */
-.editor.wrap, .output.wrap {
+.editor.wrap, .output.wrap, .scenario.wrap, .trace.wrap {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ⚠️ Внутренний узел вывода несёт своё `white-space`, и правило области его не
+ * достаёт: без этой строки кнопка на выводе цели молчала бы. */
+.output.wrap .file-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Полоса инструментов шапки области: переключатель и состояние в одной
  * строке, чтобы шапка не росла второй. */
 .pane-tools { display: flex; align-items: center; gap: var(--gap-half); }
 
-.chip[aria-pressed="true"] {
+/* Залипающая кнопка: нажатое состояние — акцентная пара. Без него кнопка
+ * ничего не сообщает, и включён ли перенос, видно только по самому тексту. */
+.chip[aria-pressed="true"],
+.icon-btn[aria-pressed="true"] {
   background: var(--surface-accent);
   color: var(--on-surface-accent);
+  border-color: var(--surface-accent);
 }
 
 /* ── Номера строк в панелях кода ─────────────────────────────────────────
