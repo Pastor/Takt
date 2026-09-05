@@ -33,6 +33,7 @@ import { inlineScripts, literalsWithText, nodesWithoutKey } from "./strings.mjs"
 import { bundleOfUrl } from "../static/build.js";
 import * as shell from "../static/shell.js";
 import * as tip from "../static/tip.js";
+import * as editor from "../static/editor.js";
 import * as build from "../static/build.js";
 import * as project from "../static/project.js";
 import * as api from "../static/api.js";
@@ -599,6 +600,42 @@ test("шапка: время сборки читается по часам чи�
   for (const bad of [undefined, null, "", "позавчера"]) {
     assert.equal(build.moment(bad), "", `метка ${JSON.stringify(bad)} дала текст`);
   }
+});
+
+test("редактор: перевод строки считается символом, и правило одно", () => {
+  // ⚠️ Узлы-строки БЛОЧНЫЕ: перевода строки между ними в DOM нет, а в тексте
+  // есть. Пока это правило считали по месту, сохранение каретки о переводах не
+  // знало вовсе: после Enter она возвращалась в конец ПРЕЖНЕЙ строки, то есть
+  // набирать текст было нельзя (воспроизведено на выложенной странице).
+  const lengths = [3, 0, 5]; // "abc", "", "hello"
+  assert.equal(editor.offsetOfLine(lengths, 0, 0), 0);
+  assert.equal(editor.offsetOfLine(lengths, 0, 3), 3);
+  assert.equal(editor.offsetOfLine(lengths, 1, 0), 4, "перевод строки не посчитан");
+  assert.equal(editor.offsetOfLine(lengths, 2, 0), 5, "пустая строка занимает один символ");
+  assert.equal(editor.offsetOfLine(lengths, 2, 5), 10);
+
+  // Обратное правило — точное обращение прямого на всех местах документа.
+  for (let index = 0; index < lengths.length; index += 1) {
+    for (let inLine = 0; inLine <= lengths[index]; inLine += 1) {
+      const offset = editor.offsetOfLine(lengths, index, inLine);
+      assert.deepEqual(editor.lineOfOffset(lengths, offset), { index, inLine },
+        `не сошлось на строке ${index}, месте ${inLine}`);
+    }
+  }
+
+  // ⚠️ То же правило обязано совпадать со счётом по ТЕКСТУ: расхождение здесь
+  // уводит и наведение, и переход к объявлению — молча, на чужое имя.
+  const text = "abc\n\nhello";
+  for (let offset = 0; offset <= text.length; offset += 1) {
+    const spot = editor.lineOfOffset(lengths, offset);
+    const byText = editor.offsetToPosition(text, offset);
+    assert.deepEqual({ index: byText.line, inLine: byText.character }, spot,
+      `смещение ${offset}: счёт по строкам разошёлся со счётом по тексту`);
+  }
+
+  // Место за концом документа — конец последней строки, а не ошибка: так
+  // ведёт себя каретка после форматирования, укоротившего текст.
+  assert.deepEqual(editor.lineOfOffset(lengths, 99), { index: 2, inLine: 5 });
 });
 
 test("шапка: две полосы, и каждая отвечает на свой вопрос", async () => {

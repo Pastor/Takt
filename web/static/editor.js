@@ -74,6 +74,23 @@ export class Editor {
     return offsetToPosition(this.text, offset);
   }
 
+  /** Ставит курсор на позицию LSP и забирает фокус (переход к объявлению). */
+  moveTo(line, character) {
+    this.root.focus();
+    setCaretOffset(this.root, positionToOffset(this.text, line, character));
+  }
+
+  /** Позиция документа под точкой экрана — для наведения мышью. */
+  positionAt(x, y) {
+    const document_ = this.root.ownerDocument;
+    const spot = document_.caretRangeFromPoint?.(x, y) ?? document_.caretPositionFromPoint?.(x, y);
+    if (!spot) return null;
+    const node = spot.startContainer ?? spot.offsetNode;
+    if (!this.root.contains(node)) return null;
+    const offset = offsetAt(this.root, node, spot.startOffset ?? spot.offset);
+    return offsetToPosition(this.text, offset);
+  }
+
   /**
    * Красит текст отрезками из ответа `takt_tokens`.
    *
@@ -179,42 +196,103 @@ function readText(root) {
   return [...lines].map((line) => line.textContent).join("\n");
 }
 
-/** Смещение курсора в символах от начала документа. */
-function caretOffset(root) {
-  const selection = root.ownerDocument.getSelection();
-  if (!selection || selection.rangeCount === 0) return 0;
-  const range = selection.getRangeAt(0).cloneRange();
-  range.selectNodeContents(root);
-  range.setEnd(selection.getRangeAt(0).endContainer, selection.getRangeAt(0).endOffset);
-  return range.toString().length;
+/**
+ * Правило перевода «строка и место в ней ↔ смещение в тексте».
+ *
+ * ⚠️ Носитель ОДИН, и это главное здесь. Узлы-строки блочные: перевода строки
+ * между ними в DOM НЕТ, а в тексте он есть. Пока это правило считали по месту,
+ * оно разъехалось: сохранение каретки не знало о переводах вовсе (после Enter
+ * каретка возвращалась в конец прежней строки — то есть набирать текст было
+ * нельзя), переход к объявлению считал так же, а наведение — иначе.
+ *
+ * @param {number[]} lengths длины строк документа
+ * @param {number} index номер строки
+ * @param {number} inLine место внутри строки
+ */
+export function offsetOfLine(lengths, index, inLine) {
+  const line = Math.max(0, Math.min(index, lengths.length - 1));
+  let offset = 0;
+  for (let i = 0; i < line; i += 1) offset += lengths[i] + 1;
+  return offset + Math.max(0, Math.min(inLine, lengths[line] ?? 0));
 }
 
-/** Ставит курсор на смещение в символах. */
-function setCaretOffset(root, offset) {
-  const document_ = root.ownerDocument;
-  const selection = document_.getSelection();
-  if (!selection) return;
-  const walker = document_.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+/** Обратное правило: смещение в тексте → строка и место в ней. */
+export function lineOfOffset(lengths, offset) {
+  let left = Math.max(0, offset);
+  for (let i = 0; i < lengths.length; i += 1) {
+    if (left <= lengths[i]) return { index: i, inLine: left };
+    left -= lengths[i] + 1;
+  }
+  const last = Math.max(0, lengths.length - 1);
+  return { index: last, inLine: lengths[last] ?? 0 };
+}
+
+/** Длины строк редактора по его узлам. */
+function lineLengths(lines) {
+  return lines.map((line) => line.textContent.length);
+}
+
+/**
+ * Смещение точки DOM в символах текста — с переводами строк.
+ *
+ * @param {HTMLElement} root узел редактора
+ * @param {Node} container узел точки
+ * @param {number} inNode место внутри узла
+ */
+export function offsetAt(root, container, inNode) {
+  const lines = [...root.querySelectorAll(".line")];
+  if (lines.length === 0) return inNode;
+  // Точка на самом редакторе: место — это номер строки, перед которой она.
+  if (container === root) return offsetOfLine(lineLengths(lines), Math.min(inNode, lines.length - 1), 0);
+
+  const index = lines.findIndex((line) => line === container || line.contains(container));
+  if (index < 0) return 0;
+  const range = root.ownerDocument.createRange();
+  range.selectNodeContents(lines[index]);
+  range.setEnd(container, inNode);
+  return offsetOfLine(lineLengths(lines), index, range.toString().length);
+}
+
+/**
+ * Точка DOM для смещения в тексте: узел и место внутри него.
+ *
+ * ⚠️ Пустая строка — это `div` с одним `<br>`, и точка в ней — сам `div` с
+ * местом 0: поставь её в `<br>`, и каретка окажется ПОСЛЕ строки.
+ */
+export function pointAt(root, offset) {
+  const lines = [...root.querySelectorAll(".line")];
+  if (lines.length === 0) return { node: root, offset: 0 };
+  const { index, inLine } = lineOfOffset(lineLengths(lines), offset);
+  const line = lines[index];
+  const walker = root.ownerDocument.createTreeWalker(line, NodeFilter.SHOW_TEXT);
   let seen = 0;
   let node = walker.nextNode();
   while (node) {
     const length = node.textContent.length;
-    if (seen + length >= offset) {
-      const range = document_.createRange();
-      range.setStart(node, Math.max(0, offset - seen));
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      return;
-    }
+    if (seen + length >= inLine) return { node, offset: inLine - seen };
     seen += length;
     node = walker.nextNode();
   }
-  // Смещение за концом документа: курсор в конец — это верно и после
-  // форматирования, которое текст укоротило.
-  const range = document_.createRange();
-  range.selectNodeContents(root);
-  range.collapse(false);
+  return { node: line, offset: 0 };
+}
+
+/** Смещение курсора в символах от начала документа. */
+function caretOffset(root) {
+  const selection = root.ownerDocument.getSelection();
+  if (!selection || selection.rangeCount === 0) return 0;
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.endContainer) && range.endContainer !== root) return 0;
+  return offsetAt(root, range.endContainer, range.endOffset);
+}
+
+/** Ставит курсор на смещение в символах. */
+function setCaretOffset(root, offset) {
+  const selection = root.ownerDocument.getSelection();
+  if (!selection) return;
+  const point = pointAt(root, offset);
+  const range = root.ownerDocument.createRange();
+  range.setStart(point.node, point.offset);
+  range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
 }
