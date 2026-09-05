@@ -47,8 +47,13 @@ services:
       db:
         condition: service_healthy
     environment:
-      TAKT_WEB_DB: postgresql://${POSTGRES_USER:-takt}:${POSTGRES_PASSWORD:-пароль-для-своей-машины-не-для-стенда}@db/${POSTGRES_DB:-takt_web}
-      TAKT_WEB_JWT_SECRET: ${TAKT_WEB_JWT_SECRET:?задайте секрет подписи: с умолчанием токен подпишет кто угодно}
+      # ⚠️ Значения В КАВЫЧКАХ: внутри них есть двоеточие с пробелом (в адресе
+      # базы и в тексте отказа), а без кавычек YAML читает такую строку как
+      # отображение — `docker compose` отвечает «mapping values are not allowed
+      # in this context» и стек не поднимается вовсе. Нашлось выкладкой на
+      # стенд 2026-09-05: дома стек не поднимали ни разу.
+      TAKT_WEB_DB: "postgresql://${POSTGRES_USER:-takt}:${POSTGRES_PASSWORD:-пароль-для-своей-машины-не-для-стенда}@db/${POSTGRES_DB:-takt_web}"
+      TAKT_WEB_JWT_SECRET: "${TAKT_WEB_JWT_SECRET:?задайте секрет подписи: с умолчанием токен подпишет кто угодно}"
       TAKT_WEB_BASE_PATH: ${TAKT_WEB_BASE_PATH:-/}
       TAKT_WEB_RETENTION_DAYS: ${TAKT_WEB_RETENTION_DAYS:-90}
     ports:
