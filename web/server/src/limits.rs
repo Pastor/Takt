@@ -36,6 +36,14 @@ pub const NAME_CHARS: usize = 64;
 /// Наибольшая длина описания, символов.
 pub const DESCRIPTION_CHARS: usize = 512;
 
+/// Наибольшая длина строки ключей сборки, символов.
+///
+/// ⚠️ Предел нужен раньше разбора: строка уходит в модуль, а разбор чужого
+/// ввода без границы — это работа, объём которой задаёт отправитель. Число
+/// взято с запасом от самой длинной осмысленной строки ключей (замер задачи
+/// 09m — 11 ключей вместе короче 200 символов).
+pub const BUILD_ARGS_CHARS: usize = 512;
+
 /// Строит отказ предела: и число, и факт.
 ///
 /// ⚠️ Оба обязательны. «Слишком большой файл» не говорит, насколько ужиматься,
@@ -82,6 +90,19 @@ pub fn check_description(text: &str) -> Result<(), ApiError> {
         return Err(exceeded(
             "длина описания в символах",
             DESCRIPTION_CHARS,
+            length,
+        ));
+    }
+    Ok(())
+}
+
+/// Проверяет длину строки ключей сборки.
+pub fn check_build_args(text: &str) -> Result<(), ApiError> {
+    let length = text.chars().count();
+    if length > BUILD_ARGS_CHARS {
+        return Err(exceeded(
+            "длина строки ключей сборки в символах",
+            BUILD_ARGS_CHARS,
             length,
         ));
     }

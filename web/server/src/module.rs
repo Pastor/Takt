@@ -110,6 +110,30 @@ impl Modules {
         Ok(files)
     }
 
+    /// Проверяет цель и ключи сборки, ничего не компилируя.
+    ///
+    /// ⚠️ Своего разбора у сервера нет и быть не должно: список ключей и
+    /// таблица применимости живут в `compile_cli` (фича 0466), и вторая копия
+    /// разошлась бы с ней МОЛЧА — сервер принимал бы ключ, который сборка
+    /// отвергает. Отсюда тот же круговой рейс, что у выгрузки архива.
+    ///
+    /// # Ошибки
+    /// - модуля такой версии нет на диске либо он не грузится;
+    /// - модуль отверг цель либо ключи — тогда ошибка несёт его причину.
+    pub fn check_flags(&self, version: &str, target: &str, args: &str) -> anyhow::Result<()> {
+        let request = serde_json::json!({"target": target, "args": args});
+        let reply = self.call(version, "takt_flags", &request.to_string())?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&reply).context("ответ модуля не разбирается")?;
+        if parsed["ok"] == serde_json::Value::Bool(true) {
+            return Ok(());
+        }
+        let message = parsed["error"]["message"]
+            .as_str()
+            .unwrap_or("модуль отказал без причины");
+        Err(anyhow::anyhow!("{message}"))
+    }
+
     /// Зовёт операцию модуля, передав и приняв JSON.
     fn call(&self, version: &str, name: &str, request: &str) -> anyhow::Result<String> {
         let module = self.module(version)?;

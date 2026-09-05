@@ -1046,6 +1046,8 @@ test("страница проекта: читается активный фай�
       owner: "ivan",
       visibility: "public",
       takt_lang: "0.58.0",
+      build_target: "sv-mmio",
+      build_args: "--bus=apb",
       main_file: "model.takt",
       files: [
         { name: "other.takt", kind: "takt", size_bytes: 3 },
@@ -1068,6 +1070,11 @@ test("страница проекта: читается активный фай�
   assert.equal(opened.scenario, "[]");
   assert.equal(opened.owner, "ivan", "автор назван: чужая модель не выглядит своей");
   assert.equal(opened.version, "0.58.0", "версия модуля — свойство проекта (A5)");
+  // Задача 09p: чужой проект открывается СБОРКОЙ АВТОРА. ⚠️ Пара берётся не
+  // умолчанием (`c` без ключей): на умолчании потеря поля неотличима от его
+  // подстановки, и проверка была бы зелёной при потерянном выборе.
+  assert.equal(opened.target, "sv-mmio", "цель — свойство проекта");
+  assert.equal(opened.args, "--bus=apb", "ключи — свойство проекта");
   // Лишних обращений нет: витрина бывает длинной, и читать всё подряд незачем.
   assert.equal(asked.length, 3, `обращений ${asked.length}: ${asked.join(", ")}`);
 });
@@ -1126,6 +1133,32 @@ test("черновик v2: круговой рейс ключуется прое
   draft.saveFile(storage, { project: "p9", file: "a.takt", source: "проектный" });
   assert.equal(draft.load(storage).source, "буфер");
   assert.equal(draft.loadFile(storage, "p9", "a.takt").source, "проектный");
+});
+
+test("черновик v2: цель и ключи перекрывают проект, а прежняя запись их не имеет", () => {
+  // ⚠️ Правило задачи 09p: проект задаёт умолчание, черновик перекрывает его
+  // для своего автора. Без пары в черновике незавершённый выбор терялся бы при
+  // каждой перезагрузке, тогда как текст её переживает.
+  const storage = memoryStorage();
+  draft.saveFile(storage, {
+    project: "p1", file: "model.takt", revision: 3, source: "текст",
+    target: "rust", args: "--fsm=table", savedAt: 100,
+  });
+  const kept = draft.loadFile(storage, "p1", "model.takt");
+  assert.equal(kept.target, "rust");
+  assert.equal(kept.args, "--fsm=table");
+
+  // ⚠️ Прежняя запись (без пары) обязана читаться: подъём формы черновика не
+  // вправе стоить автору несохранённой работы. Пустое значение и означает
+  // «выбора нет» — пару подставит проект.
+  const old = memoryStorage();
+  old.setItem(
+    "takt.draft.v2",
+    JSON.stringify({ "p1\u0000model.takt": { project: "p1", file: "model.takt", source: "текст" } }),
+  );
+  const legacy = draft.loadFile(old, "p1", "model.takt");
+  assert.equal(legacy.source, "текст", "текст прежнего черновика цел");
+  assert.equal(legacy.target ?? "", "", "выбора в прежней записи нет");
 });
 
 test("черновик v2: карта не растёт без предела", () => {
@@ -1238,6 +1271,27 @@ test("разметка: каждый узел с именем найден ст�
   );
   const missing = ids.filter((id) => !cached.has(id));
   assert.deepEqual(missing, [], `узлы разметки не найдены страницей: ${missing.join(", ")}`);
+});
+
+test("списки: значение выставляет одна точка, и она обновляет надстройку", async () => {
+  // ⚠️ Класс нашёлся прогоном страницы (задача 09p): открытый чужой проект
+  // ставил цель `sv-mmio`, а кнопка списка показывала прежнюю `c` — страница
+  // говорила одно, а собирала другим. Причина: надстройка `pick.js` рисует
+  // подпись сама, а тихая запись `select.value` не рождает `change`.
+  const app = await readFile(new URL("../static/app.js", import.meta.url), "utf8");
+  const pick = await readFile(new URL("../static/pick.js", import.meta.url), "utf8");
+  // Надстройка следует за источником истины, когда ей об этом говорят
+  // общепринятым способом.
+  assert.ok(
+    /select\.addEventListener\("change", refresh\)/.test(pick),
+    "надстройка не слушает `change` своего списка",
+  );
+  // Тихая запись идёт ТОЛЬКО через одну точку: список мест, которые надо не
+  // забыть, — это и есть то, что забывается.
+  const silent = [...app.matchAll(/dom\.(target|lang)\.value\s*=/g)].map((m) => m[0]);
+  assert.deepEqual(silent, [], `значение списка пишется мимо setPick: ${silent.join(", ")}`);
+  assert.ok(/function setPick\(/.test(app) && /picks\[name\]\?\.refresh\(\)/.test(app),
+    "точка записи не обновляет надстройку");
 });
 
 test("разметка: скрытый узел действительно скрыт", async () => {

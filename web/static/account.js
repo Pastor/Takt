@@ -156,8 +156,15 @@ export function editing() {
   return state.project !== null && state.file !== null;
 }
 
-/** Записывает черновик открытого файла. */
-export function keepDraft(source, scenario) {
+/**
+ * Записывает черновик открытого файла.
+ *
+ * ⚠️ Цель и ключи сборки едут вместе с текстом (задача 09p): проект задаёт
+ * умолчание, а черновик перекрывает его для СВОЕГО автора. Не запиши их —
+ * несохранённый выбор терялся бы при каждой перезагрузке, тогда как текст
+ * переживал бы её.
+ */
+export function keepDraft(source, scenario, target, args) {
   if (!editing()) return null;
   return draft.saveFile(localStorage, {
     project: state.project.id,
@@ -165,6 +172,8 @@ export function keepDraft(source, scenario) {
     revision: state.revision,
     source,
     scenario,
+    target,
+    args,
   });
 }
 
@@ -628,15 +637,60 @@ async function openFile(id, name) {
           revision: body.revision,
         }),
       );
-      host.open({ source: kept.source, scenario: kept.scenario ?? "" });
+      // Черновик сильнее проекта: он и есть незавершённая работа автора.
+      host.open({
+        source: kept.source,
+        scenario: kept.scenario ?? "",
+        target: kept.target || build().target,
+        args: kept.args ?? build().args,
+      });
     } else {
       hideConflict();
-      host.open({ source: body.text, scenario: state.project?.scenario ?? "" });
+      host.open({
+        source: body.text,
+        scenario: state.project?.scenario ?? "",
+        ...build(),
+      });
     }
     refresh();
   } catch (error) {
     fail(error);
   }
+}
+
+/**
+ * Цель и ключи сборки открытого проекта (задача 09p).
+ *
+ * Пусто — проект прежней выгрузки либо страница без проекта: тогда остаётся
+ * выбранное на странице, и решает это её сторона.
+ */
+function build() {
+  return {
+    target: state.project?.build_target ?? "",
+    args: state.project?.build_args ?? "",
+  };
+}
+
+/**
+ * Записывает выбор сборки в проект, если он изменился.
+ *
+ * ⚠️ Запись идёт вместе с явным сохранением, а не на каждый щелчок по
+ * вкладке: сервер не должен видеть перебор целей, которым автор просто
+ * смотрит вывод. ⚠️ Метаданные правит только ВЛАДЕЛЕЦ (правило сервера): у
+ * уровня `edit` попытка кончилась бы отказом, о котором автор не просил.
+ * Отказ поднимается вызывающему — он решает, чем это считать.
+ */
+async function keepBuild() {
+  if (state.level !== "owner") return;
+  const target = host.target();
+  const args = host.args();
+  const kept = build();
+  if (target === kept.target && args === kept.args) return;
+  const updated = await api.patch(state.project.id, {
+    build_target: target,
+    build_args: args,
+  });
+  state.project = { ...state.project, ...updated };
 }
 
 /** Сохраняет открытый файл на сервер. */
@@ -660,6 +714,15 @@ async function save() {
     draft.clearFile(localStorage, state.project.id, state.file);
     hideConflict();
     host.say(t("account.saved", { revision: written.revision }), "ok");
+    // ⚠️ Выбор сборки пишется ПОСЛЕ текста и СВОИМ отказом: сервер вправе
+    // отвергнуть ключи (задача 09p), а текст к тому времени уже сохранён —
+    // общий отказ сказал бы автору, что работа не записана, и он записал бы её
+    // ещё раз поверх своей же.
+    try {
+      await keepBuild();
+    } catch (error) {
+      host.say(text(error), "warning");
+    }
     // Состав файлов мог измениться (первое сохранение заводит файл): список
     // перечитывается, иначе он остался бы вчерашним.
     await openProjectFiles(state.project.id);

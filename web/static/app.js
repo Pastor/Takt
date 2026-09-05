@@ -40,6 +40,15 @@ const WASM_DEFAULT = "takt.wasm";
  */
 const HIGHLIGHT_LIMIT = 200_000;
 
+/**
+ * Надстройки выпадающих списков (`pick.js`) по имени узла.
+ *
+ * ⚠️ Ручка нужна потому, что значение списка выставляется и МОЛЧА: тихая
+ * запись не рождает `change`, и надстройке некому сказать, что подпись
+ * устарела. Пишет значение одна точка — [`setPick`].
+ */
+const picks = {};
+
 const state = {
   bridge: null,
   editor: null,
@@ -93,7 +102,7 @@ export async function main() {
   tip.attach(document);
   await useLanguage(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   fillLanguages();
-  enhance(dom.lang);
+  picks.lang = enhance(dom.lang);
 
   // Опись сборки читается ДО модуля: в ней адрес модуля с версией в пути.
   state.build = await build.describe();
@@ -106,7 +115,7 @@ export async function main() {
   dom.version.removeAttribute("data-i18n");
   showVersion();
   fillTargets(version.targets ?? []);
-  enhance(dom.target);
+  picks.target = enhance(dom.target);
   watchBuild();
   for (const node of [dom.editor, dom.output, dom.diagnostics, dom.trace]) fade(node);
 
@@ -129,16 +138,26 @@ export async function main() {
   account.attach(dom, {
     source: () => state.editor.value(),
     scenario: () => state.scenario,
+    // ⚠️ Цель и ключи берутся у ПРОЕКТА, а не у читателя (задача 09p, решение
+    // заказчика 2026-09-05): проект задаёт умолчание, черновик автора его
+    // перекрывает. Пришло пусто — остаётся выбранное на странице: у проекта
+    // прежней выгрузки пары нет вовсе.
     open: (restored) => {
-      applyState({ ...restored, target: state.target, args: state.args });
+      applyState({
+        ...restored,
+        target: restored.target || state.target,
+        args: restored.args ?? state.args,
+      });
       refresh();
     },
     // ⚠️ Черновик пишется НЕМЕДЛЕННО перед уходом на площадку: отложенная
     // запись до перехода не доживёт.
     keep: () => saveDraft.now(),
     // Цель выгрузки — та, что открыта во вкладке вывода: архив «с генерацией»
-    // берёт выбранную цель (решение заказчика).
+    // берёт выбранную цель (решение заказчика). Она же уходит в метаданные
+    // проекта при сохранении (задача 09p) — вместе с ключами.
     target: () => state.target,
+    args: () => state.args,
     say,
   });
   // Возврат с площадки разбирается ДО восстановления состояния: во фрагменте
@@ -175,7 +194,12 @@ async function openProject() {
     dom.project.hidden = false;
     // Читатель вправе скачать открытый проект архивом: текст всё равно у него.
     account.adopt({ id, name: opened.name });
-    return { source: opened.source, scenario: opened.scenario };
+    return {
+      source: opened.source,
+      scenario: opened.scenario,
+      target: opened.target,
+      args: opened.args,
+    };
   } catch (error) {
     // Отказ виден строкой, а не пустой страницей: удалённый или закрытый
     // проект — обычный ответ сервиса, и он обязан быть назван.
@@ -194,7 +218,7 @@ async function openProject() {
 async function useLanguage(lang) {
   await i18n.load(lang);
   i18n.apply(document);
-  if (dom.lang) dom.lang.value = i18n.language();
+  if (dom.lang) setPick("lang", i18n.language());
   // До фичи 0532 диагностики, трасса и сводка приходят из модуля только
   // по-русски. При другом языке оболочки смешение НАЗЫВАЕТСЯ строкой, а не
   // прячется: читатель, увидевший русский текст без предупреждения, решит,
@@ -287,7 +311,7 @@ function fillLanguages() {
     option.dataset.short = i18n.SHORT[code] ?? code;
     dom.lang.appendChild(option);
   }
-  dom.lang.value = i18n.language();
+  setPick("lang", i18n.language());
 }
 
 /**
@@ -344,7 +368,21 @@ function fillTargets(targets) {
     option.textContent = target;
     dom.target.appendChild(option);
   }
-  dom.target.value = state.target;
+  setPick("target", state.target);
+}
+
+/**
+ * Ставит значение списка и обновляет его надстройку.
+ *
+ * ⚠️ Точка ОДНА на страницу: значение выставляется молча — при сборке списка
+ * целей, восстановлении черновика, ссылке-снимке и открытии проекта (09p), — а
+ * тихая запись не рождает `change`, и надстройка (`pick.js`) остаётся с
+ * прежней подписью. Кнопка тогда показывает одну цель, а собирается другая.
+ * Класс нашёлся прогоном страницы; сторож — греп в `web/tests`.
+ */
+function setPick(name, value) {
+  dom[name].value = value;
+  picks[name]?.refresh();
 }
 
 function wire() {
@@ -438,7 +476,7 @@ const saveDraft = draft.debounce(() => {
   // безымянный буфер остаётся под прежним ключом: им пользуется тот, кто не
   // входил вовсе, и терять его при появлении проектов незачем.
   const problem = account.editing()
-    ? account.keepDraft(state.editor.value(), state.scenario)
+    ? account.keepDraft(state.editor.value(), state.scenario, state.target, state.args)
     : draft.save(localStorage, {
         source: state.editor.value(),
         scenario: state.scenario,
@@ -452,7 +490,7 @@ function applyState(restored) {
   state.target = restored.target || state.target;
   state.args = restored.args ?? "";
   state.scenario = restored.scenario ?? "";
-  dom.target.value = state.target;
+  setPick("target", state.target);
   dom.args.value = state.args;
   drawFlags();
   state.scenarioEditor.setValue(state.scenario);

@@ -108,6 +108,12 @@ export function saveFile(storage, record) {
     revision: record.revision ?? null,
     source: record.source ?? "",
     scenario: record.scenario ?? "",
+    // Цель и ключи сборки (задача 09p): проект задаёт умолчание, черновик его
+    // перекрывает — иначе выбор автора терялся бы при каждой перезагрузке.
+    // ⚠️ Запись ПРЕЖНЕГО черновика полей не имеет, и читается она как
+    // «выбора нет»: там подставится пара проекта.
+    target: record.target ?? "",
+    args: record.args ?? "",
     savedAt: record.savedAt ?? Date.now(),
   };
   // Старшие уходят первыми: черновик, к которому не возвращались двадцать

@@ -15,7 +15,7 @@
 
 use serde::Serialize;
 use takt_lang::compile::{CompileInput, Target};
-use takt_lang::compile_cli::{generate_options, parse_compile_args, target_flags};
+use takt_lang::compile_cli::{CompileOptions, generate_options, parse_compile_args, target_flags};
 
 use crate::reply::{self, DiagnosticJson};
 
@@ -43,14 +43,18 @@ struct CompiledJson {
     warnings: Vec<DiagnosticJson>,
 }
 
-/// Компилирует исходник целью `target` с ключами `args`.
+/// Разбирает цель и ключи — тем же разбором, что у `taktc compile`.
 ///
-/// `args` — строка ключей `taktc compile` (`--fsm=table -I lib`, имя файла
-/// позиционным аргументом). Ключ `-o` разбирается, но не действует: писать
-/// некуда.
-pub fn compile(target: &str, args: &str, source: &str) -> String {
-    let Some(target) = Target::parse(target) else {
-        return reply::refused(format!(
+/// Носитель ОДИН на обе операции модуля: компиляцию и проверку ключей
+/// ([`check`]). Разойдись они — страница принимала бы ключ, который сборка
+/// отвергает, либо наоборот, и увидеть это можно было бы только сборкой.
+///
+/// # Ошибки
+/// Незакрытая кавычка, неизвестная цель, неразбираемый ключ либо ключ,
+/// неприменимый к цели (таблица `target_flags`, фича 0466).
+fn prepare(target: &str, args: &str) -> Result<(Target, CompileOptions), String> {
+    let Some(parsed) = Target::parse(target) else {
+        return Err(format!(
             "неизвестная цель '{target}'. Поддерживается: {}",
             Target::ALL
                 .iter()
@@ -60,10 +64,7 @@ pub fn compile(target: &str, args: &str, source: &str) -> String {
         ));
     };
 
-    let mut argv = match split_args(args) {
-        Ok(argv) => argv,
-        Err(message) => return reply::refused(message),
-    };
+    let mut argv = split_args(args)?;
     // Позиционный аргумент — имя файла: `parse_compile_args` требует его, как
     // и командная строка. Своего значения по умолчанию у разбора нет, и это
     // верно: у CLI файл обязателен.
@@ -71,12 +72,10 @@ pub fn compile(target: &str, args: &str, source: &str) -> String {
         argv.push(DEFAULT_FILENAME.to_string());
     }
     argv.push("--target".to_string());
-    argv.push(target.name().to_string());
+    argv.push(parsed.name().to_string());
 
-    let options = match parse_compile_args(&argv) {
-        Ok(options) => options,
-        Err(message) => return reply::refused(format!("ключи сборки: {message}")),
-    };
+    let options =
+        parse_compile_args(&argv).map_err(|message| format!("ключи сборки: {message}"))?;
 
     // Применимость ключа к цели — та же таблица, что у CLI (фича 0466):
     // `--bus=apb` у `rust` обязан отказывать и здесь, а не приниматься молча.
@@ -87,9 +86,34 @@ pub fn compile(target: &str, args: &str, source: &str) -> String {
     if options.bus.is_some() {
         raised.push("--bus=apb");
     }
-    if let Err(message) = target_flags::check(target.name(), &raised) {
-        return reply::refused(message);
+    target_flags::check(parsed.name(), &raised)?;
+    Ok((parsed, options))
+}
+
+/// Проверяет цель и ключи, ничего не компилируя.
+///
+/// Нужна серверу (задача `0531-09p`): цель и ключи стали свойством проекта, а
+/// решение заказчика — отвергать негодные при записи. ⚠️ Проверять их своим
+/// разбором сервер не может: список ключей и таблица применимости живут в
+/// `compile_cli`, и вторая копия разошлась бы с ней молча (класс 0084/0466).
+/// Отсюда круговой рейс через модуль — тот же приём, что у сборки архива.
+pub fn check(target: &str, args: &str) -> String {
+    match prepare(target, args) {
+        Ok(_) => reply::ok(serde_json::json!({})),
+        Err(message) => reply::refused(message),
     }
+}
+
+/// Компилирует исходник целью `target` с ключами `args`.
+///
+/// `args` — строка ключей `taktc compile` (`--fsm=table -I lib`, имя файла
+/// позиционным аргументом). Ключ `-o` разбирается, но не действует: писать
+/// некуда.
+pub fn compile(target: &str, args: &str, source: &str) -> String {
+    let (target, options) = match prepare(target, args) {
+        Ok(prepared) => prepared,
+        Err(message) => return reply::refused(message),
+    };
 
     let generate = generate_options(&options);
     let input = CompileInput::new(&options.input_file, source, &[], &generate);
@@ -237,6 +261,41 @@ mod tests {
         assert!(
             !reply["error"]["message"].as_str().unwrap().is_empty(),
             "отказ обязан быть назван"
+        );
+    }
+
+    /// Годные ключи проверка принимает, ничего не компилируя.
+    #[test]
+    fn check_accepts_applicable_flags() {
+        let reply = json(&check("sv-mmio", "--bus=apb --fsm=table"));
+        assert_eq!(reply["ok"], Value::Bool(true), "{reply}");
+    }
+
+    /// Ключ, неприменимый к цели, отвергается — той же таблицей, что у сборки.
+    ///
+    /// ⚠️ Контроль обязателен: `--bus=apb` у `sv-mmio` принимается (проверка
+    /// выше), и без него правило «отвергать всё» выглядело бы работающим.
+    #[test]
+    fn check_refuses_flag_not_for_target() {
+        let reply = json(&check("rust", "--bus=apb"));
+        assert_eq!(reply["ok"], Value::Bool(false), "{reply}");
+        let message = reply["error"]["message"].as_str().unwrap();
+        assert!(message.contains("--bus"), "причина не названа: {message}");
+    }
+
+    /// Неизвестный ключ и неизвестная цель — отказ с причиной.
+    #[test]
+    fn check_refuses_unknown_flag_and_target() {
+        let unknown = json(&check("c", "--нет-такого"));
+        assert_eq!(unknown["ok"], Value::Bool(false), "{unknown}");
+        let target = json(&check("verilog", ""));
+        assert_eq!(target["ok"], Value::Bool(false), "{target}");
+        assert!(
+            target["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("sv-mmio"),
+            "отказ цели обязан назвать список"
         );
     }
 

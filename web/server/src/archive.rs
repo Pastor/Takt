@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use crate::db;
 use crate::error::ApiError;
 use crate::limits;
+use crate::projects::ProjectJson;
 
 /// Имя файла метаданных внутри архива.
 pub const MANIFEST: &str = "takt-project.json";
@@ -48,7 +49,12 @@ pub const GENERATED: &str = "generated/";
 /// ⚠️ Растёт вместе с формой записи. Читатель, встретивший бо́льшую версию,
 /// **отказывает**: разобрать наполовину значит отдать автору проект, про
 /// который он думает, что тот целый.
-pub const FORMAT: u32 = 1;
+/// ⚠️ Задача 09p подняла версию с `1` до `2`: манифест несёт цель и ключи
+/// сборки. Архив ПРЕЖНЕЙ версии по-прежнему читается — новые поля приходят
+/// пустыми (`serde(default)`), и проект получает умолчания. Отвергается
+/// только версия СТАРШЕ известной: там могут быть поля, без которых проект
+/// восстановится наполовину.
+pub const FORMAT: u32 = 2;
 
 /// Метаданные проекта в архиве.
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,8 +78,20 @@ pub struct Manifest {
     #[serde(default)]
     pub exported_at: i64,
     /// Какой целью собран `generated/`; `null` — вывода в архиве нет.
+    ///
+    /// ⚠️ Это НЕ выбор автора: поле отвечает на вопрос «чем собран каталог
+    /// `generated/`», а выбор живёт в [`Manifest::build_target`]. Поля стоят
+    /// рядом и легко путаются — оттого смысл каждого назван здесь.
     #[serde(default)]
     pub generated_target: Option<String>,
+    /// Цель сборки, выбранная автором (задача 09p); пусто — архив прежней
+    /// версии формата.
+    #[serde(default)]
+    pub build_target: String,
+    /// Ключи сборки, выбранные автором; пусто — умолчания либо архив прежней
+    /// версии формата.
+    #[serde(default)]
+    pub build_args: String,
 }
 
 /// Запись состава.
@@ -239,22 +257,22 @@ pub fn unpack(bytes: &[u8]) -> Result<Import, ApiError> {
 }
 
 /// Собирает метаданные выгрузки.
+///
+/// ⚠️ Проект берётся ЦЕЛИКОМ, а не разбирается на семь параметров: манифест
+/// повторяет метаданные проекта, и список параметров рос бы вместе с ними —
+/// у задачи 09p он и упёрся бы в порог `clippy::too_many_arguments`.
 pub fn manifest_of(
-    name: &str,
-    description: &str,
-    takt_lang: &str,
-    language_version: &str,
-    main_file: Option<String>,
+    project: &ProjectJson,
     files: &[SourceFile],
     generated_target: Option<String>,
 ) -> Manifest {
     Manifest {
         format: FORMAT,
-        name: name.to_string(),
-        description: description.to_string(),
-        takt_lang: takt_lang.to_string(),
-        language_version: language_version.to_string(),
-        main_file,
+        name: project.name.clone(),
+        description: project.description.clone(),
+        takt_lang: project.takt_lang.clone(),
+        language_version: project.language_version.clone(),
+        main_file: project.main_file.clone(),
         files: files
             .iter()
             .map(|file| ManifestFile {
@@ -264,6 +282,8 @@ pub fn manifest_of(
             .collect(),
         exported_at: db::now(),
         generated_target,
+        build_target: project.build_target.clone(),
+        build_args: project.build_args.clone(),
     }
 }
 
@@ -292,14 +312,31 @@ pub fn file_name(project: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Проект для проб: те же поля, что отдаёт ручка чтения.
+    fn project() -> ProjectJson {
+        ProjectJson {
+            id: "ид".into(),
+            name: "Термореле".into(),
+            description: "проба".into(),
+            visibility: "private".into(),
+            owner: "автор".into(),
+            takt_lang: "0.58.0".into(),
+            language_version: "0.17.0".into(),
+            main_file: Some("model.takt".to_string()),
+            build_target: "sv-mmio".into(),
+            build_args: "--bus=apb".into(),
+            revision: 1,
+            size_bytes: 10,
+            forked_from: None,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
     fn sample() -> Export {
         Export {
             manifest: manifest_of(
-                "Термореле",
-                "проба",
-                "0.58.0",
-                "0.17.0",
-                Some("model.takt".to_string()),
+                &project(),
                 &[SourceFile {
                     name: "model.takt".into(),
                     kind: "takt".into(),
@@ -332,6 +369,29 @@ mod tests {
         assert_eq!(back.sources.len(), 1, "вывод цели исходником не считается");
         assert_eq!(back.sources[0].name, "model.takt");
         assert_eq!(back.sources[0].text, "model A {}");
+        // Задача 09p: выбор автора едет вместе с проектом. ⚠️ Пара берётся
+        // непустой и НЕ умолчанием: на `c` без ключей потеря поля неотличима
+        // от подстановки умолчания.
+        assert_eq!(back.manifest.build_target, "sv-mmio", "цель пережила рейс");
+        assert_eq!(back.manifest.build_args, "--bus=apb", "ключи пережили рейс");
+        // ⚠️ Поля про цель ДВА, и они значат разное: `generated_target` —
+        // чем собран `generated/`, `build_target` — что выбрал автор.
+        assert_eq!(back.manifest.generated_target.as_deref(), Some("c"));
+    }
+
+    #[test]
+    fn an_archive_of_the_previous_format_is_still_read() {
+        // ⚠️ Версия формата поднята задачей 09p, и прежний архив обязан
+        // читаться: иначе подъём поля стоил бы автору выгруженной работы.
+        // Пара приходит пустой, и умолчание подставляет уже загрузка.
+        let mut export = sample();
+        export.manifest.format = 1;
+        export.manifest.build_target = String::new();
+        export.manifest.build_args = String::new();
+        let bytes = pack(&export).expect("архив");
+        let back = unpack(&bytes).expect("прежний формат читается");
+        assert_eq!(back.manifest.name, "Термореле");
+        assert!(back.manifest.build_target.is_empty());
     }
 
     #[test]

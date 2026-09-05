@@ -159,16 +159,12 @@ export function enhance(select) {
   document_.addEventListener("pointerdown", (event) => {
     if (!box.contains(event.target)) close(false);
   });
-  // Значение могли поменять извне (ссылка, черновик) — подпись обязана
-  // догнать: иначе кнопка показывает одно, а собирается другое.
-  select.addEventListener("change", () => {
-    // ⚠️ Кнопка показывает КОРОТКУЮ метку, если вариант её несёт
-    // (`data-short`): переключатель языка стоит рядом со значками шапки и
-    // обязан быть им под стать. В списке при этом остаётся полное название.
-    const picked = select.selectedOptions[0];
-    label.textContent = picked?.dataset.short ?? picked?.textContent ?? "";
-  });
-
+  // Значение могли поменять извне (ссылка, черновик, открытый проект) —
+  // надстройка обязана догнать: иначе кнопка показывает одно, а собирается
+  // другое. ⚠️ Догоняет ЦЕЛИКОМ (`refresh`), а не одной подписью: прежде
+  // обновлялась только она, и в меню оставался прежний `aria-selected` —
+  // диктору список отвечал вчерашним выбором.
+  select.addEventListener("change", refresh);
   refresh();
   return { refresh };
 }

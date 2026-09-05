@@ -107,7 +107,7 @@ async fn the_archive_makes_a_round_trip_through_the_service() {
     );
     let manifest: serde_json::Value =
         serde_json::from_str(&files["takt-project.json"]).expect("метаданные");
-    assert_eq!(manifest["format"], 1, "версия формата названа");
+    assert_eq!(manifest["format"], 2, "версия формата названа");
     assert_eq!(manifest["name"], "Термореле");
     // ⚠️ Версия сверяется с той, что объявил СТЕНД, а не с числом в тесте:
     // вписанное число отставало бы при каждом подъёме версии крейта, и
@@ -359,4 +359,82 @@ async fn a_target_that_refuses_says_so_in_the_archive() {
     assert!(files.contains_key("src/model.takt"), "исходники на месте");
 
     stand.drop_schema().await;
+}
+
+#[tokio::test]
+async fn the_build_target_and_flags_survive_the_round_trip() {
+    // ⚠️ Пара проверяется МОДУЛЕМ и при загрузке: без статики загрузка берёт
+    // умолчания, и проверка судила бы не то.
+    if std::env::var("TAKT_WEB_TEST_STATIC").is_err() {
+        return skipped("цель и ключи в архиве: не задан TAKT_WEB_TEST_STATIC");
+    }
+    let Some(stand) = Stand::open("a_build").await else {
+        return skipped("цель и ключи в архиве");
+    };
+    let author = person(&stand, "ivan").await;
+    let id = project(&stand, &author, "Термореле").await;
+    let (status, body) = stand
+        .patch_as(
+            &format!("/api/projects/{id}"),
+            &author,
+            serde_json::json!({"build_target": "sv-mmio", "build_args": "--bus=apb"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, bytes) = stand
+        .bytes(&format!("/api/projects/{id}/archive"), Some(&author))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let files = entries(&bytes);
+    let manifest: serde_json::Value =
+        serde_json::from_str(&files["takt-project.json"]).expect("метаданные");
+    // ⚠️ Пара названа НЕПУСТОЙ и не умолчанием: на `c` без ключей потеря поля
+    // неотличима от подстановки умолчания.
+    assert_eq!(manifest["build_target"], "sv-mmio", "{manifest}");
+    assert_eq!(manifest["build_args"], "--bus=apb", "{manifest}");
+    // ⚠️ Полей про цель ДВА, и они значат разное: выгрузка шла без генерации,
+    // значит `generated_target` пуст, а выбор автора — на месте.
+    assert!(manifest["generated_target"].is_null(), "{manifest}");
+
+    // Круговой рейс: загруженный проект открывается СБОРКОЙ АВТОРА.
+    let (status, created) = stand.upload("/api/projects/import", &author, &bytes).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(created["build_target"], "sv-mmio", "{created}");
+    assert_eq!(created["build_args"], "--bus=apb", "{created}");
+
+    // ⚠️ Архив ПРЕЖНЕЙ версии формата пары не несёт, и его загрузка обязана
+    // дать умолчание, а не пустую цель: пустой целью не собирается ничего, и
+    // страница показала бы отказ там, где автор ничего не выбирал.
+    let (status, old) = stand
+        .upload("/api/projects/import", &author, &without_build_pair())
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{old}");
+    assert_eq!(old["build_target"], "c", "{old}");
+    assert_eq!(old["build_args"], "", "{old}");
+
+    stand.drop_schema().await;
+}
+
+/// Архив прежней версии формата: метаданные без цели и ключей.
+fn without_build_pair() -> Vec<u8> {
+    use std::io::Write as _;
+    let mut buffer = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buffer);
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+        zip.start_file("takt-project.json", options).expect("файл");
+        let manifest = serde_json::json!({
+            "format": 1,
+            "name": "Прежний",
+            "takt_lang": "0.58.0",
+            "main_file": "model.takt",
+        });
+        zip.write_all(manifest.to_string().as_bytes())
+            .expect("запись");
+        zip.start_file("src/model.takt", options).expect("файл");
+        zip.write_all(b"start Run;\n").expect("запись");
+        zip.finish().expect("конец");
+    }
+    buffer.into_inner()
 }
