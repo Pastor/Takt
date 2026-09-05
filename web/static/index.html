@@ -265,16 +265,16 @@
 <div id="signin-modal" class="modal" hidden>
   <div class="modal-box" role="dialog" aria-modal="true"
        data-i18n-attr="aria-label:account.enter" aria-label="Войти">
-    <div class="modal-head" data-i18n="account.enter">Войти</div>
+    <div class="modal-head" data-i18n="account.signinTitle">Вход</div>
     <div id="signedout" class="modal-body">
       <input id="login" type="text" autocomplete="username" spellcheck="false"
              data-i18n-attr="placeholder:account.login" placeholder="Логин">
       <input id="password" type="password" autocomplete="current-password"
              data-i18n-attr="placeholder:account.password" placeholder="Пароль">
       <div class="modal-actions">
-        <button id="signin" type="button" data-i18n="account.signIn">Войти</button>
-        <button id="signup" type="button" data-i18n="account.signUp">Завести запись</button>
-        <button id="signin-cancel" type="button" data-i18n="account.cancel">Отменить</button>
+        <button id="signin" class="pair" type="button" data-i18n="account.signIn">Войти</button>
+        <button id="signin-cancel" class="pair" type="button" data-i18n="account.cancel">Отмена</button>
+        <button id="signup" class="primary" type="button" data-i18n="account.signUp">Регистрация</button>
       </div>
     </div>
     <div id="oauth" class="modal-brands" hidden></div>

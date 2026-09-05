@@ -57,7 +57,7 @@
   "account.login": "Логин",
   "account.password": "Пароль",
   "account.signIn": "Войти",
-  "account.signUp": "Завести запись",
+  "account.signUp": "Регистрация",
   "account.signOut": "Выйти",
   "account.newName": "Имя нового проекта",
   "account.newProject": "Новый проект",
@@ -135,5 +135,6 @@
   "flags.tickHz": "Частота такта: из неё считаются выдержки after и every",
   "bar.build": "сборка {number}",
   "bar.buildTip": "собрано {built} · коммит {commit} · ветка {branch}",
-  "account.cancel": "Отменить"
+  "account.cancel": "Отмена",
+  "account.signinTitle": "Вход"
 }

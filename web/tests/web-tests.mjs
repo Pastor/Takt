@@ -1258,6 +1258,19 @@ test("вход: окно, и значки площадок объявлены с
   }
   assert.match(modal, /role="dialog"[\s\S]{0,80}aria-modal="true"/, "окно не объявлено модальным");
 
+  // ⚠️ Ряд кнопок читается РАСПОЛОЖЕНИЕМ: подтвердить и отменить слева и одной
+  // ширины (пара равных исходов), главная — справа. Разная ширина у пары
+  // читается как разная важность, которой между ними нет.
+  const order = ["signin", "signin-cancel", "signup"].map((id) => modal.indexOf(`id="${id}"`));
+  assert.deepEqual(order.slice().sort((a, b) => a - b), order, "порядок кнопок окна нарушен");
+  for (const id of ["signin", "signin-cancel"]) {
+    assert.match(modal, new RegExp(`id="${id}"[^>]*class="pair"`), `${id} не в паре равной ширины`);
+  }
+  assert.match(modal, /id="signup"[^>]*class="primary"/, "регистрация не объявлена главной");
+  const cssModal = await readFile(new URL("../static/app.css", import.meta.url), "utf8");
+  assert.match(cssModal, /\.modal-actions \.pair \{[^}]*min-width/, "пара кнопок без общей ширины");
+  assert.match(cssModal, /\.modal-actions \.primary \{[^}]*margin-left: auto/, "главная не отжата вправо");
+
   const account = await readFile(new URL("../static/account.js", import.meta.url), "utf8");
   assert.match(account, /Escape[\s\S]{0,60}closeSignin/, "окно не закрывается клавишей");
 
