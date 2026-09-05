@@ -45,6 +45,9 @@ pub struct Stand {
     pub tag: String,
     /// Хранилище исходников этой проверки.
     pub store: std::sync::Arc<takt_web_server::store::Store>,
+    /// Версия модуля, которую стенд объявил проектам: её же ждут проверки
+    /// архива. ⚠️ Второго носителя версии в проверках быть не должно.
+    pub module_version: String,
 }
 
 /// Печатает причину пропуска: молча пропущенная проверка неотличима от
@@ -88,6 +91,11 @@ impl Stand {
             )
             .ok()?,
         );
+        // ⚠️ Версия берётся ИЗ СОБРАННОЙ СТАТИКИ, а не пишется числом: модуль
+        // лежит по адресу с версией, и вписанное число отставало бы при каждом
+        // подъёме версии крейта — проверки архива искали бы модуль, которого на
+        // диске нет.
+        let module_version = static_version("takt_lang").unwrap_or_else(|| "0.0.0".to_string());
         let mut config = Config::from_env().ok()?;
         config.database_url = scoped;
         config.jwt_secret = "секрет-проверки".to_string();
@@ -100,8 +108,14 @@ impl Stand {
             config,
             pool,
             rate,
-            module_version: "0.58.0".to_string(),
-            language_version: "0.17.0".to_string(),
+            // ⚠️ Версии берутся ИЗ СОБРАННОЙ СТАТИКИ, а не пишутся числом:
+            // модуль лежит по адресу с версией, и вписанное здесь число
+            // отставало бы при каждом подъёме версии крейта — проверки архива
+            // начинали бы искать модуль, которого на диске нет. Умолчание
+            // нужно там, где статики нет вовсе: тогда генерация в архиве
+            // отказывает словами, и это отдельный проверяемый случай.
+            module_version: module_version.clone(),
+            language_version: static_version("language").unwrap_or_else(|| "0.0.0".to_string()),
             // ⚠️ Модули берутся из СОБРАННОЙ статики, и в проверках её обычно
             // нет: выгрузка с генерацией тогда отказывает словами, а всё
             // остальное — исходники, метаданные, круговой рейс — проверяется
@@ -128,6 +142,7 @@ impl Stand {
             url,
             tag: tag.to_string(),
             store,
+            module_version,
         })
     }
 
@@ -558,4 +573,15 @@ fn json_request(
         builder = builder.header("authorization", format!("Bearer {token}"));
     }
     builder.body(Body::from(body.to_string())).expect("запрос")
+}
+
+/// Версия из `version.json` собранной статики; `None` — статики нет.
+///
+/// Тот же источник, что у сервера (`main.rs::versions`): второго носителя
+/// версии в проекте быть не должно.
+fn static_version(field: &str) -> Option<String> {
+    let dir = std::env::var("TAKT_WEB_TEST_STATIC").ok()?;
+    let text = std::fs::read_to_string(std::path::Path::new(&dir).join("version.json")).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&text).ok()?;
+    parsed[field].as_str().map(str::to_string)
 }

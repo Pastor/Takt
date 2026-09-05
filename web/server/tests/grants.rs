@@ -277,7 +277,10 @@ async fn a_fork_lives_its_own_life() {
     // Копия закрыта: взяли образец себе, а не переопубликовали чужое.
     assert_eq!(copy["visibility"], "private");
     assert_eq!(copy["forked_from"], id);
-    assert_eq!(copy["takt_lang"], "0.58.0", "версия модуля — та же (A5)");
+    assert_eq!(
+        copy["takt_lang"], stand.module_version,
+        "версия модуля — та же (A5)"
+    );
     assert_eq!(copy["main_file"], "model.takt");
     assert!(
         copy["size_bytes"].as_i64().expect("размер") > 0,

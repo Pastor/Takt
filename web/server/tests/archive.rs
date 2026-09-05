@@ -109,8 +109,11 @@ async fn the_archive_makes_a_round_trip_through_the_service() {
         serde_json::from_str(&files["takt-project.json"]).expect("метаданные");
     assert_eq!(manifest["format"], 1, "версия формата названа");
     assert_eq!(manifest["name"], "Термореле");
+    // ⚠️ Версия сверяется с той, что объявил СТЕНД, а не с числом в тесте:
+    // вписанное число отставало бы при каждом подъёме версии крейта, и
+    // проверка судила бы вчерашнее.
     assert_eq!(
-        manifest["takt_lang"], "0.58.0",
+        manifest["takt_lang"], stand.module_version,
         "версия модуля — часть архива"
     );
     assert_eq!(manifest["main_file"], "model.takt");
@@ -132,7 +135,7 @@ async fn the_archive_makes_a_round_trip_through_the_service() {
     assert_eq!(created["name"], "Термореле");
     assert_eq!(created["description"], "проба выгрузки");
     assert_eq!(
-        created["takt_lang"], "0.58.0",
+        created["takt_lang"], stand.module_version,
         "версия модуля пережила рейс"
     );
     assert_eq!(created["main_file"], "model.takt");
