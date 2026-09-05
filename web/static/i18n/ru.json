@@ -137,5 +137,8 @@
   "account.cancel": "Отмена",
   "account.signinTitle": "Вход",
   "panel.generate": "Генерация",
-  "panel.simulate": "Симуляция"
+  "panel.simulate": "Симуляция",
+  "source.titleDoc": "Пояснение",
+  "trace.scenarioFile": "Сценарий",
+  "account.savedWith": "сохранено, ревизия {revision}; сценарий {file} тоже записан"
 }

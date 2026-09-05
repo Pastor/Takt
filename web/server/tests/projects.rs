@@ -581,3 +581,106 @@ async fn the_build_target_and_flags_are_checked_as_a_pair() {
 
     stand.drop_schema().await;
 }
+
+#[tokio::test]
+async fn markdown_lives_in_the_project_and_the_active_scenario_is_named() {
+    let Some(stand) = Stand::open("p_kinds").await else {
+        return skipped("роды файлов и активный сценарий");
+    };
+    let token = owner(&stand, "ivan").await;
+    let id = project(&stand, &token, "Термореле").await;
+
+    // Три рода файлов; вид выводится из расширения одним правилом.
+    for (name, text) in [
+        ("model.takt", "start Run {}"),
+        ("run.json", "[]"),
+        ("readme.md", "# Термореле\n\nГреет, пока холодно."),
+        ("cold.json", "[]"),
+    ] {
+        let (status, body) = stand
+            .put_as(
+                &format!("/api/projects/{id}/files/{name}"),
+                &token,
+                serde_json::json!({"text": text}),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{name}: {body}");
+    }
+    let (_, read) = stand.get_as(&format!("/api/projects/{id}"), &token).await;
+    let kinds: Vec<(&str, &str)> = read["files"]
+        .as_array()
+        .expect("список")
+        .iter()
+        .map(|file| {
+            (
+                file["name"].as_str().expect("имя"),
+                file["kind"].as_str().expect("вид"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            ("cold.json", "scenario"),
+            ("model.takt", "takt"),
+            ("readme.md", "markdown"),
+            ("run.json", "scenario"),
+        ],
+        "роды выведены из расширения"
+    );
+
+    // Чужое расширение отвергается, и причина называет все три.
+    let (status, body) = stand
+        .put_as(
+            &format!("/api/projects/{id}/files/notes.txt"),
+            &token,
+            serde_json::json!({"text": "нет"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(
+        body["message"].as_str().expect("текст").contains(".md"),
+        "причина не называет род: {body}"
+    );
+
+    // ⚠️ Активный файл — только МОДЕЛЬ, активный сценарий — только СЦЕНАРИЙ:
+    // перепутанные роли дали бы не отказ, а пустую страницу либо прогон по
+    // пояснению.
+    for (field, value) in [
+        ("main_file", "readme.md"),
+        ("main_file", "run.json"),
+        ("main_scenario", "model.takt"),
+        ("main_scenario", "readme.md"),
+        ("main_scenario", "нет-такого.json"),
+    ] {
+        let (status, body) = stand
+            .patch_as(
+                &format!("/api/projects/{id}"),
+                &token,
+                serde_json::json!({ field: value }),
+            )
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{field}={value}: {body}");
+    }
+
+    // Контроль: годная пара ролей принимается — отказ не сплошной.
+    let (status, patched) = stand
+        .patch_as(
+            &format!("/api/projects/{id}"),
+            &token,
+            serde_json::json!({"main_file": "model.takt", "main_scenario": "cold.json"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{patched}");
+    assert_eq!(patched["main_scenario"], "cold.json");
+
+    // Удалённый сценарий забывается — как и активный файл: иначе прогон шёл бы
+    // по сценарию, которого нет.
+    stand
+        .delete_as(&format!("/api/projects/{id}/files/cold.json"), &token)
+        .await;
+    let (_, read) = stand.get_as(&format!("/api/projects/{id}"), &token).await;
+    assert!(read["main_scenario"].is_null(), "{read}");
+
+    stand.drop_schema().await;
+}

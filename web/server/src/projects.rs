@@ -37,6 +37,7 @@ use crate::db;
 use crate::error::ApiError;
 use crate::grants;
 use crate::limits;
+use crate::limits::Kind;
 use crate::retention;
 use crate::routes::{AppState, current_user, optional_user};
 use crate::showcase;
@@ -56,6 +57,11 @@ pub struct ProjectJson {
     pub takt_lang: String,
     pub language_version: String,
     pub main_file: Option<String>,
+    /// Активный сценарий прогона; `null` — не назначен (задача 09n).
+    ///
+    /// ⚠️ Правило то же, что у [`ProjectJson::build_target`]: проект называет
+    /// свой, черновик читателя его перекрывает.
+    pub main_scenario: Option<String>,
     /// Цель сборки, выбранная автором (задача 09p).
     ///
     /// ⚠️ Свойство ПРОЕКТА, а не файла (решение заказчика 2026-09-05): проект
@@ -141,6 +147,9 @@ pub struct PatchRequest {
     pub visibility: Option<String>,
     #[serde(default)]
     pub main_file: Option<String>,
+    /// Активный сценарий (задача 09n): имя файла вида `scenario`.
+    #[serde(default)]
+    pub main_scenario: Option<String>,
     /// Цель сборки; проверяется вместе с ключами (задача 09p).
     #[serde(default)]
     pub build_target: Option<String>,
@@ -181,10 +190,9 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/projects", get(list).post(create))
         .route("/projects/{id}", get(read).patch(patch).delete(remove))
-        .route(
-            "/projects/{id}/files/{name}",
-            get(read_file).put(write_file).delete(remove_file),
-        )
+        // Файлы проекта живут своим модулем (`files.rs`): предмет другой —
+        // содержимое, ревизия и пределы, а не метаданные.
+        .merge(crate::files::router())
 }
 
 async fn list(
@@ -200,7 +208,7 @@ async fn list(
         .query(
             "SELECT p.id, p.name, p.description, p.visibility, u.login AS owner,
                     p.takt_lang, p.language_version, p.main_file,
-                    p.build_target, p.build_args, p.revision,
+                    p.main_scenario, p.build_target, p.build_args, p.revision,
                     p.size_bytes, p.forked_from, p.created_at, p.updated_at,
                     g.level AS granted
              FROM projects p
@@ -378,23 +386,32 @@ async fn patch(
     }
     if let Some(main_file) = &request.main_file {
         // Активным можно назначить только тот файл, который есть: иначе
-        // страница откроет проект, показывая пустоту.
-        let exists: i64 = transaction
-            .query_one(
-                "SELECT count(*) FROM project_files WHERE project_id = $1 AND name = $2",
-                &[&id, main_file],
-            )
-            .await?
-            .get(0);
-        if exists == 0 {
-            return Err(ApiError::BadRequest(format!(
-                "активный файл '{main_file}': в проекте такого нет"
-            )));
-        }
+        // страница откроет проект, показывая пустоту. ⚠️ И только МОДЕЛЬ: с
+        // появлением пояснений (09n) назначить активным `.md` стало можно, а
+        // страница открывает активный файл как модель.
+        has_kind(&transaction, &id, main_file, Kind::Takt, "активный файл").await?;
         transaction
             .execute(
                 "UPDATE projects SET main_file = $1 WHERE id = $2",
                 &[main_file, &id],
+            )
+            .await?;
+    }
+    if let Some(main_scenario) = &request.main_scenario {
+        // ⚠️ Сценариев бывает несколько (09n), и «первый по имени» — не ответ:
+        // автор показывает работу модели на ОДНОМ из них.
+        has_kind(
+            &transaction,
+            &id,
+            main_scenario,
+            Kind::Scenario,
+            "активный сценарий",
+        )
+        .await?;
+        transaction
+            .execute(
+                "UPDATE projects SET main_scenario = $1 WHERE id = $2",
+                &[main_scenario, &id],
             )
             .await?;
     }
@@ -478,224 +495,6 @@ async fn remove(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-async fn read_file(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path((id, name)): Path<(String, String)>,
-) -> Result<Response, ApiError> {
-    let viewer = optional_user(&state, &headers).await?;
-    let client = state.pool.get().await?;
-    let (project, _) = resolve(&client, &state.store, &id, viewer.as_ref()).await?;
-    let row = client
-        .query_opt(
-            // ⚠️ Столбцы КВАЛИФИЦИРОВАНЫ: `name` есть и у файла, и у проекта, и
-            // без квалификации запрос двусмыслен — база отвечает отказом, а
-            // ручка превращает его в `500` на совершенно обычном чтении.
-            "SELECT f.name, f.kind, f.size_bytes, p.owner_id FROM project_files f
-             JOIN projects p ON p.id = f.project_id
-             WHERE f.project_id = $1 AND f.name = $2",
-            &[&id, &name],
-        )
-        .await?;
-    let Some(row) = row else {
-        return Err(ApiError::NotFound);
-    };
-    let owner: String = row.get(3);
-    // Текст живёт на ДИСКЕ (задача 09h): база ведёт состав, а не содержимое.
-    let text = state
-        .store
-        .read(&owner, &id, &name)
-        .map_err(ApiError::Internal)?;
-    Ok(Json(FileJson {
-        name: row.get(0),
-        kind: row.get(1),
-        text,
-        size_bytes: row.get(2),
-        revision: project.revision,
-    })
-    .into_response())
-}
-
-async fn write_file(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path((id, name)): Path<(String, String)>,
-    Json(request): Json<PutFileRequest>,
-) -> Result<Response, ApiError> {
-    let user = current_user(&state, &headers).await?;
-    let kind = limits::check_file_name(&name)?;
-    limits::check_file(&request.text)?;
-
-    let mut client = state.pool.get().await?;
-    // Вся запись — ОДНА транзакция со строкой проекта под замком: ревизия,
-    // предел числа файлов, предел размера и пересчёт суммы обязаны видеть одно
-    // и то же состояние. Порознь их обходит вторая вкладка того же владельца.
-    let transaction = client.transaction().await?;
-    let (revision, level) = locked(&transaction, &state.store, &id, &user).await?;
-    require_level(level, Level::Edit)?;
-    let existing: Option<i64> = transaction
-        .query_opt(
-            "SELECT size_bytes FROM project_files WHERE project_id = $1 AND name = $2",
-            &[&id, &name],
-        )
-        .await?
-        .map(|row| row.get(0));
-
-    match (request.revision, existing) {
-        // Правка существующего файла обязана назвать ревизию, которую видела.
-        (None, Some(_)) => {
-            return Err(ApiError::Conflict {
-                message: format!(
-                    "файл '{name}' уже есть: правка требует ревизии (сейчас {revision})"
-                ),
-                seen: None,
-                actual: revision,
-            });
-        }
-        (Some(seen), _) if seen != revision => {
-            return Err(ApiError::Conflict {
-                message: format!("проект изменился: у вас ревизия {seen}, у проекта {revision}"),
-                seen: Some(seen),
-                actual: revision,
-            });
-        }
-        _ => {}
-    }
-
-    if existing.is_none() {
-        let count: i64 = transaction
-            .query_one(
-                "SELECT count(*) FROM project_files WHERE project_id = $1",
-                &[&id],
-            )
-            .await?
-            .get(0);
-        if count >= limits::FILES_PER_PROJECT {
-            return Err(limits::exceeded(
-                "число файлов в проекте",
-                limits::FILES_PER_PROJECT,
-                count + 1,
-            ));
-        }
-    }
-
-    let size = request.text.len() as i64;
-    let owner: String = transaction
-        .query_one("SELECT owner_id FROM projects WHERE id = $1", &[&id])
-        .await?
-        .get(0);
-    // ⚠️ Приведение обязательно: `sum()` над `bigint` в PostgreSQL даёт
-    // `numeric`, и чтение его как `i64` кончается отказом разбора столбца.
-    let others: i64 = transaction
-        .query_one(
-            "SELECT coalesce(sum(size_bytes), 0)::bigint FROM project_files
-             WHERE project_id = $1 AND name <> $2",
-            &[&id, &name],
-        )
-        .await?
-        .get(0);
-    if others + size > limits::PROJECT_BYTES {
-        return Err(limits::exceeded(
-            "размер проекта в байтах",
-            limits::PROJECT_BYTES,
-            others + size,
-        ));
-    }
-
-    transaction
-        .execute(
-            "INSERT INTO project_files(project_id, name, kind, size_bytes)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (project_id, name) DO UPDATE
-               SET kind = excluded.kind, size_bytes = excluded.size_bytes",
-            &[&id, &name, &kind.as_str(), &size],
-        )
-        .await?;
-    // ⚠️ Диск пишется ДО фиксации записи в базе: обратный порядок при отказе
-    // диска оставил бы в составе файл, которого нет, — а состав читает страница.
-    // Отказ диска здесь откатывает транзакцию, и база остаётся согласной.
-    state
-        .store
-        .write(&owner, &id, &name, &request.text)
-        .map_err(ApiError::Internal)?;
-    let written = bump(&transaction, &id, &state.store, &owner).await?;
-    transaction.commit().await?;
-    Ok(Json(written).into_response())
-}
-
-async fn remove_file(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path((id, name)): Path<(String, String)>,
-) -> Result<Response, ApiError> {
-    let user = current_user(&state, &headers).await?;
-    let mut client = state.pool.get().await?;
-    let transaction = client.transaction().await?;
-    let (_, level) = locked(&transaction, &state.store, &id, &user).await?;
-    require_level(level, Level::Edit)?;
-    let owner: String = transaction
-        .query_one("SELECT owner_id FROM projects WHERE id = $1", &[&id])
-        .await?
-        .get(0);
-    let affected = transaction
-        .execute(
-            "DELETE FROM project_files WHERE project_id = $1 AND name = $2",
-            &[&id, &name],
-        )
-        .await?;
-    if affected == 0 {
-        return Err(ApiError::NotFound);
-    }
-    state
-        .store
-        .remove(&owner, &id, &name)
-        .map_err(ApiError::Internal)?;
-    // Активный файл, которого больше нет, забывается: иначе страница откроет
-    // проект, показывая пустоту.
-    transaction
-        .execute(
-            "UPDATE projects SET main_file = NULL WHERE id = $1 AND main_file = $2",
-            &[&id, &name],
-        )
-        .await?;
-    let written = bump(&transaction, &id, &state.store, &owner).await?;
-    transaction.commit().await?;
-    Ok(Json(written).into_response())
-}
-
-/// Пересчитывает размер, поднимает ревизию и отмечает правку.
-///
-/// ⚠️ Размер считается **суммой по файлам**, а не приращением: приращение
-/// расходится с истиной на первой же неудачной попытке, и разойдётся молча.
-async fn bump(
-    transaction: &tokio_postgres::Transaction<'_>,
-    id: &str,
-    store: &Store,
-    owner: &str,
-) -> Result<WriteResponse, ApiError> {
-    // Тексты файлов идут в поиск, и пересчёт стоит **в той же транзакции**:
-    // отдельным запросом он разошёлся бы с содержимым при первом же откате.
-    // ⚠️ Тело берётся с ДИСКА (задача 09h): базе его взять неоткуда.
-    let body = body_of(transaction, id, store, owner).await?;
-    showcase::refresh(transaction, id, &body).await?;
-    let row = transaction
-        .query_one(
-            "UPDATE projects SET
-                 revision = revision + 1,
-                 updated_at = $2,
-                 size_bytes = (SELECT coalesce(sum(size_bytes), 0)::bigint
-                               FROM project_files WHERE project_id = $1)
-             WHERE id = $1
-             RETURNING revision, size_bytes",
-            &[&id, &db::now()],
-        )
-        .await?;
-    Ok(WriteResponse {
-        revision: row.get(0),
-        size_bytes: row.get(1),
-    })
-}
-
 /// Читает ревизию и уровень доступа, взяв строку проекта под замок.
 ///
 /// ⚠️ Право спрашивается **внутри той же транзакции**, что и запись: между
@@ -757,9 +556,14 @@ pub(crate) async fn body_of<C: tokio_postgres::GenericClient>(
     store: &Store,
     owner: &str,
 ) -> Result<String, ApiError> {
+    // ⚠️ В поиск идут модель И пояснение (задача 09n, решение заказчика): по
+    // слову из описания проект ищется охотнее, чем по имени состояния.
+    // Сценарий не идёт: это числа и имена портов, и поиск по ним дал бы
+    // совпадения там, где читатель ничего не искал.
     let rows = client
         .query(
-            "SELECT name FROM project_files WHERE project_id = $1 AND kind = 'takt' ORDER BY name",
+            "SELECT name FROM project_files
+             WHERE project_id = $1 AND kind IN ('takt', 'markdown') ORDER BY name",
             &[&id],
         )
         .await?;
@@ -858,6 +662,38 @@ pub(crate) fn require_level(level: Level, needed: Level) -> Result<(), ApiError>
     }
 }
 
+/// Требует, чтобы в проекте был файл названного имени И названного вида.
+///
+/// ⚠️ Вид проверяется, а не только наличие: активным файлом назначают модель, а
+/// активным сценарием — сценарий. Перепутанные роли дали бы не отказ, а пустую
+/// страницу либо прогон по пояснению.
+///
+/// # Ошибки
+/// Файла нет либо он другого вида — `400` с названным именем.
+async fn has_kind(
+    transaction: &tokio_postgres::Transaction<'_>,
+    id: &str,
+    name: &str,
+    kind: Kind,
+    what: &str,
+) -> Result<(), ApiError> {
+    let found: i64 = transaction
+        .query_one(
+            "SELECT count(*) FROM project_files
+             WHERE project_id = $1 AND name = $2 AND kind = $3",
+            &[&id, &name, &kind.as_str()],
+        )
+        .await?
+        .get(0);
+    if found == 0 {
+        return Err(ApiError::BadRequest(format!(
+            "{what} '{name}': в проекте нет файла вида '{}' с таким именем",
+            kind.as_str()
+        )));
+    }
+    Ok(())
+}
+
 /// Проверяет цель и ключи сборки — разбором самого компилятора.
 ///
 /// ⚠️ Решение заказчика 2026-09-05: негодные ключи отвергаются при записи, а
@@ -885,7 +721,7 @@ pub(crate) fn check_build(
 
 pub(crate) const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
         u.login AS owner, p.takt_lang, p.language_version, p.main_file,
-        p.build_target, p.build_args, p.revision,
+        p.main_scenario, p.build_target, p.build_args, p.revision,
         p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id,
         p.touched_at, p.archived_at
     FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1";
@@ -900,6 +736,7 @@ pub(crate) fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
         takt_lang: row.get("takt_lang"),
         language_version: row.get("language_version"),
         main_file: row.get("main_file"),
+        main_scenario: row.get("main_scenario"),
         build_target: row.get("build_target"),
         build_args: row.get("build_args"),
         revision: row.get("revision"),

@@ -238,6 +238,22 @@ async fn search_finds_by_name_description_and_body() {
     let (_, page) = stand.get("/api/public?q=термореле").await;
     assert!(ids(&page).is_empty(), "по старому — уже нет");
 
+    // Пояснение на Markdown ИНДЕКСИРУЕТСЯ (задача 09n, решение заказчика):
+    // описание словами — самое полезное для поиска, и по слову из него проект
+    // обязан находиться так же, как по слову из модели.
+    let (status, _) = stand
+        .put_as(
+            &format!("/api/projects/{by_name}/files/readme.md"),
+            &mine,
+            // Ревизии нет: файл новый, и её посылают только для уже
+            // существующего.
+            serde_json::json!({"text": "# Заметка\n\nПрибор меряет расход мазута."}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, page) = stand.get("/api/public?q=мазута").await;
+    assert_eq!(ids(&page), vec![by_name.clone()], "нашёлся по пояснению");
+
     // Сценарий не индексируется: он задаёт вход, а не описывает модель.
     let (status, _) = stand
         .put_as(

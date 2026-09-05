@@ -107,7 +107,7 @@ async fn the_archive_makes_a_round_trip_through_the_service() {
     );
     let manifest: serde_json::Value =
         serde_json::from_str(&files["takt-project.json"]).expect("метаданные");
-    assert_eq!(manifest["format"], 2, "версия формата названа");
+    assert_eq!(manifest["format"], 3, "версия формата названа");
     assert_eq!(manifest["name"], "Термореле");
     // ⚠️ Версия сверяется с той, что объявил СТЕНД, а не с числом в тесте:
     // вписанное число отставало бы при каждом подъёме версии крейта, и

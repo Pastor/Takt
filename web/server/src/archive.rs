@@ -50,11 +50,15 @@ pub const GENERATED: &str = "generated/";
 /// **отказывает**: разобрать наполовину значит отдать автору проект, про
 /// который он думает, что тот целый.
 /// ⚠️ Задача 09p подняла версию с `1` до `2`: манифест несёт цель и ключи
-/// сборки. Архив ПРЕЖНЕЙ версии по-прежнему читается — новые поля приходят
-/// пустыми (`serde(default)`), и проект получает умолчания. Отвергается
-/// только версия СТАРШЕ известной: там могут быть поля, без которых проект
-/// восстановится наполовину.
-pub const FORMAT: u32 = 2;
+/// сборки. Задача 09n подняла до `3`: появился активный сценарий и **новый род
+/// файла** (`markdown`). Архив ПРЕЖНЕЙ версии по-прежнему читается — новые
+/// поля приходят пустыми (`serde(default)`), и проект получает умолчания.
+/// Отвергается только версия СТАРШЕ известной: там могут быть поля и роды, без
+/// которых проект восстановится наполовину. ⚠️ Род поднимает версию наравне с
+/// полем: прежний сервис отверг бы `.md` как негодное имя файла, и причина
+/// («расширение '.takt' либо '.json'») не назвала бы настоящую — устаревший
+/// сервис.
+pub const FORMAT: u32 = 3;
 
 /// Метаданные проекта в архиве.
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,6 +75,9 @@ pub struct Manifest {
     /// Активный файл; `null` — не назначен.
     #[serde(default)]
     pub main_file: Option<String>,
+    /// Активный сценарий прогона; `null` — не назначен (задача 09n).
+    #[serde(default)]
+    pub main_scenario: Option<String>,
     /// Состав исходников: имя и вид.
     #[serde(default)]
     pub files: Vec<ManifestFile>,
@@ -273,6 +280,7 @@ pub fn manifest_of(
         takt_lang: project.takt_lang.clone(),
         language_version: project.language_version.clone(),
         main_file: project.main_file.clone(),
+        main_scenario: project.main_scenario.clone(),
         files: files
             .iter()
             .map(|file| ManifestFile {
@@ -323,6 +331,7 @@ mod tests {
             takt_lang: "0.58.0".into(),
             language_version: "0.17.0".into(),
             main_file: Some("model.takt".to_string()),
+            main_scenario: Some("run.json".to_string()),
             build_target: "sv-mmio".into(),
             build_args: "--bus=apb".into(),
             revision: 1,

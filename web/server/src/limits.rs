@@ -110,12 +110,21 @@ pub fn check_build_args(text: &str) -> Result<(), ApiError> {
 }
 
 /// Вид файла по расширению.
+///
+/// ⚠️ Вид ВЫВОДИТСЯ из расширения при записи и хранится колонкой: правило одно,
+/// и второго носителя у него нет. Переименования файла в сервисе не бывает
+/// вовсе (имя — это и есть личность файла), поэтому вид не может разойтись с
+/// расширением молча (замер 2026-09-05 — он опровергает опасение проработки).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     /// Модель на Takt.
     Takt,
-    /// Сценарий входов — та же форма, что у файла `-s` эталона.
+    /// Сценарий входов И ПРОВЕРОК — та же форма, что у файла `-s` эталона
+    /// (шаги с `in_ports`, `time_ms`, `extern` и `guard`). Своего формата
+    /// сервис не заводит: проверки в нём уже есть.
     Scenario,
+    /// Пояснение к проекту на Markdown (задача 09n).
+    Markdown,
 }
 
 impl Kind {
@@ -124,6 +133,7 @@ impl Kind {
         match self {
             Self::Takt => "takt",
             Self::Scenario => "scenario",
+            Self::Markdown => "markdown",
         }
     }
 }
@@ -145,9 +155,15 @@ pub fn check_file_name(name: &str) -> Result<Kind, ApiError> {
     } else if let Some(stem) = name.strip_suffix(".json") {
         check_stem(stem)?;
         Kind::Scenario
+    } else if let Some(stem) = name.strip_suffix(".md") {
+        // ⚠️ Алфавит тот же, хотя именем модели такой файл не станет: имя
+        // попадает в путь архива и в адрес ручки, и второе правило имени
+        // означало бы, что автор должен помнить, какое из них где.
+        check_stem(stem)?;
+        Kind::Markdown
     } else {
         return Err(ApiError::BadRequest(
-            "имя файла: расширение '.takt' либо '.json'".to_string(),
+            "имя файла: расширение '.takt', '.json' либо '.md'".to_string(),
         ));
     };
     Ok(kind)

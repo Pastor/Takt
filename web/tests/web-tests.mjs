@@ -36,6 +36,7 @@ import * as tip from "../static/tip.js";
 import * as editor from "../static/editor.js";
 import * as json from "../static/json.js";
 import * as flags from "../static/flags.js";
+import * as md from "../static/md.js";
 import * as build from "../static/build.js";
 import * as project from "../static/project.js";
 import * as api from "../static/api.js";
@@ -403,7 +404,8 @@ test("язык: порядок выбора — сохранённый, брау
 const PAGE_SCRIPTS = [
   "account.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js",
   "draft.js", "editor.js", "i18n.js", "pick.js", "project.js", "sample.js",
-  "flags.js", "json.js", "share.js", "shell.js", "showcase.js", "tip.js", "worker.js",
+  "flags.js", "json.js", "md.js", "share.js", "shell.js", "showcase.js", "tip.js",
+  "worker.js",
 ];
 
 /**
@@ -1049,13 +1051,17 @@ test("страница проекта: читается активный фай�
       build_target: "sv-mmio",
       build_args: "--bus=apb",
       main_file: "model.takt",
+      main_scenario: "cold.json",
       files: [
         { name: "other.takt", kind: "takt", size_bytes: 3 },
         { name: "model.takt", kind: "takt", size_bytes: 9 },
+        { name: "cold.json", kind: "scenario", size_bytes: 2 },
         { name: "run.json", kind: "scenario", size_bytes: 2 },
+        { name: "readme.md", kind: "markdown", size_bytes: 5 },
       ],
     },
     "/api/projects/AbCd/files/model.takt": { name: "model.takt", text: MODEL },
+    "/api/projects/AbCd/files/cold.json": { name: "cold.json", text: "[{}]" },
     "/api/projects/AbCd/files/run.json": { name: "run.json", text: "[]" },
   };
   const get = async (url) => {
@@ -1067,7 +1073,11 @@ test("страница проекта: читается активный фай�
 
   const opened = await project.read("AbCd", "/", get);
   assert.equal(opened.source, MODEL, "открылся активный файл, а не первый по имени");
-  assert.equal(opened.scenario, "[]");
+  // ⚠️ Сценариев несколько (задача 09n), и берётся НАЗВАННЫЙ проектом, а не
+  // первый по имени: на первом читатель увидел бы не тот прогон, которым автор
+  // показывает работу модели. `cold.json` стоит в списке раньше `run.json` —
+  // проверка различает «названный» и «первый» только потому, что они разные.
+  assert.equal(opened.scenario, "[{}]", "взят сценарий, названный проектом");
   assert.equal(opened.owner, "ivan", "автор назван: чужая модель не выглядит своей");
   assert.equal(opened.version, "0.58.0", "версия модуля — свойство проекта (A5)");
   // Задача 09p: чужой проект открывается СБОРКОЙ АВТОРА. ⚠️ Пара берётся не
@@ -1147,6 +1157,16 @@ test("черновик v2: цель и ключи перекрывают про�
   const kept = draft.loadFile(storage, "p1", "model.takt");
   assert.equal(kept.target, "rust");
   assert.equal(kept.args, "--fsm=table");
+  // ⚠️ Имя сценария хранится ВМЕСТЕ с его текстом (задача 09n): сценариев
+  // несколько, и текст одного под именем другого — подмена, а не сохранность.
+  assert.equal(kept.scenarioFile, null, "без имени сценария поле пусто, а не пропадает");
+  draft.saveFile(storage, {
+    project: "p1", file: "model.takt", source: "текст",
+    scenario: "[{}]", scenarioFile: "warm.json", savedAt: 200,
+  });
+  const withScenario = draft.loadFile(storage, "p1", "model.takt");
+  assert.equal(withScenario.scenarioFile, "warm.json");
+  assert.equal(withScenario.scenario, "[{}]");
 
   // ⚠️ Прежняя запись (без пары) обязана читаться: подъём формы черновика не
   // вправе стоить автору несохранённой работы. Пустое значение и означает
@@ -1292,6 +1312,58 @@ test("списки: значение выставляет одна точка, �
   assert.deepEqual(silent, [], `значение списка пишется мимо setPick: ${silent.join(", ")}`);
   assert.ok(/function setPick\(/.test(app) && /picks\[name\]\?\.refresh\(\)/.test(app),
     "точка записи не обновляет надстройку");
+});
+
+test("markdown: один разбор кормит и подсветку, и показ", async () => {
+  // ⚠️ Разбор ОДИН на обе работы: заведи их порознь — и строка красилась бы
+  // заголовком, а показывалась абзацем, причём увидеть это можно только
+  // глазами. Здесь обе стороны спрашиваются об одном тексте.
+  const text = [
+    "# Термореле",
+    "",
+    "Греет, пока `холодно`, и **ждёт**.",
+    "",
+    "- один",
+    "- два",
+    "",
+    "| порт | смысл |",
+    "|---|---|",
+    "| heater | нагрев |",
+  ].join("\n");
+  const kinds = md.parse(text).map((block) => block.type);
+  assert.deepEqual(kinds, ["heading", "paragraph", "list", "table"]);
+  const marks = md.spans(text);
+  assert.ok(
+    marks.some((mark) => mark.line === 0 && mark.column === 0 && mark.type === "keyword"),
+    "решётка заголовка не покрашена",
+  );
+  assert.ok(
+    marks.some((mark) => mark.line === 2 && mark.type === "string"),
+    "код в строке не покрашен",
+  );
+});
+
+test("markdown: показ строит узлы, а не разметку из данных", async () => {
+  const mdSource = await readFile(new URL("../static/md.js", import.meta.url), "utf8");
+  // ⚠️ Текст пишет автор проекта, а видят его читатели витрины: `innerHTML`
+  // здесь означал бы чужой сценарий в чужом браузере. Признак — и запрет
+  // записи разметки в модуле, и поведение на подложном тексте.
+  const source = mdSource;
+  // ⚠️ Ищется УПОТРЕБЛЕНИЕ, а не слово: слово стоит в пояснении модуля («здесь
+  // его нет»), и запрет на слово запрещал бы объяснять правило.
+  assert.ok(
+    !/\.innerHTML|\.outerHTML|insertAdjacentHTML/.test(source),
+    "модуль показа пишет разметку строкой",
+  );
+
+  // Схема ссылки пропускается по СПИСКУ, а не по запрету: запретить один
+  // `javascript:` мало — есть `data:` и `vbscript:`.
+  assert.equal(md.safeHref("https://example.org"), "https://example.org");
+  assert.equal(md.safeHref("mailto:a@b.c"), "mailto:a@b.c");
+  assert.equal(md.safeHref("/p/AbCd"), "/p/AbCd");
+  for (const bad of ["javascript:alert(1)", "data:text/html,x", "vbscript:msgbox"]) {
+    assert.equal(md.safeHref(bad), null, `схема пропущена: ${bad}`);
+  }
 });
 
 test("разметка: скрытый узел действительно скрыт", async () => {
