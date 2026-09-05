@@ -233,6 +233,14 @@ async fn import(
         .manifest
         .main_file
         .filter(|name| parsed.sources.iter().any(|file| &file.name == name));
+    // ⚠️ Активный сценарий (09n) судится тем же правилом и ДОПОЛНИТЕЛЬНО по
+    // виду: назови архив сценарием пояснение — прогон пошёл бы по тексту.
+    let main_scenario = parsed.manifest.main_scenario.filter(|name| {
+        parsed
+            .sources
+            .iter()
+            .any(|file| &file.name == name && file.kind == limits::Kind::Scenario.as_str())
+    });
 
     let id = projects::new_id();
     let now = db::now();
@@ -244,10 +252,10 @@ async fn import(
     transaction
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
-                                  takt_lang, language_version, main_file,
+                                  takt_lang, language_version, main_file, main_scenario,
                                   build_target, build_args, revision,
                                   size_bytes, created_at, updated_at, touched_at)
-             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, $8, $9, 1, $10, $11, $11, $11)",
+             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, $8, $9, $10, 1, $11, $12, $12, $12)",
             &[
                 &id,
                 &user.id,
@@ -256,6 +264,7 @@ async fn import(
                 &takt_lang,
                 &state.language_version,
                 &main_file,
+                &main_scenario,
                 &build_target,
                 &build_args,
                 &size,

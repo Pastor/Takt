@@ -137,5 +137,8 @@
   "account.cancel": "Cancel",
   "account.signinTitle": "Sign in",
   "panel.generate": "Generation",
-  "panel.simulate": "Simulation"
+  "panel.simulate": "Simulation",
+  "source.titleDoc": "Notes",
+  "trace.scenarioFile": "Scenario",
+  "account.savedWith": "saved, revision {revision}; scenario {file} written too"
 }

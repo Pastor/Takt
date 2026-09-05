@@ -43,6 +43,10 @@ const state = {
   level: "none",
   /** Ждущий решения конфликт: `{seen, actual, text}`. */
   conflict: null,
+  /** Выбранный сценарий прогона: их в проекте бывает несколько (задача 09n). */
+  scenarioFile: null,
+  /** Текст сценария, каким его отдал сервер: по нему видно, правил ли автор. */
+  scenarioRead: "",
 };
 
 /**
@@ -144,8 +148,18 @@ export function attach(nodes, callbacks) {
  * скачать — текст всё равно уже у него в браузере. Уровень при этом остаётся
  * читательским: сохранять такой проект нельзя, и кнопки сохранения не будет.
  */
-export function adopt(project) {
-  state.project = { id: project.id, name: project.name };
+export async function adopt(project) {
+  // ⚠️ Читателю нужен СОСТАВ, а не одна ссылка (задача 09n): в проекте бывают
+  // пояснение и несколько сценариев, и без списка файлов он видит только
+  // модель — то есть меньше, чем автор ему показывает. Уровень при этом
+  // остаётся читательским: кнопки сохранения не будет.
+  try {
+    await openProjectFiles(project.id);
+  } catch {
+    // Состав не прочитался — страница всё равно показывает модель, которую
+    // уже принесла ссылка: список файлов её не заменяет.
+    state.project = { id: project.id, name: project.name };
+  }
   state.file = null;
   state.level = "view";
   refresh();
@@ -172,6 +186,10 @@ export function keepDraft(source, scenario, target, args) {
     revision: state.revision,
     source,
     scenario,
+    // ⚠️ Имя сценария хранится ВМЕСТЕ с его текстом (задача 09n): сценариев
+    // несколько, и текст одного под именем другого — это не черновик, а
+    // подмена. Разошлись — черновик сценария просто не берётся.
+    scenarioFile: state.scenarioFile,
     target,
     args,
   });
@@ -581,9 +599,50 @@ async function openProjectFiles(id) {
     const node = document.createElement("div");
     node.className = "row";
     node.dataset.file = file.name;
+    // Род виден в списке: файлы трёх родов (задача 09n) различаются не только
+    // расширением, и по щелчку они открываются по-разному.
+    node.dataset.kind = file.kind;
     node.textContent = file.name;
     dom.files.appendChild(node);
   }
+  // ⚠️ Сценариев бывает несколько: проект называет свой, и он же становится
+  // умолчанием. Не назови — прогон шёл бы по первому по имени, то есть не по
+  // тому, на котором автор показывает работу модели.
+  const scenarios = opened.files
+    .filter((file) => file.kind === "scenario")
+    .map((file) => file.name);
+  const chosen = scenarios.includes(state.scenarioFile)
+    ? state.scenarioFile
+    : (scenarios.includes(opened.main_scenario) ? opened.main_scenario : scenarios[0] ?? null);
+  host.scenarios(scenarios, chosen);
+  if (chosen !== state.scenarioFile) await chooseScenario(chosen);
+}
+
+/**
+ * Выбирает сценарий прогона и читает его текст.
+ *
+ * ⚠️ Текст запоминается таким, каким его отдал сервер: по нему видно, правил ли
+ * его автор, и надо ли записывать сценарий при сохранении.
+ */
+export async function chooseScenario(name) {
+  state.scenarioFile = name;
+  if (!name || !state.project) {
+    state.scenarioRead = "";
+    host.openScenario("", null);
+    return;
+  }
+  try {
+    const body = await api.file(state.project.id, name);
+    state.scenarioRead = body.text ?? "";
+    host.openScenario(state.scenarioRead, name);
+  } catch (error) {
+    fail(error);
+  }
+}
+
+/** Род файла по составу проекта; `takt` — если состав ещё не прочитан. */
+function kindOf(name) {
+  return state.project?.files?.find((file) => file.name === name)?.kind ?? "takt";
 }
 
 /** Открывает проект: состав файлов и активный файл. */
@@ -618,6 +677,14 @@ async function openProject(id) {
  */
 async function openFile(id, name) {
   if (!id || !name) return;
+  // Сценарий открывается СВОЕЙ областью (задача 09n): он живёт во вкладке
+  // прогона, и подмена им модели означала бы, что автор потерял модель из
+  // виду, щёлкнув по списку файлов.
+  if (kindOf(name) === "scenario") {
+    await chooseScenario(name);
+    host.showTrace();
+    return;
+  }
   try {
     const body = await api.file(id, name);
     state.file = name;
@@ -640,22 +707,45 @@ async function openFile(id, name) {
       // Черновик сильнее проекта: он и есть незавершённая работа автора.
       host.open({
         source: kept.source,
-        scenario: kept.scenario ?? "",
+        file: name,
+        kind: kindOf(name),
         target: kept.target || build().target,
         args: kept.args ?? build().args,
       });
+      // ⚠️ Черновик сценария берётся, только если он от ТОГО ЖЕ файла: текст
+      // одного сценария под именем другого — подмена, а не сохранность.
+      if (kept.scenarioFile && kept.scenarioFile === state.scenarioFile) {
+        host.openScenario(kept.scenario ?? "", state.scenarioFile);
+      }
     } else {
       hideConflict();
-      host.open({
-        source: body.text,
-        scenario: state.project?.scenario ?? "",
-        ...build(),
-      });
+      host.open({ source: body.text, file: name, kind: kindOf(name), ...build() });
     }
     refresh();
   } catch (error) {
     fail(error);
   }
+}
+
+/**
+ * Записывает выбранный сценарий, если автор его правил.
+ *
+ * Возвращает новую ревизию проекта либо `null` — сценарий не менялся.
+ *
+ * ⚠️ Признак — расхождение с ТЕКСТОМ, отданным сервером, а не «трогали ли
+ * область»: набранное и стёртое обратно — это не правка, и запись ради неё
+ * подняла бы ревизию у всех, кто держит проект открытым.
+ *
+ * # Ошибки
+ * Отказ записи поднимается вызывающему.
+ */
+async function keepScenario(revision) {
+  const text = host.scenario();
+  if (!state.scenarioFile || text === state.scenarioRead) return null;
+  const written = await api.write(state.project.id, state.scenarioFile, text, revision);
+  state.revision = written.revision;
+  state.scenarioRead = text;
+  return written.revision;
 }
 
 /**
@@ -685,11 +775,18 @@ async function keepBuild() {
   const target = host.target();
   const args = host.args();
   const kept = build();
-  if (target === kept.target && args === kept.args) return;
-  const updated = await api.patch(state.project.id, {
-    build_target: target,
-    build_args: args,
-  });
+  const fields = {};
+  if (target !== kept.target || args !== kept.args) {
+    fields.build_target = target;
+    fields.build_args = args;
+  }
+  // ⚠️ Выбранный сценарий — тот же род величины (09n): проект называет свой, и
+  // читатель, открывший проект, начинает прогон с него.
+  if (state.scenarioFile && state.scenarioFile !== state.project?.main_scenario) {
+    fields.main_scenario = state.scenarioFile;
+  }
+  if (Object.keys(fields).length === 0) return;
+  const updated = await api.patch(state.project.id, fields);
   state.project = { ...state.project, ...updated };
 }
 
@@ -713,7 +810,16 @@ async function save() {
     state.revision = written.revision;
     draft.clearFile(localStorage, state.project.id, state.file);
     hideConflict();
-    host.say(t("account.saved", { revision: written.revision }), "ok");
+    // ⚠️ Правленый сценарий записывается ВМЕСТЕ с файлом и НАЗЫВАЕТСЯ в
+    // сообщении (задача 09n): он живёт в другой области экрана, и молча
+    // записанный чужой файл — это работа, о которой автор не просил.
+    const also = await keepScenario(written.revision);
+    host.say(
+      also
+        ? t("account.savedWith", { revision: also, file: state.scenarioFile })
+        : t("account.saved", { revision: written.revision }),
+      "ok",
+    );
     // ⚠️ Выбор сборки пишется ПОСЛЕ текста и СВОИМ отказом: сервер вправе
     // отвергнуть ключи (задача 09p), а текст к тому времени уже сохранён —
     // общий отказ сказал бы автору, что работа не записана, и он записал бы её
@@ -749,7 +855,7 @@ async function resolveConflict(choice) {
       const body = await api.file(state.project.id, state.file);
       state.revision = body.revision;
       draft.clearFile(localStorage, state.project.id, state.file);
-      host.open({ source: body.text, scenario: "" });
+      host.open({ source: body.text, file: state.file, kind: kindOf(state.file) });
       host.say(t("account.rereadDone", { revision: body.revision }), "ok");
     } else {
       // Перезаписать — это записать поверх ТОЙ ревизии, что у сервера сейчас:

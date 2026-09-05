@@ -16,6 +16,7 @@ import * as build from "./build.js";
 import * as shell from "./shell.js";
 import * as tip from "./tip.js";
 import * as jsonSpans from "./json.js";
+import * as md from "./md.js";
 import * as flags from "./flags.js";
 import * as project from "./project.js";
 import * as api from "./api.js";
@@ -58,6 +59,16 @@ const state = {
   scenario: "",
   /** Область сценария: тот же редактор, что у модели (номера строк, перенос). */
   scenarioEditor: null,
+  /**
+   * Род открытого файла: `takt` либо `markdown` (задача 09n).
+   *
+   * ⚠️ Род решает всё, что делает страница с текстом: чем красить, что
+   * показывать справа и звать ли компилятор. Пояснение не компилируется — у
+   * него нет диагностик, и печатать по нему отказ значило бы врать.
+   */
+  kind: "takt",
+  /** Имя открытого файла проекта; пусто — безымянный буфер. */
+  file: "",
   /** Открытая панель правой области: "output", "trace" либо null. */
   panel: "output",
   /** Вкладка внутри панели генерации. */
@@ -116,6 +127,7 @@ export async function main() {
   showVersion();
   fillTargets(version.targets ?? []);
   picks.target = enhance(dom.target);
+  picks.scenariofile = enhance(dom.scenariofile);
   watchBuild();
   for (const node of [dom.editor, dom.output, dom.diagnostics, dom.trace]) fade(node);
 
@@ -158,6 +170,19 @@ export async function main() {
     // проекта при сохранении (задача 09p) — вместе с ключами.
     target: () => state.target,
     args: () => state.args,
+    // Сценариев в проекте бывает несколько (09n): список и выбранный приходят
+    // от того, кто знает состав проекта, — страница их только показывает.
+    scenarios: (names, chosen) => fillScenarios(names, chosen),
+    // ⚠️ Имя приходит ВМЕСТЕ с текстом: выбор сценария делают в двух местах —
+    // списком файлов и этим списком, — и величина у него одна. Обнови только
+    // текст, и подпись показывала бы один сценарий, а прогон шёл бы по другому.
+    openScenario: (text, name) => {
+      state.scenario = text;
+      state.scenarioEditor.setValue(text);
+      paintScenario();
+      if (name) setPick("scenariofile", name);
+    },
+    showTrace: () => selectPanel("trace"),
     say,
   });
   // Возврат с площадки разбирается ДО восстановления состояния: во фрагменте
@@ -193,7 +218,7 @@ async function openProject() {
     });
     dom.project.hidden = false;
     // Читатель вправе скачать открытый проект архивом: текст всё равно у него.
-    account.adopt({ id, name: opened.name });
+    await account.adopt({ id, name: opened.name });
     return {
       source: opened.source,
       scenario: opened.scenario,
@@ -354,7 +379,8 @@ function cache() {
     "projects", "files", "conflict", "conflicttext", "reread", "overwrite",
     "oauth", "pick", "picklogin", "pickok", "profile", "links", "newpass",
     "setpass", "download", "upload", "showcase", "finder", "query", "findbtn",
-    "found", "more",
+    "found", "more", "doc", "sourcetitle", "openfilename", "scenariopick",
+    "scenariofile",
   ]) {
     dom[id] = document.getElementById(id);
   }
@@ -409,6 +435,9 @@ function wire() {
     // он не входит, иначе переданная ссылка меняла бы язык у получателя.
     i18n.remember(localStorage, dom.lang.value);
     await useLanguage(dom.lang.value);
+  });
+  dom.scenariofile.addEventListener("change", () => {
+    account.chooseScenario(dom.scenariofile.value);
   });
   dom.format.addEventListener("click", format);
   dom.run.addEventListener("click", run);
@@ -489,13 +518,38 @@ const saveDraft = draft.debounce(() => {
 function applyState(restored) {
   state.target = restored.target || state.target;
   state.args = restored.args ?? "";
-  state.scenario = restored.scenario ?? "";
+  // ⚠️ Сценарий не задан — остаётся ПРЕЖНИМ, а не пустеет: с появлением
+  // нескольких сценариев (09n) он живёт своим файлом, и открытие модели его не
+  // касается. Прежняя запись `?? ""` очищала бы область при каждом открытии.
+  if (restored.scenario !== undefined) state.scenario = restored.scenario ?? "";
+  // Род открытого файла (09n): пусто — модель, как было до появления
+  // пояснений.
+  state.kind = restored.kind ?? "takt";
+  state.file = restored.file ?? "";
   setPick("target", state.target);
   dom.args.value = state.args;
   drawFlags();
   state.scenarioEditor.setValue(state.scenario);
   paintScenario();
   state.editor.setValue(restored.source ?? SAMPLE);
+  showKind();
+}
+
+/**
+ * Приводит страницу к роду открытого файла (задача 09n).
+ *
+ * ⚠️ Подпись области — КЛЮЧ словаря, а не текст: текст оболочки строит одна
+ * точка (задача 10a), и написанная здесь строка была бы вторым словарём.
+ */
+function showKind() {
+  const doc = state.kind === "markdown";
+  const key = doc ? "source.titleDoc" : "source.title";
+  dom.sourcetitle.dataset.i18n = key;
+  dom.sourcetitle.textContent = t(key);
+  dom.openfilename.textContent = state.file;
+  // Ключи сборки к пояснению отношения не имеют: вкладки уходят вместе с
+  // выводом цели, а их место занимает показ.
+  if (state.panel === "output") selectPanel("output");
 }
 
 /** Правка текста: подсветка, диагностики, вывод цели. */
@@ -613,6 +667,26 @@ function notice(text) {
   return node;
 }
 
+/**
+ * Наполняет выбор сценария (задача 09n).
+ *
+ * ⚠️ Список пуст — выбора не показываем вовсе: одна строка «сценариев нет»
+ * заняла бы место и ничего не сообщила, а вкладка прогона и без файла
+ * работает — сценарий можно набрать прямо в ней.
+ */
+function fillScenarios(names, chosen) {
+  dom.scenariofile.replaceChildren();
+  for (const name of names) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    dom.scenariofile.appendChild(option);
+  }
+  dom.scenariopick.hidden = names.length === 0;
+  if (chosen) setPick("scenariofile", chosen);
+  else picks.scenariofile?.refresh();
+}
+
 /** Красит сценарий как JSON: разбор свой, раскладчик строк общий. */
 function paintScenario() {
   state.scenarioEditor.highlight({ marks: jsonSpans.spans(state.scenario) }, []);
@@ -628,11 +702,26 @@ function onEdit() {
 
 function refresh() {
   const source = state.editor.value();
+  // ⚠️ Пояснение НЕ компилируется и не судится: у текста нет ни диагностик, ни
+  // вывода цели, и позвать компилятор значило бы напечатать отказ на том, что
+  // моделью не является (задача 09n).
+  if (state.kind === "markdown") {
+    state.editor.highlight({ marks: md.spans(source) }, []);
+    showDiagnostics([]);
+    showDoc();
+    return;
+  }
   const diagnostics = state.bridge.diagnostics(source);
   const tokens = state.bridge.tokens(source);
   state.editor.highlight(tokens, diagnostics.diagnostics ?? []);
   showDiagnostics(diagnostics.diagnostics ?? []);
   compile();
+}
+
+/** Показывает разметку пояснения: узлы строит `md.js`, а не `innerHTML`. */
+function showDoc() {
+  if (state.kind !== "markdown") return;
+  dom.doc.replaceChildren(md.render(state.editor.value(), document));
 }
 
 function showDiagnostics(items) {
@@ -918,9 +1007,19 @@ function selectPanel(name) {
   state.panel = name;
   dom.showgen.setAttribute("aria-pressed", String(name === "output"));
   dom.showsim.setAttribute("aria-pressed", String(name === "trace"));
-  dom.tabs.hidden = name !== "output";
+  // ⚠️ У пояснения место вывода занимает ПОКАЗ (09n, решение заказчика):
+  // компилировать его нечем, а вкладка «Ключи сборки» говорила бы о сборке,
+  // которой не будет.
+  const doc = state.kind === "markdown";
+  dom.tabs.hidden = name !== "output" || doc;
   document.querySelector('[data-panel="trace"]').hidden = name !== "trace";
-  if (name === "output") selectTab(state.tab === "flags" ? "flags" : "output");
+  document.querySelector('[data-panel="doc"]').hidden = !(name === "output" && doc);
+  if (name === "output" && doc) {
+    for (const panel of document.querySelectorAll('[data-panel="output"], [data-panel="flags"]')) {
+      panel.hidden = true;
+    }
+    showDoc();
+  } else if (name === "output") selectTab(state.tab === "flags" ? "flags" : "output");
   else for (const panel of document.querySelectorAll('[data-panel="output"], [data-panel="flags"]')) {
     panel.hidden = true;
   }

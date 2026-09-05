@@ -193,8 +193,8 @@ async fn fork(
 
     let source = transaction
         .query_one(
-            "SELECT name, takt_lang, language_version, main_file, owner_id,
-                    build_target, build_args
+            "SELECT name, takt_lang, language_version, main_file, main_scenario,
+                    owner_id, build_target, build_args
              FROM projects WHERE id = $1",
             &[&id],
         )
@@ -229,6 +229,9 @@ async fn fork(
     let takt_lang: String = source.get("takt_lang");
     let language_version: String = source.get("language_version");
     let main_file: Option<String> = source.get("main_file");
+    // Активный сценарий копируется вместе с составом (09n): копия — тот же
+    // проект, и прогон в ней обязан начинаться с того же сценария.
+    let main_scenario: Option<String> = source.get("main_scenario");
     // ⚠️ Цель и ключи копируются вместе с проектом (задача 09p): копия — тот же
     // код, и собираться он обязан так же. Проверять их заново нечего — они уже
     // проверены при записи в исходный проект.
@@ -237,11 +240,11 @@ async fn fork(
     transaction
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
-                                  takt_lang, language_version, main_file,
+                                  takt_lang, language_version, main_file, main_scenario,
                                   build_target, build_args, revision,
                                   size_bytes, forked_from, created_at, updated_at,
                                   touched_at)
-             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, $7, $8, 0, 0, $9, $10, $10, $10)",
+             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, $7, $8, $9, 0, 0, $10, $11, $11, $11)",
             &[
                 &copy,
                 &user.id,
@@ -249,6 +252,7 @@ async fn fork(
                 &takt_lang,
                 &language_version,
                 &main_file,
+                &main_scenario,
                 &build_target,
                 &build_args,
                 &id,

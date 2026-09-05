@@ -38,8 +38,9 @@ use tokio_postgres::NoTls;
 /// обращения и признак свёртки. Задача 09p подняла до `5`: **цель и ключи
 /// сборки стали свойством проекта**. Шага перехода нет намеренно (выпуска не
 /// было) — база прежней версии **отвергается с обоими номерами**, и это видно
-/// словами, а не проявляется потерей данных на стенде.
-pub const SCHEMA_VERSION: i64 = 5;
+/// словами, а не проявляется потерей данных на стенде. Задача 09n подняла до
+/// `6`: у проекта появился АКТИВНЫЙ СЦЕНАРИЙ (их бывает несколько).
+pub const SCHEMA_VERSION: i64 = 6;
 
 /// Заводит пул соединений по строке подключения.
 ///
@@ -134,6 +135,12 @@ CREATE TABLE projects (
     -- тем, что имел в виду автор.
     build_target     TEXT NOT NULL DEFAULT 'c',
     build_args       TEXT NOT NULL DEFAULT '',
+    -- Активный сценарий: их в проекте бывает несколько (задача 09n, поручение
+    -- заказчика). ⚠️ Правило то же, что у `main_file`: проект НАЗЫВАЕТ свой, а
+    -- страница вправе смотреть другой — выбор читателя живёт в черновике. Не
+    -- назови проект свой — читатель прогонял бы первый по имени, то есть не
+    -- тот, на котором автор показывает работу модели.
+    main_scenario    TEXT,
     revision         BIGINT NOT NULL DEFAULT 0,
     size_bytes       BIGINT NOT NULL DEFAULT 0,
     forked_from      TEXT REFERENCES projects(id) ON DELETE SET NULL,
@@ -160,7 +167,12 @@ CREATE INDEX projects_touched ON projects(archived_at, touched_at);
 CREATE TABLE project_files (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name       TEXT NOT NULL,
-    kind       TEXT NOT NULL CHECK (kind IN ('takt', 'scenario')),
+    -- ⚠️ Список видов повторяет `limits::Kind` намеренно: база — последний
+    -- рубеж, и запись мимо `check_file_name` (миграция, чужой скрипт) обязана
+    -- отказать здесь. Расхождение видно сразу — вставка падает, а не молча
+    -- заводит файл, о роде которого страница ничего не знает. Сторож —
+    -- проверка родов в `tests/projects.rs`.
+    kind       TEXT NOT NULL CHECK (kind IN ('takt', 'scenario', 'markdown')),
     size_bytes BIGINT NOT NULL,
     PRIMARY KEY (project_id, name)
 );

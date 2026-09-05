@@ -416,10 +416,44 @@ body {
  * своей у него нет: её даёт зазор сетки (`--border`), и вторая линия рядом с
  * первой читалась бы как рамка. */
 .split {
+  /* Держатель стоит ПОСЕРЕДИНЕ полосы, поэтому она — flex-контейнер, а сам
+   * держатель её псевдоэлемент: отдельным узлом он потребовал бы разметки в
+   * четырёх местах и согласования с обработчиком тяги. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: var(--gap-half);
   cursor: col-resize;
   background: transparent;
   touch-action: none;
+  /* Полоса тонкая, и область захвата на касании выходит за неё: без слоя
+   * соседняя область перехватывала бы касание у самого края. */
+  z-index: 1;
+}
+
+/* Держатель: короткая насечка посреди полосы.
+ *
+ * ⚠️ На указателе он ПОЯВЛЯЕТСЯ (наведение, фокус, тяга), на касании виден
+ * всегда: `:hover` там не наступает никогда, и без этого правила разделитель
+ * оставался бы невидимой полосой в четыре пикселя — попасть в него пальцем
+ * нельзя, а догадаться, что он есть, неоткуда (просьба заказчика 2026-09-05). */
+.split::after {
+  content: "";
+  /* Насечка во всю ширину полосы: уже неё она читается волоском, а шире —
+   * вылезала бы за собственную полосу на соседнюю область. */
+  width: var(--gap-half);
+  height: var(--h-dense);
+  border-radius: var(--radius-sm);
+  background: var(--on-surface-off);
+  opacity: 0;
+  transition: opacity var(--motion);
+}
+
+.split:hover::after,
+.split:focus-visible::after,
+.split:active::after {
+  opacity: 1;
 }
 
 /* ── Кнопка-значок ────────────────────────────────────────────────────────
@@ -480,6 +514,32 @@ body {
   width: auto;
   height: var(--gap-half);
   cursor: row-resize;
+}
+
+/* У ряда держатель ЛЕЖИТ: та же насечка, повёрнутая по своей оси. */
+.split-h::after {
+  width: var(--h-dense);
+  height: var(--gap-half);
+}
+
+/* ── Касание ──────────────────────────────────────────────────────────────
+ * Палец толще четырёх пикселей, и целится он в то, что видно. Поэтому там,
+ * где наведения не бывает: держатель виден всегда, а область захвата
+ * расширена в обе стороны — сама полоса при этом остаётся прежней, иначе она
+ * отодвигала бы области и меняла раскладку.
+ *
+ * ⚠️ Расширение — двойной зазор с каждой стороны: вместе с полосой выходит
+ * около 27 пикселей, то есть подушечка пальца. Шире брать нельзя: захват
+ * лежит ПОВЕРХ соседних областей, и касание у самого края редактора
+ * перестало бы попадать в текст. */
+@media (hover: none) {
+  .split::after { opacity: 1; }
+  .split::before {
+    content: "";
+    position: absolute;
+    inset: 0 calc(-1 * var(--gap-lg));
+  }
+  .split-h::before { inset: calc(-1 * var(--gap-lg)) 0; }
 }
 
 /* ⚠️ На узком экране колонка ОДНА, и делить её по вертикали нечего: там
@@ -594,7 +654,14 @@ button:disabled, select:disabled, input:disabled, textarea:disabled {
   color: var(--on-surface-sunken);
   background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
+  /* ⚠️ Промежуток обязателен: в шапке теперь ТРИ вещи — подпись области, имя
+   * открытого файла (задача 09n) и состояние. Без него подпись и имя слипались
+   * в одно слово, а состояние наезжало на них — нашлось прогоном страницы. */
+  gap: var(--gap);
 }
+
+/* Имя открытого файла: подпись рядом с родом области, а не вместо него. */
+.pane-head .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Редактор ───────────────────────────────────────────────────────────── */
 .editor {
@@ -1048,6 +1115,49 @@ body[data-panel="none"] .work { grid-template-columns: 1fr; }
   background: var(--surface-sunken);
   border-radius: var(--radius);
 }
+
+/* Показ пояснения (задача 09n): текст читают, а не разглядывают код, поэтому
+ * здесь шрифт страницы, а не моноширинный, и мера строки ограничена — длинная
+ * строка через всю ширину читается заметно хуже. */
+.doc {
+  flex: 1;
+  overflow: auto;
+  padding: var(--gap);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+  line-height: 1.5;
+}
+.doc > :first-child { margin-top: 0; }
+.doc h2, .doc h3, .doc h4, .doc h5, .doc h6 { margin: var(--gap) 0 var(--gap-half); }
+.doc p, .doc ul, .doc ol, .doc blockquote, .doc table { margin: 0 0 var(--gap); }
+.doc ul, .doc ol { padding-left: var(--gap-lg); }
+/* Цитата — та же роль, что комментарий в коде: сказанное рядом, а не о деле. */
+.doc blockquote {
+  margin-left: 0;
+  padding-left: var(--gap);
+  border-left: 1px solid var(--border);
+  color: var(--on-surface-soft);
+}
+.doc code { font-family: var(--font-code); font-size: var(--text-sm); }
+.doc pre {
+  margin: 0 0 var(--gap);
+  padding: var(--gap-half) var(--gap);
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.doc table { border-collapse: collapse; }
+.doc th, .doc td {
+  padding: var(--gap-half);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.doc hr { border: 0; border-top: 1px solid var(--border); }
+/* Ссылка — единственное, по чему в показе ЩЁЛКАЮТ: она обязана отличаться от
+ * текста, и отличать её цветом одного акцента мало — в тёмной теме он тонет.
+ * Отсюда пара «акцент + подчёркивание». */
+.doc a { color: var(--accent); text-decoration: underline; }
 
 .file-name {
   position: sticky;

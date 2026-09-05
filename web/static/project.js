@@ -65,7 +65,11 @@ export async function read(id, root, get = fetch) {
   const main =
     files.find((file) => file.name === meta.main_file) ??
     files.find((file) => file.kind === "takt");
-  const scenarioFile = files.find((file) => file.kind === "scenario");
+  // ⚠️ Сценарий берётся НАЗВАННЫЙ проектом (задача 09n): их бывает несколько,
+  // и первый по имени — не тот, на котором автор показывает работу модели.
+  const scenarioFile =
+    files.find((file) => file.name === meta.main_scenario && file.kind === "scenario") ??
+    files.find((file) => file.kind === "scenario");
   const source = main ? await text(get, root, id, main.name) : "";
   const scenario = scenarioFile ? await text(get, root, id, scenarioFile.name) : "";
   return {

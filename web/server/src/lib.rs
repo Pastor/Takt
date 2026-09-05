@@ -23,6 +23,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod files;
 pub mod grants;
 pub mod limits;
 pub mod module;

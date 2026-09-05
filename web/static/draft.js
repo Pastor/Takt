@@ -108,6 +108,8 @@ export function saveFile(storage, record) {
     revision: record.revision ?? null,
     source: record.source ?? "",
     scenario: record.scenario ?? "",
+    // Какому файлу принадлежит текст сценария (задача 09n): их несколько.
+    scenarioFile: record.scenarioFile ?? null,
     // Цель и ключи сборки (задача 09p): проект задаёт умолчание, черновик его
     // перекрывает — иначе выбор автора терялся бы при каждой перезагрузке.
     // ⚠️ Запись ПРЕЖНЕГО черновика полей не имеет, и читается она как
