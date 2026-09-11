@@ -1,7 +1,12 @@
-<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Фон прозрачный. Заливки; фигура ~70% по ширине/высоте, по центру. -->
-  <!-- L — синяя блочная буква (bbox 2.5..13.5), стойка и основание равной толщины 3.4 -->
-  <path fill="#1E88E5" d="M2.5 2.5 H5.9 V10.1 H13.5 V13.5 H2.5 Z"/>
-  <!-- Красная широкая стрелка вниз; верх стрелки на уровне верхней кромки L (y=2.5) -->
-  <path fill="#E53935" d="M8.3 2.5 H11.1 V6.9 H12.6 L9.7 9.9 L6.8 6.9 H8.3 Z"/>
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Takt">
+  <!-- Собрано из web/static/favicon.svg скриптом scripts/build-plugin-icons.py: правится значок страницы. -->
+  <!-- Такт: три состояния и переходы между ними — то, из чего состоит модель. -->
+  <rect width="32" height="32" rx="6" fill="#1f6f4a"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round">
+    <circle cx="9" cy="10" r="3.2"/>
+    <circle cx="23" cy="16" r="3.2"/>
+    <circle cx="9" cy="23" r="3.2"/>
+    <path d="M12 11.6 L20 14.6"/>
+    <path d="M20 17.6 L12 21"/>
+  </g>
 </svg>
