@@ -15,9 +15,24 @@ impl Unit {
     /// Рекурсивно, как `set_value`: ветви композиции живут в одном времени - иначе
     /// выдержка в одной ветви шла бы по своим часам, и трасса перестала бы быть
     /// воспроизводимой.
+    ///
+    /// Спуск идёт и в реализации состояний (`state_impls`), причём во **все**, а не
+    /// только в активную: реализация - дочерний юнит со своими часами, и без спуска они
+    /// стоят на нуле, так что `after` по времени и `every` внутри неё не срабатывают
+    /// никогда. Неактивная реализация получает время затем, чтобы войти в неё на
+    /// следующем такте с верной меткой входа.
     pub fn set_time_ns(&mut self, now_ns: i64) {
         match &mut self.0 {
-            UnitKind::Node { time_ns, .. } => *time_ns = now_ns,
+            UnitKind::Node {
+                time_ns,
+                state_impls,
+                ..
+            } => {
+                *time_ns = now_ns;
+                for implementation in state_impls.values() {
+                    implementation.borrow_mut().set_time_ns(now_ns);
+                }
+            }
             UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
                 for unit in units {
                     unit.borrow_mut().set_time_ns(now_ns);

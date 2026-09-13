@@ -35,3 +35,4 @@ mod sequential_composition_tests;
 mod state_io_tests;
 mod state_of_model_tests;
 mod struct_types_tests;
+mod time_in_implementation_tests;
