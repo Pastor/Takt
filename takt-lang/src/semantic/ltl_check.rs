@@ -18,7 +18,9 @@
 //! Функция [`ltl_warnings`] - публичный API наравне с
 //! [`unused_variable_warnings`](crate::unused_variable_warnings).
 
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::semantic::ModelNode;
 use crate::semantic::formula::sites::{FormulaLeaf, model_formula_sites};
 use crate::verification::ltl::Ltl;
@@ -55,10 +57,7 @@ fn collect_model(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
                 // Номера фич из текста убраны: автор модели о них не знает, а ссылка на
                 // задачу в диагностике читается как обещание работы. Инструмент назван -
                 // этого довольно.
-                "LTL-формула разобрана и сохранена, но при компиляции не проверяется: \
-                 свойства проверяет `taktc verify` — он умеет и управляющие свойства, и \
-                 предикаты над данными"
-                    .to_string(),
+                msg!(keys::SE_055_LTL_NOT_CHECKED),
             )
             .with_code("SE-055"),
         );
@@ -67,15 +66,8 @@ fn collect_model(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
         for atom in atoms {
             if !known.contains(&atom) {
                 out.push(
-                    Diagnostic::warning(
-                        loc,
-                        format!(
-                            "атом '{}' LTL-формулы не соответствует ни одной переменной, \
-                             состоянию или именованному условию модели",
-                            atom
-                        ),
-                    )
-                    .with_code("SE-056"),
+                    Diagnostic::warning(loc, msg!(keys::SE_056_UNKNOWN_ATOM, atom = atom))
+                        .with_code("SE-056"),
                 );
             }
         }

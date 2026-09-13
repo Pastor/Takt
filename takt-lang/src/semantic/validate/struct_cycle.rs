@@ -1,6 +1,8 @@
 //! Цикл структур - `SE-124`.
 
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::parser::ast::{self, ModelElement};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -108,12 +110,7 @@ pub(crate) fn check_struct_cycles(elements: &[ModelElement]) -> Option<Diagnosti
             return Some(
                 Diagnostic::error(
                     loc,
-                    format!(
-                        "структура '{culprit}' содержит себя — прямо либо через цепочку \
-                         полей: размер такого значения бесконечен, и представления у него \
-                         нет ни у одной цели. Разорвите цепочку: храните вместо вложенной \
-                         структуры её данные напрямую либо индекс элемента массива"
-                    ),
+                    msg!(keys::SE_124_STRUCT_CONTAINS_ITSELF, culprit = culprit),
                 )
                 .with_code("SE-124"),
             );

@@ -9,7 +9,9 @@
 //! | переменные, порты, функции, параметры | `snake_case` |
 //! | константы | `UPPER_SNAKE_CASE` |
 
+use crate::diagnostics::lang::{Key, keys};
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::parser::ast;
 
 /// Требуемая форма имени.
@@ -68,12 +70,14 @@ impl Case {
 }
 
 /// Строит предупреждение `CS-001`.
-fn warn(loc: Location, kind: &str, name: &str, case: Case) -> Diagnostic {
+fn warn(loc: Location, kind: Key, name: &str, case: Case) -> Diagnostic {
     Diagnostic::warning(
         loc,
-        format!(
-            "{kind} '{name}' не соответствует канону именования: ожидается {}",
-            case.title()
+        msg!(
+            keys::CS_001_NAMING,
+            kind = msg!(kind),
+            name = name,
+            case = case.title()
         ),
     )
     .with_code("CS-001")
@@ -83,7 +87,7 @@ fn warn(loc: Location, kind: &str, name: &str, case: Case) -> Diagnostic {
 ///
 /// `IdentifierOrError` кладёт `None`, когда имя не разобралось (набор текста в
 /// редакторе). Тогда проверять нечего - молчим, а не паникуем.
-fn check(name: &Option<ast::Identifier>, kind: &str, case: Case, out: &mut Vec<Diagnostic>) {
+fn check(name: &Option<ast::Identifier>, kind: Key, case: Case, out: &mut Vec<Diagnostic>) {
     if let Some(id) = name
         && !case.matches(&id.name)
     {
@@ -101,7 +105,7 @@ pub fn naming_warnings(model: &ast::Model) -> Vec<Diagnostic> {
 }
 
 fn collect_model(model: &ast::Model, out: &mut Vec<Diagnostic>) {
-    check(&model.name, "модель", Case::UpperCamel, out);
+    check(&model.name, keys::CS_KIND_MODEL, Case::UpperCamel, out);
     for element in &model.elements {
         collect_element(element, out);
     }
@@ -111,7 +115,7 @@ fn collect_element(element: &ast::ModelElement, out: &mut Vec<Diagnostic>) {
     match element {
         ast::ModelElement::Model(m) => collect_model(m, out),
         ast::ModelElement::State(s) => {
-            check(&s.name, "состояние", Case::UpperCamel, out);
+            check(&s.name, keys::CS_KIND_STATE, Case::UpperCamel, out);
             // Тело состояния тоже объявляет имена: `invariant` живёт и здесь
             // (`StateElement::Invariant`). Без спуска канон действовал бы через раз -
             // правило, работающее наполовину, хуже отсутствующего: его перестают
@@ -122,25 +126,39 @@ fn collect_element(element: &ast::ModelElement, out: &mut Vec<Diagnostic>) {
         }
         ast::ModelElement::Variable(v) => collect_variable(v, out),
         ast::ModelElement::Function(f) => {
-            check(&f.name, "функция", Case::Snake, out);
+            check(&f.name, keys::CS_KIND_FUNCTION, Case::Snake, out);
             for (_, param) in &f.params {
                 if let Some(param) = param {
-                    check(&param.name, "параметр", Case::Snake, out);
+                    check(&param.name, keys::CS_KIND_PARAMETER, Case::Snake, out);
                 }
             }
         }
-        ast::ModelElement::Type(t) => check(&Some(t.name.clone()), "тип", Case::UpperCamel, out),
+        ast::ModelElement::Type(t) => check(
+            &Some(t.name.clone()),
+            keys::CS_KIND_TYPE,
+            Case::UpperCamel,
+            out,
+        ),
         ast::ModelElement::Enum(e) => {
-            check(&e.name, "перечисление", Case::UpperCamel, out);
+            check(&e.name, keys::CS_KIND_ENUM, Case::UpperCamel, out);
             for v in &e.variants {
-                check(&Some(v.name.clone()), "вариант", Case::UpperCamel, out);
+                check(
+                    &Some(v.name.clone()),
+                    keys::CS_KIND_VARIANT,
+                    Case::UpperCamel,
+                    out,
+                );
             }
         }
-        ast::ModelElement::Struct(s) => check(&s.name, "структура", Case::UpperCamel, out),
+        ast::ModelElement::Struct(s) => check(&s.name, keys::CS_KIND_STRUCT, Case::UpperCamel, out),
         // `cond Имя = условие;` и `invariant Имя = условие;` - именованные объявления,
         // и канон на них распространяется наравне с типами.
-        ast::ModelElement::Condition(c) => check(&c.name, "условие", Case::UpperCamel, out),
-        ast::ModelElement::Invariant(i) => check(&i.name, "инвариант", Case::UpperCamel, out),
+        ast::ModelElement::Condition(c) => {
+            check(&c.name, keys::CS_KIND_CONDITION, Case::UpperCamel, out)
+        }
+        ast::ModelElement::Invariant(i) => {
+            check(&i.name, keys::CS_KIND_INVARIANT, Case::UpperCamel, out)
+        }
         _ => {}
     }
 }
@@ -156,7 +174,7 @@ fn collect_element(element: &ast::ModelElement, out: &mut Vec<Diagnostic>) {
 /// модели и реализация модели.
 fn collect_state_element(element: &ast::StateElement, out: &mut Vec<Diagnostic>) {
     match element {
-        ast::StateElement::Invariant(i) => check(&i.name, "инвариант", Case::UpperCamel, out),
+        ast::StateElement::Invariant(i) => check(&i.name, keys::CS_KIND_INVARIANT, Case::UpperCamel, out),
         ast::StateElement::Next(_)
         | ast::StateElement::Reference(..)
         | ast::StateElement::NamedBlockCode(_)
@@ -171,12 +189,16 @@ fn collect_state_element(element: &ast::StateElement, out: &mut Vec<Diagnostic>)
 
 fn collect_variable(define: &ast::VariableDefine, out: &mut Vec<Diagnostic>) {
     match define {
-        ast::VariableDefine::Variable { name, .. } => check(name, "переменная", Case::Snake, out),
-        ast::VariableDefine::Port { name, .. } => check(name, "порт", Case::Snake, out),
-        ast::VariableDefine::Constant { name, .. } => {
-            check(name, "константа", Case::UpperSnake, out)
+        ast::VariableDefine::Variable { name, .. } => {
+            check(name, keys::CS_KIND_VARIABLE, Case::Snake, out)
         }
-        ast::VariableDefine::Parameter { name, .. } => check(name, "параметр", Case::Snake, out),
+        ast::VariableDefine::Port { name, .. } => check(name, keys::CS_KIND_PORT, Case::Snake, out),
+        ast::VariableDefine::Constant { name, .. } => {
+            check(name, keys::CS_KIND_CONSTANT, Case::UpperSnake, out)
+        }
+        ast::VariableDefine::Parameter { name, .. } => {
+            check(name, keys::CS_KIND_PARAMETER, Case::Snake, out)
+        }
     }
 }
 

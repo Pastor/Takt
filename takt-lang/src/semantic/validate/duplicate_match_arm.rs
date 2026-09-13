@@ -21,6 +21,8 @@
 //! Код возврата `taktc` - **нулевой**: автору не говорил никто.
 
 use crate::diagnostics::Diagnostic;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use crate::semantic::{FunctionDefinitionNode, MatchArmNode, ModelNode, StateNode, StatementNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -110,14 +112,8 @@ fn check_arms(arms: &[MatchArmNode], warnings: &mut Vec<Diagnostic>) {
             continue;
         }
         warnings.push(
-            Diagnostic::warning(
-                arms[index].loc,
-                "образец этой ветви `match` уже встречался выше: `match` берёт \
-                 ПЕРВОЕ совпадение, поэтому ветвь не сработает никогда. \
-                 Объедините ветви либо уточните образец"
-                    .to_string(),
-            )
-            .with_code("SE-131"),
+            Diagnostic::warning(arms[index].loc, msg!(keys::SE_131_DUPLICATE_MATCH_ARM))
+                .with_code("SE-131"),
         );
     }
 }

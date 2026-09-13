@@ -611,7 +611,7 @@ pub fn parse_ltl_property(source: &str) -> Result<verification::ltl::Ltl, Diagno
         diags.into_iter().next().unwrap_or_else(|| {
             Diagnostic::error(
                 diagnostics::Location::Implicit,
-                format!("не удалось разобрать LTL-формулу '{}'", source),
+                crate::msg!(diagnostics::lang::keys::LTL_UNPARSABLE, source = source),
             )
         })
     })?;
@@ -625,11 +625,10 @@ pub fn parse_ltl_property(source: &str) -> Result<verification::ltl::Ltl, Diagno
     let [element] = ast.elements.as_slice() else {
         return Err(Diagnostic::error(
             diagnostics::Location::Implicit,
-            format!(
-                "ожидалась одна LTL-формула, а строка '{}' разбирается как {} \
-                 конструкций: уберите ';' — проверяйте по одной формуле за вызов",
-                source,
-                ast.elements.len()
+            crate::msg!(
+                diagnostics::lang::keys::LTL_SEVERAL_CONSTRUCTS,
+                source = source,
+                count = ast.elements.len()
             ),
         ));
     };
@@ -637,13 +636,13 @@ pub fn parse_ltl_property(source: &str) -> Result<verification::ltl::Ltl, Diagno
     let ModelElement::InlineFormula(inline) = element else {
         return Err(Diagnostic::error(
             diagnostics::Location::Implicit,
-            format!("строка '{}' не является LTL-формулой", source),
+            crate::msg!(diagnostics::lang::keys::LTL_NOT_A_FORMULA, source = source),
         ));
     };
     let InlineFormulaDefine::Ltl { formulas, loc } = inline.as_ref() else {
         return Err(Diagnostic::error(
             diagnostics::Location::Implicit,
-            format!("строка '{}' не является LTL-формулой", source),
+            crate::msg!(diagnostics::lang::keys::LTL_NOT_A_FORMULA, source = source),
         ));
     };
 
@@ -652,10 +651,9 @@ pub fn parse_ltl_property(source: &str) -> Result<verification::ltl::Ltl, Diagno
         // `: [LTL] a, b;` - список формул; какую из них проверять, непонятно.
         _ => Err(Diagnostic::error(
             *loc,
-            format!(
-                "ожидалась одна LTL-формула, задано {}: уберите запятые или \
-                 вызовите verify для каждой формулы отдельно",
-                formulas.len()
+            crate::msg!(
+                diagnostics::lang::keys::LTL_SEVERAL_FORMULAS,
+                count = formulas.len()
             ),
         )),
     }
@@ -759,93 +757,9 @@ pub fn constant_condition_warnings(
     semantic::validate::check_constant_conditions(model)
 }
 
-/// SE-044: предупреждения о лишних точках с запятой в АСД модели.
-///
-/// Обходит все элементы модели и состояний (рекурсивно), генерируя предупреждение для
-/// каждого [`ast::ModelElement::StraySemicolon`] и
-/// [`ast::StateElement::StraySemicolon`].
-pub fn stray_semicolon_warnings(model: &ast::Model) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    collect_stray_semicolons_model(model, &mut diags);
-    diags
-}
-
-/// SE-045: предупреждения об именованных блоках с неизвестным именем.
-///
-/// Допустимые имена: `enter`, `exit`, `always`. Любое другое имя генерирует
-/// предупреждение - вероятнее всего это опечатка.
-pub fn unknown_named_block_warnings(model: &ast::Model) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    collect_unknown_named_blocks_model(model, &mut diags);
-    diags
-}
-
-const KNOWN_NAMED_BLOCKS: &[&str] = &["enter", "exit", "always"];
-
-fn collect_unknown_named_blocks_model(model: &ast::Model, out: &mut Vec<Diagnostic>) {
-    for element in &model.elements {
-        match element {
-            ast::ModelElement::NamedBlockCode(def) => {
-                check_named_block_def(def, out);
-            }
-            ast::ModelElement::State(state) => {
-                for se in &state.elements {
-                    if let ast::StateElement::NamedBlockCode(def) = se {
-                        check_named_block_def(def, out);
-                    }
-                }
-            }
-            ast::ModelElement::Model(nested) => {
-                collect_unknown_named_blocks_model(nested, out);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn check_named_block_def(def: &ast::NamedBlockCodeDefine, out: &mut Vec<Diagnostic>) {
-    if let Some(name_id) = &def.name
-        && !KNOWN_NAMED_BLOCKS.contains(&name_id.name.as_str())
-    {
-        out.push(
-            Diagnostic::warning(
-                name_id.loc,
-                format!(
-                    "неизвестный именованный блок '{}'; допустимые имена: enter, exit, always",
-                    name_id.name
-                ),
-            )
-            .with_code("SE-045"),
-        );
-    }
-}
-
-fn collect_stray_semicolons_model(model: &ast::Model, out: &mut Vec<Diagnostic>) {
-    for element in &model.elements {
-        match element {
-            ast::ModelElement::StraySemicolon(loc) => {
-                out.push(
-                    Diagnostic::warning(*loc, "лишняя точка с запятой".to_string())
-                        .with_code("SE-044"),
-                );
-            }
-            ast::ModelElement::State(state) => {
-                for se in &state.elements {
-                    if let ast::StateElement::StraySemicolon(loc) = se {
-                        out.push(
-                            Diagnostic::warning(*loc, "лишняя точка с запятой".to_string())
-                                .with_code("SE-044"),
-                        );
-                    }
-                }
-            }
-            ast::ModelElement::Model(nested) => {
-                collect_stray_semicolons_model(nested, out);
-            }
-            _ => {}
-        }
-    }
-}
+// Проверки АСД `SE-044` и `SE-045` живут своим модулем, публичный путь прежний.
+mod ast_lints;
+pub use ast_lints::{stray_semicolon_warnings, unknown_named_block_warnings};
 
 #[cfg(test)]
 mod tests {

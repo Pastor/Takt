@@ -14,11 +14,7 @@ use crate::msg;
 pub(crate) fn internal(what: &str) -> Diagnostic {
     Diagnostic::error(
         crate::diagnostics::Location::Codegen,
-        format!(
-            "внутренний инвариант семантики нарушен: {what}. Это дефект компилятора, а не \
-             ошибка модели: до этого места вход обязана была отсечь более ранняя проверка. \
-             Сообщите о случае вместе с исходником"
-        ),
+        msg!(keys::SE_119_INTERNAL, what = what),
     )
     .with_code("SE-119")
 }

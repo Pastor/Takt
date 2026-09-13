@@ -211,7 +211,7 @@ fn print_inner(out: &mut Out, statement: &ast::Statement) -> Result<(), FormatEr
         // Вынужденная ветка: перечисление `#[non_exhaustive]`. Отказ, а не молчаливая
         // потеря оператора. Позиция и название вида берутся у самого узла, а не
         // `Debug`-дампом внутренней структуры.
-        other => Err(super::unsupported(other.loc(), other.kind_name())),
+        other => Err(super::unsupported(other.loc(), &other.kind_name())),
     }
 }
 
@@ -229,7 +229,10 @@ fn single_line(statement: &ast::Statement) -> Result<String, FormatError> {
         S::Expression(_, e) => Ok(format!("{};", expr::expression(e)?)),
         other => Err(super::unsupported(
             other.loc(),
-            &format!("{} в инициализаторе for", other.kind_name()),
+            &crate::msg!(
+                crate::diagnostics::lang::keys::FM_NODE_FOR_INITIALIZER,
+                kind = other.kind_name()
+            ),
         )),
     }
 }

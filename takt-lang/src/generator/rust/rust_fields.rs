@@ -134,15 +134,10 @@ impl Fields {
 fn service_clash(original: &str, produced: &str, loc: Location) -> Diagnostic {
     Diagnostic::error(
         loc,
-        format!(
-            "имя '{original}' даёт поле '{produced}', которое цель 'rust' печатает \
-             сама (состояние автомата, разделяемые переменные, аппаратный слой, \
-             механизм времени, аккумулятор 'every', шаг последовательной композиции \
-             либо экземпляр под-модели): в структуре модели оказалось бы два поля с \
-             одним именем, и 'rustc' отвечает 'E0124: field is already declared'. \
-             Это НЕ ограничение языка Takt — имя занято тем, что печатает именно эта \
-             цель, и для 'c' и 'sv' модель остаётся валидной. \
-             Переименуйте объявление в исходнике .takt"
+        msg!(
+            keys::RS_026_SERVICE_FIELD_CLASH,
+            original = original,
+            produced = produced
         ),
     )
     .with_code("RS-026")

@@ -2,7 +2,9 @@
 //! самостоятельна: читает **текст внешнего файла**, тогда как разрешение адресов
 //! ([`resolve`](super::resolve)) ходит по модели.
 
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -129,10 +131,7 @@ pub fn parse_address_map(src: &str, file_no: u64) -> Result<Vec<AddressMapEntry>
                     diags.push(
                         Diagnostic::error(
                             entry.loc,
-                            format!(
-                                "повторная запись адреса для порта '{}' во внешней карте",
-                                entry.name
-                            ),
+                            msg!(keys::AM_006_DUPLICATE_ENTRY, name = entry.name),
                         )
                         .with_code("AM-006"),
                     );
@@ -169,16 +168,17 @@ fn parse_entry(sc: &mut Scanner) -> Result<AddressMapEntry, Diagnostic> {
     let Some(c0) = sc.peek() else {
         return Err(Diagnostic::error(
             sc.loc(name_start, name_start),
-            "ожидалось имя порта".to_string(),
+            msg!(keys::AM_001_EXPECTED_PORT_NAME),
         )
         .with_code("AM-001"));
     };
     if !is_name_start(c0) {
         let end = sc.offset() + c0.len_utf8();
-        return Err(
-            Diagnostic::error(sc.loc(name_start, end), "ожидалось имя порта".to_string())
-                .with_code("AM-001"),
-        );
+        return Err(Diagnostic::error(
+            sc.loc(name_start, end),
+            msg!(keys::AM_001_EXPECTED_PORT_NAME),
+        )
+        .with_code("AM-001"));
     }
     let mut name = String::new();
     while let Some(c) = sc.peek() {
@@ -197,7 +197,7 @@ fn parse_entry(sc: &mut Scanner) -> Result<AddressMapEntry, Diagnostic> {
         let at = sc.offset();
         return Err(Diagnostic::error(
             sc.loc(at, at),
-            format!("ожидался '=' после имени порта '{}'", name),
+            msg!(keys::AM_002_EXPECTED_EQUALS, name = name),
         )
         .with_code("AM-002"));
     }
@@ -219,7 +219,7 @@ fn parse_entry(sc: &mut Scanner) -> Result<AddressMapEntry, Diagnostic> {
     if tok.is_empty() {
         return Err(Diagnostic::error(
             sc.loc(addr_start, addr_start),
-            format!("ожидался адрес для порта '{}'", name),
+            msg!(keys::AM_003_EXPECTED_ADDRESS, name = name),
         )
         .with_code("AM-003"));
     }
@@ -232,7 +232,7 @@ fn parse_entry(sc: &mut Scanner) -> Result<AddressMapEntry, Diagnostic> {
         let at = sc.offset();
         return Err(Diagnostic::error(
             sc.loc(at, at),
-            format!("ожидался ';' после адреса порта '{}'", name),
+            msg!(keys::AM_004_EXPECTED_SEMICOLON, name = name),
         )
         .with_code("AM-004"));
     }
@@ -252,9 +252,10 @@ pub(super) fn parse_address_token(tok: &str) -> Result<(i64, Option<i64>), Strin
         Some((a, b)) => (a, Some(b)),
         None => (tok, None),
     };
-    let addr = parse_int(addr_part).ok_or_else(|| format!("некорректный адрес '{}'", addr_part))?;
+    let addr = parse_int(addr_part)
+        .ok_or_else(|| msg!(keys::AM_005_INVALID_ADDRESS, value = addr_part))?;
     let bit = match bit_part {
-        Some(b) => Some(parse_int(b).ok_or_else(|| format!("некорректный бит '{}'", b))?),
+        Some(b) => Some(parse_int(b).ok_or_else(|| msg!(keys::AM_005_INVALID_BIT, value = b))?),
         None => None,
     };
     Ok((addr, bit))
@@ -294,27 +295,15 @@ pub fn address_map_overlay_warnings(
                 let has_operator = borrowed.address_defs.iter().any(|d| d.port == e.name);
                 if has_inline || has_operator {
                     out.push(
-                        Diagnostic::warning(
-                            e.loc,
-                            format!(
-                                "внешняя карта переопределяет адрес порта '{}', заданный в модели",
-                                e.name
-                            ),
-                        )
-                        .with_code("SE-050"),
+                        Diagnostic::warning(e.loc, msg!(keys::SE_050_MAP_OVERRIDES, name = e.name))
+                            .with_code("SE-050"),
                     );
                 }
             }
             _ => {
                 out.push(
-                    Diagnostic::warning(
-                        e.loc,
-                        format!(
-                            "внешняя карта задаёт адрес для несуществующего порта '{}'",
-                            e.name
-                        ),
-                    )
-                    .with_code("SE-051"),
+                    Diagnostic::warning(e.loc, msg!(keys::SE_051_MAP_UNKNOWN_PORT, name = e.name))
+                        .with_code("SE-051"),
                 );
             }
         }

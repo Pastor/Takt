@@ -52,6 +52,8 @@
 //! истинно всегда, и цели отвечали бы предупреждением своего линта (`clippy`,
 //! `verilator`), а проверки считают его ошибкой.
 
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -80,10 +82,7 @@ pub(crate) const FAULT_PORT: &str = "bounds_fault";
 pub fn synthetic_port_note(name: &str) -> Option<crate::diagnostics::Note> {
     (name == FAULT_PORT).then(|| crate::diagnostics::Note {
         loc: crate::diagnostics::Location::Codegen,
-        message: format!(
-            "порт '{FAULT_PORT}' заводит флаг `--bounds-check` (guard границ массива): \
-             задайте ему адрес во внешней карте (`--address-map`) либо снимите флаг"
-        ),
+        message: msg!(keys::NOTE_BOUNDS_FAULT_PORT, port = FAULT_PORT),
     })
 }
 

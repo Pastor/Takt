@@ -299,11 +299,7 @@ fn se065(loc: Location, lt: &TypeNode, rt: &TypeNode) -> Diagnostic {
 fn se059(loc: Location, lt: &TypeNode, rt: &TypeNode) -> Diagnostic {
     Diagnostic::declaration_error(
         loc,
-        format!(
-            "неявное смешение типов '{}' и '{}' в арифметике fixed-point запрещено; \
-             приведите операнд явно ('… as q(m, n)' либо '… as q(m, n) sat')",
-            lt, rt
-        ),
+        msg!(keys::SE_059_IMPLICIT_FIXED_MIX, left = lt, right = rt),
     )
     .with_code("SE-059")
 }

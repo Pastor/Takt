@@ -898,25 +898,29 @@ impl Statement {
     ///
     /// Не `Debug`-дамп: до отказ форматтера печатал `Statement::Assembly { loc:
     /// Source(0, 53, 71), dialect: ... }` - внутреннее представление вместо текста.
-    pub fn kind_name(&self) -> &'static str {
-        match self {
-            Self::Block { .. } => "блок",
-            Self::Assembly { .. } => "assembly",
-            Self::Formula { .. } => "formula",
-            Self::Args(_, _) => "именованные аргументы",
-            Self::If(_, _, _, _) => "if",
-            Self::Loop(_, _, _, _) => "цикл",
-            Self::Expression(_, _) => "выражение-оператор",
-            Self::Variable(_, _, _) => "объявление переменной",
-            Self::For(_, _, _, _, _) => "for",
-            Self::Continue(_) => "continue",
-            Self::Break(_) => "break",
-            Self::Return(_, _) => "return",
-            Self::Error(_) => "ошибочный оператор",
-            Self::StraySemicolon(_) => "лишняя ';'",
-            Self::Match(_, _, _) => "match",
-            Self::InlineFormula(_) => "формула-утверждение",
-        }
+    pub fn kind_name(&self) -> String {
+        use crate::diagnostics::lang::keys;
+        // Ключевые слова языка (`if`, `for`, `match`...) - слова самого языка: переводу они
+        // не подлежат и печатаются как написаны.
+        let key = match self {
+            Self::Assembly { .. } => return "assembly".to_string(),
+            Self::Formula { .. } => return "formula".to_string(),
+            Self::If(_, _, _, _) => return "if".to_string(),
+            Self::For(_, _, _, _, _) => return "for".to_string(),
+            Self::Continue(_) => return "continue".to_string(),
+            Self::Break(_) => return "break".to_string(),
+            Self::Return(_, _) => return "return".to_string(),
+            Self::Match(_, _, _) => return "match".to_string(),
+            Self::Block { .. } => keys::AST_KIND_BLOCK,
+            Self::Args(_, _) => keys::AST_KIND_NAMED_ARGS,
+            Self::Loop(_, _, _, _) => keys::AST_KIND_LOOP,
+            Self::Expression(_, _) => keys::AST_KIND_EXPRESSION,
+            Self::Variable(_, _, _) => keys::AST_KIND_VARIABLE,
+            Self::Error(_) => keys::AST_KIND_ERROR,
+            Self::StraySemicolon(_) => keys::AST_KIND_STRAY_SEMICOLON,
+            Self::InlineFormula(_) => keys::AST_KIND_INLINE_FORMULA,
+        };
+        crate::msg!(key)
     }
 }
 

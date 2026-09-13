@@ -11,42 +11,35 @@
 //! точек разбора, нельзя. Код диагностики при этом честный - `SY-`, а не `LE-`.
 
 use crate::diagnostics::Location;
-use thiserror::Error;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 
 /// Ошибка лексического анализатора.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum LexicalError {
     /// Неожиданный конец файла внутри блочного комментария.
-    #[error("неожиданный конец файла внутри комментария")]
     EndOfFileInComment(Location),
 
     /// Неожиданный конец файла внутри строкового литерала.
-    #[error("неожиданный конец файла внутри строкового литерала")]
     EndOfFileInString(Location),
 
     /// Неожиданный конец файла внутри шестнадцатеричного литерала.
-    #[error("неожиданный конец файла внутри шестнадцатеричного литерала")]
     EndOfFileInHex(Location),
 
     /// Отсутствуют цифры после `0x`.
-    #[error("отсутствует число после '0x'")]
     MissingNumber(Location),
 
     /// Недопустимый символ в шестнадцатеричном литерале.
-    #[error("недопустимый символ '{1}' в шестнадцатеричном литерале")]
     InvalidCharacterInHexLiteral(Location, char),
 
     /// Неизвестный токен.
-    #[error("нераспознанный токен '{1}'")]
     UnrecognisedToken(Location, String),
 
     /// Отсутствует показатель степени после `e`/`E`.
-    #[error("отсутствует показатель степени")]
     MissingExponent(Location),
 
     /// Ожидалось ключевое слово `from`, но встретилось другое слово.
-    #[error("ожидалось ключевое слово 'from', но найдено '{1}'")]
     ExpectedFrom(Location, String),
 
     /// Числовой литерал не помещается ни в один целочисленный тип языка.
@@ -54,10 +47,6 @@ pub enum LexicalError {
     /// Приём и его обоснование - [`crate::parser::literal_range`]. Здесь важно одно:
     /// диапазон проверяется против **типов языка**, а влезает ли литерал в конкретный
     /// тип приёмника - это уже `SE-089` на семантике.
-    #[error(
-        "числовой литерал '{1}' вне диапазона [-9223372036854775808, 18446744073709551615]: \
-         не помещается ни в один целочисленный тип языка"
-    )]
     NumberOutOfRange(Location, String),
 
     /// Литерал длительности/частоты вне представимого диапазона.
@@ -65,7 +54,6 @@ pub enum LexicalError {
     /// Длительность хранится в наносекундах (`i64`, ±292 года), частота - в герцах
     /// (`u64`). Молчаливой обёртки здесь быть не должно: выдержка, обернувшаяся при
     /// разборе, стала бы другой выдержкой.
-    #[error("литерал времени '{1}' вне представимого диапазона")]
     TimeLiteralOutOfRange(Location, String),
 
     /// Оператор-выражение без эффекта: `x + 1;`, `#0x100.4;`.
@@ -76,11 +64,6 @@ pub enum LexicalError {
     ///
     /// Проверка стоит в **грамматике**, а не в семантике: этого требовал,
     /// и тот же приём уже применён к позиции присваивания.
-    #[error(
-        "выражение в позиции оператора не имеет эффекта: оператором может быть \
-         присваивание ('цель := значение;') либо вызов функции ('f(x);'). \
-         Вычисленное значение здесь некуда деть"
-    )]
     StatementWithoutEffect(Location),
 
     /// Единица времени стоит после формы, которая её не допускает.
@@ -90,11 +73,42 @@ pub enum LexicalError {
     /// идентификатором" - иначе автор получил бы `SY-002` про неведомый токен вместо
     /// указания на настоящую причину. Дробная длительность выражается меньшей единицей
     /// (`1500ms`).
-    #[error(
-        "недопустимый литерал времени '{1}': единица допустима только у целого десятичного числа"
-    )]
     InvalidTimeLiteral(Location, String),
 }
+
+/// Текст ошибки строится каталогом на языке прогона.
+///
+/// `Display` написан руками, а не атрибутом `#[error(...)]`: атрибут вычисляется при
+/// сборке и дал бы один текст на все языки, а язык выбирается при запуске.
+impl std::fmt::Display for LexicalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            Self::EndOfFileInComment(_) => msg!(keys::LE_001_EOF_IN_COMMENT),
+            Self::EndOfFileInString(_) => msg!(keys::LE_002_EOF_IN_STRING),
+            Self::EndOfFileInHex(_) => msg!(keys::LE_003_EOF_IN_HEX),
+            Self::MissingNumber(_) => msg!(keys::LE_004_MISSING_NUMBER),
+            Self::InvalidCharacterInHexLiteral(_, symbol) => {
+                msg!(keys::LE_005_INVALID_HEX_CHAR, symbol = symbol)
+            }
+            Self::UnrecognisedToken(_, token) => {
+                msg!(keys::LE_006_UNRECOGNISED_TOKEN, token = token)
+            }
+            Self::MissingExponent(_) => msg!(keys::LE_007_MISSING_EXPONENT),
+            Self::ExpectedFrom(_, found) => msg!(keys::LE_008_EXPECTED_FROM, found = found),
+            Self::NumberOutOfRange(_, text) => msg!(keys::LE_009_NUMBER_OUT_OF_RANGE, text = text),
+            Self::TimeLiteralOutOfRange(_, text) => {
+                msg!(keys::LE_010_TIME_OUT_OF_RANGE, text = text)
+            }
+            Self::StatementWithoutEffect(_) => msg!(keys::SY_007_STATEMENT_WITHOUT_EFFECT),
+            Self::InvalidTimeLiteral(_, text) => {
+                msg!(keys::LE_011_INVALID_TIME_LITERAL, text = text)
+            }
+        };
+        f.write_str(&text)
+    }
+}
+
+impl std::error::Error for LexicalError {}
 
 impl LexicalError {
     /// Возвращает местоположение в исходном тексте, где возникла ошибка.

@@ -3,6 +3,8 @@
 //! Здесь же стоит проверка предела глубины дерева: разбор отдаёт наружу только
 //! дерево, уложившееся в предел.
 
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use lalrpop_util::ParseError;
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -62,7 +64,7 @@ fn parser_error_to_diagnostic(
     match error {
         ParseError::InvalidToken { location } => Diagnostic::parser_error(
             Location::source(file_no, *location, *location),
-            "недопустимый токен".to_string(),
+            msg!(keys::SY_001_INVALID_TOKEN),
         )
         .with_code("SY-001"),
         // Присваивание в позиции значения - своя диагностика.
@@ -77,11 +79,7 @@ fn parser_error_to_diagnostic(
             ..
         } => Diagnostic::parser_error(
             Location::source(file_no, *l, *r),
-            "присваивание стоит там, где вычисляется значение: в языке \
-             присваивание — оператор, а не выражение. Запись обязана быть \
-             отдельным оператором (либо шагом цикла `for`): сперва \
-             `цель := значение;`, затем использование цели"
-                .to_string(),
+            msg!(keys::SY_006_ASSIGNMENT_IN_VALUE),
         )
         .with_code("SY-006"),
         // Адресный литерал вне позиции размещения - своя диагностика.
@@ -95,12 +93,7 @@ fn parser_error_to_diagnostic(
             ..
         } => Diagnostic::parser_error(
             Location::source(file_no, *l, *r),
-            format!(
-                "адресный литерал '{text}' стоит там, где вычисляется значение: \
-                 адрес есть свойство размещения ('at {text}', оператор 'address', \
-                 внешняя карта). Чтобы обратиться к ячейке в выражении, напишите \
-                 '#{text} as ТИП' либо '#0xАДРЕС.БИТ'"
-            ),
+            msg!(keys::SY_008_ADDRESS_LITERAL_IN_VALUE, text = text),
         )
         .with_code("SY-008"),
         ParseError::UnrecognizedToken {
@@ -108,10 +101,10 @@ fn parser_error_to_diagnostic(
             expected,
         } => Diagnostic::parser_error(
             Location::source(file_no, *l, *r),
-            format!(
-                "нераспознанный токен '{}', ожидалось {}",
-                token,
-                expected.join(", ")
+            msg!(
+                keys::SY_002_UNRECOGNISED_TOKEN,
+                token = token,
+                expected = expected.join(", ")
             ),
         )
         .with_code("SY-002"),
@@ -120,12 +113,12 @@ fn parser_error_to_diagnostic(
         }
         ParseError::ExtraToken { token } => Diagnostic::parser_error(
             Location::source(file_no, token.0, token.2),
-            format!("лишний токен '{}'", token.1),
+            msg!(keys::SY_003_EXTRA_TOKEN, token = token.1),
         )
         .with_code("SY-003"),
         ParseError::UnrecognizedEof { expected, location } => Diagnostic::parser_error(
             Location::source(file_no, *location, *location),
-            format!("неожиданный конец файла, ожидалось {}", expected.join(", ")),
+            msg!(keys::SY_004_UNEXPECTED_EOF, expected = expected.join(", ")),
         )
         .with_code("SY-004"),
     }

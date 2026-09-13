@@ -9,6 +9,8 @@
 //! второй, двоичный, ради одной операции завёл бы второй разбор ответа у страницы.
 
 use std::collections::{BTreeMap, BTreeSet};
+use takt_lang::diagnostics::lang::keys;
+use takt_lang::msg;
 
 use base64::Engine as _;
 use serde::Deserialize;
@@ -95,19 +97,18 @@ fn request_of(r: &ExportRequest) -> Result<Request, String> {
         None | Some("") => None,
         Some("draft") => Some(View::Draft),
         Some("run") => Some(View::Run),
-        Some(other) => return Err(format!("вид '{other}': draft либо run")),
+        Some(other) => return Err(msg!(keys::EXPORT_BAD_VIEW, value = other)),
     };
     let mut formats = BTreeSet::new();
     for name in &r.formats {
         formats.insert(
-            Format::parse(name)
-                .ok_or_else(|| format!("формат '{name}': svg, png, gif либо mp4"))?,
+            Format::parse(name).ok_or_else(|| msg!(keys::EXPORT_BAD_FORMAT, value = name))?,
         );
     }
     let background = match r.background.as_deref() {
         None | Some("fill") => Background::Fill,
         Some("none") => Background::None,
-        Some(other) => return Err(format!("фон '{other}': fill либо none")),
+        Some(other) => return Err(msg!(keys::EXPORT_BAD_BACKGROUND, value = other)),
     };
     Ok(Request {
         view,

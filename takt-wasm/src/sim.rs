@@ -4,6 +4,8 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use takt_lang::diagnostics::FileTable;
+use takt_lang::diagnostics::lang::keys;
+use takt_lang::msg;
 use takt_lang::semantic::tree::construct_model_with_files;
 use takt_sim::build_unit;
 use takt_sim::json_input::SimStep;
@@ -142,7 +144,7 @@ pub fn open(
     } else {
         match serde_json::from_str(scenario) {
             Ok(steps) => steps,
-            Err(e) => return reply::refused(format!("сценарий не читается: {e}")),
+            Err(e) => return reply::refused(msg!(keys::WASM_SCENARIO_UNREADABLE, error = e)),
         }
     };
 
@@ -201,7 +203,7 @@ pub fn tick(id: u32, budget: u32) -> String {
     SESSIONS.with(|sessions| {
         let mut sessions = sessions.borrow_mut();
         let Some(runner) = sessions.get_mut(&id) else {
-            return reply::refused(format!("прогон {id} не открыт"));
+            return reply::refused(msg!(keys::WASM_RUN_NOT_OPEN, id = id));
         };
         let mut lines = Vec::new();
         let mut warnings = Vec::new();

@@ -18,6 +18,8 @@
 mod after_const;
 /// База постфиксной индексации в условии.
 mod base;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use base::{cond_base_is_array, cond_base_label};
 
 /// Распознавание паттерна `S(Модель) = Состояние` и его краткой формы `Модель =
@@ -177,11 +179,7 @@ pub fn resolve_condition(
                 // SE-117: у диагностики есть код и позиция.
                 return Err(Diagnostic::error(
                     *loc,
-                    format!(
-                        "{} не является массивом: индексировать можно переменную массива \
-                         либо поле структуры типа '[T; N]'",
-                        cond_base_label(&base)
-                    ),
+                    msg!(keys::SE_117_NOT_AN_ARRAY, what = cond_base_label(&base)),
                 )
                 .with_code("SE-117"));
             }

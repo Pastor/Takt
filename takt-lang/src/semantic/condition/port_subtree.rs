@@ -26,6 +26,8 @@
 //! называя обход: перенести значение узла в переменную модели (её присваивание проход
 //! уже разворачивает).
 
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -173,14 +175,9 @@ fn aggregate_of(split: &super::port_split::Split, path: &[Step]) -> ExpressionNo
 pub(super) fn refuse(name: &str, path: &[Step], loc: Location) -> Diagnostic {
     Diagnostic::error(
         loc,
-        format!(
-            "Обращение '{}' берёт СОСТАВНУЮ часть порта там, где цель не может \
-             объявить временную (условие перехода, именованное условие, охранная \
-             формула, условие цикла): порт развёрнут по листьям, и узел собирается \
-             из них. Перенесите значение в переменную модели — \
-             `var v: …; always {{ v := {}; }}` — и пользуйтесь ей",
-            text_of(name, path),
-            text_of(name, path)
+        msg!(
+            keys::SE_130_PORT_SUBTREE_IN_CONDITION,
+            path = text_of(name, path)
         ),
     )
     .with_code("SE-130")

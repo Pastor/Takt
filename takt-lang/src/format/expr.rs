@@ -106,9 +106,17 @@ pub(crate) fn expression(expr: &ast::Expression) -> Result<String, FormatError> 
         ),
 
         // -- Пока не поддержаны - отказ, а не порча исходника -----------------
-        E::CodeBlock(loc, _, _) => return Err(super::unsupported(*loc, "блок кода")),
+        E::CodeBlock(loc, _, _) => {
+            return Err(super::unsupported(
+                *loc,
+                &crate::msg!(crate::diagnostics::lang::keys::FM_NODE_CODE_BLOCK),
+            ));
+        }
         E::NamedFunction(loc, _, _) => {
-            return Err(super::unsupported(*loc, "именованная функция"));
+            return Err(super::unsupported(
+                *loc,
+                &crate::msg!(crate::diagnostics::lang::keys::FM_NODE_NAMED_FUNCTION),
+            ));
         }
     })
 }
@@ -235,7 +243,7 @@ pub(crate) fn ty(t: &ast::Type) -> Result<String, FormatError> {
         T::Function { .. } => {
             return Err(super::unsupported(
                 crate::diagnostics::Location::Implicit,
-                "тип-функция",
+                &crate::msg!(crate::diagnostics::lang::keys::FM_NODE_FUNCTION_TYPE),
             ));
         }
     })

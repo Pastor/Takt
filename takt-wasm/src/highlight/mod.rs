@@ -32,7 +32,9 @@ pub mod syntax;
 
 use serde::Serialize;
 use takt_lang::compile::Target;
+use takt_lang::diagnostics::lang::keys;
 use takt_lang::lsp;
+use takt_lang::msg;
 
 use crate::reply;
 use syntax::{Role, Syntax};
@@ -56,9 +58,10 @@ struct HighlightJson {
 /// бы завести вторую таблицу целей.
 pub fn highlight(target: &str, text: &str) -> String {
     let Some(target) = Target::parse(target) else {
-        return reply::refused(format!(
-            "неизвестная цель '{target}'. Поддерживается: {}",
-            Target::ALL
+        return reply::refused(msg!(
+            keys::WASM_UNKNOWN_TARGET,
+            target = target,
+            known = Target::ALL
                 .iter()
                 .map(|t| t.name())
                 .collect::<Vec<_>>()
@@ -66,10 +69,7 @@ pub fn highlight(target: &str, text: &str) -> String {
         ));
     };
     let Some((language, syntax)) = syntax::of(target.language()) else {
-        return reply::refused(format!(
-            "цель '{}' печатает язык, описания подсветки для которого нет",
-            target.name()
-        ));
+        return reply::refused(msg!(keys::WASM_NO_HIGHLIGHT, target = target.name()));
     };
     reply::ok(HighlightJson {
         language,

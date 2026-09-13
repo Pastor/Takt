@@ -220,11 +220,10 @@ fn model_not_found(model: &Rc<RefCell<ModelNode>>, id: &ast::Identifier) -> Diag
         // редактора, который умеет открыть нужный файл.
         Some((owner, nested_loc)) => diagnostic.with_note(
             nested_loc,
-            format!(
-                "модель '{}' объявлена внутри модели '{owner}': подключение файла целиком \
-                 вносит только её, а вложенные модели снаружи не видны. Подключите нужную \
-                 выборочно: import {{ {} }} from \"…\";",
-                id.name, id.name
+            msg!(
+                keys::NOTE_NESTED_MODEL_IMPORT,
+                name = id.name,
+                owner = owner
             ),
         ),
         None => diagnostic,

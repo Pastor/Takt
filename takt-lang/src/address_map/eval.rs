@@ -6,7 +6,9 @@
 //! **разный адрес для одного текста**".
 
 use super::env::AddressEnv;
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -16,22 +18,14 @@ type AddrValue = (i64, Option<i64>);
 
 /// `SE-054` - имя в выражении адреса не разрешается ни define'ом, ни `const`.
 fn undefined_symbol(loc: Location, name: &str) -> Diagnostic {
-    Diagnostic::error(
-        loc,
-        format!(
-            "выражение адреса ссылается на неопределённый символ '{}' \
-             (нет ни `--define {}=…`, ни `const {}` в модели)",
-            name, name, name
-        ),
-    )
-    .with_code("SE-054")
+    Diagnostic::error(loc, msg!(keys::SE_054_UNDEFINED_SYMBOL, name = name)).with_code("SE-054")
 }
 
 /// `SE-055` - выражение адреса не сворачивается в константу.
 fn not_constant(loc: Location, reason: &str) -> Diagnostic {
     Diagnostic::error(
         loc,
-        format!("выражение адреса не сворачивается в константу: {}", reason),
+        msg!(keys::SE_055_ADDRESS_NOT_CONSTANT, reason = reason),
     )
     .with_code("SE-055")
 }
@@ -66,29 +60,28 @@ fn apply_binary(
     // Бит - свойство записи адреса (`0x1000:3`), а не число: арифметика над ним
     // бессмысленна, и молча его терять нельзя.
     if left.1.is_some() || right.1.is_some() {
-        return Err(not_constant(
-            loc,
-            "операнд формы `адрес:бит` не участвует в арифметике",
-        ));
+        return Err(not_constant(loc, &msg!(keys::ADDR_BIT_OPERAND)));
     }
     match int_binary(op, i128::from(left.0), i128::from(right.0)) {
         Ok(IntOutcome::Int(v)) => Ok((v as i64, None)),
         // Булево значение адресом быть не может.
-        Ok(IntOutcome::Bool(_)) | Err(IntOpError::UnsupportedOperator) => Err(not_constant(
-            loc,
-            "операция не поддержана в выражении адреса",
-        )),
-        Err(IntOpError::DivisionByZero) => Err(not_constant(loc, "деление на ноль")),
-        Err(IntOpError::RemainderByZero) => Err(not_constant(loc, "остаток от деления на ноль")),
+        Ok(IntOutcome::Bool(_)) | Err(IntOpError::UnsupportedOperator) => {
+            Err(not_constant(loc, &msg!(keys::ADDR_UNSUPPORTED_OPERATION)))
+        }
+        Err(IntOpError::DivisionByZero) => {
+            Err(not_constant(loc, &msg!(keys::CONST_DIVISION_BY_ZERO)))
+        }
+        Err(IntOpError::RemainderByZero) => {
+            Err(not_constant(loc, &msg!(keys::CONST_REMAINDER_BY_ZERO)))
+        }
         Err(IntOpError::ShiftOutOfRange) => {
-            Err(not_constant(loc, "сдвиг допустим только на 0..63 бит"))
+            Err(not_constant(loc, &msg!(keys::ADDR_SHIFT_OUT_OF_RANGE)))
         }
         // Степень до выражения адреса не доходит: форму `Power` матчер не разбирает
         // вовсе. Ветвь - защита в глубину, как соседняя `Bool` выше.
-        Err(IntOpError::ExponentOutOfRange) => Err(not_constant(
-            loc,
-            "показатель степени отрицателен либо шире 32 бит",
-        )),
+        Err(IntOpError::ExponentOutOfRange) => {
+            Err(not_constant(loc, &msg!(keys::ADDR_EXPONENT_OUT_OF_RANGE)))
+        }
     }
 }
 
@@ -137,11 +130,7 @@ fn eval_ast_addr(
         E::BitwiseAnd(loc, l, r) => bin!("&", l, r, *loc),
         E::BitwiseOr(loc, l, r) => bin!("|", l, r, *loc),
         E::BitwiseXor(loc, l, r) => bin!("^", l, r, *loc),
-        other => Err(not_constant(
-            other.loc(),
-            "поддержаны только целочисленные литералы, символы и операции \
-             `+ - * / % << >> & | ^ ~`",
-        )),
+        other => Err(not_constant(other.loc(), &msg!(keys::ADDR_SUPPORTED_FORMS))),
     }
 }
 
@@ -151,21 +140,13 @@ fn eval_ast_addr(
 /// адресом быть не может. Сужение - явный отказ `SE-055`: молчаливое `as i64` дало бы
 /// адрес, которого автор не писал.
 fn narrow_addr_literal(value: i128, loc: Location) -> Result<i64, Diagnostic> {
-    i64::try_from(value).map_err(|_| {
-        not_constant(
-            loc,
-            "числовой литерал не помещается в знаковое 64-битное значение адреса",
-        )
-    })
+    i64::try_from(value).map_err(|_| not_constant(loc, &msg!(keys::ADDR_LITERAL_TOO_WIDE)))
 }
 
 /// Унарная операция: бит в ней бессмыслен - см.
 fn unary_bitless(value: i64, bit: Option<i64>, loc: Location) -> Result<AddrValue, Diagnostic> {
     if bit.is_some() {
-        return Err(not_constant(
-            loc,
-            "операнд формы `адрес:бит` не участвует в арифметике",
-        ));
+        return Err(not_constant(loc, &msg!(keys::ADDR_BIT_OPERAND)));
     }
     Ok((value, None))
 }
@@ -195,7 +176,7 @@ fn resolve_symbol(
     if seen.iter().any(|s| s == name) {
         return Err(not_constant(
             loc,
-            &format!("циклическая ссылка через '{}'", name),
+            &msg!(keys::ADDR_CYCLIC_REFERENCE, name = name),
         ));
     }
     let Some(var) = scope.borrow().search_var(name) else {
@@ -209,16 +190,13 @@ fn resolve_symbol(
             return Err(crate::semantic::parameter_const::compile_time_parameter(
                 loc,
                 name,
-                "адрес порта",
+                &msg!(keys::ADDR_POSITION_PORT_ADDRESS),
             ));
         }
         // Переменная или порт: их значение известно только в времени выполнения.
         return Err(not_constant(
             loc,
-            &format!(
-                "'{}' — не константа (адрес обязан быть известен при сборке)",
-                name
-            ),
+            &msg!(keys::ADDR_NOT_A_CONSTANT, name = name),
         ));
     };
     seen.push(name.to_string());
@@ -276,8 +254,7 @@ fn eval_addr_value(
         ExpressionNode::BitwiseXor(l, r) => bin!("^", l, r),
         _ => Err(not_constant(
             Location::Implicit,
-            "поддержаны только целочисленные литералы, символы и операции \
-             `+ - * / % << >> & | ^ ~`",
+            &msg!(keys::ADDR_SUPPORTED_FORMS),
         )),
     }
 }

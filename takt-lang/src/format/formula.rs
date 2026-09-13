@@ -64,9 +64,10 @@ fn print_statement(out: &mut Out, statement: &ast::FormulaStatement) -> Result<(
         // Узел восстановления после ошибки: до печати он не доходит - форматтер
         // работает по разобранному дереву, а разбор с ошибкой отдаёт `Err`. Молчаливо
         // пропустить его нельзя: это была бы потеря куска исходника.
-        ast::FormulaStatement::Error(loc) => {
-            Err(super::unsupported(*loc, "ошибка в блоке formula"))
-        }
+        ast::FormulaStatement::Error(loc) => Err(super::unsupported(
+            *loc,
+            &crate::msg!(crate::diagnostics::lang::keys::FM_NODE_FORMULA_ERROR),
+        )),
     }
 }
 

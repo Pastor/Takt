@@ -1,6 +1,8 @@
 //! Сбор анонимных обращений модели - `#0x346619:0 as u64`.
 
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::semantic::anon_port::AnonPortAccess;
 use crate::semantic::{
     ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, StatementNode,
@@ -202,15 +204,11 @@ fn warn_stmt(stmt: &StatementNode, out: &mut Vec<Diagnostic>) {
         out.push(
             Diagnostic::warning(
                 Location::Codegen,
-                format!(
-                    "запись по адресу '#0x{:X}' идёт в ячейку с НЕобъявленным \
-                     направлением: проверить её законность компилятор не может. \
-                     Объявите именованный порт с этим адресом \
-                     ('out имя: {} at 0x{:X}{};'), и запись станет проверяемой",
-                    cell.addr as u64,
-                    cell.ty,
-                    cell.addr as u64,
-                    if cell.bit == 0 {
+                msg!(
+                    keys::SE_096_UNDECLARED_DIRECTION,
+                    addr = format!("{:X}", cell.addr as u64),
+                    ty = cell.ty,
+                    bit = if cell.bit == 0 {
                         String::new()
                     } else {
                         format!(":{}", cell.bit)
