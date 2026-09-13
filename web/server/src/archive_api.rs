@@ -254,6 +254,23 @@ async fn import(
     let run_delays = limits::check_run_delays(&run_delays).unwrap_or_default();
     let run_delays =
         serde_json::to_string(&run_delays).map_err(|error| ApiError::Internal(error.into()))?;
+    // Частоты прогона - по тому же правилу, что задержки: только у сценариев архива
+    // и только в пределе.
+    let run_frequencies: BTreeMap<String, f64> = parsed
+        .manifest
+        .run_frequencies
+        .iter()
+        .filter(|(name, _)| {
+            parsed
+                .sources
+                .iter()
+                .any(|file| &file.name == *name && file.kind == limits::Kind::Scenario.as_str())
+        })
+        .map(|(name, hz)| (name.clone(), *hz as f64))
+        .collect();
+    let run_frequencies = limits::check_run_frequencies(&run_frequencies).unwrap_or_default();
+    let run_frequencies = serde_json::to_string(&run_frequencies)
+        .map_err(|error| ApiError::Internal(error.into()))?;
 
     let id = projects::new_id();
     let now = db::now();
@@ -266,9 +283,9 @@ async fn import(
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
                                   takt_lang, language_version, main_file, main_scenario,
-                                  build_target, build_args, run_delays, revision,
-                                  size_bytes, created_at, updated_at, touched_at)
-             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, $8, $9, $10, $11, 1, $12, $13, $13, $13)",
+                                  build_target, build_args, run_delays, run_frequencies,
+                                  revision, size_bytes, created_at, updated_at, touched_at)
+             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, $8, $9, $10, $11, $12, 1, $13, $14, $14, $14)",
             &[
                 &id,
                 &user.id,
@@ -281,6 +298,7 @@ async fn import(
                 &build_target,
                 &build_args,
                 &run_delays,
+                &run_frequencies,
                 &size,
                 &now,
             ],

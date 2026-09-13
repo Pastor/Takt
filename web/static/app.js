@@ -154,7 +154,6 @@ export async function main() {
   shell.attachFontSize(dom.fontless, dom.fontmore, dom.fontsize, localStorage);
   // Прочие настройки интерфейса - оттуда же: вкладка и бюджет прогона.
   dom.budget.value = shell.setting(localStorage, shell.UI_KEYS.budget, dom.budget.value);
-  dom.tickhz.value = shell.setting(localStorage, shell.UI_KEYS.tickHz, dom.tickhz.value);
   // Читается только известное значение: в памяти читателя мог остаться выбор
   // области, которой больше нет, и страница открылась бы без вывода вовсе.
   selectPanel(shell.setting(localStorage, shell.UI_KEYS.panel, "output") === "output" ? "output" : null);
@@ -369,8 +368,10 @@ export async function main() {
     openScenario: (text, file) => {
       state.scenario = text;
       state.scenarioFile = file ?? "";
-      // Задержка между тактами - своя у каждого сценария: открыт другой - и темп его.
+      // Задержка и частота - свои у каждого сценария: открыт другой - и темп его.
       dom.tickdelay.value = String(account.delayOf(state.scenarioFile));
+      const hz = account.frequencyOf(state.scenarioFile);
+      dom.tickhz.value = hz ? String(hz) : "";
       state.scenarioEditor.setValue(text);
       paintScenario();
       if (state.shown === "scenario") showSource("scenario");
@@ -769,11 +770,12 @@ function wire() {
   dom.budget.addEventListener("change", () =>
     shell.remember(localStorage, shell.UI_KEYS.budget, dom.budget.value)
   );
-  // Частоту хранит браузер, как бюджет: поле показывает число, которое уйдёт в прогон.
+  // Частоту хранит проект, по сценарию, как задержку: поле показывает число, которое
+  // уйдёт в прогон.
   dom.tickhz.addEventListener("change", () => {
     const hz = project.tickHz(dom.tickhz.value);
     dom.tickhz.value = hz ? String(hz) : "";
-    shell.remember(localStorage, shell.UI_KEYS.tickHz, dom.tickhz.value);
+    account.setFrequency(state.scenarioFile, hz);
   });
   // Задержку хранит проект, по сценарию: поле показывает число, которое записано.
   dom.tickdelay.addEventListener("change", () => {
@@ -1664,6 +1666,7 @@ async function exportContext() {
     sheet: state.scheme.current().key || null,
     scenario,
     steps: Number(dom.budget.value) || null,
+    tick_hz: project.tickHz(dom.tickhz.value) || null,
   };
 }
 

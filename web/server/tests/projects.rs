@@ -783,3 +783,100 @@ async fn the_run_delay_is_kept_per_scenario_and_follows_its_file() {
 
     stand.drop_schema().await;
 }
+
+#[tokio::test]
+async fn the_run_frequency_is_kept_per_scenario_and_follows_its_file() {
+    let Some(stand) = Stand::open("p_frequencies").await else {
+        return skipped("частота прогона по сценариям");
+    };
+    let token = owner(&stand, "ivan").await;
+    let id = project(&stand, &token, "Светофор").await;
+    for (name, text) in [("model.takt", "start Run {}"), ("cold.json", "[]")] {
+        let (status, body) = stand
+            .put_as(
+                &format!("/api/projects/{id}/files/{name}"),
+                &token,
+                serde_json::json!({"text": text}),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{name}: {body}");
+    }
+    let patch = |fields: serde_json::Value| {
+        let stand = &stand;
+        let token = &token;
+        let id = &id;
+        async move {
+            stand
+                .patch_as(&format!("/api/projects/{id}"), token, fields)
+                .await
+        }
+    };
+
+    // Частота - только у сценария проекта, целая и в пределе.
+    for frequencies in [
+        serde_json::json!({"model.takt": 2}),
+        serde_json::json!({"нет-такого.json": 2}),
+        serde_json::json!({"cold.json": -1}),
+        serde_json::json!({"cold.json": 2.5}),
+        serde_json::json!({"cold.json": 2_000_000_000u64}),
+    ] {
+        let (status, body) = patch(serde_json::json!({ "run_frequencies": frequencies })).await;
+        assert!(status.is_client_error(), "{frequencies}: {status} {body}");
+    }
+
+    // Контроль: годная частота принимается - отказ не сплошной.
+    let (status, patched) = patch(serde_json::json!({"run_frequencies": {"cold.json": 2}})).await;
+    assert_eq!(status, StatusCode::OK, "{patched}");
+    assert_eq!(
+        patched["run_frequencies"],
+        serde_json::json!({"cold.json": 2})
+    );
+
+    // Задержка и частота независимы: запись одной не трогает другую.
+    let (_, patched) = patch(serde_json::json!({"run_delays": {"cold.json": 0.5}})).await;
+    assert_eq!(
+        patched["run_frequencies"],
+        serde_json::json!({"cold.json": 2}),
+        "{patched}"
+    );
+
+    // Переименованный сценарий уносит обе настройки: ключ - имя файла.
+    let (status, body) = stand
+        .post_as(
+            &format!("/api/projects/{id}/files/cold.json/rename"),
+            &token,
+            serde_json::json!({"to": "warm.json"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, read) = stand.get_as(&format!("/api/projects/{id}"), &token).await;
+    assert_eq!(
+        read["run_frequencies"],
+        serde_json::json!({"warm.json": 2}),
+        "{read}"
+    );
+    assert_eq!(
+        read["run_delays"],
+        serde_json::json!({"warm.json": 0.5}),
+        "{read}"
+    );
+
+    // Ноль - "частота из модели" и не хранится.
+    let (_, patched) = patch(serde_json::json!({"run_frequencies": {"warm.json": 0}})).await;
+    assert_eq!(
+        patched["run_frequencies"],
+        serde_json::json!({}),
+        "{patched}"
+    );
+
+    // Удалённый сценарий забывает свою частоту.
+    patch(serde_json::json!({"run_frequencies": {"warm.json": 3}})).await;
+    stand
+        .delete_as(&format!("/api/projects/{id}/files/warm.json"), &token)
+        .await;
+    let (_, read) = stand.get_as(&format!("/api/projects/{id}"), &token).await;
+    assert_eq!(read["run_frequencies"], serde_json::json!({}), "{read}");
+    assert_eq!(read["run_delays"], serde_json::json!({}), "{read}");
+
+    stand.drop_schema().await;
+}

@@ -257,9 +257,12 @@ async fn rename_file(
             &[&id, &name, &request.to],
         )
         .await?;
-    // Задержка прогона ключуется именем сценария - она уходит вместе с ним.
+    // Задержка и частота прогона ключуются именем сценария - они уходят вместе с ним.
     transaction
-        .execute(crate::projects::RENAME_DELAY, &[&id, &name, &request.to])
+        .execute(
+            crate::projects::RENAME_RUN_SETTINGS,
+            &[&id, &name, &request.to],
+        )
         .await?;
     let written = bump(&transaction, &id, &state.store, &owner).await?;
     transaction.commit().await?;
@@ -310,7 +313,7 @@ async fn remove_file(
         )
         .await?;
     transaction
-        .execute(crate::projects::FORGET_DELAY, &[&id, &name])
+        .execute(crate::projects::FORGET_RUN_SETTINGS, &[&id, &name])
         .await?;
     let written = bump(&transaction, &id, &state.store, &owner).await?;
     transaction.commit().await?;

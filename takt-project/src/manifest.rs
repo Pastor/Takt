@@ -23,8 +23,9 @@ pub const GENERATED: &str = "generated/";
 /// - `2` - цель и ключи сборки;
 /// - `3` - активный сценарий и род `markdown`;
 /// - `4` - задержки прогона по сценариям;
-/// - `5` - род `address_map` (карта адресов `.takt-map`).
-pub const FORMAT: u32 = 5;
+/// - `5` - род `address_map` (карта адресов `.takt-map`);
+/// - `6` - частоты модельных часов прогона по сценариям.
+pub const FORMAT: u32 = 6;
 
 /// Метаданные проекта.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -67,6 +68,10 @@ pub struct Manifest {
     /// Задержки прогона по сценариям, секунд; пусто - без задержек.
     #[serde(default)]
     pub run_delays: BTreeMap<String, f64>,
+    /// Частоты модельных часов прогона по сценариям, Гц - то же, что `clock` модели;
+    /// сценария нет в списке - частота из `clock` модели, иначе 1 мс на такт.
+    #[serde(default)]
+    pub run_frequencies: BTreeMap<String, u64>,
 }
 
 /// Запись состава.

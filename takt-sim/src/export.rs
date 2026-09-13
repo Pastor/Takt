@@ -90,7 +90,8 @@ pub struct Request {
     pub scenario: Option<String>,
     /// Предел тактов; `None` - длина сценария, без сценария [`DEFAULT_STEPS`].
     pub steps: Option<usize>,
-    /// Период такта, миллисекунд; `None` - частота модели либо 1 мс.
+    /// Период такта, миллисекунд; `None` - частота сценария из манифеста, затем
+    /// частота модели, иначе 1 мс.
     pub tick_ms: Option<i64>,
     /// Каталоги поиска импортов одной модели (`-I`); у каталога и архива импорты
     /// разрешаются по составу проекта.
@@ -393,10 +394,21 @@ fn run(
         .steps
         .or(scenario.is_none().then_some(DEFAULT_STEPS));
     let mut runner = SimulationRunner::new(unit, steps, limit, port_names);
+    // Приоритет как у страницы: явный период, частота сценария из манифеста, `clock`
+    // модели. Частота сценария - выбор автора проекта, и видео обязано идти в том же
+    // темпе, что прогон на странице.
+    let scenario_hz = scenario
+        .as_ref()
+        .and_then(|name| project.manifest.run_frequencies.get(name))
+        .copied();
     if let Some(ms) = request.tick_ms {
         runner.set_tick_period_ns(ms.saturating_mul(1_000_000));
-    } else if let Some(hz) = clock_hz.filter(|hz| *hz > 0) {
-        runner.set_tick_period_ns(1_000_000_000 / i64::try_from(hz).unwrap_or(i64::MAX));
+    } else if let Some(hz) = scenario_hz
+        .filter(|hz| *hz > 0)
+        .or(clock_hz.filter(|hz| *hz > 0))
+    {
+        let period = 1_000_000_000 / i64::try_from(hz).unwrap_or(i64::MAX);
+        runner.set_tick_period_ns(period.max(1));
     }
 
     let mut out = Vec::new();
