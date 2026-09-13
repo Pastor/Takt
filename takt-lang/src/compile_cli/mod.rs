@@ -11,6 +11,9 @@ use crate::address_map::split_include_dirs;
 use std::fs;
 use std::process;
 
+use crate::diagnostics::lang::keys;
+use crate::msg;
+
 /// Применимость ключа сборки к цели - одна таблица на проект.
 pub mod target_flags;
 
@@ -174,21 +177,21 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 i += 1;
                 match args.get(i) {
                     Some(v) => target = v.clone(),
-                    None => return Err(format!("{} требует аргумент", arg)),
+                    None => return Err(msg!(keys::CLI_FLAG_NEEDS_ARGUMENT, flag = arg)),
                 }
             }
             "-o" | "--output" => {
                 i += 1;
                 match args.get(i) {
                     Some(v) => output_path = Some(v.clone()),
-                    None => return Err(format!("{} требует аргумент", arg)),
+                    None => return Err(msg!(keys::CLI_FLAG_NEEDS_ARGUMENT, flag = arg)),
                 }
             }
             "-D" | "--define" => {
                 i += 1;
                 match args.get(i) {
                     Some(v) => defines.push(v.clone()),
-                    None => return Err(format!("{} требует аргумент", arg)),
+                    None => return Err(msg!(keys::CLI_FLAG_NEEDS_ARGUMENT, flag = arg)),
                 }
             }
             // Слитная форма: -DNAME=VALUE. Ветка стоит после раздельной - иначе она
@@ -200,7 +203,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 i += 1;
                 match args.get(i) {
                     Some(v) => include_dirs.extend(split_include_dirs(v)),
-                    None => return Err(format!("{} требует аргумент", arg)),
+                    None => return Err(msg!(keys::CLI_FLAG_NEEDS_ARGUMENT, flag = arg)),
                 }
             }
             // Слитная форма: -I/path или -I/a:/b
@@ -228,7 +231,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 i += 1;
                 match args.get(i) {
                     Some(v) => address_map = Some(v.clone()),
-                    None => return Err(format!("{} требует аргумент", arg)),
+                    None => return Err(msg!(keys::CLI_FLAG_NEEDS_ARGUMENT, flag = arg)),
                 }
             }
             // ширина вещественного типа. Принимаются обе формы - `--float-width=32`
@@ -238,7 +241,9 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 i += 1;
                 match args.get(i) {
                     Some(v) => float_width = parse_float_width(v)?,
-                    None => return Err(format!("{} требует аргумент: 32 или 64", arg)),
+                    None => {
+                        return Err(msg!(keys::CLI_COMPILE_FLOAT_WIDTH_NEEDS_VALUE, flag = arg));
+                    }
                 }
             }
             a if a.starts_with("--float-width=") => {
@@ -249,7 +254,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 i += 1;
                 match args.get(i) {
                     Some(v) => float_as_q = Some(parse_float_as_q(v)?),
-                    None => return Err(format!("{} требует аргумент: m.n (напр. 10.22)", arg)),
+                    None => return Err(msg!(keys::CLI_COMPILE_FLOAT_AS_Q_NEEDS_VALUE, flag = arg)),
                 }
             }
             a if a.starts_with("--float-as-q=") => {
@@ -262,9 +267,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 parameters = parse_parameters_mode(&a["--parameters=".len()..])?;
             }
             "--parameters" => {
-                return Err(
-                    "--parameters требует значение: --parameters=assign|specialize".to_string(),
-                );
+                return Err(msg!(keys::CLI_COMPILE_PARAMETERS_NEEDS_VALUE));
             }
             // адаптер шины для цели `sv-mmio`. Только слитная форма со значением - как
             // у `--parameters=`: флаг без значения есть ошибка, а не молчаливое
@@ -273,7 +276,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 bus = Some(parse_bus(&a["--bus=".len()..])?);
             }
             "--bus" => {
-                return Err("--bus требует значение: --bus=apb".to_string());
+                return Err(msg!(keys::CLI_COMPILE_BUS_NEEDS_VALUE));
             }
             // форма печати автомата. Только слитная форма со значением - как у
             // `--parameters=` и `--bus=`.
@@ -281,7 +284,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 fsm = parse_fsm(&a["--fsm=".len()..])?;
             }
             "--fsm" => {
-                return Err("--fsm требует значение: --fsm=switch|table".to_string());
+                return Err(msg!(keys::CLI_COMPILE_FSM_NEEDS_VALUE));
             }
             // эвристика подстановки. Атрибут `[inline]` от флага не зависит - он
             // написан автором.
@@ -289,14 +292,14 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 inline = parse_inline(&a["--inline=".len()..])?;
             }
             "--inline" => {
-                return Err("--inline требует значение: --inline=off|auto".to_string());
+                return Err(msg!(keys::CLI_COMPILE_INLINE_NEEDS_VALUE));
             }
             // частота такта устройства. Обе формы, как у соседей.
             "--tick-hz" => {
                 i += 1;
                 match args.get(i) {
                     Some(v) => tick_hz = Some(parse_tick_hz(v)?),
-                    None => return Err(format!("{} требует аргумент: частоту в Гц", arg)),
+                    None => return Err(msg!(keys::CLI_COMPILE_TICK_HZ_NEEDS_VALUE, flag = arg)),
                 }
             }
             a if a.starts_with("--tick-hz=") => {
@@ -307,7 +310,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 input_file = Some(a.to_string());
             }
             unknown => {
-                return Err(format!("неизвестный флаг '{}'", unknown));
+                return Err(msg!(keys::CLI_UNKNOWN_FLAG, flag = unknown));
             }
         }
         i += 1;
@@ -315,13 +318,10 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
 
     // Флаги --verbose и --quiet взаимоисключающие
     if verbose && quiet {
-        return Err(
-            "флаги --verbose и --quiet взаимоисключающие: нельзя указывать оба одновременно"
-                .to_string(),
-        );
+        return Err(msg!(keys::CLI_COMPILE_VERBOSE_AND_QUIET));
     }
 
-    let input_file = input_file.ok_or_else(|| "не указан входной файл".to_string())?;
+    let input_file = input_file.ok_or_else(|| msg!(keys::CLI_NO_INPUT_FILE))?;
     let output_path = output_path.unwrap_or_else(|| "output".to_string());
 
     Ok(CompileOptions {
@@ -355,10 +355,7 @@ fn parse_parameters_mode(value: &str) -> Result<ParametersMode, String> {
     match value {
         "assign" => Ok(ParametersMode::Assign),
         "specialize" => Ok(ParametersMode::Specialize),
-        other => Err(format!(
-            "--parameters={} — неизвестный режим; допустимы: assign (умолчание), specialize",
-            other
-        )),
+        other => Err(msg!(keys::CLI_COMPILE_PARAMETERS_UNKNOWN, value = other)),
     }
 }
 
@@ -371,10 +368,7 @@ fn parse_float_width(value: &str) -> Result<crate::FloatWidth, String> {
     match value {
         "32" => Ok(crate::FloatWidth::W32),
         "64" => Ok(crate::FloatWidth::W64),
-        other => Err(format!(
-            "--float-width: недопустимое значение '{}' (допустимо 32 или 64)",
-            other
-        )),
+        other => Err(msg!(keys::CLI_COMPILE_FLOAT_WIDTH_INVALID, value = other)),
     }
 }
 
@@ -384,18 +378,16 @@ fn parse_float_width(value: &str) -> Result<crate::FloatWidth, String> {
 /// неверный формат - ошибка CLI, а не молчаливое умолчание: точность представления
 /// задаёт автор, компилятор её не угадывает.
 fn parse_float_as_q(value: &str) -> Result<(u8, u8), String> {
-    let (m_str, n_str) = value.split_once('.').ok_or_else(|| {
-        format!("--float-as-q: ожидался формат m.n (напр. 10.22), получено '{value}'")
-    })?;
+    let (m_str, n_str) = value
+        .split_once('.')
+        .ok_or_else(|| msg!(keys::CLI_COMPILE_FLOAT_AS_Q_FORMAT, value = value))?;
     let parse = |s: &str, what: &str| -> Result<u8, String> {
         s.parse::<u8>()
-            .map_err(|_| format!("--float-as-q: {what} '{s}' — не целое 0..255"))
+            .map_err(|_| msg!(keys::CLI_COMPILE_FLOAT_AS_Q_PART, part = what, value = s))
     };
     let (m, n) = (parse(m_str, "m")?, parse(n_str, "n")?);
     if m < 1 || n < 1 || (m as u16) + (n as u16) > 64 {
-        return Err(format!(
-            "--float-as-q: q({m}, {n}) вне границ (m ≥ 1, n ≥ 1, m + n ≤ 64)"
-        ));
+        return Err(msg!(keys::CLI_COMPILE_FLOAT_AS_Q_RANGE, m = m, n = n));
     }
     Ok((m, n))
 }
@@ -413,9 +405,7 @@ fn parse_float_as_q(value: &str) -> Result<(u8, u8), String> {
 fn parse_bus(value: &str) -> Result<crate::generator::Bus, String> {
     match value {
         "apb" => Ok(crate::generator::Bus::Apb),
-        other => Err(format!(
-            "--bus: неизвестный протокол '{other}'. Поддерживается: apb"
-        )),
+        other => Err(msg!(keys::CLI_COMPILE_BUS_UNKNOWN, value = other)),
     }
 }
 
@@ -427,9 +417,7 @@ fn parse_fsm(value: &str) -> Result<crate::generator::FsmForm, String> {
     match value {
         "switch" => Ok(crate::generator::FsmForm::Switch),
         "table" => Ok(crate::generator::FsmForm::Table),
-        other => Err(format!(
-            "--fsm: неизвестная форма '{other}'. Поддерживаются: switch (по умолчанию), table"
-        )),
+        other => Err(msg!(keys::CLI_COMPILE_FSM_UNKNOWN, value = other)),
     }
 }
 
@@ -438,19 +426,16 @@ fn parse_inline(value: &str) -> Result<crate::generator::InlinePolicy, String> {
     match value {
         "off" => Ok(crate::generator::InlinePolicy::Off),
         "auto" => Ok(crate::generator::InlinePolicy::Auto),
-        other => Err(format!(
-            "--inline: неизвестный режим '{other}'. Поддерживаются: off (по умолчанию; \
-             подставляются только функции с атрибутом 'inline'), auto (плюс эвристика)"
-        )),
+        other => Err(msg!(keys::CLI_COMPILE_INLINE_UNKNOWN, value = other)),
     }
 }
 
 fn parse_tick_hz(value: &str) -> Result<u64, String> {
     let hz = value
         .parse::<u64>()
-        .map_err(|_| format!("--tick-hz: '{value}' — не целое число герц"))?;
+        .map_err(|_| msg!(keys::CLI_COMPILE_TICK_HZ_NOT_INTEGER, value = value))?;
     if hz == 0 {
-        return Err("--tick-hz: частота такта не может быть нулевой".to_string());
+        return Err(msg!(keys::CLI_COMPILE_TICK_HZ_ZERO));
     }
     Ok(hz)
 }
@@ -554,8 +539,13 @@ fn report_result(
         options.input_file.clone()
     };
     eprintln!(
-        "Скомпилировано: {} → {}/ ({})",
-        input, options.output_path, target
+        "{}",
+        msg!(
+            keys::CLI_COMPILE_DONE,
+            input = input,
+            output = options.output_path,
+            target = target
+        )
     );
 }
 
@@ -567,8 +557,8 @@ pub fn run_compile(args: &[String]) -> i32 {
     let options = match parse_compile_args(args) {
         Ok(o) => o,
         Err(e) => {
-            eprintln!("Ошибка разбора аргументов: {e}");
-            eprintln!("Подсказка: см. `taktc --help`.");
+            eprintln!("{}", msg!(keys::CLI_ARGS_ERROR, error = e));
+            eprintln!("{}", msg!(keys::CLI_COMPILE_HINT));
             return 1;
         }
     };
@@ -589,7 +579,14 @@ pub fn run_compile(args: &[String]) -> i32 {
     let source = match fs::read_to_string(&options.input_file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Ошибка чтения файла '{}': {}", options.input_file, e);
+            eprintln!(
+                "{}",
+                msg!(
+                    keys::CLI_READ_FILE_ERROR,
+                    path = options.input_file,
+                    error = e
+                )
+            );
             return 1;
         }
     };
@@ -605,7 +602,10 @@ pub fn run_compile(args: &[String]) -> i32 {
         let map_src = match fs::read_to_string(map_path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Ошибка чтения карты адресов '{}': {}", map_path, e);
+                eprintln!(
+                    "{}",
+                    msg!(keys::CLI_ADDRESS_MAP_READ_ERROR, path = map_path, error = e)
+                );
                 return 1;
             }
         };
@@ -615,9 +615,12 @@ pub fn run_compile(args: &[String]) -> i32 {
             Err(diags) => {
                 for d in diags {
                     eprintln!(
-                        "Ошибка карты адресов [{}]: {}",
-                        d.code.as_deref().unwrap_or("?"),
-                        d.message
+                        "{}",
+                        msg!(
+                            keys::CLI_ADDRESS_MAP_ERROR,
+                            code = d.code.as_deref().unwrap_or("?"),
+                            message = d.message
+                        )
                     );
                 }
                 return 1;
@@ -634,9 +637,12 @@ pub fn run_compile(args: &[String]) -> i32 {
         Err(diags) => {
             for d in diags {
                 eprintln!(
-                    "Ошибка --define [{}]: {}",
-                    d.code.as_deref().unwrap_or("?"),
-                    d.message
+                    "{}",
+                    msg!(
+                        keys::CLI_DEFINE_ERROR,
+                        code = d.code.as_deref().unwrap_or("?"),
+                        message = d.message
+                    )
                 );
             }
             return 1;
@@ -711,14 +717,18 @@ pub fn run_compile(args: &[String]) -> i32 {
 
     // Выбор цели по имени - Одна точка на проект (`compile::Target`).
     let Some(target) = crate::compile::Target::parse(options.target.as_str()) else {
+        let known = crate::compile::Target::ALL
+            .iter()
+            .map(|t| t.name())
+            .collect::<Vec<_>>()
+            .join(", ");
         eprintln!(
-            "Ошибка: неизвестная цель '{}'. Поддерживается: {}",
-            options.target,
-            crate::compile::Target::ALL
-                .iter()
-                .map(|t| t.name())
-                .collect::<Vec<_>>()
-                .join(", ")
+            "{}",
+            msg!(
+                keys::CLI_COMPILE_UNKNOWN_TARGET,
+                target = options.target,
+                known = known
+            )
         );
         return 1;
     };
@@ -753,21 +763,31 @@ pub fn run_compile(args: &[String]) -> i32 {
         if !options.quiet {
             if options.verbose {
                 // Расширенный вывод: полный путь к файлу и список директорий поиска
+                let input = fs::canonicalize(&options.input_file)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| options.input_file.clone());
+                // Список путей печатается формой `Debug` - она и была выводом. В каталог
+                // он приходит готовой строкой: `{:?}` в тексте каталога не бывает.
+                let dirs = format!("{:?}", options.include_dirs);
                 eprintln!(
-                    "Скомпилировано: {} → {} (путей поиска: {}: {:?})",
-                    fs::canonicalize(&options.input_file)
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_else(|_| options.input_file.clone()),
-                    options.output_path,
-                    options.include_dirs.len(),
-                    options.include_dirs,
+                    "{}",
+                    msg!(
+                        keys::CLI_COMPILE_DONE_C_VERBOSE,
+                        input = input,
+                        output = options.output_path,
+                        count = options.include_dirs.len(),
+                        dirs = dirs
+                    )
                 );
             } else {
                 eprintln!(
-                    "Скомпилировано: {} → {}/ (путей поиска: {})",
-                    options.input_file,
-                    options.output_path,
-                    options.include_dirs.len()
+                    "{}",
+                    msg!(
+                        keys::CLI_COMPILE_DONE_C,
+                        input = options.input_file,
+                        output = options.output_path,
+                        count = options.include_dirs.len()
+                    )
                 );
             }
         }

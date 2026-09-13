@@ -29,6 +29,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::rc::Rc;
+use takt_lang::diagnostics::lang::keys;
+use takt_lang::msg;
 
 // -----------------------------------------------------------------------------
 // Подкоманда `fmt` - канонический форматтер
@@ -57,16 +59,16 @@ pub fn parse_fmt_args(args: &[String]) -> Result<FmtOptions, String> {
             "--check" => options.check = true,
             "--stdin" => options.stdin = true,
             other if other.starts_with('-') => {
-                return Err(format!("неизвестный флаг '{other}'"));
+                return Err(msg!(keys::CLI_UNKNOWN_FLAG, flag = other));
             }
             other => options.paths.push(other.to_string()),
         }
     }
     if options.stdin && !options.paths.is_empty() {
-        return Err("--stdin несовместим с указанием файлов".to_string());
+        return Err(msg!(keys::CLI_FMT_STDIN_WITH_FILES));
     }
     if !options.stdin && options.paths.is_empty() {
-        return Err("укажите файлы/каталоги или --stdin".to_string());
+        return Err(msg!(keys::CLI_FMT_NO_INPUT));
     }
     Ok(options)
 }
@@ -78,7 +80,7 @@ fn collect_takt_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String>
         return Ok(());
     }
     if !path.is_dir() {
-        return Err(format!("путь не найден: {}", path.display()));
+        return Err(msg!(keys::CLI_FMT_PATH_NOT_FOUND, path = path.display()));
     }
     let entries = fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))?;
     for entry in entries.flatten() {
@@ -146,7 +148,7 @@ fn run_fmt(options: &FmtOptions) -> i32 {
     if options.stdin {
         let mut source = String::new();
         if let Err(e) = io::Read::read_to_string(&mut io::stdin(), &mut source) {
-            eprintln!("Ошибка чтения stdin: {e}");
+            eprintln!("{}", msg!(keys::CLI_FMT_STDIN_READ_ERROR, error = e));
             return 1;
         }
         return match takt_lang::format::format_source_with_warnings(&source) {
@@ -156,7 +158,7 @@ fn run_fmt(options: &FmtOptions) -> i32 {
                     if formatted == source {
                         0
                     } else {
-                        eprintln!("stdin: требуется форматирование");
+                        eprintln!("{}", msg!(keys::CLI_FMT_STDIN_NEEDS_FORMAT));
                         1
                     }
                 } else {
@@ -176,7 +178,7 @@ fn run_fmt(options: &FmtOptions) -> i32 {
     let mut files = Vec::new();
     for path in &options.paths {
         if let Err(e) = collect_takt_files(Path::new(path), &mut files) {
-            eprintln!("Ошибка: {e}");
+            eprintln!("{}", msg!(keys::CLI_ERROR, error = e));
             return 1;
         }
     }
@@ -189,7 +191,14 @@ fn run_fmt(options: &FmtOptions) -> i32 {
         let source = match fs::read_to_string(file) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Ошибка чтения '{}': {e}", file.display());
+                eprintln!(
+                    "{}",
+                    msg!(
+                        keys::CLI_FMT_FILE_READ_ERROR,
+                        path = file.display(),
+                        error = e
+                    )
+                );
                 failed += 1;
                 continue;
             }
@@ -215,7 +224,10 @@ fn run_fmt(options: &FmtOptions) -> i32 {
         if options.check {
             need_format.push(file.clone());
         } else if let Err(e) = fs::write(file, &formatted) {
-            eprintln!("Ошибка записи '{}': {e}", file.display());
+            eprintln!(
+                "{}",
+                msg!(keys::CLI_WRITE_ERROR, path = file.display(), error = e)
+            );
             failed += 1;
         } else {
             changed += 1;
@@ -224,13 +236,19 @@ fn run_fmt(options: &FmtOptions) -> i32 {
 
     if options.check {
         for file in &need_format {
-            eprintln!("требуется форматирование: {}", file.display());
+            eprintln!(
+                "{}",
+                msg!(keys::CLI_FMT_NEEDS_FORMAT, path = file.display())
+            );
         }
         if !need_format.is_empty() {
             eprintln!(
-                "\nНе отформатировано файлов: {} из {}",
-                need_format.len(),
-                files.len()
+                "\n{}",
+                msg!(
+                    keys::CLI_FMT_NOT_FORMATTED,
+                    count = need_format.len(),
+                    total = files.len()
+                )
             );
         }
         if need_format.is_empty() && failed == 0 {
@@ -240,7 +258,14 @@ fn run_fmt(options: &FmtOptions) -> i32 {
     }
 
     if changed > 0 {
-        eprintln!("Отформатировано файлов: {changed} из {}", files.len());
+        eprintln!(
+            "{}",
+            msg!(
+                keys::CLI_FMT_FORMATTED,
+                count = changed,
+                total = files.len()
+            )
+        );
     }
     if failed > 0 { 1 } else { 0 }
 }
@@ -261,7 +286,14 @@ fn run_verify(options: &VerifyOptions) -> i32 {
     let source = match fs::read_to_string(&options.input_file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Ошибка чтения файла '{}': {e}", options.input_file);
+            eprintln!(
+                "{}",
+                msg!(
+                    keys::CLI_READ_FILE_ERROR,
+                    path = options.input_file,
+                    error = e
+                )
+            );
             return 1;
         }
     };
@@ -271,9 +303,12 @@ fn run_verify(options: &VerifyOptions) -> i32 {
         Err(diags) => {
             for d in diags {
                 eprintln!(
-                    "Ошибка разбора [{}]: {}",
-                    d.code.as_deref().unwrap_or("?"),
-                    d.message
+                    "{}",
+                    msg!(
+                        keys::CLI_PARSE_ERROR,
+                        code = d.code.as_deref().unwrap_or("?"),
+                        message = d.message
+                    )
                 );
             }
             return 1;
@@ -285,9 +320,12 @@ fn run_verify(options: &VerifyOptions) -> i32 {
         Ok(m) => m,
         Err(d) => {
             eprintln!(
-                "Семантическая ошибка [{}]: {}",
-                d.code.as_deref().unwrap_or("?"),
-                d.message
+                "{}",
+                msg!(
+                    keys::CLI_SEMANTIC_ERROR,
+                    code = d.code.as_deref().unwrap_or("?"),
+                    message = d.message
+                )
             );
             return 1;
         }
@@ -318,7 +356,10 @@ fn run_verify(options: &VerifyOptions) -> i32 {
             let phi = match takt_lang::parse_ltl_property(text) {
                 Ok(p) => p,
                 Err(d) => {
-                    eprintln!("Ошибка разбора свойства: {}", d.message);
+                    eprintln!(
+                        "{}",
+                        msg!(keys::CLI_VERIFY_PROPERTY_PARSE_ERROR, message = d.message)
+                    );
                     return 1;
                 }
             };
@@ -342,9 +383,8 @@ fn run_verify(options: &VerifyOptions) -> i32 {
 
     if outcome.results.is_empty() && outcome.skipped.is_empty() {
         eprintln!(
-            "В файле '{}' нет LTL-формул. Объявите свойство как `: [LTL] φ;` \
-             или задайте его флагом --property \"φ\".",
-            options.input_file
+            "{}",
+            msg!(keys::CLI_VERIFY_NO_FORMULAS, path = options.input_file)
         );
         return 1;
     }
@@ -365,38 +405,70 @@ fn print_verify_results(outcome: &takt_lang::VerifyOutcome) -> i32 {
         let scope = if result.model.is_empty() {
             String::new()
         } else {
-            format!(" [модель {}]", result.model)
+            format!(" {}", msg!(keys::CLI_VERIFY_SCOPE, model = result.model))
         };
         match &result.verdict {
             Verdict::Holds => {
-                println!("СВОЙСТВО ДЕРЖИТСЯ{scope}: {}", result.formula);
+                println!(
+                    "{}",
+                    msg!(
+                        keys::CLI_VERIFY_HOLDS,
+                        scope = scope,
+                        formula = result.formula
+                    )
+                );
             }
             Verdict::Violated(cex) => {
                 failures += 1;
-                println!("СВОЙСТВО НАРУШЕНО{scope}: {}", result.formula);
-                println!("  контрпример: {}", cex.trace());
                 println!(
-                    "  (абстракция управления: условия переходов не учитываются — \
-                     контрпример может быть недостижим по данным)"
+                    "{}",
+                    msg!(
+                        keys::CLI_VERIFY_VIOLATED,
+                        scope = scope,
+                        formula = result.formula
+                    )
                 );
+                println!(
+                    "  {}",
+                    msg!(keys::CLI_VERIFY_COUNTEREXAMPLE, trace = cex.trace())
+                );
+                println!("  {}", msg!(keys::CLI_VERIFY_ABSTRACTION_NOTE));
             }
             Verdict::Unsupported { atoms, reason } => {
                 failures += 1;
-                println!("СВОЙСТВО НЕ ПРОВЕРЕНО{scope}: {}", result.formula);
+                println!(
+                    "{}",
+                    msg!(
+                        keys::CLI_VERIFY_NOT_CHECKED,
+                        scope = scope,
+                        formula = result.formula
+                    )
+                );
                 // Печатается одна причина - та, по которой проверка и не выполнена.
-                println!("  атом(ы) {}: {}.", atoms.join(", "), reason.text());
+                println!(
+                    "  {}",
+                    msg!(
+                        keys::CLI_VERIFY_ATOMS,
+                        atoms = atoms.join(", "),
+                        reason = reason.text()
+                    )
+                );
                 // Охват печатается всегда: он объясняет, что вообще проверяемо, и нужен
                 // при любой из причин - в том числе чтобы автор увидел, что предикаты
                 // над данными в охвате есть.
-                println!(
-                    "  В охвате: свойства управления (имя состояния) и предикаты над данными \
-                     (`cond`/булев `var` над `bit`/`bool`/целым/`enum`)."
-                );
+                println!("  {}", msg!(keys::CLI_VERIFY_COVERAGE));
             }
             Verdict::NoStartState => {
                 failures += 1;
-                println!("СВОЙСТВО НЕ ПРОВЕРЕНО{scope}: {}", result.formula);
-                println!("  у модели нет стартового состояния — проверять нечего");
+                println!(
+                    "{}",
+                    msg!(
+                        keys::CLI_VERIFY_NOT_CHECKED,
+                        scope = scope,
+                        formula = result.formula
+                    )
+                );
+                println!("  {}", msg!(keys::CLI_VERIFY_NO_START_STATE));
             }
         }
     }
@@ -405,139 +477,53 @@ fn print_verify_results(outcome: &takt_lang::VerifyOutcome) -> i32 {
     // читалось бы как "проверено всё".
     if !outcome.skipped.is_empty() {
         println!(
-            "\nНе проверено (вне области): {} — модели из импортов: {}",
-            outcome.skipped.len(),
-            outcome.skipped.join(", ")
+            "\n{}",
+            msg!(
+                keys::CLI_VERIFY_SKIPPED,
+                count = outcome.skipped.len(),
+                models = outcome.skipped.join(", ")
+            )
         );
-        println!("  --scope all — проверить их тоже.");
+        println!("  {}", msg!(keys::CLI_VERIFY_SCOPE_ALL_HINT));
     }
 
     // Итог печатается в stdout вместе с вердиктами: разведи их по потокам - и в
     // терминале итог всплывёт выше вердиктов из-за буферизации.
     if failures > 0 {
         println!(
-            "\nПроверено свойств: {}; не держится/не проверено: {failures}",
-            results.len()
+            "\n{}",
+            msg!(
+                keys::CLI_VERIFY_SUMMARY_FAILED,
+                count = results.len(),
+                failures = failures
+            )
         );
         return 1;
     }
-    println!("\nПроверено свойств: {}; все держатся", results.len());
+    println!(
+        "\n{}",
+        msg!(keys::CLI_VERIFY_SUMMARY_OK, count = results.len())
+    );
     0
 }
 
 /// Выводит справку по использованию утилиты в stderr.
+///
+/// Справка живёт в каталоге **разделами**: переводчику легче держать раздел, чем
+/// сотню строк, а пустая строка между разделами - разметка, и её ставит код.
 fn print_usage() {
-    eprintln!(
-        "Takt — учебный язык автоматных моделей: показывает принципы автоматного подхода к разработке."
-    );
-    eprintln!();
-    eprintln!("Использование: taktc compile [флаги] <input.takt> [-o <output>]");
-    eprintln!("               taktc fmt [--check] [--stdin] <файлы/каталоги>");
-    eprintln!(
-        "               taktc verify [--property \"φ\"] [--scope file|all] [--trace] <input.takt>"
-    );
-    eprintln!(
-        "               taktc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.takt>"
-    );
-    eprintln!("               taktc version | --version | -V");
-    eprintln!("               taktc --help");
-    eprintln!();
-    eprintln!("Флаги compile:");
-    eprintln!("  --target, -t <цель>    Целевой язык (по умолчанию: c) — см. «Целевые платформы»");
-    eprintln!("  --output, -o <путь>    Путь к выходному файлу");
-    eprintln!("  --include-dirs, -I <dirs>  Пути поиска файлов import, разделённые ':' или ';'");
-    eprintln!("                             Можно повторять: -I /a -I /b  или  -I /a:/b");
-    eprintln!("  --verbose, -v          Расширенный вывод: все предупреждения и полные пути");
-    eprintln!("  --quiet, -q            Тихий режим: только ошибки");
-    eprintln!("                         Флаги --verbose и --quiet взаимоисключающие");
-    eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
-    eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
-    eprintln!("  --fsm=switch|table     Форма автомата (все цели):");
-    eprintln!(
-        "                         switch — по умолчанию; table — переходы данными (таблица + диспетчер)"
-    );
-    eprintln!("  --bounds-check         Guard границ массива: доступ за границей не выполняется,");
-    eprintln!(
-        "                         признак уходит в выходной порт bounds_fault (по умолчанию выкл.)"
-    );
-    eprintln!(
-        "  --inline=off|auto      Подстановка тела функции: off — по умолчанию (действует только"
-    );
-    eprintln!(
-        "                         атрибут [inline]); auto — плюс эвристика (тело ≤ 5 операторов)"
-    );
-    eprintln!(
-        "  --parameters=assign|specialize  Параметры модели: assign — поле экземпляра (по умолчанию);"
-    );
-    eprintln!(
-        "                         specialize — копия модели на набор аргументов, параметр константой"
-    );
-    eprintln!("  --address-map <файл>   Внешняя карта адресов портов (.ld-подобный формат)");
-    eprintln!("  -D, --define N=VALUE   Символ платформы для выражений адреса (повторяем);");
-    eprintln!("                         слитно: -DN=VALUE. Значение — 0x…/десятичное[:бит].");
-    eprintln!(
-        "                         Виден ТОЛЬКО выражениям адреса, логику автомата не меняет."
-    );
-    eprintln!("  --float-width=32|64    Ширина вещественного типа в C: float или double");
-    eprintln!(
-        "  --float-as-q=m.n       Точность q(m,n) для реализации float (0096): sv → q; c/rust/st → q с --float-embedded"
-    );
-    eprintln!(
-        "  --float-embedded       Реализовать float целочисленным q в c/rust/st (embedded без FPU)"
-    );
-    eprintln!(
-        "  --bus=apb              Цель sv-mmio: адаптер шины рядом с ядром (<модель>_apb.sv)"
-    );
-    eprintln!(
-        "  --tick-hz=<n>          Частота такта устройства (Гц): профиль «такты» (фича 0134)"
-    );
-    eprintln!("                         Модель с `clock` требует совпадающий флаг (SE-069/SE-070)");
-    eprintln!(
-        "                         По умолчанию 64 (double) — совпадает с точностью симулятора"
-    );
-    eprintln!();
-    eprintln!("Целевые платформы:");
-    eprintln!("  c         Генерация C-заголовочного файла");
-    eprintln!("  c-hal     C + таблица адресов портов и дефолтный HAL (фича 0020)");
-    eprintln!("  st        Генерация Structured Text IEC 61131-3 (.st), язык ПЛК (фича 0041)");
-    eprintln!("  st-at     ST + размещение портов по карте адресов (AT %...)");
-    eprintln!("  rust      Генерация no_std Rust (.rs) — прошивка МК (фича 0050)");
-    eprintln!("            Порты через трейт Hal; подключается в крейт через mod");
-    eprintln!("  sv        Генерация синтезируемого SystemVerilog (.sv) — FPGA/ASIC (фича 0045)");
-    eprintln!("            Такт модели ≡ posedge clk; clk/rst_n — служебные порты модуля");
-    eprintln!("  sv-mmio   SV + порты с адресом → регистровый файл на шине (фича 0062)");
-    eprintln!("            Порт с адресом = бит регистра; интерфейс reg_addr/wdata/wen/rdata");
-    eprintln!();
-    eprintln!("Примеры:");
-    eprintln!("  taktc compile main.takt");
-    eprintln!("  taktc compile -I /lib/lam:/home/user/lam main.takt -o build/");
-    eprintln!("  taktc compile -I /lib/lam -I /home/user/lam --target c main.takt");
-    eprintln!("  taktc compile --verbose main.takt");
-    eprintln!("  taktc compile --quiet main.takt -o dist/");
-    eprintln!();
-    eprintln!("Подкоманда fmt (канонический форматтер):");
-    eprintln!("  --check      Не писать файлы; ненулевой код, если нужен формат (для CI)");
-    eprintln!("  --stdin      Читать из stdin, писать в stdout");
-    eprintln!("  taktc fmt examples/            # отформатировать каталог на месте");
-    eprintln!("  taktc fmt --check examples/    # проверить (CI)");
-    eprintln!("  cat a.takt | taktc fmt --stdin  # отформатировать поток");
-    eprintln!();
-    eprintln!("Подкоманда verify (проверка LTL-свойств, model checking — фича 0049):");
-    eprintln!("  --property, -p \"φ\"  Проверить одну формулу из командной строки");
-    eprintln!("                      Без флага проверяются все `: [LTL] φ;` файла");
-    eprintln!("  --scope file|all    Область проверки (по умолчанию: file — модели своего файла)");
-    eprintln!("                      all — проверять и модели, пришедшие через import");
-    eprintln!("  --trace             Печатать конвейер (Крипке, автомат !φ, произведение)");
-    eprintln!("  -I <dirs>           Пути поиска файлов import");
-    eprintln!();
-    eprintln!("  Атом формулы — ИМЯ СОСТОЯНИЯ: `S` истинно, когда автомат в состоянии S.");
-    eprintln!("  Проверяются свойства управления: достижимость, порядок состояний, живость.");
-    eprintln!("  Свойства над данными (`G (temp <= 100)`) в этой абстракции не поддержаны.");
-    eprintln!("  Код возврата: 0 — все свойства держатся; 1 — нарушение/не проверено.");
-    eprintln!();
-    eprintln!("  taktc verify model.takt");
-    eprintln!("  taktc verify --property \"F Done\" model.takt       # достижимость");
-    eprintln!("  taktc verify -p \"G (Fault -> F Idle)\" model.takt  # живость");
+    let sections = [
+        keys::CLI_TAKTC_HELP_INTRO,
+        keys::CLI_TAKTC_HELP_USAGE,
+        keys::CLI_TAKTC_HELP_LANG,
+        keys::CLI_TAKTC_HELP_COMPILE,
+        keys::CLI_TAKTC_HELP_TARGETS,
+        keys::CLI_TAKTC_HELP_EXAMPLES,
+        keys::CLI_TAKTC_HELP_FMT,
+        keys::CLI_TAKTC_HELP_VERIFY,
+    ];
+    let text: Vec<String> = sections.iter().map(|key| msg!(*key)).collect();
+    eprintln!("{}", text.join("\n\n"));
 }
 
 fn main() {
@@ -547,7 +533,7 @@ fn main() {
     // разбора самих аргументов обязан прийти уже на выбранном языке. Разбор - в
     // библиотеке: ключ общий с `takt-sim`, и вторая копия разошлась бы с первой молча.
     if let Err(e) = takt_lang::diagnostics::lang::take_flag(&mut args) {
-        eprintln!("Ошибка разбора аргументов: {e}");
+        eprintln!("{}", msg!(keys::CLI_ARGS_ERROR, error = e));
         process::exit(1);
     }
 
@@ -567,7 +553,7 @@ fn main() {
         let options = match parse_fmt_args(&args[2..]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Ошибка разбора аргументов: {e}");
+                eprintln!("{}", msg!(keys::CLI_ARGS_ERROR, error = e));
                 print_usage();
                 process::exit(1);
             }
@@ -579,7 +565,7 @@ fn main() {
         let options = match parse_verify_args(&args[2..]) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Ошибка разбора аргументов: {e}");
+                eprintln!("{}", msg!(keys::CLI_ARGS_ERROR, error = e));
                 print_usage();
                 process::exit(1);
             }
@@ -594,9 +580,8 @@ fn main() {
 
     if args[1] != "compile" {
         eprintln!(
-            "Ошибка: неизвестная команда '{}'. Используйте 'compile', 'fmt', 'verify', \
-             'address-map' или 'version'.",
-            args[1]
+            "{}",
+            msg!(keys::CLI_TAKTC_UNKNOWN_COMMAND, command = args[1])
         );
         print_usage();
         process::exit(1);

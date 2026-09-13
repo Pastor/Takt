@@ -38,7 +38,7 @@ takt-scheme = { path = "../takt-scheme", features = ["video"], optional = true }
 # Проект на диске: состав, роды файлов, активные файлы - то, что экспорт
 # выгружает и что печатает `takt-sim project`.
 takt-project = { path = "../takt-project", optional = true }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "string"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 env_logger = "0.11"

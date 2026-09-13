@@ -79,18 +79,28 @@ pub fn all() -> Vec<Lang> {
 /// Перечисление обязательно: список открыт, и автор, промахнувшийся мимо `en`, иначе не
 /// узнает, чем дерево располагает.
 pub fn parse(code: &str) -> Result<Lang, String> {
-    let wanted = code.trim().to_ascii_lowercase();
-    if let Some(found) = LANGS.iter().find(|known| **known == wanted) {
-        return Ok(Lang(found));
+    if let Some(lang) = known(code) {
+        return Ok(lang);
     }
     let known = LANGS.join(", ");
-    // Текст отказа берётся из каталога базового языка: активный язык в этот момент ещё
-    // не выбран - его как раз и не удалось разобрать.
-    Err(render_in(
-        Lang::base(),
+    // Текст отказа - на языке, выбранном до ключа: переменной `TAKT_LANG` либо
+    // умолчанием. Ключ, который не удалось разобрать, выбором не считается, а базовый
+    // язык здесь давал смесь: `TAKT_LANG=en taktc --lang de` отвечал английской
+    // подписью и русским отказом. Рекурсии нет - [`current`] ищет переменную через
+    // [`known`], а не через `parse`.
+    Err(render(
         keys::LANG_UNKNOWN,
         &[("name", &code), ("known", &known)],
     ))
+}
+
+/// Язык по коду, если для него есть каталог; регистр и пробелы значения не имеют.
+fn known(code: &str) -> Option<Lang> {
+    let wanted = code.trim().to_ascii_lowercase();
+    LANGS
+        .iter()
+        .find(|known| **known == wanted)
+        .map(|found| Lang(found))
 }
 
 /// Изымает ключ `--lang <код>` (или `--lang=<код>`) из аргументов и активирует язык.
@@ -156,7 +166,7 @@ pub fn current() -> Lang {
     }
     std::env::var("TAKT_LANG")
         .ok()
-        .and_then(|code| parse(&code).ok())
+        .and_then(|code| known(&code))
         .unwrap_or_else(Lang::base)
 }
 
@@ -291,6 +301,17 @@ mod tests {
         let err = parse("de").expect_err("язык 'de' в дереве отсутствует");
         assert!(err.contains("de"), "{err}");
         assert!(err.contains("ru") && err.contains("en"), "{err}");
+    }
+
+    /// Отказ разбора языка идёт на языке, выбранном до ключа, а не на базовом: иначе
+    /// английская подпись CLI обрамляла бы русский отказ.
+    #[test]
+    fn refusal_speaks_the_language_chosen_before() {
+        activate(parse("en").unwrap());
+        let err = parse("de").expect_err("языка 'de' в дереве нет");
+        reset();
+        assert!(err.contains("de") && err.contains("en"), "{err}");
+        assert!(!err.chars().any(|c| ('а'..='я').contains(&c)), "{err}");
     }
 
     /// Регистр и пробелы кода языка значения не имеют.

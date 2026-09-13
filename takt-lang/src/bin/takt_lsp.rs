@@ -23,6 +23,8 @@ use lsp_types::request::{
     GotoDefinition, HoverRequest, PrepareRenameRequest, References, Rename, Request as _,
 };
 use lsp_types::*;
+use takt_lang::diagnostics::lang::keys;
+use takt_lang::msg;
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Аргументы разбираются до открытия stdio: иначе `takt-lsp --version` уходит в
@@ -99,7 +101,10 @@ fn search_paths_from_init(init_params: &serde_json::Value) -> Vec<String> {
         // Нечитаемые параметры инициализации - работаем без путей поиска (прежнее
         // поведение), а не падаем на старте.
         Err(e) => {
-            eprintln!("[takt-lsp] initializationOptions не разобраны: {e}");
+            eprintln!(
+                "[takt-lsp] {}",
+                msg!(keys::CLI_LSP_INIT_OPTIONS_UNREADABLE, error = e)
+            );
             return Vec::new();
         }
     };
@@ -218,7 +223,7 @@ fn main_loop(
 /// граф читался бы как модель без состояний.
 fn print_graph(path: Option<&str>) -> i32 {
     let Some(path) = path else {
-        eprintln!("takt-lsp --graph: не указан файл модели");
+        eprintln!("{}", msg!(keys::CLI_LSP_GRAPH_NO_FILE));
         return 2;
     };
     let source = match std::fs::read_to_string(path) {
@@ -284,7 +289,10 @@ fn handle_request(
             let result = match takt_lang::lsp::formatting_edits(text) {
                 Ok(edits) => edits,
                 Err(e) => {
-                    eprintln!("[takt-lsp] форматирование не выполнено: {e}");
+                    eprintln!(
+                        "[takt-lsp] {}",
+                        msg!(keys::CLI_LSP_FORMAT_FAILED, error = e)
+                    );
                     None
                 }
             };
@@ -483,7 +491,7 @@ fn handle_request(
             connection.sender.send(Message::Response(Response::new_err(
                 req.id,
                 lsp_server::ErrorCode::MethodNotFound as i32,
-                format!("неизвестный метод: {}", req.method),
+                msg!(keys::CLI_LSP_UNKNOWN_METHOD, method = req.method),
             )))?;
         }
     }
