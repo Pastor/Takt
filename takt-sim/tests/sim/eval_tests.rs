@@ -418,3 +418,23 @@ fn array_element_write_and_read() {
     );
     assert_eq!(arr_elem(&unit, "big", 1), 5, "big[1] := 5");
 }
+
+/// Ошибка прогона приходит на выбранном языке: текст `SIM-001` строит каталог, код
+/// остаётся прежним. Язык ставится на поток и снимается сразу после прогона.
+#[test]
+fn t11_division_by_zero_speaks_the_chosen_language() {
+    use takt_lang::diagnostics::lang;
+    lang::activate(lang::parse("en").expect("каталог en есть в дереве"));
+    let (_, result) = run("div_zero.takt", 1);
+    lang::reset();
+    match result {
+        TickResult::Failed(details) => {
+            assert!(details.contains("SIM-001"), "код тот же: {details}");
+            assert!(
+                !details.chars().any(|c| matches!(c, 'А'..='я' | 'Ё' | 'ё')),
+                "текст под en без кириллицы: {details}"
+            );
+        }
+        other => panic!("ожидался отказ прогона, получено {other:?}"),
+    }
+}
