@@ -971,3 +971,163 @@ sim.film-no-frame = кадра {index} нет
 # ─── Мост модуля: разбор запроса (`takt-wasm-io`) ──────────────────────────
 bridge.request-not-utf8 = запрос не UTF-8: {error}
 bridge.request-unreadable = запрос не читается: {error}
+
+# ─── CLI: общие тексты инструментов (`taktc`, `takt-sim`, `takt-lsp`) ─────────
+cli.args-error = Ошибка разбора аргументов: {error}
+cli.error = Ошибка: {error}
+cli.unknown-flag = неизвестный флаг '{flag}'
+cli.flag-needs-argument = {flag} требует аргумент
+cli.no-input-file = не указан входной файл
+cli.read-file-error = Ошибка чтения файла '{path}': {error}
+cli.write-error = Ошибка записи '{path}': {error}
+cli.parse-error = Ошибка разбора [{code}]: {message}
+cli.semantic-error = Семантическая ошибка [{code}]: {message}
+cli.address-map-read-error = Ошибка чтения карты адресов '{path}': {error}
+cli.address-map-error = Ошибка карты адресов [{code}]: {message}
+cli.define-error = Ошибка --define [{code}]: {message}
+
+# ─── CLI: справка `taktc --help` (`bin/taktc.rs`), разделами ────────────────
+cli.taktc.help.intro = Takt — учебный язык автоматных моделей: показывает принципы автоматного подхода к разработке.
+cli.taktc.help.usage = Использование: taktc compile [флаги] <input.takt> [-o <output>]\n               taktc fmt [--check] [--stdin] <файлы/каталоги>\n               taktc verify [--property "φ"] [--scope file|all] [--trace] <input.takt>\n               taktc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.takt>\n               taktc version | --version | -V\n               taktc --help
+cli.taktc.help.lang = Общий ключ (все подкоманды):\n  --lang <код>           Язык сообщений (ru — по умолчанию, en); без ключа — переменная TAKT_LANG
+cli.taktc.help.compile = Флаги compile:\n  --target, -t <цель>    Целевой язык (по умолчанию: c) — см. «Целевые платформы»\n  --output, -o <путь>    Путь к выходному файлу\n  --include-dirs, -I <dirs>  Пути поиска файлов import, разделённые ':' или ';'\n                             Можно повторять: -I /a -I /b  или  -I /a:/b\n  --verbose, -v          Расширенный вывод: все предупреждения и полные пути\n  --quiet, -q            Тихий режим: только ошибки\n                         Флаги --verbose и --quiet взаимоисключающие\n  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)\n  --guard-disable        Выключить генерацию проверок Guard-формул\n  --fsm=switch|table     Форма автомата (все цели):\n                         switch — по умолчанию; table — переходы данными (таблица + диспетчер)\n  --bounds-check         Guard границ массива: доступ за границей не выполняется,\n                         признак уходит в выходной порт bounds_fault (по умолчанию выкл.)\n  --inline=off|auto      Подстановка тела функции: off — по умолчанию (действует только\n                         атрибут [inline]); auto — плюс эвристика (тело ≤ 5 операторов)\n  --parameters=assign|specialize  Параметры модели: assign — поле экземпляра (по умолчанию);\n                         specialize — копия модели на набор аргументов, параметр константой\n  --address-map <файл>   Внешняя карта адресов портов (.ld-подобный формат)\n  -D, --define N=VALUE   Символ платформы для выражений адреса (повторяем);\n                         слитно: -DN=VALUE. Значение — 0x…/десятичное[:бит].\n                         Виден ТОЛЬКО выражениям адреса, логику автомата не меняет.\n  --float-width=32|64    Ширина вещественного типа в C: float или double\n                         По умолчанию 64 (double) — совпадает с точностью симулятора\n  --float-as-q=m.n       Точность q(m,n) для реализации float (0096): sv → q; c/rust/st → q с --float-embedded\n  --float-embedded       Реализовать float целочисленным q в c/rust/st (embedded без FPU)\n  --bus=apb              Цель sv-mmio: адаптер шины рядом с ядром (<модель>_apb.sv)\n  --tick-hz=<n>          Частота такта устройства (Гц): профиль «такты» (фича 0134)\n                         Модель с `clock` требует совпадающий флаг (SE-069/SE-070)
+cli.taktc.help.targets = Целевые платформы:\n  c         Генерация C-заголовочного файла\n  c-hal     C + таблица адресов портов и дефолтный HAL (фича 0020)\n  st        Генерация Structured Text IEC 61131-3 (.st), язык ПЛК (фича 0041)\n  st-at     ST + размещение портов по карте адресов (AT %...)\n  rust      Генерация no_std Rust (.rs) — прошивка МК (фича 0050)\n            Порты через трейт Hal; подключается в крейт через mod\n  sv        Генерация синтезируемого SystemVerilog (.sv) — FPGA/ASIC (фича 0045)\n            Такт модели ≡ posedge clk; clk/rst_n — служебные порты модуля\n  sv-mmio   SV + порты с адресом → регистровый файл на шине (фича 0062)\n            Порт с адресом = бит регистра; интерфейс reg_addr/wdata/wen/rdata
+cli.taktc.help.examples = Примеры:\n  taktc compile main.takt\n  taktc compile -I /lib/lam:/home/user/lam main.takt -o build/\n  taktc compile -I /lib/lam -I /home/user/lam --target c main.takt\n  taktc compile --verbose main.takt\n  taktc compile --quiet main.takt -o dist/
+cli.taktc.help.fmt = Подкоманда fmt (канонический форматтер):\n  --check      Не писать файлы; ненулевой код, если нужен формат (для CI)\n  --stdin      Читать из stdin, писать в stdout\n  taktc fmt examples/            # отформатировать каталог на месте\n  taktc fmt --check examples/    # проверить (CI)\n  cat a.takt | taktc fmt --stdin  # отформатировать поток
+cli.taktc.help.verify = Подкоманда verify (проверка LTL-свойств, model checking — фича 0049):\n  --property, -p "φ"  Проверить одну формулу из командной строки\n                      Без флага проверяются все `: [LTL] φ;` файла\n  --scope file|all    Область проверки (по умолчанию: file — модели своего файла)\n                      all — проверять и модели, пришедшие через import\n  --trace             Печатать конвейер (Крипке, автомат !φ, произведение)\n  -I <dirs>           Пути поиска файлов import\n\n  Атом формулы — ИМЯ СОСТОЯНИЯ: `S` истинно, когда автомат в состоянии S.\n  Проверяются свойства управления: достижимость, порядок состояний, живость.\n  Свойства над данными (`G (temp <= 100)`) в этой абстракции не поддержаны.\n  Код возврата: 0 — все свойства держатся; 1 — нарушение/не проверено.\n\n  taktc verify model.takt\n  taktc verify --property "F Done" model.takt       # достижимость\n  taktc verify -p "G (Fault -> F Idle)" model.takt  # живость
+cli.taktc.unknown-command = Ошибка: неизвестная команда '{command}'. Используйте 'compile', 'fmt', 'verify', 'address-map' или 'version'.
+
+# ─── CLI: подкоманда `taktc fmt` (`bin/taktc.rs`) ─────────────────────────────
+cli.fmt.stdin-with-files = --stdin несовместим с указанием файлов
+cli.fmt.no-input = укажите файлы/каталоги или --stdin
+cli.fmt.path-not-found = путь не найден: {path}
+cli.fmt.stdin-read-error = Ошибка чтения stdin: {error}
+cli.fmt.stdin-needs-format = stdin: требуется форматирование
+cli.fmt.file-read-error = Ошибка чтения '{path}': {error}
+cli.fmt.needs-format = требуется форматирование: {path}
+cli.fmt.not-formatted = Не отформатировано файлов: {count} из {total}
+cli.fmt.formatted = Отформатировано файлов: {count} из {total}
+
+# ─── CLI: подкоманда `taktc verify` (`bin/taktc.rs`, `verification/verify_cli.rs`) ─
+cli.verify.property-parse-error = Ошибка разбора свойства: {message}
+cli.verify.no-formulas = В файле '{path}' нет LTL-формул. Объявите свойство как `: [LTL] φ;` или задайте его флагом --property "φ".
+cli.verify.scope = [модель {model}]
+cli.verify.holds = СВОЙСТВО ДЕРЖИТСЯ{scope}: {formula}
+cli.verify.violated = СВОЙСТВО НАРУШЕНО{scope}: {formula}
+cli.verify.counterexample = контрпример: {trace}
+cli.verify.abstraction-note = (абстракция управления: условия переходов не учитываются — контрпример может быть недостижим по данным)
+cli.verify.not-checked = СВОЙСТВО НЕ ПРОВЕРЕНО{scope}: {formula}
+cli.verify.atoms = атом(ы) {atoms}: {reason}.
+cli.verify.coverage = В охвате: свойства управления (имя состояния) и предикаты над данными (`cond`/булев `var` над `bit`/`bool`/целым/`enum`).
+cli.verify.no-start-state = у модели нет стартового состояния — проверять нечего
+cli.verify.skipped = Не проверено (вне области): {count} — модели из импортов: {models}
+cli.verify.scope-all-hint = --scope all — проверить их тоже.
+cli.verify.summary-failed = Проверено свойств: {count}; не держится/не проверено: {failures}
+cli.verify.summary-ok = Проверено свойств: {count}; все держатся
+cli.verify.unknown-scope = неизвестная область '{value}'; допустимо: file (модели своего файла) или all (включая импортированные)
+cli.verify.property-twice = свойство задано дважды ('{first}' и '{second}'); verify проверяет одно свойство за вызов
+cli.verify.property-needs-value = флаг '{flag}' требует значение — LTL-формулу
+cli.verify.emit-graph-needs-value = флаг '{flag}' требует значение: kripke, buchi или product
+cli.verify.scope-needs-value = флаг '{flag}' требует значение: file или all
+cli.verify.flag-needs-value = флаг '{flag}' требует значение
+cli.verify.one-file = verify принимает один файл; лишний аргумент '{arg}'
+cli.verify.no-file = укажите .takt-файл для проверки
+
+# ─── CLI: подкоманда `taktc compile` (`compile_cli/`) ─────────────────────────
+cli.compile.hint = Подсказка: см. `taktc --help`.
+cli.compile.float-width-needs-value = {flag} требует аргумент: 32 или 64
+cli.compile.float-as-q-needs-value = {flag} требует аргумент: m.n (напр. 10.22)
+cli.compile.tick-hz-needs-value = {flag} требует аргумент: частоту в Гц
+cli.compile.parameters-needs-value = --parameters требует значение: --parameters=assign|specialize
+cli.compile.bus-needs-value = --bus требует значение: --bus=apb
+cli.compile.fsm-needs-value = --fsm требует значение: --fsm=switch|table
+cli.compile.inline-needs-value = --inline требует значение: --inline=off|auto
+cli.compile.verbose-and-quiet = флаги --verbose и --quiet взаимоисключающие: нельзя указывать оба одновременно
+cli.compile.parameters-unknown = --parameters={value} — неизвестный режим; допустимы: assign (умолчание), specialize
+cli.compile.float-width-invalid = --float-width: недопустимое значение '{value}' (допустимо 32 или 64)
+cli.compile.float-as-q-format = --float-as-q: ожидался формат m.n (напр. 10.22), получено '{value}'
+cli.compile.float-as-q-part = --float-as-q: {part} '{value}' — не целое 0..255
+cli.compile.float-as-q-range = --float-as-q: q({m}, {n}) вне границ (m ≥ 1, n ≥ 1, m + n ≤ 64)
+cli.compile.bus-unknown = --bus: неизвестный протокол '{value}'. Поддерживается: apb
+cli.compile.fsm-unknown = --fsm: неизвестная форма '{value}'. Поддерживаются: switch (по умолчанию), table
+cli.compile.inline-unknown = --inline: неизвестный режим '{value}'. Поддерживаются: off (по умолчанию; подставляются только функции с атрибутом 'inline'), auto (плюс эвристика)
+cli.compile.tick-hz-not-integer = --tick-hz: '{value}' — не целое число герц
+cli.compile.tick-hz-zero = --tick-hz: частота такта не может быть нулевой
+cli.compile.flag-not-for-target = Ошибка: {flag} не поддерживается целью '{target}'. {what}: {targets}
+cli.compile.bus-adapter = Адаптер шины печатает цель
+cli.compile.unknown-target = Ошибка: неизвестная цель '{target}'. Поддерживается: {known}
+cli.compile.done = Скомпилировано: {input} → {output}/ ({target})
+cli.compile.done-c = Скомпилировано: {input} → {output}/ (путей поиска: {count})
+cli.compile.done-c-verbose = Скомпилировано: {input} → {output} (путей поиска: {count}: {dirs})
+
+# ─── CLI: подкоманда `taktc address-map` (`address_map/export_cli.rs`) ────────
+cli.address-map.emit-unknown = неизвестный формат выгрузки '{value}' (допустимо: map, json). Формат CMSIS-SVD не поставляется — у Takt нет требуемых им данных (ADR 0043)
+cli.address-map.emit-needs-value = --emit требует значение (map|json)
+cli.address-map.output-needs-path = -o требует путь
+cli.address-map.include-needs-path = -I требует путь
+cli.address-map.define-needs-value = -D требует N=VALUE
+cli.address-map.map-needs-file = --address-map требует файл
+cli.address-map.many-inputs = указано несколько входных файлов
+cli.address-map.usage = Использование: taktc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-I <dirs>] [-o <out>] <input.takt>
+cli.address-map.diag-error = Ошибка [{code}]: {message}
+
+# ─── CLI: версия и сервер (`version.rs`, `bin/takt_lsp.rs`) ───────────────────
+cli.version.language = язык Takt {version}
+cli.lsp.help = takt-lsp — языковой сервер Takt (LSP поверх stdio).\n\nЗапускается РЕДАКТОРОМ, не вручную: без клиента процесс завершится\nошибкой протокола.\n\nФормы:\n  takt-lsp                 запуск сервера (stdio)\n  takt-lsp --version | -V  версии инструмента и языка\n  takt-lsp --help    | -h  эта справка\n  takt-lsp --graph ФАЙЛ    граф модели для схемы, JSON в поток вывода\n  takt-lsp --lang <код>    язык сообщений (initializationOptions.lang сильнее)\n\nПути поиска импортов задаются клиентом —\ninitializationOptions.searchPaths.
+cli.lsp.graph-no-file = takt-lsp --graph: не указан файл модели
+cli.lsp.init-options-unreadable = initializationOptions не разобраны: {error}
+cli.lsp.format-failed = форматирование не выполнено: {error}
+cli.lsp.unknown-method = неизвестный метод: {method}
+
+# ─── CLI: симулятор `takt-sim` (`takt-sim/src/bin/`) ──────────────────────────
+cli.sim.about = Симуляция Takt-моделей
+cli.sim.after-help = Подкоманды:\n  takt-sim export <проект> [ключи]   картинки листов и видео прогона\n  takt-sim project <проект>          состав проекта\nСправка подкоманды: takt-sim export --help
+cli.sim.arg.model-file = Путь к.takt файлу (обязательный)
+cli.sim.arg.include = Директории поиска include (можно указать несколько)
+cli.sim.arg.lang = Язык сообщений: `ru`, `en`, ... - по каталогам в дереве
+cli.sim.arg.lang-long = Язык сообщений: `ru`, `en`, ... - по каталогам в дереве.\n\nУмолчание - русский; переменная `TAKT_LANG` действует, если ключа нет. Системная локаль (`LANG`/`LC_MESSAGES`) **не читается**: вывод инструмента не должен зависеть от машины - на этом стоят потактовые сверки. Ключ тот же, что у `taktc`, и разбирает его общий носитель.
+cli.sim.arg.lang-value = код
+cli.sim.arg.steps = Количество шагов (по умолчанию - до терминального состояния)
+cli.sim.arg.bounds-check = Guard границ массива: доступ за границей не выполняется, а признак уходит в выходной порт `bounds_fault`
+cli.sim.arg.bounds-check-long = Guard границ массива: доступ за границей не выполняется, а признак уходит в выходной порт `bounds_fault`.\n\nБез флага эталон отвечает `SIM-010` и останавливает прогон - это его умолчание и умолчание целей (флаг `--bounds-check` у `taktc`).
+cli.sim.arg.output = Каталог для GIF прогона: кадр на такт - схема корневого листа цветным видом и строка трассы. Схема рисуется по файлу раскладки `<модель>.takt-ui` рядом с моделью; без него - отказ до прогона
+cli.sim.arg.sim-file = JSON-файл с входными данными и проверками
+cli.sim.arg.load-state = Загрузить состояние модели из JSON-файла перед симуляцией
+cli.sim.arg.save-state = Сохранить состояние модели в JSON-файл после симуляции
+cli.sim.arg.invariant-soft = Мягкий режим инвариантов: нарушение записывается, и прогон продолжается, вместо останова. Для отладки - сверки с C у него нет
+cli.sim.arg.tick-ms = Сколько модельного времени проходит за такт, в миллисекундах
+cli.sim.arg.tick-ms-long = Сколько модельного времени проходит за такт, в миллисекундах.\n\nУмолчание - 1 мс.
+cli.sim.graphics-config-removed = ключ `--graphics-config` снят: кадры прогона рисуются по файлу раскладки `<модель>.takt-ui` рядом с моделью, вид схемы задаёт он
+cli.sim.read-failed = Не удалось прочитать {path}: {error}
+cli.sim.parse-errors = Ошибки парсинга
+cli.sim.build-error = Ошибка построения: {message}
+cli.sim.state-loaded = Состояние загружено из {path}
+cli.sim.state-saved = Состояние сохранено в {path}
+cli.sim.layout-missing = раскладки нет: {path} ({error}) - кадры прогона рисуются по файлу раскладки схемы, его пишет редактор
+cli.sim.create-dir-failed = Не удалось создать каталог {path}: {error}
+cli.sim.create-failed = Не удалось создать {path}: {error}
+cli.sim.write-failed = Не удалось записать {path}: {error}
+cli.sim.not-a-file-name = '{path}': не имя файла
+cli.sim.scenario-not-found = сценария '{path}' нет ни в проекте, ни на диске
+cli.sim.one-project = проект один: каталог, архив либо модель
+cli.export.about = Экспорт картинок листов и видео прогона по файлам раскладки `.takt-ui`
+cli.export.arg.project = Проект: каталог с `takt-project.json`, архив `.zip` либо модель `.takt`
+cli.export.arg.output = Каталог вывода; умолчание - `export/` в каталоге проекта
+cli.export.arg.view = Вид картинок; умолчание - `draft`. Видео всегда цветное
+cli.export.view.draft = Чертёжный: одни чернила, без подсветки
+cli.export.view.run = Цветной: подсветка последнего такта прогона
+cli.export.arg.format = Формат (повторяемый): `svg`, `png` - картинка листа, `gif`, `mp4` - видео прогона. Умолчание - `svg`
+cli.export.arg.background = Фон PNG: `fill` - поле листа, `none` - прозрачный
+cli.export.background.fill = Заливка цветом поля листа
+cli.export.background.none = Прозрачный фон
+cli.export.arg.legend = Легенда - таблица знаков состояний и условий с подписями автора
+cli.export.arg.model = Файл модели проекта; умолчание - картинки всех моделей, видео активной
+cli.export.arg.sheet = Лист (`/`, `/#Line`, `Engine`); умолчание - картинки всех листов, видео корня
+cli.export.arg.pause = Пауза между кадрами видео, миллисекунд
+cli.export.arg.sim-file = Сценарий прогона: файл проекта; файл вне проекта берётся с диска. Умолчание - активный либо единственный сценарий модели
+cli.export.arg.steps = Предел тактов прогона; умолчание - длина сценария, без сценария 200
+cli.export.arg.include = Каталоги поиска импортов одной модели (у каталога и архива импорты - по составу)
+cli.export.arg.lang = Язык сообщений: `ru`, `en`, ...
+cli.project.about = Состав проекта: файлы и роды, активные файлы, сборка, сценарии моделей
+cli.project.arg.paths = Проект: каталог с `takt-project.json`, архив `.zip` либо модель `.takt`. С `--owner` - файлы моделей, среди которых ищется владелец сценария
+cli.project.arg.owner = Модель, которой принадлежит сценарий, по правилу принадлежности: печатается файл модели, не принадлежит никому - пустая строка и код 1

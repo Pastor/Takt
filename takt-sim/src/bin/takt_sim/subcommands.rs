@@ -15,6 +15,9 @@ use takt_scheme::style::View;
 use takt_sim::export::{Format, Request, export};
 use takt_sim::film::PAUSE_MS;
 
+use takt_lang::diagnostics::lang::keys;
+use takt_lang::msg;
+
 /// Подкоманда по первому аргументу; `None` - прежний вызов прогона.
 pub fn dispatch(args: &[std::ffi::OsString]) -> Option<ExitCode> {
     let name = args.get(1)?.to_str()?;
@@ -31,7 +34,7 @@ fn finish(result: Result<bool, String>) -> ExitCode {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(e) => {
-            eprintln!("Ошибка: {e}");
+            eprintln!("{}", msg!(keys::CLI_ERROR, error = e));
             ExitCode::FAILURE
         }
     }
@@ -39,9 +42,9 @@ fn finish(result: Result<bool, String>) -> ExitCode {
 
 #[derive(Clone, Copy, ValueEnum)]
 enum ViewArg {
-    /// Чертёжный: одни чернила, без подсветки.
+    #[value(help = msg!(keys::CLI_EXPORT_VIEW_DRAFT))]
     Draft,
-    /// Цветной: подсветка последнего такта прогона.
+    #[value(help = msg!(keys::CLI_EXPORT_VIEW_RUN))]
     Run,
 }
 
@@ -55,9 +58,9 @@ enum FormatArg {
 
 #[derive(Clone, Copy, ValueEnum)]
 enum BackgroundArg {
-    /// Заливка цветом поля листа.
+    #[value(help = msg!(keys::CLI_EXPORT_BACKGROUND_FILL))]
     Fill,
-    /// Прозрачный фон.
+    #[value(help = msg!(keys::CLI_EXPORT_BACKGROUND_NONE))]
     None,
 }
 
@@ -67,80 +70,85 @@ enum OnOff {
     Off,
 }
 
-/// Экспорт картинок листов и видео прогона по файлам раскладки `.takt-ui`.
+// Экспорт картинок листов и видео прогона по файлам раскладки `.takt-ui`. Тексты
+// справки - из каталога сообщений, как у прогона (`Args` в `takt_sim.rs`).
 #[derive(Parser)]
-#[command(name = "takt-sim export", version)]
+#[command(name = "takt-sim export", version, about = msg!(keys::CLI_EXPORT_ABOUT))]
 struct ExportArgs {
-    /// Проект: каталог с `takt-project.json`, архив `.zip` либо модель `.takt`.
+    // Проект: каталог с `takt-project.json`, архив `.zip` либо модель `.takt`.
+    #[arg(help = msg!(keys::CLI_EXPORT_ARG_PROJECT))]
     project: PathBuf,
 
-    /// Каталог вывода; умолчание - `export/` в каталоге проекта.
-    #[arg(short = 'o', long = "output", value_name = "DIR")]
+    // Каталог вывода; умолчание - `export/` в каталоге проекта.
+    #[arg(short = 'o', long = "output", value_name = "DIR", help = msg!(keys::CLI_EXPORT_ARG_OUTPUT))]
     output: Option<PathBuf>,
 
-    /// Вид картинок; умолчание - `draft`. Видео всегда цветное.
-    #[arg(long, value_enum)]
+    // Вид картинок; умолчание - `draft`. Видео всегда цветное.
+    #[arg(long, value_enum, help = msg!(keys::CLI_EXPORT_ARG_VIEW))]
     view: Option<ViewArg>,
 
-    /// Формат (повторяемый): `svg`, `png` - картинка листа, `gif`, `mp4` - видео
-    /// прогона. Умолчание - `svg`.
-    #[arg(long = "format", value_enum)]
+    // Формат (повторяемый): картинка листа либо видео прогона; умолчание - `svg`.
+    #[arg(long = "format", value_enum, help = msg!(keys::CLI_EXPORT_ARG_FORMAT))]
     formats: Vec<FormatArg>,
 
-    /// Фон PNG: `fill` - поле листа, `none` - прозрачный.
-    #[arg(long, value_enum, default_value = "fill")]
+    // Фон PNG: `fill` - поле листа, `none` - прозрачный.
+    #[arg(long, value_enum, default_value = "fill", help = msg!(keys::CLI_EXPORT_ARG_BACKGROUND))]
     background: BackgroundArg,
 
-    /// Легенда - таблица знаков состояний и условий с подписями автора.
-    #[arg(long, value_enum, default_value = "on")]
+    // Легенда - таблица знаков состояний и условий с подписями автора.
+    #[arg(long, value_enum, default_value = "on", help = msg!(keys::CLI_EXPORT_ARG_LEGEND))]
     legend: OnOff,
 
-    /// Файл модели проекта; умолчание - картинки всех моделей, видео активной.
-    #[arg(long, value_name = "FILE")]
+    // Файл модели проекта; умолчание - картинки всех моделей, видео активной.
+    #[arg(long, value_name = "FILE", help = msg!(keys::CLI_EXPORT_ARG_MODEL))]
     model: Option<String>,
 
-    /// Лист (`/`, `/#Line`, `Engine`); умолчание - картинки всех листов, видео корня.
-    #[arg(long, value_name = "KEY")]
+    // Лист (`/`, `/#Line`, `Engine`); умолчание - картинки всех листов, видео корня.
+    #[arg(long, value_name = "KEY", help = msg!(keys::CLI_EXPORT_ARG_SHEET))]
     sheet: Option<String>,
 
-    /// Пауза между кадрами видео, миллисекунд.
-    #[arg(long, value_name = "MS", default_value_t = PAUSE_MS)]
+    // Пауза между кадрами видео, миллисекунд.
+    #[arg(long, value_name = "MS", default_value_t = PAUSE_MS, help = msg!(keys::CLI_EXPORT_ARG_PAUSE))]
     pause: u32,
 
-    /// Сценарий прогона: файл проекта; файл вне проекта берётся с диска.
-    /// Умолчание - активный либо единственный сценарий модели.
-    #[arg(short = 's', long = "sim-file", value_name = "FILE")]
+    // Сценарий прогона: файл проекта; файл вне проекта берётся с диска. Умолчание -
+    // активный либо единственный сценарий модели.
+    #[arg(short = 's', long = "sim-file", value_name = "FILE", help = msg!(keys::CLI_EXPORT_ARG_SIM_FILE))]
     scenario: Option<PathBuf>,
 
-    /// Предел тактов прогона; умолчание - длина сценария, без сценария 200.
-    #[arg(short = 'n', long = "steps", value_name = "N")]
+    // Предел тактов прогона; умолчание - длина сценария, без сценария 200.
+    #[arg(short = 'n', long = "steps", value_name = "N", help = msg!(keys::CLI_EXPORT_ARG_STEPS))]
     steps: Option<usize>,
 
-    /// Сколько модельного времени проходит за такт, в миллисекундах.
-    #[arg(long = "tick-ms", value_name = "MS")]
+    // Сколько модельного времени проходит за такт, в миллисекундах.
+    #[arg(long = "tick-ms", value_name = "MS", help = msg!(keys::CLI_SIM_ARG_TICK_MS))]
     tick_ms: Option<i64>,
 
-    /// Каталоги поиска импортов одной модели (у каталога и архива импорты - по составу).
-    #[arg(short = 'I', long = "include", value_name = "DIR")]
+    // Каталоги поиска импортов одной модели (у каталога и архива импорты - по составу).
+    #[arg(short = 'I', long = "include", value_name = "DIR", help = msg!(keys::CLI_EXPORT_ARG_INCLUDE))]
     include: Vec<PathBuf>,
 
-    /// Язык сообщений: `ru`, `en`, ...
-    #[arg(long = "lang", value_name = "код")]
+    // Язык сообщений: `ru`, `en`, ...
+    #[arg(
+        long = "lang",
+        value_name = msg!(keys::CLI_SIM_ARG_LANG_VALUE),
+        help = msg!(keys::CLI_EXPORT_ARG_LANG)
+    )]
     lang: Option<String>,
 }
 
-/// Состав проекта: файлы и роды, активные файлы, сборка, сценарии моделей.
+// Состав проекта: файлы и роды, активные файлы, сборка, сценарии моделей.
 #[derive(Parser)]
-#[command(name = "takt-sim project", version)]
+#[command(name = "takt-sim project", version, about = msg!(keys::CLI_PROJECT_ABOUT))]
 struct ProjectArgs {
-    /// Проект: каталог с `takt-project.json`, архив `.zip` либо модель `.takt`.
-    /// С `--owner` - файлы моделей, среди которых ищется владелец сценария.
-    #[arg(required = true)]
+    // Проект: каталог с `takt-project.json`, архив `.zip` либо модель `.takt`.
+    // С `--owner` - файлы моделей, среди которых ищется владелец сценария.
+    #[arg(required = true, help = msg!(keys::CLI_PROJECT_ARG_PATHS))]
     paths: Vec<PathBuf>,
 
-    /// Модель, которой принадлежит сценарий, по правилу принадлежности: печатается
-    /// файл модели, не принадлежит никому - пустая строка и код 1.
-    #[arg(long, value_name = "SCENARIO")]
+    // Модель, которой принадлежит сценарий, по правилу принадлежности: печатается
+    // файл модели, не принадлежит никому - пустая строка и код 1.
+    #[arg(long, value_name = "SCENARIO", help = msg!(keys::CLI_PROJECT_ARG_OWNER))]
     owner: Option<String>,
 }
 
@@ -196,8 +204,13 @@ fn run_export(args: ExportArgs) -> Result<bool, String> {
     };
     let out = export(&project, &request)?;
     let dir = args.output.unwrap_or_else(|| project.root.join("export"));
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Не удалось создать каталог {}: {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        msg!(
+            keys::CLI_SIM_CREATE_DIR_FAILED,
+            path = dir.display(),
+            error = e
+        )
+    })?;
     for file in &out.files {
         let path = dir.join(&file.name);
         write(&path, &file.bytes)?;
@@ -215,15 +228,15 @@ fn scenario_in(project: &mut Project, path: &Path) -> Result<String, String> {
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
-        .ok_or_else(|| format!("'{}': не имя файла", path.display()))?
+        .ok_or_else(|| msg!(keys::CLI_SIM_NOT_A_FILE_NAME, path = path.display()))?
         .to_string();
     if project.file(&name).is_some() && !path.is_file() {
         return Ok(name);
     }
     if !path.is_file() {
-        return Err(format!(
-            "сценария '{}' нет ни в проекте, ни на диске",
-            path.display()
+        return Err(msg!(
+            keys::CLI_SIM_SCENARIO_NOT_FOUND,
+            path = path.display()
         ));
     }
     let text = std::fs::read_to_string(path).map_err(|e| format!("'{}': {e}", path.display()))?;
@@ -242,10 +255,10 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     part.push(".part");
     let part = PathBuf::from(part);
     let written = std::fs::write(&part, bytes)
-        .map_err(|e| format!("Не удалось записать {}: {e}", part.display()))
+        .map_err(|e| msg!(keys::CLI_SIM_WRITE_FAILED, path = part.display(), error = e))
         .and_then(|()| {
             std::fs::rename(&part, path)
-                .map_err(|e| format!("Не удалось записать {}: {e}", path.display()))
+                .map_err(|e| msg!(keys::CLI_SIM_WRITE_FAILED, path = path.display(), error = e))
         });
     if written.is_err() {
         let _ = std::fs::remove_file(&part);
@@ -279,7 +292,7 @@ fn run_project(args: ProjectArgs) -> Result<bool, String> {
         return Ok(path.is_some());
     }
     let [path] = args.paths.as_slice() else {
-        return Err("проект один: каталог, архив либо модель".to_string());
+        return Err(msg!(keys::CLI_SIM_ONE_PROJECT));
     };
     let project = takt_project::load(path).map_err(|e| e.message().to_string())?;
     for line in describe(&project) {
@@ -290,6 +303,10 @@ fn run_project(args: ProjectArgs) -> Result<bool, String> {
 
 /// Состав проекта строками: форма, активные файлы, сборка, файлы с родами,
 /// сценарии каждой модели. Строки стабильны - их читают скрипты.
+///
+/// Потому язык сообщений их **не** меняет: это данные, а не текст - тот же случай, что у
+/// строки шага трассы. Переведи их - и скрипт, разбирающий `проект:`, молча перестал бы
+/// находить поле под `TAKT_LANG=en`.
 fn describe(project: &Project) -> Vec<String> {
     let manifest = &project.manifest;
     let form = match project.form {

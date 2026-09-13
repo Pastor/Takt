@@ -964,3 +964,163 @@ sim.film-no-frame = there is no frame {index}
 # ─── Мост модуля: разбор запроса (`takt-wasm-io`) ──────────────────────────
 bridge.request-not-utf8 = the request is not UTF-8: {error}
 bridge.request-unreadable = the request cannot be read: {error}
+
+# ─── CLI: общие тексты инструментов (`taktc`, `takt-sim`, `takt-lsp`) ─────────
+cli.args-error = Argument parsing error: {error}
+cli.error = Error: {error}
+cli.unknown-flag = unknown flag '{flag}'
+cli.flag-needs-argument = {flag} requires an argument
+cli.no-input-file = no input file given
+cli.read-file-error = Error reading file '{path}': {error}
+cli.write-error = Error writing '{path}': {error}
+cli.parse-error = Parse error [{code}]: {message}
+cli.semantic-error = Semantic error [{code}]: {message}
+cli.address-map-read-error = Error reading address map '{path}': {error}
+cli.address-map-error = Address map error [{code}]: {message}
+cli.define-error = --define error [{code}]: {message}
+
+# ─── CLI: справка `taktc --help` (`bin/taktc.rs`), разделами ────────────────
+cli.taktc.help.intro = Takt is a teaching language of automata models: it shows the principles of automata-based development.
+cli.taktc.help.usage = Usage: taktc compile [flags] <input.takt> [-o <output>]\n       taktc fmt [--check] [--stdin] <files/directories>\n       taktc verify [--property "φ"] [--scope file|all] [--trace] <input.takt>\n       taktc address-map [--emit map|json] [--address-map <file>] [-D N=V] [-o <out>] <input.takt>\n       taktc version | --version | -V\n       taktc --help
+cli.taktc.help.lang = Common key (all subcommands):\n  --lang <code>          Message language (ru is the default, en); without the key, the TAKT_LANG variable
+cli.taktc.help.compile = Compile flags:\n  --target, -t <target>  Target language (default: c) — see "Target platforms"\n  --output, -o <path>    Output file path\n  --include-dirs, -I <dirs>  Search paths for import files, separated by ':' or ';'\n                             May be repeated: -I /a -I /b  or  -I /a:/b\n  --verbose, -v          Verbose output: all warnings and full paths\n  --quiet, -q            Quiet mode: errors only\n                         --verbose and --quiet are mutually exclusive\n  --guard-enable         Generate Guard formula checks (default)\n  --guard-disable        Do not generate Guard formula checks\n  --fsm=switch|table     Automaton form (all targets):\n                         switch — default; table — transitions as data (table + dispatcher)\n  --bounds-check         Array bounds guard: an out-of-bounds access is not performed,\n                         the flag goes to the output port bounds_fault (off by default)\n  --inline=off|auto      Function body inlining: off — default (only the [inline]\n                         attribute applies); auto — plus a heuristic (body ≤ 5 statements)\n  --parameters=assign|specialize  Model parameters: assign — an instance field (default);\n                         specialize — a model copy per argument set, the parameter as a constant\n  --address-map <file>   External port address map (.ld-like format)\n  -D, --define N=VALUE   Platform symbol for address expressions (repeatable);\n                         joined: -DN=VALUE. Value — 0x…/decimal[:bit].\n                         Visible ONLY to address expressions, does not change the automaton logic.\n  --float-width=32|64    Width of the real type in C: float or double\n                         Default 64 (double) — matches the simulator's precision\n  --float-as-q=m.n       q(m,n) precision for implementing float (0096): sv → q; c/rust/st → q with --float-embedded\n  --float-embedded       Implement float as integer q in c/rust/st (embedded without an FPU)\n  --bus=apb              Target sv-mmio: bus adapter next to the core (<model>_apb.sv)\n  --tick-hz=<n>          Device tick frequency (Hz): the "ticks" profile (feature 0134)\n                         A model with `clock` requires a matching flag (SE-069/SE-070)
+cli.taktc.help.targets = Target platforms:\n  c         C header file generation\n  c-hal     C + port address table and a default HAL (feature 0020)\n  st        Structured Text IEC 61131-3 (.st) generation, the PLC language (feature 0041)\n  st-at     ST + port placement from the address map (AT %...)\n  rust      no_std Rust (.rs) generation — MCU firmware (feature 0050)\n            Ports via the Hal trait; plugged into a crate via mod\n  sv        Synthesizable SystemVerilog (.sv) generation — FPGA/ASIC (feature 0045)\n            Model tick ≡ posedge clk; clk/rst_n are service ports of the module\n  sv-mmio   SV + addressed ports → a register file on the bus (feature 0062)\n            An addressed port = a register bit; interface reg_addr/wdata/wen/rdata
+cli.taktc.help.examples = Examples:\n  taktc compile main.takt\n  taktc compile -I /lib/lam:/home/user/lam main.takt -o build/\n  taktc compile -I /lib/lam -I /home/user/lam --target c main.takt\n  taktc compile --verbose main.takt\n  taktc compile --quiet main.takt -o dist/
+cli.taktc.help.fmt = Subcommand fmt (canonical formatter):\n  --check      Do not write files; nonzero exit code if formatting is needed (for CI)\n  --stdin      Read from stdin, write to stdout\n  taktc fmt examples/            # format a directory in place\n  taktc fmt --check examples/    # check (CI)\n  cat a.takt | taktc fmt --stdin  # format a stream
+cli.taktc.help.verify = Subcommand verify (LTL property checking, model checking — feature 0049):\n  --property, -p "φ"  Check a single formula from the command line\n                      Without the flag, all `: [LTL] φ;` of the file are checked\n  --scope file|all    Checking scope (default: file — models of the file itself)\n                      all — also check models brought in by import\n  --trace             Print the pipeline (Kripke, automaton !φ, product)\n  -I <dirs>           Search paths for import files\n\n  A formula atom is a STATE NAME: `S` holds when the automaton is in state S.\n  Control properties are checked: reachability, order of states, liveness.\n  Properties over data (`G (temp <= 100)`) are not supported in this abstraction.\n  Exit code: 0 — all properties hold; 1 — violation/not checked.\n\n  taktc verify model.takt\n  taktc verify --property "F Done" model.takt       # reachability\n  taktc verify -p "G (Fault -> F Idle)" model.takt  # liveness
+cli.taktc.unknown-command = Error: unknown command '{command}'. Use 'compile', 'fmt', 'verify', 'address-map' or 'version'.
+
+# ─── CLI: подкоманда `taktc fmt` (`bin/taktc.rs`) ─────────────────────────────
+cli.fmt.stdin-with-files = --stdin cannot be combined with files
+cli.fmt.no-input = give files/directories or --stdin
+cli.fmt.path-not-found = path not found: {path}
+cli.fmt.stdin-read-error = Error reading stdin: {error}
+cli.fmt.stdin-needs-format = stdin: formatting required
+cli.fmt.file-read-error = Error reading '{path}': {error}
+cli.fmt.needs-format = formatting required: {path}
+cli.fmt.not-formatted = Files not formatted: {count} of {total}
+cli.fmt.formatted = Files formatted: {count} of {total}
+
+# ─── CLI: подкоманда `taktc verify` (`bin/taktc.rs`, `verification/verify_cli.rs`) ─
+cli.verify.property-parse-error = Property parse error: {message}
+cli.verify.no-formulas = File '{path}' has no LTL formulas. Declare a property as `: [LTL] φ;` or pass it with --property "φ".
+cli.verify.scope = [model {model}]
+cli.verify.holds = PROPERTY HOLDS{scope}: {formula}
+cli.verify.violated = PROPERTY VIOLATED{scope}: {formula}
+cli.verify.counterexample = counterexample: {trace}
+cli.verify.abstraction-note = (control abstraction: transition conditions are not taken into account — the counterexample may be unreachable by data)
+cli.verify.not-checked = PROPERTY NOT CHECKED{scope}: {formula}
+cli.verify.atoms = atom(s) {atoms}: {reason}.
+cli.verify.coverage = Covered: control properties (state name) and predicates over data (`cond`/boolean `var` over `bit`/`bool`/integer/`enum`).
+cli.verify.no-start-state = the model has no start state — nothing to check
+cli.verify.skipped = Not checked (out of scope): {count} — models from imports: {models}
+cli.verify.scope-all-hint = --scope all — check them too.
+cli.verify.summary-failed = Properties checked: {count}; not holding/not checked: {failures}
+cli.verify.summary-ok = Properties checked: {count}; all hold
+cli.verify.unknown-scope = unknown scope '{value}'; allowed: file (models of the file itself) or all (including imported ones)
+cli.verify.property-twice = property given twice ('{first}' and '{second}'); verify checks one property per call
+cli.verify.property-needs-value = flag '{flag}' requires a value — an LTL formula
+cli.verify.emit-graph-needs-value = flag '{flag}' requires a value: kripke, buchi or product
+cli.verify.scope-needs-value = flag '{flag}' requires a value: file or all
+cli.verify.flag-needs-value = flag '{flag}' requires a value
+cli.verify.one-file = verify takes one file; extra argument '{arg}'
+cli.verify.no-file = give a .takt file to check
+
+# ─── CLI: подкоманда `taktc compile` (`compile_cli/`) ─────────────────────────
+cli.compile.hint = Hint: see `taktc --help`.
+cli.compile.float-width-needs-value = {flag} requires an argument: 32 or 64
+cli.compile.float-as-q-needs-value = {flag} requires an argument: m.n (e.g. 10.22)
+cli.compile.tick-hz-needs-value = {flag} requires an argument: the frequency in Hz
+cli.compile.parameters-needs-value = --parameters requires a value: --parameters=assign|specialize
+cli.compile.bus-needs-value = --bus requires a value: --bus=apb
+cli.compile.fsm-needs-value = --fsm requires a value: --fsm=switch|table
+cli.compile.inline-needs-value = --inline requires a value: --inline=off|auto
+cli.compile.verbose-and-quiet = flags --verbose and --quiet are mutually exclusive: they cannot both be given
+cli.compile.parameters-unknown = --parameters={value} — unknown mode; allowed: assign (default), specialize
+cli.compile.float-width-invalid = --float-width: invalid value '{value}' (32 or 64 allowed)
+cli.compile.float-as-q-format = --float-as-q: expected the form m.n (e.g. 10.22), got '{value}'
+cli.compile.float-as-q-part = --float-as-q: {part} '{value}' is not an integer 0..255
+cli.compile.float-as-q-range = --float-as-q: q({m}, {n}) out of bounds (m ≥ 1, n ≥ 1, m + n ≤ 64)
+cli.compile.bus-unknown = --bus: unknown protocol '{value}'. Supported: apb
+cli.compile.fsm-unknown = --fsm: unknown form '{value}'. Supported: switch (default), table
+cli.compile.inline-unknown = --inline: unknown mode '{value}'. Supported: off (default; only functions with the 'inline' attribute are inlined), auto (plus a heuristic)
+cli.compile.tick-hz-not-integer = --tick-hz: '{value}' is not an integer number of hertz
+cli.compile.tick-hz-zero = --tick-hz: the tick frequency cannot be zero
+cli.compile.flag-not-for-target = Error: {flag} is not supported by target '{target}'. {what}: {targets}
+cli.compile.bus-adapter = The bus adapter is printed by target
+cli.compile.unknown-target = Error: unknown target '{target}'. Supported: {known}
+cli.compile.done = Compiled: {input} → {output}/ ({target})
+cli.compile.done-c = Compiled: {input} → {output}/ (search paths: {count})
+cli.compile.done-c-verbose = Compiled: {input} → {output} (search paths: {count}: {dirs})
+
+# ─── CLI: подкоманда `taktc address-map` (`address_map/export_cli.rs`) ────────
+cli.address-map.emit-unknown = unknown export format '{value}' (allowed: map, json). The CMSIS-SVD format is not provided — Takt lacks the data it requires (ADR 0043)
+cli.address-map.emit-needs-value = --emit requires a value (map|json)
+cli.address-map.output-needs-path = -o requires a path
+cli.address-map.include-needs-path = -I requires a path
+cli.address-map.define-needs-value = -D requires N=VALUE
+cli.address-map.map-needs-file = --address-map requires a file
+cli.address-map.many-inputs = several input files given
+cli.address-map.usage = Usage: taktc address-map [--emit map|json] [--address-map <file>] [-D N=V] [-I <dirs>] [-o <out>] <input.takt>
+cli.address-map.diag-error = Error [{code}]: {message}
+
+# ─── CLI: версия и сервер (`version.rs`, `bin/takt_lsp.rs`) ───────────────────
+cli.version.language = Takt language {version}
+cli.lsp.help = takt-lsp — the Takt language server (LSP over stdio).\n\nStarted by the EDITOR, not by hand: without a client the process ends\nwith a protocol error.\n\nForms:\n  takt-lsp                 start the server (stdio)\n  takt-lsp --version | -V  tool and language versions\n  takt-lsp --help    | -h  this help\n  takt-lsp --graph FILE    model graph for the scheme, JSON to standard output\n  takt-lsp --lang <code>   message language (initializationOptions.lang wins)\n\nImport search paths are set by the client —\ninitializationOptions.searchPaths.
+cli.lsp.graph-no-file = takt-lsp --graph: no model file given
+cli.lsp.init-options-unreadable = initializationOptions could not be parsed: {error}
+cli.lsp.format-failed = formatting not performed: {error}
+cli.lsp.unknown-method = unknown method: {method}
+
+# ─── CLI: симулятор `takt-sim` (`takt-sim/src/bin/`) ──────────────────────────
+cli.sim.about = Simulation of Takt models
+cli.sim.after-help = Subcommands:\n  takt-sim export <project> [keys]   sheet images and run video\n  takt-sim project <project>         project composition\nSubcommand help: takt-sim export --help
+cli.sim.arg.model-file = Path to the .takt file (required)
+cli.sim.arg.include = Include search directories (may be given several times)
+cli.sim.arg.lang = Message language: `ru`, `en`, ... - by the catalogues in the tree
+cli.sim.arg.lang-long = Message language: `ru`, `en`, ... - by the catalogues in the tree.\n\nDefault - Russian; the `TAKT_LANG` variable applies if the key is absent. The system locale (`LANG`/`LC_MESSAGES`) is **not read**: the tool's output must not depend on the machine - per-tick conformance checks rely on it. The key is the same as for `taktc` and is parsed by the shared carrier.
+cli.sim.arg.lang-value = code
+cli.sim.arg.steps = Number of steps (default - until the terminal state)
+cli.sim.arg.bounds-check = Array bounds guard: an out-of-bounds access is not performed, and the flag goes to the output port `bounds_fault`
+cli.sim.arg.bounds-check-long = Array bounds guard: an out-of-bounds access is not performed, and the flag goes to the output port `bounds_fault`.\n\nWithout the flag the reference answers `SIM-010` and stops the run - this is its default and the default of the targets (flag `--bounds-check` of `taktc`).
+cli.sim.arg.output = Directory for the run GIF: a frame per tick - the root sheet scheme in colour view and the trace line. The scheme is drawn from the layout file `<model>.takt-ui` next to the model; without it - refusal before the run
+cli.sim.arg.sim-file = JSON file with inputs and checks
+cli.sim.arg.load-state = Load the model state from a JSON file before the simulation
+cli.sim.arg.save-state = Save the model state to a JSON file after the simulation
+cli.sim.arg.invariant-soft = Soft invariant mode: a violation is recorded and the run goes on instead of stopping. For debugging - it has no conformance check against C
+cli.sim.arg.tick-ms = How much model time passes per tick, in milliseconds
+cli.sim.arg.tick-ms-long = How much model time passes per tick, in milliseconds.\n\nDefault - 1 ms.
+cli.sim.graphics-config-removed = the `--graphics-config` key has been removed: run frames are drawn from the layout file `<model>.takt-ui` next to the model, and it defines the scheme view
+cli.sim.read-failed = Could not read {path}: {error}
+cli.sim.parse-errors = Parse errors
+cli.sim.build-error = Build error: {message}
+cli.sim.state-loaded = State loaded from {path}
+cli.sim.state-saved = State saved to {path}
+cli.sim.layout-missing = no layout: {path} ({error}) - run frames are drawn from the scheme layout file, which the editor writes
+cli.sim.create-dir-failed = Could not create directory {path}: {error}
+cli.sim.create-failed = Could not create {path}: {error}
+cli.sim.write-failed = Could not write {path}: {error}
+cli.sim.not-a-file-name = '{path}': not a file name
+cli.sim.scenario-not-found = scenario '{path}' is neither in the project nor on disk
+cli.sim.one-project = one project: a directory, an archive or a model
+cli.export.about = Export of sheet images and run video from `.takt-ui` layout files
+cli.export.arg.project = Project: a directory with `takt-project.json`, a `.zip` archive or a `.takt` model
+cli.export.arg.output = Output directory; default - `export/` in the project directory
+cli.export.arg.view = Image view; default - `draft`. Video is always in colour
+cli.export.view.draft = Drawing: ink only, no highlighting
+cli.export.view.run = Colour: highlighting of the last run tick
+cli.export.arg.format = Format (repeatable): `svg`, `png` - sheet image, `gif`, `mp4` - run video. Default - `svg`
+cli.export.arg.background = PNG background: `fill` - the sheet field, `none` - transparent
+cli.export.background.fill = Fill with the sheet field colour
+cli.export.background.none = Transparent background
+cli.export.arg.legend = Legend - a table of state and condition signs with the author's captions
+cli.export.arg.model = Project model file; default - images of all models, video of the active one
+cli.export.arg.sheet = Sheet (`/`, `/#Line`, `Engine`); default - images of all sheets, video of the root
+cli.export.arg.pause = Pause between video frames, milliseconds
+cli.export.arg.sim-file = Run scenario: a project file; a file outside the project is taken from disk. Default - the active or the only scenario of the model
+cli.export.arg.steps = Run tick limit; default - the scenario length, 200 without a scenario
+cli.export.arg.include = Import search directories of a single model (for a directory and an archive, imports come from the composition)
+cli.export.arg.lang = Message language: `ru`, `en`, ...
+cli.project.about = Project composition: files and kinds, active files, build, model scenarios
+cli.project.arg.paths = Project: a directory with `takt-project.json`, a `.zip` archive or a `.takt` model. With `--owner` - model files among which the scenario owner is sought
+cli.project.arg.owner = Model the scenario belongs to by the ownership rule: the model file is printed; belongs to nobody - an empty line and exit code 1

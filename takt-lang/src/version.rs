@@ -20,6 +20,9 @@
 //! случайность: `pub` поверх недостижимого кода глушит `dead_code`, и мёртвая
 //! функция живёт в дереве незамеченной. Модульная - валит сборку под `-D warnings`.
 
+use crate::diagnostics::lang::keys;
+use crate::msg;
+
 /// Текущая версия языка Takt (SemVer, `x.y.z`). Единственный источник истины;
 /// `README.md` обязан ей соответствовать (проверка `check-language-version.sh`).
 pub const LANGUAGE_VERSION: &str = "0.19.0";
@@ -51,10 +54,10 @@ fn version_text() -> String {
 /// Своей печати у сервера заводить нельзя: форма вывода - одно знание на проект.
 fn version_text_for(tool: &str) -> String {
     format!(
-        "{} {}\nязык Takt {}",
+        "{} {}\n{}",
         tool,
         env!("CARGO_PKG_VERSION"),
-        LANGUAGE_VERSION
+        msg!(keys::CLI_VERSION_LANGUAGE, version = LANGUAGE_VERSION)
     )
 }
 
@@ -101,21 +104,8 @@ pub fn handle_server_args(args: &[String]) -> Option<i32> {
 /// него версию до этого исправления.
 fn server_help_text() -> String {
     format!(
-        "takt-lsp — языковой сервер Takt (LSP поверх stdio).\n\
-         \n\
-         Запускается РЕДАКТОРОМ, не вручную: без клиента процесс завершится\n\
-         ошибкой протокола.\n\
-         \n\
-         Формы:\n\
-         \x20 takt-lsp                 запуск сервера (stdio)\n\
-         \x20 takt-lsp --version | -V  версии инструмента и языка\n\
-         \x20 takt-lsp --help    | -h  эта справка\n\
-         \x20 takt-lsp --graph ФАЙЛ    граф модели для схемы, JSON в поток вывода\n\
-         \n\
-         Пути поиска импортов задаются клиентом —\n\
-         initializationOptions.searchPaths.\n\
-         \n\
-         {}",
+        "{}\n\n{}",
+        msg!(keys::CLI_LSP_HELP),
         version_text_for("takt-lsp")
     )
 }

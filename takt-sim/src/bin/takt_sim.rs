@@ -20,76 +20,91 @@ use takt_sim::json_input::load_sim_steps;
 use takt_sim::runner::{PortNames, RunResult, SimulationRunner};
 use takt_sim::state_io;
 
+use takt_lang::diagnostics::lang::keys;
+use takt_lang::msg;
+
 // -- Аргументы командной строки ------------------------------------------------
 
+// Тексты справки берутся из каталога сообщений при построении команды: атрибуты
+// `help = msg!(...)` вычисляются в момент разбора аргументов, а не при сборке. Поэтому
+// язык выбирается **до** разбора (`early_language`), а doc-комментарии полей заменены
+// обычными: `clap` взял бы их русский текст справкой поверх ключа.
 #[derive(Parser)]
 #[command(
     name = "takt-sim",
-    about = "Симуляция Takt-моделей",
+    about = msg!(keys::CLI_SIM_ABOUT),
     version,
-    after_help = "Подкоманды:\n  takt-sim export <проект> [ключи]   картинки листов и видео прогона\n  takt-sim project <проект>          состав проекта\nСправка подкоманды: takt-sim export --help"
+    after_help = msg!(keys::CLI_SIM_AFTER_HELP)
 )]
 struct Args {
-    /// Путь к.takt файлу (обязательный)
+    // Путь к файлу модели (обязательный).
+    #[arg(help = msg!(keys::CLI_SIM_ARG_MODEL_FILE))]
     model_file: PathBuf,
 
-    /// Директории поиска include (можно указать несколько)
-    #[arg(short = 'I', long = "include", value_name = "DIR")]
+    // Директории поиска include (можно указать несколько).
+    #[arg(short = 'I', long = "include", value_name = "DIR", help = msg!(keys::CLI_SIM_ARG_INCLUDE))]
     include_paths: Vec<PathBuf>,
 
-    /// Язык сообщений: `ru`, `en`, ... - по каталогам в дереве.
-    ///
-    /// Умолчание - русский; переменная `TAKT_LANG` действует, если ключа нет. Системная
-    /// локаль (`LANG`/`LC_MESSAGES`) **не читается**: вывод инструмента не должен
-    /// зависеть от машины - на этом стоят потактовые сверки. Ключ тот же, что у
-    /// `taktc`, и разбирает его общий носитель.
-    #[arg(long = "lang", value_name = "код")]
+    // Язык сообщений. Умолчание - русский; `TAKT_LANG` действует, если ключа нет.
+    // Системная локаль не читается: вывод инструмента не должен зависеть от машины - на
+    // этом стоят потактовые сверки. Ключ тот же, что у `taktc`, разбор общий.
+    #[arg(
+        long = "lang",
+        value_name = msg!(keys::CLI_SIM_ARG_LANG_VALUE),
+        help = msg!(keys::CLI_SIM_ARG_LANG),
+        long_help = msg!(keys::CLI_SIM_ARG_LANG_LONG)
+    )]
     lang: Option<String>,
 
-    /// Количество шагов (по умолчанию - до терминального состояния)
-    #[arg(short = 'n', long = "steps", value_name = "N")]
+    // Количество шагов (по умолчанию - до терминального состояния).
+    #[arg(short = 'n', long = "steps", value_name = "N", help = msg!(keys::CLI_SIM_ARG_STEPS))]
     steps: Option<usize>,
 
-    /// Guard границ массива: доступ за границей не выполняется, а признак уходит в
-    /// выходной порт `bounds_fault`.
-    ///
-    /// Без флага эталон отвечает `SIM-010` и останавливает прогон - это его умолчание и
-    /// умолчание целей (флаг `--bounds-check` у `taktc`).
-    #[arg(long = "bounds-check")]
+    // Guard границ массива: доступ за границей не выполняется, а признак уходит в
+    // выходной порт `bounds_fault`. Без флага эталон отвечает `SIM-010` и останавливает
+    // прогон - это его умолчание и умолчание целей (флаг `--bounds-check` у `taktc`).
+    #[arg(
+        long = "bounds-check",
+        help = msg!(keys::CLI_SIM_ARG_BOUNDS_CHECK),
+        long_help = msg!(keys::CLI_SIM_ARG_BOUNDS_CHECK_LONG)
+    )]
     bounds_check: bool,
 
-    /// Каталог для GIF прогона: кадр на такт - схема корневого листа цветным видом
-    /// и строка трассы. Схема рисуется по файлу раскладки `<модель>.takt-ui` рядом
-    /// с моделью; без него - отказ до прогона.
-    #[arg(short = 'o', long = "output", value_name = "DIR")]
+    // Каталог для GIF прогона: кадр на такт - схема корневого листа цветным видом и
+    // строка трассы. Схема рисуется по файлу раскладки `<модель>.takt-ui` рядом с
+    // моделью; без него - отказ до прогона.
+    #[arg(short = 'o', long = "output", value_name = "DIR", help = msg!(keys::CLI_SIM_ARG_OUTPUT))]
     output_dir: Option<PathBuf>,
 
-    /// JSON-файл с входными данными и проверками
-    #[arg(short = 's', long = "sim-file", value_name = "FILE")]
+    // JSON-файл с входными данными и проверками.
+    #[arg(short = 's', long = "sim-file", value_name = "FILE", help = msg!(keys::CLI_SIM_ARG_SIM_FILE))]
     sim_file: Option<PathBuf>,
 
-    /// Загрузить состояние модели из JSON-файла перед симуляцией
-    #[arg(long = "load-state", value_name = "FILE")]
+    // Загрузить состояние модели из JSON-файла перед симуляцией.
+    #[arg(long = "load-state", value_name = "FILE", help = msg!(keys::CLI_SIM_ARG_LOAD_STATE))]
     load_state: Option<PathBuf>,
 
-    /// Сохранить состояние модели в JSON-файл после симуляции
-    #[arg(long = "save-state", value_name = "FILE")]
+    // Сохранить состояние модели в JSON-файл после симуляции.
+    #[arg(long = "save-state", value_name = "FILE", help = msg!(keys::CLI_SIM_ARG_SAVE_STATE))]
     save_state: Option<PathBuf>,
 
-    /// Снятый ключ настроек прежней графики. Принимается ради внятного отказа:
-    /// неизвестный ключ `clap` отверг бы справкой, не назвав причину.
+    // Снятый ключ настроек прежней графики. Принимается ради внятного отказа:
+    // неизвестный ключ `clap` отверг бы справкой, не назвав причину.
     #[arg(long = "graphics-config", value_name = "FILE", hide = true)]
     graphics_config: Option<PathBuf>,
 
-    /// Мягкий режим инвариантов: нарушение записывается, и прогон продолжается, вместо
-    /// останова. Для отладки - сверки с C у него нет.
-    #[arg(long = "invariant-soft")]
+    // Мягкий режим инвариантов: нарушение записывается, и прогон продолжается, вместо
+    // останова. Для отладки - сверки с C у него нет.
+    #[arg(long = "invariant-soft", help = msg!(keys::CLI_SIM_ARG_INVARIANT_SOFT))]
     invariant_soft: bool,
 
-    /// Сколько модельного времени проходит за такт, в миллисекундах.
-    ///
-    /// Умолчание - 1 мс.
-    #[arg(long = "tick-ms", value_name = "MS")]
+    // Сколько модельного времени проходит за такт, в миллисекундах; умолчание - 1 мс.
+    #[arg(
+        long = "tick-ms",
+        value_name = "MS",
+        help = msg!(keys::CLI_SIM_ARG_TICK_MS),
+        long_help = msg!(keys::CLI_SIM_ARG_TICK_MS_LONG)
+    )]
     tick_ms: Option<i64>,
 }
 
@@ -98,18 +113,24 @@ struct Args {
 fn main() -> ExitCode {
     env_logger::init();
     let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    // Язык - до разбора аргументов: тексты справки `clap` берёт из каталога при
+    // построении команды, и `--help` обязан прийти уже на выбранном языке.
+    if let Err(e) = early_language(&argv) {
+        eprintln!("{}", msg!(keys::CLI_ERROR, error = e));
+        return ExitCode::FAILURE;
+    }
     if let Some(code) = subcommands::dispatch(&argv) {
         return code;
     }
     let args = Args::parse_from(argv);
 
-    // Язык - до первого сообщения: диагностика прогона обязана прийти уже на выбранном
-    // языке. Разбор общий с `taktc`.
+    // Язык уже выбран `early_language`; поле читается здесь тем же носителем - через
+    // него ключ принимает `clap`, и выбор у прогона один.
     if let Some(code) = args.lang.as_deref() {
         match takt_lang::diagnostics::lang::parse(code) {
             Ok(lang) => takt_lang::diagnostics::lang::activate(lang),
             Err(e) => {
-                eprintln!("Ошибка: {e}");
+                eprintln!("{}", msg!(keys::CLI_ERROR, error = e));
                 return ExitCode::FAILURE;
             }
         }
@@ -128,34 +149,51 @@ fn main() -> ExitCode {
             }
         }
         Err(e) => {
-            eprintln!("Ошибка: {e}");
+            eprintln!("{}", msg!(keys::CLI_ERROR, error = e));
             ExitCode::FAILURE
         }
     }
+}
+
+/// Выбирает язык по ключу `--lang` до разбора аргументов `clap`.
+///
+/// Ключ ищет общий носитель (`lang::take_flag`) в **копии** аргументов: сами аргументы
+/// остаются `clap` - он ключ и принимает, и показывает в справке. `--lang` последним,
+/// без значения, оставлен `clap`: его отказ называет форму ключа.
+fn early_language(argv: &[std::ffi::OsString]) -> Result<(), String> {
+    let mut args: Vec<String> = argv
+        .iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    if args.last().is_some_and(|a| a == "--lang") {
+        return Ok(());
+    }
+    takt_lang::diagnostics::lang::take_flag(&mut args)
 }
 
 fn run(args: Args) -> Result<RunResult, String> {
     // Снятый ключ - отказ словами, а не молчание: прежний вызов со своими
     // настройками получил бы другую картинку и не узнал бы об этом.
     if args.graphics_config.is_some() {
-        return Err(
-            "ключ `--graphics-config` снят: кадры прогона рисуются по файлу \
-                    раскладки `<модель>.takt-ui` рядом с моделью, вид схемы задаёт он"
-                .to_string(),
-        );
+        return Err(msg!(keys::CLI_SIM_GRAPHICS_CONFIG_REMOVED));
     }
 
     // 1. Читаем исходный файл модели
-    let source = std::fs::read_to_string(&args.model_file)
-        .map_err(|e| format!("Не удалось прочитать {}: {e}", args.model_file.display()))?;
+    let source = std::fs::read_to_string(&args.model_file).map_err(|e| {
+        msg!(
+            keys::CLI_SIM_READ_FAILED,
+            path = args.model_file.display(),
+            error = e
+        )
+    })?;
 
     // Реестр файлов: корневой - номер 0, импортируемые получит проход 0. Нужен, чтобы
     // назвать пользователю файл ошибки.
     let mut files = takt_lang::diagnostics::FileTable::new(&args.model_file.to_string_lossy());
 
     // 2. Парсинг
-    let (ast, _comments) =
-        parse(&source, 0).map_err(|diags| format_diagnostics("Ошибки парсинга", &diags, &files))?;
+    let (ast, _comments) = parse(&source, 0)
+        .map_err(|diags| format_diagnostics(&msg!(keys::CLI_SIM_PARSE_ERRORS), &diags, &files))?;
 
     // 3. Семантический анализ
     let search_paths: Vec<String> = args
@@ -198,12 +236,16 @@ fn run(args: Args) -> Result<RunResult, String> {
     if args.bounds_check {
         takt_lang::semantic::bounds_guard::insert_bounds_guards(&model_rc);
     }
-    let mut unit = build_unit(model_rc).map_err(|d| format!("Ошибка построения: {}", d.message))?;
+    let mut unit =
+        build_unit(model_rc).map_err(|d| msg!(keys::CLI_SIM_BUILD_ERROR, message = d.message))?;
 
     // Загружаем сохранённое состояние (если указано)
     if let Some(path) = &args.load_state {
         state_io::load_from_file(&mut unit, path)?;
-        println!("Состояние загружено из {}", path.display());
+        println!(
+            "{}",
+            msg!(keys::CLI_SIM_STATE_LOADED, path = path.display())
+        );
     }
 
     // 6. Загружаем шаги симуляции (если указан файл)
@@ -241,7 +283,7 @@ fn run(args: Args) -> Result<RunResult, String> {
     // 8. Сохраняем состояние модели (если указано)
     if let Some(path) = &args.save_state {
         state_io::save_to_file(runner.unit(), path)?;
-        println!("Состояние сохранено в {}", path.display());
+        println!("{}", msg!(keys::CLI_SIM_STATE_SAVED, path = path.display()));
     }
 
     // 9. GIF прогона: имя - по файлу сценария, без него - по файлу модели.
@@ -265,10 +307,10 @@ fn run(args: Args) -> Result<RunResult, String> {
 fn film_of(model_file: &std::path::Path, source: &str) -> Result<Film, String> {
     let layout_file = model_file.with_extension("takt-ui");
     let layout = std::fs::read_to_string(&layout_file).map_err(|e| {
-        format!(
-            "раскладки нет: {} ({e}) - кадры прогона рисуются по файлу раскладки \
-             схемы, его пишет редактор",
-            layout_file.display()
+        msg!(
+            keys::CLI_SIM_LAYOUT_MISSING,
+            path = layout_file.display(),
+            error = e
         )
     })?;
     Film::new(source, &layout, ROOT_SHEET, true)
@@ -283,16 +325,27 @@ fn write_gif(film: &Film, path: &std::path::Path) -> Result<(), String> {
         return Ok(());
     }
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)
-            .map_err(|e| format!("Не удалось создать каталог {}: {e}", dir.display()))?;
+        std::fs::create_dir_all(dir).map_err(|e| {
+            msg!(
+                keys::CLI_SIM_CREATE_DIR_FAILED,
+                path = dir.display(),
+                error = e
+            )
+        })?;
     }
     let part = path.with_extension("gif.part");
     let written = std::fs::File::create(&part)
-        .map_err(|e| format!("Не удалось создать {}: {e}", part.display()))
+        .map_err(|e| {
+            msg!(
+                keys::CLI_SIM_CREATE_FAILED,
+                path = part.display(),
+                error = e
+            )
+        })
         .and_then(|file| film.gif(PAUSE_MS, std::io::BufWriter::new(file)))
         .and_then(|()| {
             std::fs::rename(&part, path)
-                .map_err(|e| format!("Не удалось записать {}: {e}", path.display()))
+                .map_err(|e| msg!(keys::CLI_SIM_WRITE_FAILED, path = path.display(), error = e))
         });
     if written.is_err() {
         let _ = std::fs::remove_file(&part);

@@ -1,11 +1,15 @@
 //! Применимость флага сборки к цели - один носитель.
 
+use crate::diagnostics::lang::{Key, keys};
+use crate::msg;
+
 /// Флаг, применимый не ко всякой цели.
 struct Restricted {
     /// Как флаг записан автором - для текста отказа.
     flag: &'static str,
-    /// Что флаг делает - вторая половина текста отказа.
-    what: &'static str,
+    /// Что флаг делает - вторая половина текста отказа, ключом каталога: текст строится
+    /// на языке прогона в момент отказа.
+    what: Key,
     /// Цели, которые флаг понимают.
     targets: &'static [&'static str],
 }
@@ -13,7 +17,7 @@ struct Restricted {
 /// Таблица ограниченных флагов.
 const RESTRICTED: &[Restricted] = &[Restricted {
     flag: "--bus=apb",
-    what: "Адаптер шины печатает цель",
+    what: keys::CLI_COMPILE_BUS_ADAPTER,
     targets: &["sv-mmio"],
 }];
 
@@ -29,12 +33,12 @@ pub fn check(target: &str, raised: &[&str]) -> Result<(), String> {
         if entry.targets.contains(&target) {
             continue;
         }
-        return Err(format!(
-            "Ошибка: {} не поддерживается целью '{}'. {}: {}",
-            entry.flag,
-            target,
-            entry.what,
-            entry.targets.join(", ")
+        return Err(msg!(
+            keys::CLI_COMPILE_FLAG_NOT_FOR_TARGET,
+            flag = entry.flag,
+            target = target,
+            what = msg!(entry.what),
+            targets = entry.targets.join(", ")
         ));
     }
     Ok(())

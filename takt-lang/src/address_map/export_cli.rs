@@ -15,6 +15,9 @@ use std::fs;
 use std::io::Write as _;
 use std::rc::Rc;
 
+use crate::diagnostics::lang::keys;
+use crate::msg;
+
 /// Разбивает список путей поиска импортов по платформенному разделителю (`:` на Unix,
 /// `;` на Windows - там путь может начинаться с буквы диска).
 ///
@@ -72,10 +75,7 @@ fn parse_emit_format(s: &str) -> Result<EmitFormat, String> {
     match s {
         "map" => Ok(EmitFormat::Map),
         "json" => Ok(EmitFormat::Json),
-        other => Err(format!(
-            "неизвестный формат выгрузки '{other}' (допустимо: map, json). \
-             Формат CMSIS-SVD не поставляется — у Takt нет требуемых им данных (ADR 0043)"
-        )),
+        other => Err(msg!(keys::CLI_ADDRESS_MAP_EMIT_UNKNOWN, value = other)),
     }
 }
 
@@ -95,7 +95,9 @@ pub fn parse_address_map_args(args: &[String]) -> Result<AddressMapOptions, Stri
         match a.as_str() {
             "--emit" => {
                 i += 1;
-                let v = args.get(i).ok_or("--emit требует значение (map|json)")?;
+                let v = args
+                    .get(i)
+                    .ok_or_else(|| msg!(keys::CLI_ADDRESS_MAP_EMIT_NEEDS_VALUE))?;
                 emit = parse_emit_format(v)?;
             }
             s if s.starts_with("--emit=") => {
@@ -103,11 +105,17 @@ pub fn parse_address_map_args(args: &[String]) -> Result<AddressMapOptions, Stri
             }
             "-o" | "--output" => {
                 i += 1;
-                output_path = Some(args.get(i).ok_or("-o требует путь")?.clone());
+                output_path = Some(
+                    args.get(i)
+                        .ok_or_else(|| msg!(keys::CLI_ADDRESS_MAP_OUTPUT_NEEDS_PATH))?
+                        .clone(),
+                );
             }
             "-I" | "--include-dirs" => {
                 i += 1;
-                let v = args.get(i).ok_or("-I требует путь")?;
+                let v = args
+                    .get(i)
+                    .ok_or_else(|| msg!(keys::CLI_ADDRESS_MAP_INCLUDE_NEEDS_PATH))?;
                 include_dirs.extend(split_include_dirs(v));
             }
             s if s.starts_with("-I") && s.len() > 2 => {
@@ -115,22 +123,30 @@ pub fn parse_address_map_args(args: &[String]) -> Result<AddressMapOptions, Stri
             }
             "-D" | "--define" => {
                 i += 1;
-                defines.push(args.get(i).ok_or("-D требует N=VALUE")?.clone());
+                defines.push(
+                    args.get(i)
+                        .ok_or_else(|| msg!(keys::CLI_ADDRESS_MAP_DEFINE_NEEDS_VALUE))?
+                        .clone(),
+                );
             }
             s if s.starts_with("-D") && s.len() > 2 => {
                 defines.push(s[2..].to_string());
             }
             "--address-map" => {
                 i += 1;
-                address_map = Some(args.get(i).ok_or("--address-map требует файл")?.clone());
+                address_map = Some(
+                    args.get(i)
+                        .ok_or_else(|| msg!(keys::CLI_ADDRESS_MAP_MAP_NEEDS_FILE))?
+                        .clone(),
+                );
             }
             "--quiet" | "-q" => quiet = true,
             unknown if unknown.starts_with('-') => {
-                return Err(format!("неизвестный флаг '{unknown}'"));
+                return Err(msg!(keys::CLI_UNKNOWN_FLAG, flag = unknown));
             }
             positional => {
                 if input_file.is_some() {
-                    return Err("указано несколько входных файлов".to_string());
+                    return Err(msg!(keys::CLI_ADDRESS_MAP_MANY_INPUTS));
                 }
                 input_file = Some(positional.to_string());
             }
@@ -138,7 +154,7 @@ pub fn parse_address_map_args(args: &[String]) -> Result<AddressMapOptions, Stri
         i += 1;
     }
 
-    let input_file = input_file.ok_or("не указан входной файл")?;
+    let input_file = input_file.ok_or_else(|| msg!(keys::CLI_NO_INPUT_FILE))?;
     Ok(AddressMapOptions {
         input_file,
         output_path,
@@ -156,11 +172,8 @@ pub fn run_export_subcommand(args: &[String]) -> i32 {
     match parse_address_map_args(args) {
         Ok(options) => run(&options),
         Err(e) => {
-            eprintln!("Ошибка разбора аргументов: {e}");
-            eprintln!(
-                "Использование: taktc address-map [--emit map|json] [--address-map <файл>] \
-                 [-D N=V] [-I <dirs>] [-o <out>] <input.takt>"
-            );
+            eprintln!("{}", msg!(keys::CLI_ARGS_ERROR, error = e));
+            eprintln!("{}", msg!(keys::CLI_ADDRESS_MAP_USAGE));
             1
         }
     }
@@ -177,7 +190,14 @@ fn run(options: &AddressMapOptions) -> i32 {
     let source = match fs::read_to_string(&options.input_file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Ошибка чтения файла '{}': {e}", options.input_file);
+            eprintln!(
+                "{}",
+                msg!(
+                    keys::CLI_READ_FILE_ERROR,
+                    path = options.input_file,
+                    error = e
+                )
+            );
             return 1;
         }
     };
@@ -187,7 +207,10 @@ fn run(options: &AddressMapOptions) -> i32 {
             let map_src = match fs::read_to_string(path) {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("Ошибка чтения карты адресов '{path}': {e}");
+                    eprintln!(
+                        "{}",
+                        msg!(keys::CLI_ADDRESS_MAP_READ_ERROR, path = path, error = e)
+                    );
                     return 1;
                 }
             };
@@ -196,9 +219,12 @@ fn run(options: &AddressMapOptions) -> i32 {
                 Err(diags) => {
                     for d in diags {
                         eprintln!(
-                            "Ошибка карты адресов [{}]: {}",
-                            d.code.as_deref().unwrap_or("?"),
-                            d.message
+                            "{}",
+                            msg!(
+                                keys::CLI_ADDRESS_MAP_ERROR,
+                                code = d.code.as_deref().unwrap_or("?"),
+                                message = d.message
+                            )
                         );
                     }
                     return 1;
@@ -213,9 +239,12 @@ fn run(options: &AddressMapOptions) -> i32 {
         Err(diags) => {
             for d in diags {
                 eprintln!(
-                    "Ошибка --define [{}]: {}",
-                    d.code.as_deref().unwrap_or("?"),
-                    d.message
+                    "{}",
+                    msg!(
+                        keys::CLI_DEFINE_ERROR,
+                        code = d.code.as_deref().unwrap_or("?"),
+                        message = d.message
+                    )
                 );
             }
             return 1;
@@ -227,9 +256,12 @@ fn run(options: &AddressMapOptions) -> i32 {
         Err(diags) => {
             for d in diags {
                 eprintln!(
-                    "Ошибка разбора [{}]: {}",
-                    d.code.as_deref().unwrap_or("?"),
-                    d.message
+                    "{}",
+                    msg!(
+                        keys::CLI_PARSE_ERROR,
+                        code = d.code.as_deref().unwrap_or("?"),
+                        message = d.message
+                    )
                 );
             }
             return 1;
@@ -239,9 +271,12 @@ fn run(options: &AddressMapOptions) -> i32 {
         Ok(m) => m,
         Err(d) => {
             eprintln!(
-                "Семантическая ошибка [{}]: {}",
-                d.code.as_deref().unwrap_or("?"),
-                d.message
+                "{}",
+                msg!(
+                    keys::CLI_SEMANTIC_ERROR,
+                    code = d.code.as_deref().unwrap_or("?"),
+                    message = d.message
+                )
             );
             return 1;
         }
@@ -259,17 +294,17 @@ fn run(options: &AddressMapOptions) -> i32 {
         } else if options.quiet {
             continue;
         }
-        eprintln!(
-            "{}{} [{}]: {}",
-            crate::diagnostics::position_prefix(d),
-            if is_error {
-                "Ошибка"
-            } else {
-                "Предупреждение"
-            },
-            d.code.as_deref().unwrap_or("?"),
-            d.message
-        );
+        let code = d.code.as_deref().unwrap_or("?");
+        let line = if is_error {
+            msg!(
+                keys::CLI_ADDRESS_MAP_DIAG_ERROR,
+                code = code,
+                message = d.message
+            )
+        } else {
+            msg!(keys::DIAG_WARNING, code = code, message = d.message)
+        };
+        eprintln!("{}{line}", crate::diagnostics::position_prefix(d));
     }
     if has_error {
         return 1;
@@ -283,7 +318,7 @@ fn run(options: &AddressMapOptions) -> i32 {
     match &options.output_path {
         Some(path) => {
             if let Err(e) = fs::write(path, &out) {
-                eprintln!("Ошибка записи '{path}': {e}");
+                eprintln!("{}", msg!(keys::CLI_WRITE_ERROR, path = path, error = e));
                 return 1;
             }
         }

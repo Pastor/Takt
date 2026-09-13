@@ -5,6 +5,8 @@
 
 use crate::VerifyScope;
 use crate::address_map::split_include_dirs;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use crate::verification::dot::{GraphKind, parse_graph_kind};
 
 /// Опции подкоманды `verify`.
@@ -36,10 +38,7 @@ fn parse_scope(value: &str) -> Result<VerifyScope, String> {
     match value {
         "file" => Ok(VerifyScope::File),
         "all" => Ok(VerifyScope::All),
-        other => Err(format!(
-            "неизвестная область '{other}'; допустимо: file (модели своего файла) \
-             или all (включая импортированные)"
-        )),
+        other => Err(msg!(keys::CLI_VERIFY_UNKNOWN_SCOPE, value = other)),
     }
 }
 
@@ -51,9 +50,10 @@ fn parse_scope(value: &str) -> Result<VerifyScope, String> {
 /// второго файла.
 fn set_property(options: &mut VerifyOptions, value: &str) -> Result<(), String> {
     if let Some(first) = &options.property {
-        return Err(format!(
-            "свойство задано дважды ('{first}' и '{value}'); \
-             verify проверяет одно свойство за вызов"
+        return Err(msg!(
+            keys::CLI_VERIFY_PROPERTY_TWICE,
+            first = first,
+            second = value
         ));
     }
     options.property = Some(value.to_string());
@@ -73,29 +73,29 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
                 i += 1;
                 let value = args
                     .get(i)
-                    .ok_or_else(|| format!("флаг '{arg}' требует значение — LTL-формулу"))?;
+                    .ok_or_else(|| msg!(keys::CLI_VERIFY_PROPERTY_NEEDS_VALUE, flag = arg))?;
                 set_property(&mut options, value)?;
             }
             "--trace" => options.trace = true,
             "--emit-graph" => {
                 i += 1;
-                let value = args.get(i).ok_or_else(|| {
-                    format!("флаг '{arg}' требует значение: kripke, buchi или product")
-                })?;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| msg!(keys::CLI_VERIFY_EMIT_GRAPH_NEEDS_VALUE, flag = arg))?;
                 options.emit_graph = Some(parse_graph_kind(value)?);
             }
             "--scope" => {
                 i += 1;
                 let value = args
                     .get(i)
-                    .ok_or_else(|| format!("флаг '{arg}' требует значение: file или all"))?;
+                    .ok_or_else(|| msg!(keys::CLI_VERIFY_SCOPE_NEEDS_VALUE, flag = arg))?;
                 options.scope = parse_scope(value)?;
             }
             "--include-dirs" | "-I" => {
                 i += 1;
                 let value = args
                     .get(i)
-                    .ok_or_else(|| format!("флаг '{arg}' требует значение"))?;
+                    .ok_or_else(|| msg!(keys::CLI_VERIFY_FLAG_NEEDS_VALUE, flag = arg))?;
                 options.include_dirs.extend(split_include_dirs(value));
             }
             other if other.starts_with("--property=") => {
@@ -112,13 +112,11 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
                 options.include_dirs.extend(split_include_dirs(&other[2..]));
             }
             other if other.starts_with('-') => {
-                return Err(format!("неизвестный флаг '{other}'"));
+                return Err(msg!(keys::CLI_UNKNOWN_FLAG, flag = other));
             }
             other => {
                 if !options.input_file.is_empty() {
-                    return Err(format!(
-                        "verify принимает один файл; лишний аргумент '{other}'"
-                    ));
+                    return Err(msg!(keys::CLI_VERIFY_ONE_FILE, arg = other));
                 }
                 options.input_file = other.to_string();
             }
@@ -126,7 +124,7 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
         i += 1;
     }
     if options.input_file.is_empty() {
-        return Err("укажите .takt-файл для проверки".to_string());
+        return Err(msg!(keys::CLI_VERIFY_NO_FILE));
     }
     Ok(options)
 }
