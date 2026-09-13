@@ -73,6 +73,9 @@ pub struct ProjectJson {
     /// Задержка между тактами прогона по сценариям, секунд; сценария нет в списке -
     /// прогон идёт без задержки.
     pub run_delays: BTreeMap<String, f64>,
+    /// Частота модельных часов прогона по сценариям, Гц; сценария нет в списке -
+    /// частота из `clock` модели.
+    pub run_frequencies: BTreeMap<String, u64>,
     pub revision: i64,
     pub size_bytes: i64,
     pub forked_from: Option<String>,
@@ -161,6 +164,9 @@ pub struct PatchRequest {
     /// Задержки прогона по сценариям - список целиком: запись заменяет прежний.
     #[serde(default)]
     pub run_delays: Option<BTreeMap<String, f64>>,
+    /// Частоты модельных часов прогона по сценариям, Гц - список целиком, как у задержек.
+    #[serde(default)]
+    pub run_frequencies: Option<BTreeMap<String, f64>>,
     /// Подъём версии модуля - **явное действие владельца**: после него
     /// вывод целей может измениться.
     #[serde(default)]
@@ -256,7 +262,7 @@ async fn rename_project_files(
             )
             .await?;
         transaction
-            .execute(RENAME_DELAY, &[&id, name, &target])
+            .execute(RENAME_RUN_SETTINGS, &[&id, name, &target])
             .await?;
     }
     Ok(())
@@ -304,7 +310,7 @@ async fn list(
         .query(
             "SELECT p.id, p.name, p.description, p.visibility, u.login AS owner,
                     p.takt_lang, p.language_version, p.main_file,
-                    p.main_scenario, p.build_target, p.build_args, p.run_delays, p.revision,
+                    p.main_scenario, p.build_target, p.build_args, p.run_delays, p.run_frequencies, p.revision,
                     p.size_bytes, p.forked_from, p.created_at, p.updated_at,
                     g.level AS granted
              FROM projects p
@@ -537,6 +543,28 @@ async fn patch(
         transaction
             .execute(
                 "UPDATE projects SET run_delays = $1 WHERE id = $2",
+                &[&stored, &id],
+            )
+            .await?;
+    }
+    if let Some(frequencies) = &request.run_frequencies {
+        // Частота - свойство сценария по тому же правилу, что задержка.
+        let frequencies = limits::check_run_frequencies(frequencies)?;
+        for name in frequencies.keys() {
+            has_kind(
+                &transaction,
+                &id,
+                name,
+                Kind::Scenario,
+                "сценарий частоты прогона",
+            )
+            .await?;
+        }
+        let stored = serde_json::to_string(&frequencies)
+            .map_err(|error| ApiError::Internal(error.into()))?;
+        transaction
+            .execute(
+                "UPDATE projects SET run_frequencies = $1 WHERE id = $2",
                 &[&stored, &id],
             )
             .await?;
@@ -839,7 +867,7 @@ pub(crate) fn check_build(
 
 pub(crate) const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
         u.login AS owner, p.takt_lang, p.language_version, p.main_file,
-        p.main_scenario, p.build_target, p.build_args, p.run_delays, p.revision,
+        p.main_scenario, p.build_target, p.build_args, p.run_delays, p.run_frequencies, p.revision,
         p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id,
         p.touched_at, p.archived_at
     FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1";
@@ -858,6 +886,7 @@ pub(crate) fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
         build_target: row.get("build_target"),
         build_args: row.get("build_args"),
         run_delays: delays_of(row.get("run_delays")),
+        run_frequencies: frequencies_of(row.get("run_frequencies")),
         revision: row.get("revision"),
         size_bytes: row.get("size_bytes"),
         forked_from: row.get("forked_from"),
@@ -874,18 +903,31 @@ pub(crate) fn delays_of(stored: String) -> BTreeMap<String, f64> {
     serde_json::from_str(&stored).unwrap_or_default()
 }
 
-/// Переносит задержку прогона на новое имя сценария: `$1` - проект, `$2` - прежнее
-/// имя, `$3` - новое. Ключ задержки - имя файла, и без переноса переименованный
-/// сценарий потерял бы свой темп.
-pub(crate) const RENAME_DELAY: &str = "UPDATE projects
-    SET run_delays = ((run_delays::jsonb - $2::text)
-        || jsonb_build_object($3::text, run_delays::jsonb -> $2::text))::text
-    WHERE id = $1 AND run_delays::jsonb ? $2::text";
+/// Частоты прогона из колонки: объект JSON "сценарий - герцы"; правило чтения то же,
+/// что у [`delays_of`].
+pub(crate) fn frequencies_of(stored: String) -> BTreeMap<String, u64> {
+    serde_json::from_str(&stored).unwrap_or_default()
+}
 
-/// Забывает задержку удалённого сценария: `$1` - проект, `$2` - имя.
-pub(crate) const FORGET_DELAY: &str = "UPDATE projects
-    SET run_delays = (run_delays::jsonb - $2::text)::text
-    WHERE id = $1 AND run_delays::jsonb ? $2::text";
+/// Переносит задержку и частоту прогона на новое имя сценария: `$1` - проект, `$2` -
+/// прежнее имя, `$3` - новое. Ключ обеих - имя файла, и без переноса переименованный
+/// сценарий потерял бы свой темп. Колонка без ключа не трогается.
+pub(crate) const RENAME_RUN_SETTINGS: &str = "UPDATE projects
+    SET run_delays = CASE WHEN run_delays::jsonb ? $2::text
+            THEN ((run_delays::jsonb - $2::text)
+                || jsonb_build_object($3::text, run_delays::jsonb -> $2::text))::text
+            ELSE run_delays END,
+        run_frequencies = CASE WHEN run_frequencies::jsonb ? $2::text
+            THEN ((run_frequencies::jsonb - $2::text)
+                || jsonb_build_object($3::text, run_frequencies::jsonb -> $2::text))::text
+            ELSE run_frequencies END
+    WHERE id = $1 AND (run_delays::jsonb ? $2::text OR run_frequencies::jsonb ? $2::text)";
+
+/// Забывает задержку и частоту удалённого сценария: `$1` - проект, `$2` - имя.
+pub(crate) const FORGET_RUN_SETTINGS: &str = "UPDATE projects
+    SET run_delays = (run_delays::jsonb - $2::text)::text,
+        run_frequencies = (run_frequencies::jsonb - $2::text)::text
+    WHERE id = $1 AND (run_delays::jsonb ? $2::text OR run_frequencies::jsonb ? $2::text)";
 
 /// Идентификатор проекта: 16 случайных байт, base64url.
 ///

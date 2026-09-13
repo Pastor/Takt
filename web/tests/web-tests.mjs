@@ -2453,6 +2453,7 @@ test("экспорт: запрос из выбора окна и порядок 
     sheet: "/#Line",
     scenario: "m_run.json",
     steps: 40,
+    tick_hz: 2,
     name: "Бак",
   };
   // Лист: модель и лист открытые; видео - всегда цветное; проект - без модели и листа.
@@ -2461,6 +2462,11 @@ test("экспорт: запрос из выбора окна и порядок 
     [sheet.formats, sheet.view, sheet.model, sheet.sheet, sheet.legend, sheet.archive],
     [["svg"], "draft", "m.takt", "/#Line", true, "Бак.export.zip"]
   );
+  // Частота уходит по сценарию - так её берёт модуль из манифеста; без сценария
+  // или без частоты карта пуста, и видео идёт в темпе clock модели.
+  assert.deepEqual(sheet.run_frequencies, { "m_run.json": 2 }, "частота прогона не дошла");
+  assert.deepEqual(exportRequest({ ...DEFAULTS }, { ...context, scenario: null }).run_frequencies, {});
+  assert.deepEqual(exportRequest({ ...DEFAULTS }, { ...context, tick_hz: 0 }).run_frequencies, {});
   const video = exportRequest({ ...DEFAULTS, format: "mp4", view: "draft", scope: "model", pause: 250 }, context);
   assert.deepEqual([video.view, video.sheet, video.pause, video.steps], ["run", null, 250, 40]);
   const project = exportRequest({ ...DEFAULTS, scope: "project", format: "png", background: "none" }, context);

@@ -1,6 +1,6 @@
 [package]
 name = "takt-project"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Pastor <viruszold@gmail.com>"]
 description = "Takt — учебный DSL конечных автоматов: проект на диске и в архиве — роды файлов, манифест, состав. Язык сделан в учебных целях и показывает принципы автоматного подхода к разработке"
 homepage = "https://but.ru"

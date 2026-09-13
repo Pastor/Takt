@@ -197,6 +197,42 @@ fn a_video_has_a_frame_per_tick_of_the_run() {
     assert_eq!(frames, ticks, "кадр на такт");
 }
 
+/// Частота сценария из манифеста задаёт темп видео - тот же, что у прогона на
+/// странице: видео с частотой 2 Гц равно видео с периодом 500 мс байт в байт.
+#[test]
+fn the_scenario_frequency_from_the_manifest_sets_the_video_pace() {
+    let root = dir("frequency");
+    let fixture = PathBuf::from(format!("{DATA}/project"));
+    let project = root.join("project");
+    copy(&fixture, &project);
+    let path = project.join("takt-project.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("манифест"))
+            .expect("манифест разбирается");
+    manifest["format"] = 6.into();
+    manifest["run_frequencies"] = serde_json::json!({"plant_start.json": 2});
+    std::fs::write(&path, manifest.to_string()).expect("запись манифеста");
+
+    let gif = |from: &Path, tag: &str, extra: &[&str]| -> Vec<u8> {
+        let out = root.join(tag);
+        std::fs::create_dir_all(&out).expect("каталог вывода");
+        let mut args = vec![s(from), "-o", s(&out), "--format", "gif"];
+        args.extend_from_slice(extra);
+        ok(&export(&args));
+        std::fs::read(out.join("plant.run.gif")).expect("GIF")
+    };
+    let by_manifest = gif(&project, "manifest", &[]);
+    assert!(
+        by_manifest == gif(&fixture, "period", &["--tick-ms", "500"]),
+        "частота сценария 2 Гц - тот же темп, что период 500 мс"
+    );
+    // Контроль: без частоты видео другое - иначе равенство выше ничего не доказывает.
+    assert!(
+        by_manifest != gif(&fixture, "plain", &[]),
+        "частота из манифеста не дошла до прогона"
+    );
+}
+
 #[test]
 fn a_missing_layout_refuses_the_whole_export() {
     let work = dir("refusal");

@@ -58,6 +58,10 @@ pub struct ExportRequest {
     steps: Option<usize>,
     #[serde(default)]
     tick_ms: Option<i64>,
+    /// Частоты модельных часов прогона по сценариям, Гц - те же, что в манифесте
+    /// проекта: видео идёт в темпе, выбранном автором для сценария.
+    #[serde(default)]
+    run_frequencies: std::collections::BTreeMap<String, u64>,
     /// Имя архива `.zip`: вывод из нескольких файлов уходит им одним. Один файл
     /// уходит как есть - архив из одной картинки читателю ни к чему.
     #[serde(default)]
@@ -86,6 +90,7 @@ fn project_of(request: &ExportRequest) -> Result<Project, String> {
             format: takt_project::FORMAT,
             main_file: request.main_file.clone(),
             main_scenario: request.main_scenario.clone(),
+            run_frequencies: request.run_frequencies.clone(),
             ..Manifest::default()
         },
         files,

@@ -1,6 +1,6 @@
 [package]
 name = "takt-wasm-export"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Pastor <viruszold@gmail.com>"]
 description = "Takt — учебный DSL конечных автоматов: модуль экспорта для WebAssembly — картинки листов схемы и видео прогона"
 homepage = "https://but.ru"

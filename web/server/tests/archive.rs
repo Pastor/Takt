@@ -106,10 +106,14 @@ async fn the_archive_makes_a_round_trip_through_the_service() {
     );
     let manifest: serde_json::Value =
         serde_json::from_str(&files["takt-project.json"]).expect("метаданные");
-    assert_eq!(manifest["format"], 5, "версия формата названа");
+    assert_eq!(manifest["format"], 6, "версия формата названа");
     assert!(
         manifest["run_delays"].is_object(),
         "задержки прогона — часть архива: {manifest}"
+    );
+    assert!(
+        manifest["run_frequencies"].is_object(),
+        "частоты прогона — часть архива: {manifest}"
     );
     assert_eq!(manifest["name"], "Термореле");
     // Версия сверяется с той, что объявил стенд, а не с числом в тесте: вписанное число

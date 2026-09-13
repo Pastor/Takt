@@ -2601,7 +2601,7 @@ cargo build -p takt-wasm --profile wasm --target wasm32-unknown-unknown
 
 **Проект на диске.** Крейт `takt-project` знает, из чего состоит проект: роды
 файлов по расширению (`.takt`, `.json`, `.md`, `.takt-ui`, `.takt-map`),
-манифест `takt-project.json` формата 5, архив `.zip` сервиса и правило
+манифест `takt-project.json` формата 6, архив `.zip` сервиса и правило
 принадлежности сценария модели (побеждает самая длинная основа имени:
 `elevator_mini_floor2.json` принадлежит `elevator_mini`, а не `elevator`).
 Проект читается в трёх формах — каталог с манифестом, архив или одна модель

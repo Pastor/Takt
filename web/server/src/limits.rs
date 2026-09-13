@@ -156,6 +156,47 @@ pub fn check_run_delays(delays: &BTreeMap<String, f64>) -> Result<BTreeMap<Strin
     Ok(kept)
 }
 
+/// Наибольшая частота модельных часов прогона, Гц: такт не короче наносекунды.
+pub const RUN_FREQUENCY_HZ: f64 = 1_000_000_000.0;
+
+/// Проверяет частоты модельных часов прогона и отдаёт их в хранимом виде.
+///
+/// Частота - целое число герц от нуля до [`RUN_FREQUENCY_HZ`], как у объявления
+/// `clock` модели: дробной частоты оно не знает. Приходит числом JSON, то есть
+/// дробным, - иначе дробь и минус отвергал бы разбор запроса, не называя поля. Ноль
+/// означает "частота из модели" и не хранится - по той же причине, что нулевая
+/// задержка. Что ключ - сценарий проекта, судит вызывающий: состав знает база.
+pub fn check_run_frequencies(
+    frequencies: &BTreeMap<String, f64>,
+) -> Result<BTreeMap<String, u64>, ApiError> {
+    let mut kept = BTreeMap::new();
+    for (name, &hz) in frequencies {
+        if !hz.is_finite() || hz < 0.0 || hz.fract() != 0.0 {
+            return Err(ApiError::BadRequest(format!(
+                "частота прогона у '{name}': целое число герц от 0 до {RUN_FREQUENCY_HZ}"
+            )));
+        }
+        if hz > RUN_FREQUENCY_HZ {
+            return Err(exceeded(
+                &format!("частота прогона у '{name}' в герцах"),
+                RUN_FREQUENCY_HZ,
+                hz,
+            ));
+        }
+        if hz > 0.0 {
+            kept.insert(name.clone(), hz as u64);
+        }
+    }
+    if kept.len() > RUN_DELAYS {
+        return Err(exceeded(
+            "число сценариев с частотой",
+            RUN_DELAYS,
+            kept.len(),
+        ));
+    }
+    Ok(kept)
+}
+
 /// Род файла проекта - тип крейта проекта: правило одно у сервера и командной
 /// строки.
 pub use takt_project::Kind;

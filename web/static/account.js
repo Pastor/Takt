@@ -1642,22 +1642,38 @@ export function delayOf(file) {
   return (file && state.project?.run_delays?.[file]) || 0;
 }
 
+/** Частота модельных часов прогона у сценария, Гц; записи нет - ноль, частота из модели. */
+export function frequencyOf(file) {
+  return (file && state.project?.run_frequencies?.[file]) || 0;
+}
+
+/** Ставит задержку сценарию и записывает её в проект - см. {@link setRunSetting}. */
+export function setDelay(file, seconds) {
+  return setRunSetting("run_delays", file, seconds);
+}
+
+/** Ставит частоту сценарию и записывает её в проект - см. {@link setRunSetting}. */
+export function setFrequency(file, hz) {
+  return setRunSetting("run_frequencies", file, hz);
+}
+
 /**
- * Ставит задержку сценарию и записывает её в проект.
+ * Ставит настройку прогона сценарию и записывает её в проект.
  *
- * Записывает только владелец - метаданные правит он (правило сервера); у прочих
- * задержка живёт до перезагрузки страницы. Без сценария записывать не к чему:
- * задержка - свойство сценария.
+ * Задержка и частота - метаданные прогона одной формы: карта "сценарий - число",
+ * ноль не хранится. Записывает только владелец - метаданные правит он (правило
+ * сервера); у прочих настройка живёт до перезагрузки страницы. Без сценария
+ * записывать не к чему: настройка - свойство сценария.
  */
-export async function setDelay(file, seconds) {
+async function setRunSetting(field, file, value) {
   if (!state.project || !file) return;
-  const delays = { ...(state.project.run_delays ?? {}) };
-  if (seconds > 0) delays[file] = seconds;
-  else delete delays[file];
-  state.project = { ...state.project, run_delays: delays };
+  const values = { ...(state.project[field] ?? {}) };
+  if (value > 0) values[file] = value;
+  else delete values[file];
+  state.project = { ...state.project, [field]: values };
   if (state.level !== "owner") return;
   try {
-    const updated = await api.patch(state.project.id, { run_delays: delays });
+    const updated = await api.patch(state.project.id, { [field]: values });
     state.project = { ...state.project, ...updated };
   } catch (error) {
     host.say(text(error), "warning");

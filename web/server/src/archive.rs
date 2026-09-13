@@ -92,6 +92,7 @@ pub fn manifest_of(
         build_target: project.build_target.clone(),
         build_args: project.build_args.clone(),
         run_delays: project.run_delays.clone(),
+        run_frequencies: project.run_frequencies.clone(),
     }
 }
 
@@ -137,6 +138,7 @@ mod tests {
             build_target: "sv-mmio".into(),
             build_args: "--bus=apb".into(),
             run_delays: BTreeMap::from([("run.json".to_string(), 0.5)]),
+            run_frequencies: BTreeMap::from([("run.json".to_string(), 2)]),
             revision: 1,
             size_bytes: 10,
             forked_from: None,

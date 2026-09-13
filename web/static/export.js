@@ -37,7 +37,8 @@ export const DEFAULTS = Object.freeze({
  * @param {typeof DEFAULTS} choice выбор окна
  * @param {{files: Record<string, string>, main_file?: string|null, main_scenario?: string|null,
  *   model?: string|null, sheet?: string|null, scenario?: string|null, steps?: number|null,
- *   name?: string}} context состав и открытое: модель, лист, сценарий, предел тактов
+ *   tick_hz?: number|null, name?: string}} context состав и открытое: модель, лист,
+ *   сценарий, предел тактов, частота прогона
  */
 export function exportRequest(choice, context) {
   const video = isVideo(choice.format);
@@ -57,6 +58,9 @@ export function exportRequest(choice, context) {
     sheet: scope === "sheet" ? (context.sheet ?? null) : null,
     scenario: context.scenario ?? null,
     steps: context.steps ?? null,
+    // Частота - та, с которой страница прогоняет сценарий: видео идёт в том же
+    // темпе. Модуль берёт её по сценарию, как из манифеста проекта.
+    run_frequencies: context.scenario && context.tick_hz ? { [context.scenario]: context.tick_hz } : {},
     archive: `${context.name || "takt"}.export.zip`,
   };
 }
