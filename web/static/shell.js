@@ -605,6 +605,8 @@ export const UI_KEYS = {
   tab: "takt.ui.tab",
   /** Бюджет прогона, тактов. */
   budget: "takt.ui.budget",
+  /** Частота модельных часов прогона, Гц; пусто - из `clock` модели. */
+  tickHz: "takt.ui.tickHz",
   /** Открытая панель правой области: `output` либо пусто. */
   panel: "takt.ui.panel",
   /** Какая запись показана в области диагностик: `diagnostics` либо `trace`. */

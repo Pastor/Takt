@@ -30,7 +30,8 @@ thread_local! {
 ///
 /// `scenario` - JSON-сценарий той же формы, что файл `-s` у `takt-sim` (пустая строка -
 /// сценария нет). `tick_ms` - период модельных часов; `0` означает "взять из объявления
-/// `clock` модели, иначе 1 мс", как в CLI. `steps` - длина прогона, ключ `-n`: сценарий
+/// `clock` модели, иначе 1 мс", как в CLI. `tick_hz` - частота тех же часов, как
+/// `clock N Hz` модели; задана - сильнее и `tick_ms`, и объявления модели. `steps` - длина прогона, ключ `-n`: сценарий
 /// задаёт входы, и после его последнего шага значения удерживаются.
 ///
 /// Предупреждение прогона в форме страницы.
@@ -97,6 +98,7 @@ pub fn open(
     source: &str,
     scenario: &str,
     tick_ms: i64,
+    tick_hz: u64,
     project_files: std::collections::BTreeMap<String, String>,
     steps: Option<usize>,
 ) -> String {
@@ -150,9 +152,13 @@ pub fn open(
 
     // Кадров бегун не пишет: подсветку схемы страница берёт из полей шага.
     let mut runner = SimulationRunner::new(unit, scenario_steps, steps, port_names);
-    // Период такта: явный аргумент > частота модели > умолчание 1 мс - тот же
-    // приоритет, что у CLI.
-    if tick_ms > 0 {
+    // Период такта: явная частота > явный период > частота модели > умолчание 1 мс -
+    // тот же приоритет, что у CLI: заданное читателем побеждает выведенное. Частота
+    // пересчитывается так же, как `clock` модели; такт не короче наносекунды.
+    if tick_hz > 0 {
+        let hz = i64::try_from(tick_hz).unwrap_or(i64::MAX);
+        runner.set_tick_period_ns((1_000_000_000 / hz).max(1));
+    } else if tick_ms > 0 {
         runner.set_tick_period_ns(tick_ms.saturating_mul(1_000_000));
     } else if let Some(hz) = clock_hz.filter(|hz| *hz > 0) {
         runner.set_tick_period_ns(1_000_000_000 / i64::try_from(hz).unwrap_or(i64::MAX));
@@ -295,7 +301,7 @@ mod tests {
     /// Прогон идёт по тактам и отдаёт ту же трассу, что печатает `takt-sim`.
     #[test]
     fn ticks_yield_trace_lines() {
-        let opened = json(&open(COUNTER, "", 0, Default::default(), None));
+        let opened = json(&open(COUNTER, "", 0, 0, Default::default(), None));
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
 
@@ -346,7 +352,7 @@ mod tests {
     fn ticks_yield_instance_addresses() {
         const CHAIN: &str = "model E { start A { ref B; } state B; }\n\
                              start Main = E + E { next Done; }\nstate Done;\n";
-        let opened = json(&open(CHAIN, "", 0, Default::default(), None));
+        let opened = json(&open(CHAIN, "", 0, 0, Default::default(), None));
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
         let reply = json(&tick(id, 20));
@@ -381,7 +387,7 @@ mod tests {
     /// запрошенного числа тактов.
     #[test]
     fn budget_stops_endless_model() {
-        let opened = json(&open(COUNTER, "", 0, Default::default(), None));
+        let opened = json(&open(COUNTER, "", 0, 0, Default::default(), None));
         let id = opened["id"].as_u64().unwrap() as u32;
         for _ in 0..3 {
             let reply = json(&tick(id, 5));
@@ -395,7 +401,7 @@ mod tests {
     /// Завершающаяся модель отдаёт исход и сводку - ту же, что печатает CLI.
     #[test]
     fn terminating_model_reports_outcome() {
-        let opened = json(&open("start S;\n", "", 0, Default::default(), None));
+        let opened = json(&open("start S;\n", "", 0, 0, Default::default(), None));
         let id = opened["id"].as_u64().unwrap() as u32;
         let reply = json(&tick(id, 10));
         assert_eq!(reply["done"], Value::Bool(true), "{reply}");
@@ -413,7 +419,7 @@ mod tests {
     fn scenario_drives_inputs() {
         let model = "in sensor: u8;\nvar seen: u8 := 0;\n\nstart Run {\n    always {\n        seen := sensor;\n    }\n\n    ref Run: 1 = 1;\n}\n";
         let scenario = r#"[{"in_ports": {"sensor": 7}}]"#;
-        let opened = json(&open(model, scenario, 0, Default::default(), None));
+        let opened = json(&open(model, scenario, 0, 0, Default::default(), None));
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
         let reply = json(&tick(id, 1));
@@ -430,7 +436,7 @@ mod tests {
     fn scenario_shorter_than_run_keeps_inputs() {
         let model = "in sensor: u8;\nvar seen: u8 := 0;\n\nstart Run {\n    always {\n        seen := sensor;\n    }\n\n    ref Run: 1 = 1;\n}\n";
         let scenario = r#"[{"in_ports": {"sensor": 3}}, {"in_ports": {"sensor": 7}}]"#;
-        let opened = json(&open(model, scenario, 0, Default::default(), Some(5)));
+        let opened = json(&open(model, scenario, 0, 0, Default::default(), Some(5)));
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
         let reply = json(&tick(id, 196));
@@ -450,6 +456,7 @@ mod tests {
         let reply = json(&open(
             "start S {\n    ref Missing: 1 = 1;\n}\n",
             "",
+            0,
             0,
             Default::default(),
             None,

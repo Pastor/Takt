@@ -194,6 +194,24 @@ test("мост: страница и модуль сходятся формой �
   bridge.simClose(opened.id);
 });
 
+test("прогон: частота часов страницы - как clock модели", async () => {
+  // `after 1s` при 2 Гц - два такта: вход на такте 1, срабатывание на такте 3. Без
+  // частоты такт - 1 мс, и за те же такты выдержка не истекает: частота обязана
+  // доехать от страницы через мост до эталона.
+  const bridge = await loadBridge();
+  const model = "start A {\n    ref B: after 1s;\n}\nstate B;\n";
+  const clocked = bridge.simOpen(model, "", 0, {}, 5, 2);
+  assert.equal(clocked.ok, true, JSON.stringify(clocked));
+  const fast = bridge.simTick(clocked.id, 5);
+  assert.match(fast.lines[1], /\[A\]/, fast.lines.join("\n"));
+  assert.match(fast.lines[2], /\[B\]/, fast.lines.join("\n"));
+  bridge.simClose(clocked.id);
+  const plain = bridge.simOpen(model, "", 0, {}, 5);
+  const slow = bridge.simTick(plain.id, 5);
+  assert.ok(slow.lines.slice(0, 5).every((line) => line.includes("[A]")), slow.lines.join("\n"));
+  bridge.simClose(plain.id);
+});
+
 test("прогон: предупреждения и вывод модели доезжают до страницы", async () => {
   // Ради этого фича и заведена: печать внутри библиотеки для страницы не
   // существует, и до перевода на возврат автор не узнавал ни что форма сценария

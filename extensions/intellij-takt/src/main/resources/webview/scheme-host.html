@@ -42,6 +42,9 @@
             <label for="tickdelay" class="run-steps" data-i18n="trace.delay">Задержка, с</label>
             <input id="tickdelay" type="number" min="0" max="60" step="0.1" value="0"
             data-i18n-attr="data-tip:trace.delayHint" data-tip="Пауза между тактами прогона, секунд; 0 — без паузы. Своя у каждого сценария">
+            <label for="tickhz" class="run-steps" data-i18n="trace.tickHz">Частота, Гц</label>
+            <input id="tickhz" type="number" min="1" max="1000000000" step="1" placeholder="авто"
+            data-i18n-attr="data-tip:trace.tickHzHint;placeholder:trace.tickHzAuto" data-tip="Частота модельных часов, Гц — как clock в модели: такт длится 1/частота секунды модельного времени (2 Гц — 0,5 с). Пусто — из clock модели, иначе 1000 Гц. Задержка от частоты не зависит: это пауза реального времени между тактами на экране. Чтобы прогон шёл в реальном времени, задайте задержку 1/частота секунды (2 Гц — задержка 0,5)">
             <button class="icon-btn" type="button" data-run="run"
             data-i18n-attr="aria-label:trace.run;data-tip:trace.run"
             aria-label="Прогон" data-tip="Прогон"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5l11 7-11 7z"/></svg></button>
