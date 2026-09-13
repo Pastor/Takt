@@ -93,6 +93,12 @@ echo "dead.key = мёртвый" >> "$D/takt-lang/messages/ru.txt"
 echo "dead.key = dead" >> "$D/takt-lang/messages/en.txt"
 expect "M5 ключ без печатника" fail "$D"
 
+# M8 - три пробела подряд в однострочном тексте: след склеенной строки
+# исходника.
+D=$(mktemp -d); prepare "$D"
+sed -i.bak 's/^diag.note-label = .*/diag.note-label = при   мечание/' "$D/takt-lang/messages/ru.txt"
+expect "M8 три пробела подряд в тексте" fail "$D"
+
 # M7 - вырожденный вход: пустой базовый каталог обязан давать отказ. Проверка,
 # молчащий на пустом файле, ничего не прочёл.
 D=$(mktemp -d); prepare "$D"

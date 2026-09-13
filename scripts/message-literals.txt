@@ -1,0 +1,23 @@
+# Реестр литералов с кириллицей, которые сообщением не являются.
+#
+# Проверка `check-message-literals.py` отвергает русский литерал вне каталога
+# сообщений `takt-lang/messages/`. Здесь названы файлы, где такой литерал законен,
+# и число таких литералов: рост ловится (в файл добавлен текст мимо каталога),
+# убыль тоже (запись обязана быть опущена - ратчет в обе стороны).
+#
+# Причина называет категорию текста, а не выдаёт индульгенцию файлу.
+#
+# Формат: <файл от корня репозитория> <число> # причина
+takt-lang/src/generator/c/c_time.rs 1 # текст порождённого кода: сообщение _Static_assert в выводе цели c
+takt-lang/src/generator/rust/rust_tick.rs 1 # текст порождённого кода: сообщение assert! в выводе цели rust
+takt-lang/src/generator/st/st_at.rs 3 # комментарии в выводе цели st-at
+takt-lang/src/generator/st/st_model.rs 2 # комментарии в выводе цели st
+takt-lang/src/generator/sv/sv_apb.rs 11 # комментарии портов адаптера APB в выводе цели sv-mmio
+takt-lang/src/generator/sv/sv_module.rs 3 # комментарии сторон inout-порта в выводе цели sv
+takt-lang/src/parser/depth/mod.rs 1 # const assert: нарушенный инвариант сборки, не ошибка модели
+takt-lang/src/semantic/import/build.rs 1 # метка недостижимой воронки SE-119
+takt-lang/src/semantic/tree.rs 1 # метка недостижимой воронки SE-119
+takt-sim/src/bin/takt_sim/subcommands.rs 10 # вывод takt-sim project: стабильные строки для скриптов, данные
+takt-sim/src/trace.rs 2 # строка шага трассы: данные сверок (решение заказчика)
+takt-wasm-io/src/reply.rs 1 # недостижимый запасной ответ на отказ сериализации
+takt-wasm/src/sim.rs 1 # недостижимый запасной ответ: разбор без диагностики

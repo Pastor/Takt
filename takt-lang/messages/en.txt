@@ -144,7 +144,7 @@ se-086.specialize-parameter-not-found = parameter '{name}' not found in the mode
 
 # ─── Semantics: adopting imported declarations (`semantic/import/adopt.rs`) ──
 se-005.variable-declared-in-included = variable '{name}' is already declared (the included file '{file}' declares it too)
-se-108.type-declared-in-included = a type named '{name}' is already declared: the included file                      '{file}' declares it too
+se-108.type-declared-in-included = a type named '{name}' is already declared: the included file '{file}' declares it too
 se-108.type-declared-in-included-note = the declaration of type '{name}' in the included file is here
 se-009.function-defined-in-included = function '{name}' is already defined (the included file '{file}' defines it too)
 se-074.imported-model-needs-declarations = the imported model uses declarations of the included file that were not imported with it: {list}. Add them to the import list
@@ -403,7 +403,7 @@ bool.verb-to = to
 se-053.recursion-forbidden = function recursion is forbidden: the call chain {chain}
 
 # ─── Semantics: type mixing and aliases ──────────────────────────────────────
-se-065.duration-mixed = mixing the types '{left}' and '{right}' in arithmetic is forbidden: a duration              combines only with a duration
+se-065.duration-mixed = mixing the types '{left}' and '{right}' in arithmetic is forbidden: a duration combines only with a duration
 se-039.type-alias-cycle = the type alias '{name}' forms a cyclic dependency
 
 # ─── Semantics: function body inlining (`semantic/inline/`) ──────────────────
