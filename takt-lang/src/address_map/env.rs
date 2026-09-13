@@ -4,7 +4,9 @@
 //! ([`eval`](super::eval)), но арифметику и разрешение имён не выполняет.
 
 use super::parse::{is_name_cont, is_name_start, parse_address_token};
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
@@ -106,7 +108,7 @@ pub fn parse_defines(args: &[String]) -> Result<AddressEnv, Vec<Diagnostic>> {
             diags.push(
                 Diagnostic::error(
                     Location::CommandLine,
-                    format!("--define '{}': ожидалось NAME=VALUE (нет '=')", arg),
+                    msg!(keys::DF_001_MISSING_EQUALS, arg = arg),
                 )
                 .with_code("DF-001"),
             );
@@ -116,11 +118,7 @@ pub fn parse_defines(args: &[String]) -> Result<AddressEnv, Vec<Diagnostic>> {
             diags.push(
                 Diagnostic::error(
                     Location::CommandLine,
-                    format!(
-                        "--define '{}': некорректное имя символа '{}' \
-                         (ожидается [A-Za-z_][A-Za-z0-9_]*)",
-                        arg, name
-                    ),
+                    msg!(keys::DF_001_INVALID_NAME, arg = arg, name = name),
                 )
                 .with_code("DF-001"),
             );
@@ -142,7 +140,7 @@ pub fn parse_defines(args: &[String]) -> Result<AddressEnv, Vec<Diagnostic>> {
             diags.push(
                 Diagnostic::error(
                     Location::CommandLine,
-                    format!("--define: символ '{}' задан дважды", name),
+                    msg!(keys::DF_003_DUPLICATE, name = name),
                 )
                 .with_code("DF-003"),
             );

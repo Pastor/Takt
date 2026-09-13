@@ -88,10 +88,10 @@ fn empty_model_diagnostic(target: &Rc<RefCell<ModelNode>>, usage: Location) -> O
     Some(match nested_with_states(&target) {
         Some(nested) => diagnostic.with_note(
             target.loc,
-            format!(
-                "модель '{name}' объявлена здесь; состояния есть у вложенной модели \
-                 '{nested}', но обёртка их не наследует — перенесите состояния на \
-                 верхний уровень"
+            msg!(
+                keys::NOTE_WRAPPER_DOES_NOT_INHERIT,
+                name = name,
+                nested = nested
             ),
         ),
         None => diagnostic.with_note(

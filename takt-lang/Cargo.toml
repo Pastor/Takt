@@ -37,7 +37,6 @@ lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", version = "^0.23.1",
 
 [dependencies]
 lalrpop-util = { git = "https://github.com/lalrpop/lalrpop.git", version = "^0.23.1" }
-thiserror = "2.0.18"
 phf = { version = "0.14.0", features = ["macros"] }
 unicode-xid = "0.2"
 itertools = "0.15.0"

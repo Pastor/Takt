@@ -28,10 +28,10 @@ pub(super) fn check_type_array_size(ty: &TypeNode, loc: Location) -> Result<(), 
         if *size > MAX_ARRAY_SIZE {
             return Err(Diagnostic::error(
                 loc,
-                format!(
-                    "размер массива {} превышает максимально допустимый {} (2^10). \
-                     Используйте динамическую память или разбейте массив на части.",
-                    size, MAX_ARRAY_SIZE
+                msg!(
+                    keys::SE_038_ARRAY_TOO_LARGE,
+                    size = size,
+                    max = MAX_ARRAY_SIZE
                 ),
             )
             .with_code("SE-038"));

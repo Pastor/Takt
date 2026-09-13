@@ -49,35 +49,21 @@ pub enum RenameRefusal {
 }
 
 impl RenameRefusal {
-    /// Сообщение для пользователя редактора.
-    pub fn message(&self) -> &'static str {
-        match self {
-            Self::Unparsable => "файл не компилируется: переименование недоступно",
-            Self::NoSymbol => "под курсором нет имени",
-            Self::ForeignDeclaration => {
-                "имя объявлено в другом файле: переименование затронуло бы файлы вне рабочего набора"
-            }
-            Self::ModelName => {
-                "имя модели видно за пределами файла: переименование затронуло бы импортирующие файлы"
-            }
-            Self::Incomplete => {
-                "в файле есть места, которые сервер не разобрал: полнота переименования не гарантируется"
-            }
-            Self::NotAnIdentifier => "новое имя не является идентификатором языка",
-            Self::Keyword => "новое имя — ключевое слово языка",
-            Self::UnparsableConsumer => {
-                "файл рабочей области, использующий это имя, не компилируется: \
-                 его вхождения остались бы неправленными"
-            }
-            Self::AmbiguousImport => {
-                "имя объявлено сразу в нескольких подключённых файлах: какое из них \
-                 переименовывать, определить нельзя"
-            }
-            Self::NameTaken => {
-                "новое имя уже занято в файле, которого коснулась бы правка: \
-                 переименование изменило бы смысл программы"
-            }
-        }
+    /// Сообщение для пользователя редактора - на языке сеанса.
+    pub fn message(&self) -> String {
+        use crate::diagnostics::lang::keys;
+        crate::msg!(match self {
+            Self::Unparsable => keys::RENAME_UNPARSABLE,
+            Self::NoSymbol => keys::RENAME_NO_SYMBOL,
+            Self::ForeignDeclaration => keys::RENAME_FOREIGN_DECLARATION,
+            Self::ModelName => keys::RENAME_MODEL_NAME,
+            Self::Incomplete => keys::RENAME_INCOMPLETE,
+            Self::NotAnIdentifier => keys::RENAME_NOT_AN_IDENTIFIER,
+            Self::Keyword => keys::RENAME_KEYWORD,
+            Self::UnparsableConsumer => keys::RENAME_UNPARSABLE_CONSUMER,
+            Self::AmbiguousImport => keys::RENAME_AMBIGUOUS_IMPORT,
+            Self::NameTaken => keys::RENAME_NAME_TAKEN,
+        })
     }
 }
 

@@ -277,10 +277,9 @@ pub fn units_or_diagnostic(
                 TimeProfile::Clock => {
                     msg!(keys::TIME_CLOCK_QUANTUM)
                 }
-                TimeProfile::Ticks { hertz } => format!(
-                    "при частоте {hertz} Гц длительность не кратна периоду такта; \
-                     выберите кратную длительность или другую частоту"
-                ),
+                TimeProfile::Ticks { hertz } => {
+                    msg!(keys::DURATION_NOT_MULTIPLE_OF_TICK, hertz = hertz)
+                }
             };
             Diagnostic::error(
                 loc,

@@ -3,6 +3,7 @@
 //! Часть модуля `lsp`.
 
 use super::*;
+use crate::diagnostics::lang::{Key, keys};
 
 /// Типы семантических токенов (порядок важен - индекс используется как тип в легенде).
 pub const SEMANTIC_TOKEN_TYPES: &[SemanticTokenType] = &[
@@ -39,75 +40,59 @@ pub(super) const TT_OPERATOR: u32 = 8;
 pub(super) const TT_CLASS: u32 = 9;
 
 /// Ключевые слова языка Takt для автодополнения.
-pub(super) const TAKT_KEYWORDS: &[(&str, &str)] = &[
-    ("model", "объявление модели конечного автомата"),
-    ("state", "объявление обычного состояния"),
-    ("start", "объявление начального состояния"),
-    ("ref", "условный переход между состояниями"),
-    ("next", "безусловный переход"),
-    ("enter", "именованный блок при входе в состояние"),
-    ("exit", "именованный блок при выходе из состояния"),
-    ("always", "именованный блок, выполняемый каждый цикл"),
-    ("var", "объявление переменной"),
-    ("const", "объявление константы"),
-    ("parameter", "объявление параметра модели"),
-    ("type", "псевдоним типа"),
-    ("fn", "объявление функции"),
-    ("extern", "объявление внешней функции"),
-    ("in", "входной порт"),
-    ("out", "выходной порт"),
-    ("inout", "двунаправленный порт"),
-    (
-        "address",
-        "задание аппаратного адреса порта (address Имя = <адрес>;)",
-    ),
-    (
-        "at",
-        "размещение порта в объявлении (out led: bit at 0x40:2;) — необязательно:          адрес может прийти оператором address или внешней картой",
-    ),
-    ("enum", "объявление перечисления"),
-    ("struct", "объявление структуры"),
-    ("cond", "именованное условие перехода"),
-    (
-        "invariant",
-        "именованный инвариант: условие, обязанное держаться (invariant Имя = C;)",
-    ),
-    ("if", "условный оператор"),
-    ("else", "ветка условного оператора"),
-    ("loop", "цикл с опциональным условием"),
-    ("while", "цикл с условием (синоним loop)"),
-    ("for", "цикл со счётчиком"),
-    ("match", "оператор выбора по образцу"),
-    ("break", "выход из цикла"),
-    ("continue", "переход к следующей итерации цикла"),
-    ("return", "возврат из функции"),
-    ("import", "импорт файла"),
-    ("as", "псевдоним при импорте"),
-    ("from", "источник выборочного импорта"),
-    ("formula", "формальная спецификация"),
-    ("assembly", "ассемблерная вставка"),
-    ("true", "булев литерал истина"),
-    ("false", "булев литерал ложь"),
+pub(super) const TAKT_KEYWORDS: &[(&str, Key)] = &[
+    ("model", keys::KW_MODEL),
+    ("state", keys::KW_STATE),
+    ("start", keys::KW_START),
+    ("ref", keys::KW_REF),
+    ("next", keys::KW_NEXT),
+    ("enter", keys::KW_ENTER),
+    ("exit", keys::KW_EXIT),
+    ("always", keys::KW_ALWAYS),
+    ("var", keys::KW_VAR),
+    ("const", keys::KW_CONST),
+    ("parameter", keys::KW_PARAMETER),
+    ("type", keys::KW_TYPE),
+    ("fn", keys::KW_FN),
+    ("extern", keys::KW_EXTERN),
+    ("in", keys::KW_IN),
+    ("out", keys::KW_OUT),
+    ("inout", keys::KW_INOUT),
+    ("address", keys::KW_ADDRESS),
+    ("at", keys::KW_AT),
+    ("enum", keys::KW_ENUM),
+    ("struct", keys::KW_STRUCT),
+    ("cond", keys::KW_COND),
+    ("invariant", keys::KW_INVARIANT),
+    ("if", keys::KW_IF),
+    ("else", keys::KW_ELSE),
+    ("loop", keys::KW_LOOP),
+    ("while", keys::KW_WHILE),
+    ("for", keys::KW_FOR),
+    ("match", keys::KW_MATCH),
+    ("break", keys::KW_BREAK),
+    ("continue", keys::KW_CONTINUE),
+    ("return", keys::KW_RETURN),
+    ("import", keys::KW_IMPORT),
+    ("as", keys::KW_AS),
+    ("from", keys::KW_FROM),
+    ("formula", keys::KW_FORMULA),
+    ("assembly", keys::KW_ASSEMBLY),
+    ("true", keys::KW_TRUE),
+    ("false", keys::KW_FALSE),
     // Конструкции времени.
-    (
-        "clock",
-        "объявление частоты тактирования модели (clock 1kHz;)",
-    ),
-    (
-        "after",
-        "выдержка перехода: прошло не меньше указанного \
-         (after 3s, after 3t, after DWELL, after (BASE + 30s))",
-    ),
-    ("every", "периодическое действие через заданный интервал"),
+    ("clock", keys::KW_CLOCK),
+    ("after", keys::KW_AFTER),
+    ("every", keys::KW_EVERY),
     // Операторы LTL и типы формул (: до неё в списке отсутствовали, хотя ключевыми
     // словами языка являются с самого начала верификации).
-    ("X", "LTL: на следующем шаге (Next)"),
-    ("F", "LTL: когда-нибудь в будущем (Finally)"),
-    ("G", "LTL: всегда (Globally)"),
-    ("U", "LTL: до тех пор, пока (Until)"),
-    ("R", "LTL: освобождение (Release)"),
-    ("LTL", "вид формулы: темпоральное свойство (: [LTL] φ;)"),
-    ("Guard", "вид формулы: охранное условие (: [Guard] c;)"),
+    ("X", keys::KW_LTL_NEXT),
+    ("F", keys::KW_LTL_FINALLY),
+    ("G", keys::KW_LTL_GLOBALLY),
+    ("U", keys::KW_LTL_UNTIL),
+    ("R", keys::KW_LTL_RELEASE),
+    ("LTL", keys::KW_LTL),
+    ("Guard", keys::KW_GUARD),
 ];
 
 /// Ключевые слова языка, **намеренно** не предлагаемые автодополнением.
@@ -136,44 +121,20 @@ const COMPLETION_EXCLUDED: &[(&str, &str)] = &[
 ///
 /// Используются для подсветки идентификаторов-типов (`TT_TYPE`) в semantic tokens, для
 /// генерации элементов автодополнения с видом `TYPE` и для hover-подсказок.
-pub(super) const TAKT_BUILTIN_TYPES: &[(&str, &str)] = &[
-    ("bit", "встроенный 1-битный примитивный тип (0 или 1)"),
-    ("bool", "встроенный булев тип (true или false)"),
-    ("float", "встроенный тип числа с плавающей точкой"),
-    (
-        "unit",
-        "встроенный пустой тип (возвращаемый тип процедур без значения)",
-    ),
-    (
-        "u8",
-        "встроенный 8-битный беззнаковый целочисленный тип [0 … 255]",
-    ),
-    (
-        "u16",
-        "встроенный 16-битный беззнаковый целочисленный тип [0 … 65 535]",
-    ),
-    (
-        "u32",
-        "встроенный 32-битный беззнаковый целочисленный тип [0 … 4 294 967 295]",
-    ),
-    ("u64", "встроенный 64-битный беззнаковый целочисленный тип"),
-    (
-        "i8",
-        "встроенный 8-битный знаковый целочисленный тип [−128 … 127]",
-    ),
-    (
-        "i16",
-        "встроенный 16-битный знаковый целочисленный тип [−32 768 … 32 767]",
-    ),
-    (
-        "i32",
-        "встроенный 32-битный знаковый целочисленный тип [−2 147 483 648 … 2 147 483 647]",
-    ),
-    ("i64", "встроенный 64-битный знаковый целочисленный тип"),
-    (
-        "duration",
-        "встроенный тип длительности (фича 0134): 3s, 500ms, 1m30s",
-    ),
+pub(super) const TAKT_BUILTIN_TYPES: &[(&str, Key)] = &[
+    ("bit", keys::TYPE_BIT),
+    ("bool", keys::TYPE_BOOL),
+    ("float", keys::TYPE_FLOAT),
+    ("unit", keys::TYPE_UNIT),
+    ("u8", keys::TYPE_U8),
+    ("u16", keys::TYPE_U16),
+    ("u32", keys::TYPE_U32),
+    ("u64", keys::TYPE_U64),
+    ("i8", keys::TYPE_I8),
+    ("i16", keys::TYPE_I16),
+    ("i32", keys::TYPE_I32),
+    ("i64", keys::TYPE_I64),
+    ("duration", keys::TYPE_DURATION),
 ];
 
 #[cfg(test)]
@@ -233,9 +194,13 @@ mod tests {
     /// У каждой записи обоих списков есть непустое описание/обоснование.
     #[test]
     fn test_every_entry_is_documented() {
-        for (word, text) in TAKT_KEYWORDS.iter().chain(COMPLETION_EXCLUDED.iter()) {
+        for (word, key) in TAKT_KEYWORDS {
             assert!(!word.is_empty(), "пустое ключевое слово в списке");
-            assert!(!text.is_empty(), "нет описания у `{word}`");
+            assert!(!crate::msg!(*key).is_empty(), "нет описания у `{word}`");
+        }
+        for (word, text) in COMPLETION_EXCLUDED {
+            assert!(!word.is_empty(), "пустое ключевое слово в списке");
+            assert!(!text.is_empty(), "нет обоснования у `{word}`");
         }
     }
 }

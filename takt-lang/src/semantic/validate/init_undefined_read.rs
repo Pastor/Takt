@@ -7,6 +7,8 @@
 //! разъехалась бы текстом.
 
 use super::*;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 
 /// Проверяет инициализаторы объявлений модели на чтение неопределённой памяти.
 pub(super) fn validate_undefined_reads_in_initializers(
@@ -62,21 +64,15 @@ fn check(expr: &ExpressionNode, loc: Location, name: &str) -> Result<(), Diagnos
         None => Ok(()),
         Some(UndefinedRead::Cell) => Err(Diagnostic::error(
             loc,
-            format!(
-                "инициализатор '{name}' обращается к ячейке по адресу: содержимое памяти \
-                 до первого такта неизвестно, и эталон с целью разошлись бы молча. \
-                 Читайте ячейку в теле состояния — например, 'always {{ {name} := \
-                 #0xАДРЕС as тип; }}'"
-            ),
+            msg!(keys::SE_099_INITIALIZER_READS_CELL, name = name),
         )
         .with_code("SE-099")),
         Some(UndefinedRead::Port(port)) => Err(Diagnostic::error(
             loc,
-            format!(
-                "инициализатор '{name}' читает порт '{port}': значение порта до первого \
-                 такта не определено, и потребители разошлись бы молча — эталон дал бы \
-                 ноль, цель 'c-hal' прочла бы регистр, а 'st' потеряла бы инициализатор. \
-                 Читайте порт в теле состояния — например, 'always {{ {name} := {port}; }}'"
+            msg!(
+                keys::SE_113_INITIALIZER_READS_PORT,
+                name = name,
+                port = port
             ),
         )
         .with_code("SE-113")),

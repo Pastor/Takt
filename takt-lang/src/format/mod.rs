@@ -100,7 +100,10 @@ pub(crate) fn unsupported(loc: crate::diagnostics::Location, node: &str) -> Form
     FormatError::Unsupported(
         crate::diagnostics::Diagnostic::error(
             loc,
-            format!("печать узла '{node}' пока не поддерживается форматтером"),
+            crate::msg!(
+                crate::diagnostics::lang::keys::FM_001_UNSUPPORTED_NODE,
+                node = node
+            ),
         )
         .with_code("FM-001"),
     )

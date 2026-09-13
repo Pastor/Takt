@@ -155,7 +155,11 @@ fn diagnostic_to_lsp(
 
     let mut lsp = grammar_diagnostic_to_lsp(&stamped, source);
     lsp.range = anchor;
-    lsp.message = format!("в файле {}{}", where_, diag.message);
+    lsp.message = crate::msg!(
+        crate::diagnostics::lang::keys::LSP_IN_FILE,
+        place = where_,
+        message = diag.message
+    );
     lsp
 }
 
@@ -199,7 +203,15 @@ pub fn grammar_diagnostic_to_lsp(
         let notes_text: String = diag
             .notes
             .iter()
-            .map(|n| format!("\nЗаметка: {}", n.message))
+            .map(|n| {
+                format!(
+                    "\n{}",
+                    crate::msg!(
+                        crate::diagnostics::lang::keys::LSP_NOTE,
+                        message = n.message
+                    )
+                )
+            })
             .collect();
         format!("{}{}", diag.message, notes_text)
     };

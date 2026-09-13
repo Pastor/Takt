@@ -16,7 +16,9 @@
 //! порождают.
 
 use super::{collect_identifiers, declaration_position, is_literal};
+use crate::diagnostics::lang::{Key, keys};
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::semantic::{ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -66,6 +68,19 @@ pub(super) fn initializer_calls_function(source: &crate::parser::ast::Expression
     left.is_some_and(initializer_calls_function) || right.is_some_and(initializer_calls_function)
 }
 
+/// Разделитель между вводной и причиной в тексте ключа: то, что стоит перед `{reason}`
+/// после последней другой подстановки.
+///
+/// Берётся у каталога, а не пишется в коде: подстрока одного языка под другим каталогом
+/// молча не нашлась бы, и `SE-084` процитировал бы причину вместе с вводной вычислителя.
+fn reason_separator(key: Key) -> String {
+    const NAME: char = '\u{1}';
+    const REASON: char = '\u{2}';
+    let text = crate::diagnostics::lang::render(key, &[("name", &NAME), ("reason", &REASON)]);
+    let before = text.split(REASON).next().unwrap_or_default();
+    before.rsplit(NAME).next().unwrap_or(before).to_string()
+}
+
 /// Инициализатор зовёт функцию, которую компилятор исполнить не смог, - `SE-084` с
 /// **причиной** вычислителя.
 pub(super) fn unfoldable_call(name: &str, cause: &Diagnostic, loc: Location) -> Diagnostic {
@@ -74,18 +89,24 @@ pub(super) fn unfoldable_call(name: &str, cause: &Diagnostic, loc: Location) -> 
     // целиком она читалась бы как заикание. Вводная вида "функция 'f' не
     // вычисляется..." снимается тоже - имя функции в ней полезно, но повторяет то, что
     // автор видит в самой записи.
-    let reason = cause
-        .message
-        .split_once("не вычисляется при компиляции: ")
-        .map_or(cause.message.as_str(), |(_, tail)| tail);
+    let reason = [
+        keys::SE_083_NOT_A_CONSTANT_EXPRESSION,
+        keys::SE_084_FUNCTION_NOT_CONSTANT,
+    ]
+    .into_iter()
+    .find_map(|key| {
+        cause
+            .message
+            .split_once(reason_separator(key).as_str())
+            .map(|(_, tail)| tail)
+    })
+    .unwrap_or(cause.message.as_str());
     Diagnostic::error(
         loc,
-        format!(
-            "инициализатор '{name}' зовёт функцию, которую компилятор вычислить не может: \
-             {reason}. Начальное значение выставляется до первого такта, и прежде \
-             потребители расходились молча: эталон оставлял ноль, а цель 'st' теряла \
-             инициализатор без единого слова. Присвойте в теле состояния — \
-             'always {{ {name} := …; }}'"
+        msg!(
+            keys::SE_084_INITIALIZER_CALLS_UNFOLDABLE,
+            name = name,
+            reason = reason
         ),
     )
     .with_code("SE-084")
@@ -108,18 +129,8 @@ pub(super) fn unfoldable_fractional(
         return None;
     }
     Some(
-        Diagnostic::error(
-            loc,
-            format!(
-                "инициализатор '{name}' — дробное выражение, которое компилятор не может \
-                 вычислить точно: округление дробных задано эталоном симулятора, и \
-                 посчитав здесь, компилятор дал бы значение, которого симулятор не \
-                 вычислит (прогон показал бы ноль, а прошивка — своё число, и молча). \
-                 Задайте готовый литерал — например 'var {name}: … := 0.333;' — либо \
-                 вычисляйте в теле состояния: 'always {{ {name} := …; }}'"
-            ),
-        )
-        .with_code("SE-114"),
+        Diagnostic::error(loc, msg!(keys::SE_114_FRACTIONAL_INITIALIZER, name = name))
+            .with_code("SE-114"),
     )
 }
 
@@ -181,16 +192,40 @@ pub(super) fn forward_reference(
             continue;
         }
         return Some(
-            Diagnostic::error(
-                loc,
-                format!(
-                    "переменная '{name}' объявлена ниже: в инициализаторе имя значит \
-                     НАЧАЛЬНОЕ значение и ссылается только назад по тексту. \
-                     Переставьте объявления либо возьмите константу"
-                ),
-            )
-            .with_code("SE-109"),
+            Diagnostic::error(loc, msg!(keys::SE_109_FORWARD_REFERENCE, name = name))
+                .with_code("SE-109"),
         );
     }
     None
+}
+
+#[cfg(test)]
+mod reason_tests {
+    use super::*;
+    use crate::diagnostics::lang;
+
+    /// Разделитель берётся у каталога языка: вводная вычислителя срезается на любом
+    /// языке, иначе `SE-084` цитировал бы её целиком.
+    #[test]
+    fn reason_is_cut_in_every_language() {
+        for chosen in lang::all() {
+            lang::activate(chosen);
+            let preamble = msg!(keys::SE_084_FUNCTION_NOT_CONSTANT, name = "f", reason = "");
+            let cause = Diagnostic::error(
+                Location::Implicit,
+                msg!(
+                    keys::SE_084_FUNCTION_NOT_CONSTANT,
+                    name = "f",
+                    reason = "CAUSE"
+                ),
+            );
+            let text = unfoldable_call("x", &cause, Location::Implicit).message;
+            assert!(text.contains("CAUSE"), "{chosen}: {text}");
+            assert!(
+                !text.contains(&preamble),
+                "{chosen}: вводная не срезана: {text}"
+            );
+        }
+        lang::reset();
+    }
 }

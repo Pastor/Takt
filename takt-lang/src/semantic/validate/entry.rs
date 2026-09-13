@@ -14,6 +14,8 @@
 //! писал, а автору автомата - "файл библиотечный", хотя он писал автомат.
 
 use crate::diagnostics::Diagnostic;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use crate::semantic::ModelNode;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -27,17 +29,7 @@ pub fn validate_entry_model(model: &Rc<RefCell<ModelNode>>) -> Option<Diagnostic
     if !borrowed.states.is_empty() {
         return None;
     }
-    Some(
-        Diagnostic::error(
-            borrowed.loc,
-            "файл не содержит ни одного состояния: это библиотека — набор типов, \
-             функций и переменных для подключения через 'import', а не автомат. \
-             Скомпилируйте (или подайте симулятору) файл, который её импортирует, \
-             либо добавьте сюда стартовое состояние ('start Имя;')"
-                .to_string(),
-        )
-        .with_code("SE-102"),
-    )
+    Some(Diagnostic::error(borrowed.loc, msg!(keys::SE_102_LIBRARY_FILE)).with_code("SE-102"))
 }
 
 #[cfg(test)]

@@ -27,6 +27,8 @@
 //! `ConditionNode::is_unconditional`: правило одно на всех потребителей.
 
 use crate::diagnostics::Diagnostic;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use crate::semantic::{ModelNode, StateNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -57,11 +59,10 @@ fn check_model(model: &Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnostic>) {
             warnings.push(
                 Diagnostic::warning(
                     dead.location,
-                    format!(
-                        "переход в '{}' недостижим: он записан после безусловного перехода \
-                         в '{}', а тот завершает выбор. Поставьте это ребро выше \
-                         безусловного либо снабдите безусловное условием",
-                        dead.name, references[cut].name
+                    msg!(
+                        keys::SE_116_UNREACHABLE_EDGE,
+                        target = dead.name,
+                        cut = references[cut].name
                     ),
                 )
                 .with_code("SE-116"),

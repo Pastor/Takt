@@ -15,6 +15,8 @@
 //! нашедшего файл на диске.
 
 use std::collections::BTreeMap;
+use takt_lang::diagnostics::lang::keys;
+use takt_lang::msg;
 
 use serde::Serialize;
 use takt_lang::compile::{CompileInput, Target};
@@ -60,9 +62,10 @@ struct CompiledJson {
 /// неприменимый к цели (таблица `target_flags`).
 fn prepare(target: &str, args: &str, filename: &str) -> Result<(Target, CompileOptions), String> {
     let Some(parsed) = Target::parse(target) else {
-        return Err(format!(
-            "неизвестная цель '{target}'. Поддерживается: {}",
-            Target::ALL
+        return Err(msg!(
+            keys::WASM_UNKNOWN_TARGET,
+            target = target,
+            known = Target::ALL
                 .iter()
                 .map(|t| t.name())
                 .collect::<Vec<_>>()
@@ -87,8 +90,8 @@ fn prepare(target: &str, args: &str, filename: &str) -> Result<(Target, CompileO
     argv.push("--target".to_string());
     argv.push(parsed.name().to_string());
 
-    let options =
-        parse_compile_args(&argv).map_err(|message| format!("ключи сборки: {message}"))?;
+    let options = parse_compile_args(&argv)
+        .map_err(|message| msg!(keys::WASM_BUILD_KEYS, message = message))?;
 
     // Применимость ключа к цели - та же таблица, что у CLI: `--bus=apb` у `rust` обязан
     // отказывать и здесь, а не приниматься молча.
@@ -176,16 +179,18 @@ fn address_map_of(
     files: &BTreeMap<String, String>,
 ) -> Result<Vec<takt_lang::AddressMapEntry>, String> {
     let Some(text) = files.get(memory::key_of(name)) else {
-        return Err(format!(
-            "карта адресов '{name}': такого файла в проекте нет"
-        ));
+        return Err(msg!(keys::WASM_ADDRESS_MAP_MISSING, name = name));
     };
     takt_lang::parse_address_map(text, 1).map_err(|diagnostics| {
         let reasons: Vec<String> = diagnostics
             .iter()
             .map(|d| format!("[{}] {}", d.code.as_deref().unwrap_or("?"), d.message))
             .collect();
-        format!("карта адресов '{name}': {}", reasons.join("; "))
+        msg!(
+            keys::WASM_ADDRESS_MAP_INVALID,
+            name = name,
+            reasons = reasons.join("; ")
+        )
     })
 }
 
@@ -220,7 +225,7 @@ fn split_args(args: &str) -> Result<Vec<String>, String> {
         }
     }
     if quote.is_some() {
-        return Err("незакрытая кавычка в ключах сборки".to_string());
+        return Err(msg!(keys::WASM_UNCLOSED_QUOTE));
     }
     if has_current {
         out.push(current);

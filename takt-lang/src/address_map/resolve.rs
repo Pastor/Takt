@@ -4,7 +4,9 @@
 use super::env::AddressEnv;
 use super::eval::eval_addr_expr;
 use super::parse::AddressMapEntry;
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, ModelNode, PortDirection, VariableNode};
 use std::cell::RefCell;
@@ -137,11 +139,7 @@ pub fn resolve_addresses(
         result.diagnostics.push(
             Diagnostic::warning(
                 const_loc,
-                format!(
-                    "--define '{}' перекрывает одноимённую `const` модели в выражении адреса; \
-                     в логике автомата `const` сохраняет своё значение",
-                    name
-                ),
+                msg!(keys::SE_053_DEFINE_OVERRIDES_CONST, name = name),
             )
             .with_code("SE-053"),
         );
@@ -153,10 +151,7 @@ pub fn resolve_addresses(
         result.diagnostics.push(
             Diagnostic::warning(
                 Location::CommandLine,
-                format!(
-                    "--define '{}' не использован: ни одно выражение адреса к нему не обращается",
-                    name
-                ),
+                msg!(keys::DF_004_UNUSED, name = name),
             )
             .with_code("DF-004"),
         );
@@ -169,14 +164,8 @@ pub fn resolve_addresses(
     for e in external {
         if !result.map.values().any(|r| r.name == e.name) {
             result.diagnostics.push(
-                Diagnostic::warning(
-                    e.loc,
-                    format!(
-                        "внешняя карта задаёт адрес для несуществующего порта '{}'",
-                        e.name
-                    ),
-                )
-                .with_code("SE-051"),
+                Diagnostic::warning(e.loc, msg!(keys::SE_051_MAP_UNKNOWN_PORT, name = e.name))
+                    .with_code("SE-051"),
             );
         }
     }
@@ -262,14 +251,8 @@ fn resolve_model(
             // Наложение поверх адреса модели - предупреждение SE-050.
             if inline.is_some() || operator.is_some() {
                 out.diagnostics.push(
-                    Diagnostic::warning(
-                        e.loc,
-                        format!(
-                            "внешняя карта переопределяет адрес порта '{}', заданный в модели",
-                            name
-                        ),
-                    )
-                    .with_code("SE-050"),
+                    Diagnostic::warning(e.loc, msg!(keys::SE_050_MAP_OVERRIDES, name = name))
+                        .with_code("SE-050"),
                 );
             }
             Some(ResolvedAddress {
@@ -320,12 +303,7 @@ fn resolve_model(
                     out.diagnostics.push(
                         Diagnostic::warning(
                             *loc,
-                            format!(
-                                "порт '{}' однобитный, но в адресе не задана позиция бита: \
-                                 принят бит 0. Если подразумевался другой бит, укажите его \
-                                 явно — `0xADDR:бит`",
-                                name
-                            ),
+                            msg!(keys::SE_090_BIT_POSITION_MISSING, name = name),
                         )
                         .with_code("SE-090"),
                     );
@@ -342,12 +320,7 @@ fn resolve_model(
                     out.diagnostics.push(
                         Diagnostic::error(
                             *loc,
-                            format!(
-                                "бит {} адреса порта '{}' вне диапазона [0, 63]: дефолтный HAL \
-                                 читает слово шириной до 64 бит (uint64_t), а сдвиг на большую \
-                                 величину — неопределённое поведение. Укажите бит 0…63",
-                                b, name
-                            ),
+                            msg!(keys::SE_060_BIT_OUT_OF_RANGE, bit = b, name = name),
                         )
                         .with_code("SE-060"),
                     );
@@ -372,11 +345,7 @@ fn resolve_model(
                 if used_ports.contains(name) && !failed {
                     let mut diagnostic = Diagnostic::error(
                         *loc,
-                        format!(
-                            "порт '{}' используется в кодогенерации, но не имеет адреса \
-                             (ни inline, ни оператором `address`, ни во внешней карте)",
-                            name
-                        ),
+                        msg!(keys::SE_052_PORT_WITHOUT_ADDRESS, name = name),
                     )
                     .with_code("SE-052");
                     // Порт, заведённый флагом, автор в тексте не найдёт - заметку даёт

@@ -12,6 +12,8 @@
 //! (`docs/diagnostics/README.md`).
 
 use crate::diagnostics::Diagnostic;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use crate::semantic::{ExpressionNode, ModelNode, PortDirection, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -47,15 +49,8 @@ fn collect(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
         }
         if *direction == PortDirection::In {
             out.push(
-                Diagnostic::error(
-                    *loc,
-                    format!(
-                        "входной порт '{name}' не может иметь начального значения: значение \
-                         входа приходит извне. Если имелся в виду адрес, укажите его \
-                         размещением — `at <адрес>`"
-                    ),
-                )
-                .with_code("SE-092"),
+                Diagnostic::error(*loc, msg!(keys::SE_092_INPUT_PORT_INITIALIZER, name = name))
+                    .with_code("SE-092"),
             );
         }
     }

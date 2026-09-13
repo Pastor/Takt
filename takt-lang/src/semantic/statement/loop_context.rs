@@ -28,6 +28,8 @@
 //! потоков несколько, и общий счётчик считал бы чужую работу. Выход из цикла
 //! учитывается разрушением [`LoopGuard`], поэтому ранний возврат по `?` не "залипает".
 
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use std::cell::Cell;
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -65,11 +67,7 @@ pub fn inside() -> bool {
 pub fn refuse(keyword: &str, loc: Location) -> Diagnostic {
     Diagnostic::error(
         loc,
-        format!(
-            "'{keyword}' вне цикла: прерывать нечего. Оператор допустим только в \
-             теле 'while', 'loop' или 'for'; тело блока и функции завершается \
-             само"
-        ),
+        msg!(keys::SE_132_BREAK_OUTSIDE_LOOP, keyword = keyword),
     )
     .with_code("SE-132")
 }

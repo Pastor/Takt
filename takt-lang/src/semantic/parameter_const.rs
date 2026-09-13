@@ -42,7 +42,9 @@
 //! константой. Пропуск обязан валить сборку, а не вывод.
 #![deny(clippy::wildcard_enum_match_arm)]
 
+use crate::diagnostics::lang::keys;
 use crate::diagnostics::{Diagnostic, Location};
+use crate::msg;
 use crate::parser::ast;
 use crate::semantic::{ModelNode, ParameterNode, VariableNode};
 use std::cell::RefCell;
@@ -156,11 +158,10 @@ pub(crate) fn compile_time_parameter(loc: Location, name: &str, position: &str) 
 /// (`after_const`), собирает сообщение сам, но **этим** текстом - одна формулировка на
 /// все позиции.
 pub(crate) fn compile_time_parameter_text(name: &str, position: &str) -> String {
-    format!(
-        "{position}: '{name}' — параметр модели, а здесь нужна величина, \
-         известная при генерации; параметр является константой только при сборке \
-         с '--parameters=specialize' (в режиме по умолчанию '--parameters=assign' \
-         параметр — поле экземпляра)"
+    msg!(
+        keys::SE_088_COMPILE_TIME_PARAMETER,
+        position = position,
+        name = name
     )
 }
 

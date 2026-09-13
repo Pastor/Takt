@@ -270,7 +270,11 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             }
             SemanticNodeKind::LocalVar => {
                 // Локальная переменная в блоке (enter/exit/always/fn): показываем имя
-                hover_text = format!("```but\nvar {} (локальная)\n```", word);
+                hover_text = format!(
+                    "```but\nvar {} ({})\n```",
+                    word,
+                    crate::msg!(crate::diagnostics::lang::keys::LSP_LOCAL_VARIABLE)
+                );
             }
         }
     }
@@ -351,7 +355,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         else if let Some((_, description)) =
             TAKT_BUILTIN_TYPES.iter().find(|(t, _)| *t == word.as_str())
         {
-            hover_text = format!("```but\n{}\n```\n\n{}", word, description);
+            hover_text = format!("```but\n{}\n```\n\n{}", word, crate::msg!(*description));
         }
     }
 

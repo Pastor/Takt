@@ -16,7 +16,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
         items.push(CompletionItem {
             label: keyword.to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some(description.to_string()),
+            detail: Some(crate::msg!(*description)),
             ..Default::default()
         });
     }
@@ -26,7 +26,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
         items.push(CompletionItem {
             label: type_name.to_string(),
             kind: Some(CompletionItemKind::TYPE_PARAMETER),
-            detail: Some(description.to_string()),
+            detail: Some(crate::msg!(*description)),
             ..Default::default()
         });
     }
@@ -42,7 +42,9 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             items.push(CompletionItem {
                 label: name.clone(),
                 kind: Some(CompletionItemKind::CLASS),
-                detail: Some("модель".to_string()),
+                detail: Some(crate::msg!(
+                    crate::diagnostics::lang::keys::LSP_DETAIL_MODEL
+                )),
                 ..Default::default()
             });
         }
@@ -88,7 +90,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             items.push(CompletionItem {
                 label: name.clone(),
                 kind: Some(CompletionItemKind::TYPE_PARAMETER),
-                detail: Some("тип".to_string()),
+                detail: Some(crate::msg!(crate::diagnostics::lang::keys::LSP_DETAIL_TYPE)),
                 ..Default::default()
             });
         }

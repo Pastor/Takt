@@ -1,6 +1,8 @@
 //! Число аргументов вызова обязано совпадать с числом параметров - `SE-122`.
 
 use super::*;
+use crate::diagnostics::lang::keys;
+use crate::msg;
 use crate::semantic::FunctionDefinitionNode;
 
 /// Проверяет число аргументов вызова; `None` - вызов согласован.
@@ -39,11 +41,11 @@ pub(super) fn check_call(
     Some(
         Diagnostic::error(
             loc,
-            format!(
-                "функция '{name}': объявлено параметров {expected}, передано аргументов {}. \
-                 Прежде такой вызов принимался молча: цель 'c' печатала код, который \
-                 отвергает 'cc', а эталон останавливал прогон уже в такте",
-                args.len()
+            msg!(
+                keys::SE_122_ARITY,
+                name = name,
+                expected = expected,
+                given = args.len()
             ),
         )
         .with_code("SE-122"),

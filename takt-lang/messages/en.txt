@@ -1124,3 +1124,216 @@ cli.export.arg.lang = Message language: `ru`, `en`, ...
 cli.project.about = Project composition: files and kinds, active files, build, model scenarios
 cli.project.arg.paths = Project: a directory with `takt-project.json`, a `.zip` archive or a `.takt` model. With `--owner` - model files among which the scenario owner is sought
 cli.project.arg.owner = Model the scenario belongs to by the ownership rule: the model file is printed; belongs to nobody - an empty line and exit code 1
+
+# ─── Лексер (`parser/lex_error.rs`) ──────────────────────────────────────────
+le-001.eof-in-comment = unexpected end of file inside a comment
+le-002.eof-in-string = unexpected end of file inside a string literal
+le-003.eof-in-hex = unexpected end of file inside a hexadecimal literal
+le-004.missing-number = no number after '0x'
+le-005.invalid-hex-char = invalid character '{symbol}' in a hexadecimal literal
+le-006.unrecognised-token = unrecognised token '{token}'
+le-007.missing-exponent = the exponent is missing
+le-008.expected-from = expected the keyword 'from', but found '{found}'
+le-009.number-out-of-range = numeric literal '{text}' is out of the range [-9223372036854775808, 18446744073709551615]: it fits no integer type of the language
+le-010.time-out-of-range = time literal '{text}' is out of the representable range
+le-011.invalid-time-literal = invalid time literal '{text}': a unit is allowed only on a whole decimal number
+sy-007.statement-without-effect = an expression in statement position has no effect: a statement can be an assignment ('target := value;') or a function call ('f(x);'). The computed value has nowhere to go here
+
+# ─── Разбор (`parse_entry.rs`) ────────────────────────────────────────────────
+sy-001.invalid-token = invalid token
+sy-002.unrecognised-token = unrecognised token '{token}', expected {expected}
+sy-003.extra-token = extra token '{token}'
+sy-004.unexpected-eof = unexpected end of file, expected {expected}
+sy-006.assignment-in-value = an assignment stands where a value is computed: in the language an assignment is a statement, not an expression. It must be a separate statement (or a `for` loop step): first `target := value;`, then use the target
+sy-008.address-literal-in-value = address literal '{text}' stands where a value is computed: an address is a placement property ('at {text}', the 'address' statement, an external map). To access a memory cell in an expression, write '#{text} as TYPE' or '#0xADDRESS.BIT'
+
+# ─── Виды операторов для текстов (`parser/ast.rs`) ────────────────────────────
+ast.kind-block = block
+ast.kind-named-args = named arguments
+ast.kind-loop = loop
+ast.kind-expression = expression statement
+ast.kind-variable = variable declaration
+ast.kind-error = erroneous statement
+ast.kind-stray-semicolon = stray ';'
+ast.kind-inline-formula = assertion formula
+
+# ─── Форматтер (`format/`) ────────────────────────────────────────────────────
+fm-001.unsupported-node = printing the node '{node}' is not supported by the formatter yet
+fm.node-code-block = code block
+fm.node-named-function = named function
+fm.node-function-type = function type
+fm.node-formula-error = error in a formula block
+fm.node-for-initializer = {kind} in a for initializer
+
+# ─── Строка LTL и предупреждения АСД (`lib.rs`) ──────────────────────────────
+ltl.unparsable = could not parse the LTL formula '{source}'
+ltl.several-constructs = expected one LTL formula, but the string '{source}' parses as {count} constructs: remove ';' — check one formula per call
+ltl.not-a-formula = the string '{source}' is not an LTL formula
+ltl.several-formulas = expected one LTL formula, {count} given: remove the commas or call verify for each formula separately
+se-044.stray-semicolon = stray semicolon
+se-045.unknown-named-block = unknown named block '{name}'; allowed names: enter, exit, always
+
+# ─── Канон именования (`style/naming.rs`) ────────────────────────────────────
+cs-001.naming = {kind} '{name}' does not follow the naming convention: expected {case}
+cs.kind-model = model
+cs.kind-state = state
+cs.kind-function = function
+cs.kind-parameter = parameter
+cs.kind-type = type
+cs.kind-enum = enumeration
+cs.kind-variant = variant
+cs.kind-struct = structure
+cs.kind-condition = condition
+cs.kind-invariant = invariant
+cs.kind-variable = variable
+cs.kind-port = port
+cs.kind-constant = constant
+
+# ─── Адреса портов и `--define` (`address_map/`) ─────────────────────────────
+se-054.undefined-symbol = the address expression refers to an undefined symbol '{name}' (there is neither `--define {name}=…` nor `const {name}` in the model)
+se-055.address-not-constant = the address expression does not fold to a constant: {reason}
+addr.bit-operand = an operand of the form `address:bit` takes no part in arithmetic
+addr.unsupported-operation = the operation is not supported in an address expression
+addr.shift-out-of-range = a shift is allowed only by 0..63 bits
+addr.exponent-out-of-range = the exponent is negative or wider than 32 bits
+addr.supported-forms = only integer literals, symbols and the operations `+ - * / % << >> & | ^ ~` are supported
+addr.literal-too-wide = the numeric literal does not fit a signed 64-bit address value
+addr.cyclic-reference = cyclic reference through '{name}'
+addr.position-port-address = port address
+addr.not-a-constant = '{name}' is not a constant (an address must be known at build time)
+am-001.expected-port-name = expected a port name
+am-002.expected-equals = expected '=' after the port name '{name}'
+am-003.expected-address = expected an address for the port '{name}'
+am-004.expected-semicolon = expected ';' after the address of the port '{name}'
+am-005.invalid-address = invalid address '{value}'
+am-005.invalid-bit = invalid bit '{value}'
+am-006.duplicate-entry = repeated address entry for the port '{name}' in the external map
+se-050.map-overrides = the external map overrides the address of the port '{name}' given in the model
+se-051.map-unknown-port = the external map gives an address for a non-existent port '{name}'
+se-053.define-overrides-const = --define '{name}' overrides the model `const` of the same name in address expressions; in the automaton logic the `const` keeps its value
+se-060.bit-out-of-range = bit {bit} of the address of the port '{name}' is out of the range [0, 63]: the default HAL reads a word of up to 64 bits (uint64_t), and a larger shift is undefined behaviour. Give a bit 0…63
+se-090.bit-position-missing = the port '{name}' is one-bit, but its address has no bit position: bit 0 is assumed. If another bit was meant, give it explicitly — `0xADDR:bit`
+df-001.missing-equals = --define '{arg}': expected NAME=VALUE (no '=')
+df-001.invalid-name = --define '{arg}': invalid symbol name '{name}' (expected [A-Za-z_][A-Za-z0-9_]*)
+df-003.duplicate = --define: the symbol '{name}' is given twice
+df-004.unused = --define '{name}' is unused: no address expression refers to it
+
+# ─── Семантика: многострочные тексты, пропущенные переносом (`semantic/`) ─────
+se-038.array-too-large = array size {size} exceeds the maximum allowed {max} (2^10). Use dynamic memory or split the array into parts.
+se-055.ltl-not-checked = the LTL formula is parsed and kept, but it is not checked at compile time: properties are checked by `taktc verify` — it handles both control properties and predicates over data
+se-056.unknown-atom = the atom '{atom}' of the LTL formula matches no variable, state or named condition of the model
+se-059.implicit-fixed-mix = implicit mixing of the types '{left}' and '{right}' in fixed-point arithmetic is forbidden; cast the operand explicitly ('… as q(m, n)' or '… as q(m, n) sat')
+se-084.initializer-calls-unfoldable = the initializer '{name}' calls a function the compiler cannot evaluate: {reason}. The initial value is set before the first tick, and previously the consumers diverged silently: the reference kept zero, and the 'st' target lost the initializer without a word. Assign it in a state body — 'always {{ {name} := …; }}'
+se-088.compile-time-parameter = {position}: '{name}' is a model parameter, but a value known at generation time is needed here; a parameter is a constant only when building with '--parameters=specialize' (in the default mode '--parameters=assign' a parameter is an instance field)
+se-092.input-port-initializer = the input port '{name}' cannot have an initial value: the value of an input comes from outside. If an address was meant, give it as a placement — `at <address>`
+se-096.undeclared-direction = a write to the address '#0x{addr}' goes to a cell with an UNdeclared direction: the compiler cannot check that it is legal. Declare a named port with this address ('out name: {ty} at 0x{addr}{bit};'), and the write becomes checkable
+se-099.initializer-reads-cell = the initializer '{name}' accesses a memory cell by address: the memory contents before the first tick are unknown, and the reference and the target would diverge silently. Read the cell in a state body — for example, 'always {{ {name} := #0xADDRESS as type; }}'
+se-102.library-file = the file contains no state: it is a library — a set of types, functions and variables to be included via 'import', not an automaton. Compile (or give the simulator) the file that imports it, or add a start state here ('start Name;')
+se-109.forward-reference = the variable '{name}' is declared below: in an initializer a name means the INITIAL value and refers only backwards in the text. Reorder the declarations or use a constant
+se-113.initializer-reads-port = the initializer '{name}' reads the port '{port}': the port value before the first tick is undefined, and the consumers would diverge silently — the reference would give zero, the 'c-hal' target would read the register, and 'st' would lose the initializer. Read the port in a state body — for example, 'always {{ {name} := {port}; }}'
+se-114.fractional-initializer = the initializer '{name}' is a fractional expression the compiler cannot evaluate exactly: fractional rounding is defined by the simulator reference, and by computing it here the compiler would give a value the simulator does not compute (the run would show zero and the firmware its own number, silently). Give a ready literal — for example 'var {name}: … := 0.333;' — or compute it in a state body: 'always {{ {name} := …; }}'
+se-116.unreachable-edge = the transition to '{target}' is unreachable: it is written after the unconditional transition to '{cut}', which ends the choice. Put this edge above the unconditional one or give the unconditional one a condition
+se-117.not-an-array = {what} is not an array: only an array variable or a structure field of type '[T; N]' can be indexed
+se-119.internal = an internal invariant of the semantics is broken: {what}. This is a compiler defect, not a model error: an earlier check should have rejected the input before this point. Please report the case together with the source
+se-122.arity = function '{name}': {expected} parameters declared, {given} arguments passed. Previously such a call was accepted silently: the 'c' target printed code that 'cc' rejects, and the reference stopped the run already during the tick
+se-124.struct-contains-itself = the structure '{culprit}' contains itself — directly or through a chain of fields: the size of such a value is infinite, and no target can represent it. Break the chain: store the data of the nested structure directly or an index of an array element instead
+se-130.port-subtree-in-condition = The access '{path}' takes a COMPOSITE part of a port where the target cannot declare a temporary (transition condition, named condition, guard formula, loop condition): the port is split into leaves, and the node is assembled from them. Move the value to a model variable — `var v: …; always {{ v := {path}; }}` — and use that
+se-131.duplicate-match-arm = the pattern of this `match` arm already occurred above: `match` takes the FIRST match, so the arm never fires. Merge the arms or refine the pattern
+se-132.break-outside-loop = '{keyword}' outside a loop: there is nothing to interrupt. The statement is allowed only in the body of 'while', 'loop' or 'for'; the body of a block or a function ends by itself
+duration.not-multiple-of-tick = at {hertz} Hz the duration is not a multiple of the tick period; choose a multiple duration or another frequency
+note.bounds-fault-port = the port '{port}' is introduced by the `--bounds-check` flag (array bounds guard): give it an address in the external map (`--address-map`) or drop the flag
+note.nested-model-import = the model '{name}' is declared inside the model '{owner}': including the whole file brings only that one, and nested models are not visible from outside. Include the needed one selectively: import {{ {name} }} from "…";
+note.wrapper-does-not-inherit = the model '{name}' is declared here; the nested model '{nested}' has states, but the wrapper does not inherit them — move the states to the top level
+rs-026.service-field-clash = the name '{original}' gives the field '{produced}', which the 'rust' target prints itself (automaton state, shared variables, hardware layer, time mechanism, 'every' accumulator, sequential composition step or sub-model instance): the model structure would get two fields with one name, and 'rustc' answers 'E0124: field is already declared'. This is NOT a limitation of the Takt language — the name is taken by what this particular target prints, and for 'c' and 'sv' the model stays valid. Rename the declaration in the .takt source
+
+# ─── LSP: подписи, переименование, словарь (`lsp/`) ──────────────────────────
+lsp.detail-model = model
+lsp.detail-type = type
+lsp.in-file = in file {place}{message}
+lsp.note = Note: {message}
+lsp.local-variable = local
+rename.unparsable = the file does not compile: renaming is unavailable
+rename.no-symbol = there is no name under the cursor
+rename.foreign-declaration = the name is declared in another file: renaming would touch files outside the working set
+rename.model-name = the model name is visible outside the file: renaming would touch importing files
+rename.incomplete = the file has places the server did not parse: completeness of the renaming is not guaranteed
+rename.not-an-identifier = the new name is not an identifier of the language
+rename.keyword = the new name is a keyword of the language
+rename.unparsable-consumer = a workspace file using this name does not compile: its occurrences would stay unedited
+rename.ambiguous-import = the name is declared in several included files at once: which of them to rename cannot be determined
+rename.name-taken = the new name is already taken in a file the edit would touch: renaming would change the meaning of the program
+kw.model = declaration of a finite state machine model
+kw.state = declaration of an ordinary state
+kw.start = declaration of the start state
+kw.ref = conditional transition between states
+kw.next = unconditional transition
+kw.enter = named block on entering a state
+kw.exit = named block on leaving a state
+kw.always = named block executed every cycle
+kw.var = variable declaration
+kw.const = constant declaration
+kw.parameter = model parameter declaration
+kw.type = type alias
+kw.fn = function declaration
+kw.extern = external function declaration
+kw.in = input port
+kw.out = output port
+kw.inout = bidirectional port
+kw.address = setting the hardware address of a port (address Name = <address>;)
+kw.at = placing a port in its declaration (out led: bit at 0x40:2;) — optional: the address may come from the address statement or an external map
+kw.enum = enumeration declaration
+kw.struct = structure declaration
+kw.cond = named transition condition
+kw.invariant = named invariant: a condition that must hold (invariant Name = C;)
+kw.if = conditional statement
+kw.else = branch of a conditional statement
+kw.loop = loop with an optional condition
+kw.while = loop with a condition (synonym of loop)
+kw.for = counting loop
+kw.match = pattern-matching choice statement
+kw.break = exit from a loop
+kw.continue = go to the next loop iteration
+kw.return = return from a function
+kw.import = file import
+kw.as = alias on import
+kw.from = source of a selective import
+kw.formula = formal specification
+kw.assembly = assembly insert
+kw.true = boolean literal true
+kw.false = boolean literal false
+kw.clock = declaration of the model clock frequency (clock 1kHz;)
+kw.after = transition delay: at least the given time has passed (after 3s, after 3t, after DWELL, after (BASE + 30s))
+kw.every = periodic action at the given interval
+kw.ltl-next = LTL: at the next step (Next)
+kw.ltl-finally = LTL: some time in the future (Finally)
+kw.ltl-globally = LTL: always (Globally)
+kw.ltl-until = LTL: until (Until)
+kw.ltl-release = LTL: release (Release)
+kw.ltl = formula kind: temporal property (: [LTL] φ;)
+kw.guard = formula kind: guard condition (: [Guard] c;)
+type.bit = built-in 1-bit primitive type (0 or 1)
+type.bool = built-in boolean type (true or false)
+type.float = built-in floating-point number type
+type.unit = built-in empty type (the return type of procedures without a value)
+type.u8 = built-in 8-bit unsigned integer type [0 … 255]
+type.u16 = built-in 16-bit unsigned integer type [0 … 65 535]
+type.u32 = built-in 32-bit unsigned integer type [0 … 4 294 967 295]
+type.u64 = built-in 64-bit unsigned integer type
+type.i8 = built-in 8-bit signed integer type [−128 … 127]
+type.i16 = built-in 16-bit signed integer type [−32 768 … 32 767]
+type.i32 = built-in 32-bit signed integer type [−2 147 483 648 … 2 147 483 647]
+type.i64 = built-in 64-bit signed integer type
+type.duration = built-in duration type: 3s, 500ms, 1m30s
+
+# ─── Модули для браузера (`takt-wasm`, `takt-wasm-export`) ───────────────────
+wasm.unknown-target = unknown target '{target}'. Supported: {known}
+wasm.build-keys = build keys: {message}
+wasm.address-map-missing = address map '{name}': there is no such file in the project
+wasm.address-map-invalid = address map '{name}': {reasons}
+wasm.unclosed-quote = unclosed quote in the build keys
+wasm.no-highlight = the target '{target}' prints a language that has no highlighting description
+wasm.scenario-unreadable = the scenario cannot be read: {error}
+wasm.run-not-open = run {id} is not open
+export.bad-view = view '{value}': draft or run
+export.bad-format = format '{value}': svg, png, gif or mp4
+export.bad-background = background '{value}': fill or none
