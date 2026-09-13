@@ -1060,6 +1060,18 @@ test("прогон: задержка между тактами - секунды,
   assert.equal(runDelay("600"), 60, "больше предела - предел");
 });
 
+test("прогон: частота модельных часов - целые герцы, пусто - часы модели", async () => {
+  const { tickHz, TICK_HZ_MAX } = await import("../static/project.js");
+  assert.equal(tickHz("2"), 2);
+  assert.equal(tickHz("1000"), 1000);
+  assert.equal(tickHz("2.7"), 2, "clock дробной частоты не знает");
+  assert.equal(tickHz(""), 0, "пусто - частота из clock модели");
+  assert.equal(tickHz("0"), 0);
+  assert.equal(tickHz("-5"), 0, "отрицательное - не задана");
+  assert.equal(tickHz("abc"), 0);
+  assert.equal(tickHz("1e12"), TICK_HZ_MAX, "больше предела - предел");
+});
+
 test("страница проекта: сценарий прогона - только сценарий открытой модели", async () => {
   const { pickScenario } = await import("../static/project.js");
   const own = ["lift-busy.json", "lift-idle.json"];

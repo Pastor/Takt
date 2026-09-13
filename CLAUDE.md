@@ -1958,7 +1958,7 @@ cargo run --bin takt-sim -- project <проект>   # состав проект
   ([константы `LANGUAGE_VERSION` в коде нет](docs/features/0085-language-version-constant.md)). Проверка
   `scripts/check-language-version.sh` сверяет **три** источника — константу, README и
   живой контекст. Меняя версию языка, правь все три синхронно; это
-  **не** версия крейта `takt-lang` (`CARGO_PKG_VERSION`, сейчас `0.62.0`).
+  **не** версия крейта `takt-lang` (`CARGO_PKG_VERSION`, сейчас `0.62.1`).
 - **Релиз и тег выпускает автоматика при подъёме минорной версии языка**
   ([релиз и тег при подъёме минорной версии языка](docs/features/0302-release-on-language-minor.md)): решение принимает
   `scripts/release-check.sh`, тело собирает `scripts/release-notes.sh`, YAML — обёртка

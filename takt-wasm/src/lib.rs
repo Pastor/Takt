@@ -260,6 +260,10 @@ struct SimOpenRequest {
     /// Период модельного такта в миллисекундах; `0` - как в CLI.
     #[serde(default)]
     tick_ms: i64,
+    /// Частота модельных часов, Гц - как `clock N Hz` в модели; `0` - не задана.
+    /// Сильнее `tick_ms` и объявления модели: это явный выбор читателя.
+    #[serde(default)]
+    tick_hz: u64,
     /// Состав проекта для `import`.
     #[serde(default)]
     files: std::collections::BTreeMap<String, String>,
@@ -286,7 +290,7 @@ struct SimCloseRequest {
 #[unsafe(no_mangle)]
 pub extern "C" fn takt_sim_open(len: u32) -> u32 {
     call(len, |r: SimOpenRequest| {
-        sim::open(&r.source, &r.scenario, r.tick_ms, r.files, r.steps)
+        sim::open(&r.source, &r.scenario, r.tick_ms, r.tick_hz, r.files, r.steps)
     })
 }
 

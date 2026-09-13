@@ -154,6 +154,7 @@ export async function main() {
   shell.attachFontSize(dom.fontless, dom.fontmore, dom.fontsize, localStorage);
   // Прочие настройки интерфейса - оттуда же: вкладка и бюджет прогона.
   dom.budget.value = shell.setting(localStorage, shell.UI_KEYS.budget, dom.budget.value);
+  dom.tickhz.value = shell.setting(localStorage, shell.UI_KEYS.tickHz, dom.tickhz.value);
   // Читается только известное значение: в памяти читателя мог остаться выбор
   // области, которой больше нет, и страница открылась бы без вывода вовсе.
   selectPanel(shell.setting(localStorage, shell.UI_KEYS.panel, "output") === "output" ? "output" : null);
@@ -666,7 +667,7 @@ function docks() {
 function cache() {
   for (const id of [
     "editor", "diagnostics", "output", "trace", "version", "target", "args",
-    "scenario", "budget", "tickdelay", "share", "format", "say", "modes",
+    "scenario", "budget", "tickdelay", "tickhz", "share", "format", "say", "modes",
     "gentitle", "gensummary", "gentools", "buildsettings", "copyout", "saveout", "genfiles",
     "build-modal", "build-tabs", "build-target", "build-flags", "build-line", "build-save", "build-cancel",
     "scheme-export", "export-modal", "export-format", "export-scope", "export-view", "export-background",
@@ -768,6 +769,12 @@ function wire() {
   dom.budget.addEventListener("change", () =>
     shell.remember(localStorage, shell.UI_KEYS.budget, dom.budget.value)
   );
+  // Частоту хранит браузер, как бюджет: поле показывает число, которое уйдёт в прогон.
+  dom.tickhz.addEventListener("change", () => {
+    const hz = project.tickHz(dom.tickhz.value);
+    dom.tickhz.value = hz ? String(hz) : "";
+    shell.remember(localStorage, shell.UI_KEYS.tickHz, dom.tickhz.value);
+  });
   // Задержку хранит проект, по сценарию: поле показывает число, которое записано.
   dom.tickdelay.addEventListener("change", () => {
     const seconds = project.runDelay(dom.tickdelay.value);
@@ -1590,6 +1597,8 @@ function session() {
     source: state.editor.value(),
     scenario: state.scenario,
     tickMs: 0,
+    // Частота модельных часов - как `clock` модели; пусто - часы модели.
+    tickHz: project.tickHz(dom.tickhz.value),
     files: projectFiles(),
     // Язык ответов прогона: сводку и отказы модуль строит на языке запроса.
     lang: i18n.language(),

@@ -56,7 +56,7 @@ self.onmessage = async (event) => {
  *
  * @returns {Promise<boolean>} сессия готова к тактам
  */
-async function ensure({ wasmUrl, source, scenario, tickMs, files, steps, lang }) {
+async function ensure({ wasmUrl, source, scenario, tickMs, tickHz, files, steps, lang }) {
   if (!bridge) bridge = await Bridge.load(wasmUrl);
   // Язык - не часть ключа сессии: модель от него не меняется, а каждый такт несёт
   // язык сам.
@@ -64,11 +64,12 @@ async function ensure({ wasmUrl, source, scenario, tickMs, files, steps, lang })
   // Состав проекта входит в ключ: правка подключаемого файла меняет модель так же,
   // как правка её самой, и прогон по старому тексту был бы прогоном чужой модели.
   // Длина прогона - тоже: эталон заканчивает прогон по ней, и сессия, открытая под
-  // другое число шагов, остановилась бы не там, где просит автор.
-  const key = JSON.stringify([source, scenario ?? "", tickMs ?? 0, files ?? {}, steps ?? null]);
+  // другое число шагов, остановилась бы не там, где просит автор. Частота часов -
+  // тоже: выдержка по времени считается от неё, и старая сессия шла бы в чужом темпе.
+  const key = JSON.stringify([source, scenario ?? "", tickMs ?? 0, tickHz ?? 0, files ?? {}, steps ?? null]);
   if (session !== null && sessionKey === key) return true;
   close_();
-  const opened = bridge.simOpen(source, scenario ?? "", tickMs ?? 0, files ?? {}, steps ?? null);
+  const opened = bridge.simOpen(source, scenario ?? "", tickMs ?? 0, files ?? {}, steps ?? null, tickHz ?? 0);
   if (!opened.ok) {
     post({ type: "failed", message: opened.error?.message, key: "trace.notOpened", error: opened.error });
     return false;
