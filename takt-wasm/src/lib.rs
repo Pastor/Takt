@@ -290,7 +290,14 @@ struct SimCloseRequest {
 #[unsafe(no_mangle)]
 pub extern "C" fn takt_sim_open(len: u32) -> u32 {
     call(len, |r: SimOpenRequest| {
-        sim::open(&r.source, &r.scenario, r.tick_ms, r.tick_hz, r.files, r.steps)
+        sim::open(
+            &r.source,
+            &r.scenario,
+            r.tick_ms,
+            r.tick_hz,
+            r.files,
+            r.steps,
+        )
     })
 }
 
