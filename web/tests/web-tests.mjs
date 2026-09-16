@@ -587,7 +587,7 @@ const PAGE_SCRIPTS = [
   "account.js", "alerts.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js", "build-settings.js",
   "draft.js", "editor.js", "export.js", "file-kinds.js", "help.js", "i18n.js", "layout.js", "legend.js", "pick.js",
   "panels.js", "project.js", "sample.js", "scheme.js", "scheme-geometry.js",
-  "scheme-host.js", "scheme-run.js",
+  "scheme-host.js", "scheme-run.js", "sim-panel.js",
   "scheme-settings.js",
   "flags.js", "json.js",
   "md.js", "offline.js", "share.js", "shell.js", "sw.js", "tip.js", "worker.js",
@@ -2589,4 +2589,51 @@ test("загрузка файла: чужое расширение, имя и р
   assert.equal(uploadRefusal("big.json", LIMIT_BYTES + 1).key, "file.tooBig");
   const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
   assert.doesNotMatch(html, /id="filepick"[^>]*accept=/, "второй список родов в разметке");
+});
+
+test("панель прогона: значение поля в форме сценария и отказы словарём", async () => {
+  const { fieldValue, inputRequest, editable, observable, keptWatch } = await import("../static/sim-panel.js");
+  const u8 = { name: "level", direction: "in", type: "u8", kind: "integer", min: "0", max: "255" };
+  assert.deepEqual(fieldValue(u8, "42"), { value: 42 });
+  assert.deepEqual(fieldValue(u8, " 255 "), { value: 255 }, "пробелы по краям не мешают");
+  assert.equal(fieldValue(u8, "256").key, "simPanel.outOfRange");
+  assert.equal(fieldValue(u8, "-1").key, "simPanel.outOfRange");
+  assert.equal(fieldValue(u8, "4.5").key, "simPanel.notInteger");
+  const u64 = { name: "big", direction: "in", type: "u64", kind: "integer", min: "0", max: "18446744073709551615" };
+  assert.equal(fieldValue(u64, "18446744073709551615").key, "simPanel.tooWide", "граница u64 точно не ложится в число");
+  assert.deepEqual(fieldValue(u64, "9007199254740991"), { value: 9007199254740991 });
+  const i16 = { name: "t", direction: "in", type: "i16", kind: "integer", min: "-32768", max: "32767" };
+  assert.deepEqual(fieldValue(i16, "-32768"), { value: -32768 });
+  assert.deepEqual(fieldValue({ name: "on", kind: "bit" }, true), { value: 1 });
+  assert.deepEqual(fieldValue({ name: "on", kind: "bit" }, false), { value: 0 });
+  assert.deepEqual(fieldValue({ name: "ok", kind: "bool" }, true), { value: true });
+  const mode = { name: "mode", kind: "enum", variants: [{ name: "Off", value: "0" }, { name: "Slow", value: "3" }] };
+  assert.deepEqual(fieldValue(mode, "3"), { value: 3 }, "вариант - его значение, как у сценария");
+  assert.equal(fieldValue(mode, "7").key, "simPanel.badVariant");
+  assert.deepEqual(fieldValue({ name: "g", kind: "fixed" }, "1,5"), { value: 1.5 }, "запятая - десятичная");
+  assert.equal(fieldValue({ name: "g", kind: "float" }, "").key, "simPanel.notNumber");
+  assert.deepEqual(fieldValue({ name: "hold", kind: "duration" }, "250"), { value: 250 });
+  assert.equal(fieldValue({ name: "hold", kind: "duration" }, "-1").key, "simPanel.outOfRange");
+  assert.equal(fieldValue({ name: "flags", kind: "composite" }, "1").key, "simPanel.notEditable");
+
+  assert.deepEqual(inputRequest(u8, 7), { in_ports: { level: 7 }, inout: {} });
+  assert.deepEqual(inputRequest({ ...u8, direction: "inout" }, 7), { in_ports: {}, inout: { level: 7 } });
+  assert.equal(editable({ direction: "out", kind: "integer" }), false, "выход не вводится");
+  assert.equal(editable({ direction: "in", kind: "composite" }), false, "составной не вводится");
+  assert.equal(observable({ direction: "inout" }), true);
+  const ports = [
+    { name: "a", direction: "out" },
+    { name: "b", direction: "in" },
+    { name: "c", direction: "inout" },
+  ];
+  assert.deepEqual(keptWatch(ports, ["c", "gone", "b", "a"]), ["a", "c"], "исчезнувшее и вход отброшены, порядок модели");
+
+  // Каждый ключ отказа есть в обоих словарях.
+  const source = await readFile(new URL("../static/sim-panel.js", import.meta.url), "utf8");
+  const used = [...source.matchAll(/"(simPanel\.\w+)"/g)].map((match) => match[1]);
+  assert.ok(used.length >= 6, `ключей найдено ${used.length}`);
+  for (const lang of ["ru", "en"]) {
+    const dict = await dictionary(lang);
+    for (const key of used) assert.ok(dict[key], `в '${lang}' нет ключа ${key}`);
+  }
 });

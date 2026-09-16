@@ -943,6 +943,7 @@ sim-037.positional-length = {count} значений в позиционном �
 sim.port-not-found = Ошибка [{code}]: шаг {step}: порт `{name}` не найден в модели
 sim.port-ambiguous = Ошибка [{code}]: шаг {step}: имя `{name}` объявлено несколькими моделями ({models}) — укажите квалифицированное имя
 sim.port-not-in-direction = Ошибка [{code}]: шаг {step}: порт `{name}` не найден среди портов направления `{field}`
+sim.manual-value-unreadable = Ошибка: такт {tick}: значение `{name}={value}` не число, не логическое и не массив
 sim.guard-port = Guard шага {step}: {field} ({name}): ожидалось {expected}, получено {actual}
 sim.guard-var = Guard шага {step}: vars[{name}]: ожидалось {expected}, получено {actual}
 sim.extern-value-unreadable = шаг {step}: значение extern-функции '{name}' не читается

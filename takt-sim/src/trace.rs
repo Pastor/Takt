@@ -20,26 +20,10 @@ pub fn step_line(unit: &Unit, port_names: &PortNames, step_no: usize, now_ns: i6
         states.join(", ")
     };
 
-    // Двусмысленное имя печатается квалифицированными формами: показывать `val=1`, пока
-    // вторая под-модель держит `val=2`, - значит скрывать половину состояния модели.
-    let display_names = |names: &[String]| -> Vec<String> {
-        let mut out = Vec::new();
-        for n in names {
-            match port_names.ambiguous.iter().find(|(bare, _)| bare == n) {
-                Some((_, qualified)) => out.extend(qualified.iter().cloned()),
-                None => out.push(n.clone()),
-            }
-        }
-        out
-    };
-
     let fmt_group = |names: &[String]| -> String {
-        display_names(names)
+        displayed_values(unit, port_names, names)
             .iter()
-            .filter_map(|n| {
-                unit.get_value(n)
-                    .map(|v| format!("{}={}", n, format_value(&v)))
-            })
+            .map(|(n, v)| format!("{n}={v}"))
             .collect::<Vec<_>>()
             .join("  ")
     };
@@ -69,6 +53,46 @@ pub fn step_line(unit: &Unit, port_names: &PortNames, step_no: usize, now_ns: i6
         }
     }
     line
+}
+
+/// Значения группы имён в печатной форме трассы, в порядке трассы.
+///
+/// Двусмысленное имя печатается квалифицированными формами: показывать `val=1`, пока
+/// вторая под-модель держит `val=2`, - значит скрывать половину состояния модели.
+fn displayed_values(
+    unit: &Unit,
+    port_names: &PortNames,
+    names: &[String],
+) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for n in names {
+        let shown: Vec<String> = match port_names.ambiguous.iter().find(|(bare, _)| bare == n) {
+            Some((_, qualified)) => qualified.clone(),
+            None => vec![n.clone()],
+        };
+        for name in shown {
+            if let Some(value) = unit.get_value(&name) {
+                out.push((name, format_value(&value)));
+            }
+        }
+    }
+    out
+}
+
+/// Значения портов после такта - те же, что печатает строка трассы, но словарём
+/// "имя - значение": панель прогона показывает их, не разбирая строку обратно.
+pub fn port_values(
+    unit: &Unit,
+    port_names: &PortNames,
+) -> std::collections::BTreeMap<String, String> {
+    [
+        port_names.in_ports.as_slice(),
+        port_names.out_ports.as_slice(),
+        port_names.inout_ports.as_slice(),
+    ]
+    .into_iter()
+    .flat_map(|names| displayed_values(unit, port_names, names))
+    .collect()
 }
 
 /// Печатная форма предупреждения прогона - единственная в проекте.

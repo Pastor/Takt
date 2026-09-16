@@ -28,6 +28,7 @@ mod inference_chain_tests;
 mod inferred_width_tests;
 mod instance_tests;
 mod library_entry_tests;
+mod manual_input_tests;
 mod named_port_scenario_tests;
 mod run_warnings_tests;
 mod scenario_run_length_tests;

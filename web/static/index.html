@@ -255,9 +255,28 @@
             <button class="icon-btn" type="button" data-run="stop" disabled
             data-i18n-attr="aria-label:trace.stop;data-tip:trace.stop"
             aria-label="Стоп" data-tip="Стоп"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
+            <!-- Интерактивный режим: панель входов и выходов по портам модели. -->
+            <button id="simio" class="icon-btn" type="button" aria-pressed="false"
+            data-i18n-attr="aria-label:simPanel.toggle;data-tip:simPanel.toggleHint"
+            aria-label="Входы и выходы" data-tip="Входы и выходы"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h9"/><circle cx="16" cy="7" r="2.5"/><path d="M20 17h-9"/><circle cx="8" cy="17" r="2.5"/></svg></button>
           </div>
           </div>
           <div class="tool-dock tool-dock-tr" data-dock="tr">
+          <!-- Входы и выходы прогона: поля строятся по портам, которые отдаёт модуль;
+               панель открывает кнопка интерактивного режима. -->
+          <div id="panel-io" class="tool-panel sim-io" data-tool="io" hidden
+               data-i18n-attr="aria-label:scheme.panel.io" aria-label="Входы и выходы">
+            <span class="tool-grip" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5v11M14.5 6.5v11"/></svg></span>
+            <div class="sim-io-body">
+              <div class="seg">
+                <button id="simio-in" type="button" aria-pressed="true" data-i18n="simPanel.inputs">Входы</button>
+                <button id="simio-out" type="button" aria-pressed="false" data-i18n="simPanel.outputs">Выходы</button>
+              </div>
+              <div id="simio-empty" class="sim-io-note" data-i18n="simPanel.empty">Порты появятся после открытия прогона</div>
+              <div id="simio-inputs" class="sim-io-list"></div>
+              <div id="simio-outputs" class="sim-io-list" hidden></div>
+            </div>
+          </div>
           <!-- Вид листа: масштаб, вписать, к началу, раскладка заново -->
           <div id="panel-view" class="tool-panel scheme-tools" data-tool="view"
                data-i18n-attr="aria-label:scheme.panel.view" aria-label="Вид">

@@ -280,6 +280,16 @@ struct SimTickRequest {
     budget: u32,
 }
 
+/// Запрос ручного ввода значений портов.
+#[derive(Debug, Deserialize)]
+struct SimInputsRequest {
+    id: u32,
+    #[serde(default)]
+    in_ports: std::collections::BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    inout: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
 /// Запрос закрытия прогона.
 #[derive(Debug, Deserialize)]
 struct SimCloseRequest {
@@ -305,6 +315,14 @@ pub extern "C" fn takt_sim_open(len: u32) -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn takt_sim_tick(len: u32) -> u32 {
     call(len, |r: SimTickRequest| sim::tick(r.id, r.budget))
+}
+
+/// Ставит ручные значения портов перед следующим тактом.
+#[unsafe(no_mangle)]
+pub extern "C" fn takt_sim_inputs(len: u32) -> u32 {
+    call(len, |r: SimInputsRequest| {
+        sim::inputs(r.id, &r.in_ports, &r.inout)
+    })
 }
 
 /// Закрывает прогон.

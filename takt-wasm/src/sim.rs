@@ -106,6 +106,11 @@ pub fn open(
     struct Reply {
         id: u32,
         warnings: Vec<RunWarningJson>,
+        /// Порты модели с родом поля: панель прогона строит по ним поля ввода и
+        /// список наблюдения, не зная языка.
+        ports: Vec<takt_sim::port_fields::PortField>,
+        /// Значения портов до первого такта.
+        values: std::collections::BTreeMap<String, String>,
     }
 
     let mut files = FileTable::new(DEFAULT_FILENAME);
@@ -135,6 +140,7 @@ pub fn open(
     }
 
     let port_names = PortNames::from_model(&model.borrow());
+    let ports = takt_sim::port_fields::port_fields(&model.borrow());
     let clock_hz = model.borrow().clock_hz;
     let unit = match build_unit(model) {
         Ok(unit) => unit,
@@ -175,8 +181,14 @@ pub fn open(
         *next = next.wrapping_add(1).max(1);
         id
     });
+    let values = runner.port_values();
     SESSIONS.with(|sessions| sessions.borrow_mut().insert(id, runner));
-    reply::ok(Reply { id, warnings })
+    reply::ok(Reply {
+        id,
+        warnings,
+        ports,
+        values,
+    })
 }
 
 /// Делает не более `budget` тактов открытого прогона.
@@ -204,6 +216,11 @@ pub fn tick(id: u32, budget: u32) -> String {
         /// Те же активные состояния с адресом экземпляра, по списку на строку: имя не
         /// различает экземпляры одной модели на листе композиции, адрес различает.
         active: Vec<Vec<ActiveJson>>,
+        /// Ручные значения, применённые перед тактом, по списку на строку: из них
+        /// страница пишет запись прогона.
+        manual: Vec<Vec<takt_sim::runner::ManualInput>>,
+        /// Значения портов после последнего такта порции.
+        values: std::collections::BTreeMap<String, String>,
     }
 
     SESSIONS.with(|sessions| {
@@ -217,6 +234,7 @@ pub fn tick(id: u32, budget: u32) -> String {
         let mut states = Vec::new();
         let mut next = Vec::new();
         let mut active = Vec::new();
+        let mut manual = Vec::new();
         for _ in 0..budget {
             match runner.step() {
                 Ok(step) => {
@@ -227,6 +245,7 @@ pub fn tick(id: u32, budget: u32) -> String {
                         states.push(step.states);
                         next.push(step.next);
                         active.push(step.active.into_iter().map(ActiveJson::from).collect());
+                        manual.push(step.manual);
                     }
                     if let Some(result) = step.result {
                         let report = takt_sim::trace::result_report(&result);
@@ -240,6 +259,8 @@ pub fn tick(id: u32, budget: u32) -> String {
                             states,
                             next,
                             active,
+                            manual,
+                            values: runner.port_values(),
                         });
                     }
                 }
@@ -259,7 +280,35 @@ pub fn tick(id: u32, budget: u32) -> String {
             states,
             next,
             active,
+            manual,
+            values: runner.port_values(),
         })
+    })
+}
+
+/// Ставит ручные значения портов перед следующим тактом открытого прогона.
+///
+/// Разбирает их эталон той же воронкой, что шаг сценария; отказ - текст эталона.
+pub fn inputs(
+    id: u32,
+    in_ports: &std::collections::BTreeMap<String, serde_json::Value>,
+    inout: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> String {
+    #[derive(Serialize)]
+    struct Reply {
+        set: usize,
+    }
+    SESSIONS.with(|sessions| {
+        let mut sessions = sessions.borrow_mut();
+        let Some(runner) = sessions.get_mut(&id) else {
+            return reply::refused(msg!(keys::WASM_RUN_NOT_OPEN, id = id));
+        };
+        match runner.set_manual_inputs(in_ports, inout) {
+            Ok(()) => reply::ok(Reply {
+                set: in_ports.len() + inout.len(),
+            }),
+            Err(message) => reply::refused(message),
+        }
     })
 }
 
@@ -286,6 +335,10 @@ fn unreachable_empty() -> takt_lang::diagnostics::Diagnostic {
 
 /// Диагностики документа в форме страницы - общая с редакторским слоем.
 pub type Diagnostics = Vec<DiagnosticJson>;
+
+#[cfg(test)]
+#[path = "sim_panel_tests.rs"]
+mod panel_tests;
 
 #[cfg(test)]
 mod tests {

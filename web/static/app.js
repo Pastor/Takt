@@ -23,6 +23,7 @@ import * as flags from "./flags.js";
 import * as project from "./project.js";
 import * as layoutFile from "./layout.js";
 import { Scheme } from "./scheme.js";
+import { SimPanel } from "./sim-panel.js";
 import * as api from "./api.js";
 import * as account from "./account.js";
 import * as alerts from "./alerts.js";
@@ -60,6 +61,10 @@ const picks = {};
 
 const state = {
   bridge: null,
+  /** Панель входов и выходов прогона (`sim-panel.js`). */
+  simPanel: null,
+  /** Наблюдаемые выходы: имена портов, отмеченные на вкладке выходов. */
+  simWatch: [],
   /** Ручка справки (`help.js`): страница без входа держит её несъёмной. */
   help: null,
   /** Ждущие ответа экспорты по номеру запроса к потоку. */
@@ -264,6 +269,7 @@ export async function main() {
         run: dom["panel-run"],
         view: dom["panel-view"],
         sheet: dom["panel-sheet"],
+        io: dom["panel-io"],
         // Легенда углов холста не занимает, но вопрос к ней тот же - показывать
         // или нет, - и отвечать на него читатель ходит в то же окно.
         legend: dom.legend,
@@ -312,6 +318,26 @@ export async function main() {
       },
     },
   );
+  // Входы и выходы прогона: поля по портам модуля, ввод уходит в поток прогона.
+  state.simPanel = new SimPanel(
+    {
+      root: dom["panel-io"],
+      inputsTab: dom["simio-in"],
+      outputsTab: dom["simio-out"],
+      inputs: dom["simio-inputs"],
+      outputs: dom["simio-outputs"],
+      empty: dom["simio-empty"],
+    },
+    {
+      t,
+      say,
+      send: (request) => worker().postMessage({ type: "inputs", ...session(), ...request }),
+      onWatch: (names) => {
+        state.simWatch = names;
+      },
+    },
+  );
+  dom.simio.addEventListener("click", toggleSimPanel);
   // Экспорт схемы: окно на панели листа, рисует модуль в потоке прогона.
   attachExport(dom, {
     keep: keepForExport,
@@ -697,6 +723,7 @@ function cache() {
     "scenarioload", "scenariocancel",
     "crumbs", "scheme-up", "stage", "scheme", "sheet", "nav", "map",
     "panel-run", "panel-view", "panel-sheet", "settings",
+    "panel-io", "simio", "simio-in", "simio-out", "simio-empty", "simio-inputs", "simio-outputs",
     "scheme-empty", "legend", "zoom", "alerts",
     "scheme-modal", "scheme-tabs", "scheme-settings", "scheme-save", "scheme-cancel",
     "showdiag-tab", "showtrace-tab", "legendrows", "legendcols",
@@ -1733,6 +1760,19 @@ function stop() {
 }
 
 /**
+ * Открывает либо закрывает панель входов и выходов.
+ *
+ * Открытие открывает и сессию прогона без такта: поля строятся по портам модели, и
+ * задать вход до первого шага читатель вправе.
+ */
+function toggleSimPanel() {
+  const open = dom.simio.getAttribute("aria-pressed") !== "true";
+  dom.simio.setAttribute("aria-pressed", String(open));
+  state.scheme.panels?.setOpen("io", open);
+  if (open && !state.running) worker().postMessage({ type: "open", ...session() });
+}
+
+/**
  * Сброс: автомат возвращается в начальное состояние.
  *
  * Трасса при этом остаётся: прежний прогон стоит рядом с новым,
@@ -1759,6 +1799,15 @@ function onWorker(message) {
       // законченному прогону.
       dom.trace.replaceChildren();
       state.scheme.setRunning([]);
+      state.simPanel.setPorts(message.ports, message.values, state.simWatch);
+      break;
+    case "inputsSet":
+      say(t("simPanel.set"), "ok");
+      break;
+    case "inputsRefused":
+      // Отказ эталона - его текстом: он называет имя и причину точнее оболочки.
+      dom.trace.appendChild(row(message.message ?? "", "error"));
+      say(message.message ?? "", "warning");
       break;
     case "stepped":
       break;
@@ -1776,6 +1825,7 @@ function onWorker(message) {
         const last = message.states.length - 1;
         state.scheme.setRunning(message.active?.[last] ?? [], message.next?.[last] ?? []);
       }
+      state.simPanel.setValues(message.values);
       break;
     case "warnings":
       // Код показывается отдельно от текста - как у предупреждений компиляции.

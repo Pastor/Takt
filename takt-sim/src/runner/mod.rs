@@ -11,6 +11,9 @@ use crate::unit::{TickResult, Unit};
 use takt_lang::diagnostics::lang::keys;
 use takt_lang::msg;
 
+mod manual;
+pub use manual::ManualInput;
+
 // -- Результат симуляции ------------------------------------------------------
 
 #[derive(Debug)]
@@ -94,6 +97,8 @@ pub struct Step {
     /// парами "из, в". Взгляд вперёд для схемы: следующий такт вправе изменить
     /// значения телами и входами, и ответ - ожидание, а не обещание.
     pub next: Vec<(String, String)>,
+    /// Ручные значения, применённые перед этим тактом (после шага сценария).
+    pub manual: Vec<ManualInput>,
 }
 
 // -- Бегун симуляции ----------------------------------------------------------
@@ -131,6 +136,8 @@ pub struct SimulationRunner {
     /// Предупреждения текущего такта: разбор значений идёт по `&self`, поэтому
     /// накопитель - `RefCell`. `step` забирает их и кладёт в [`Step::warnings`].
     pending_warnings: std::cell::RefCell<Vec<RunWarning>>,
+    /// Ручные значения, поставленные до следующего такта.
+    manual_pending: Vec<manual::Pending>,
 }
 
 impl SimulationRunner {
@@ -155,6 +162,7 @@ impl SimulationRunner {
             soft_violations: Vec::new(),
             positional_form_warned: std::cell::Cell::new(false),
             pending_warnings: std::cell::RefCell::new(Vec::new()),
+            manual_pending: Vec::new(),
             now_ns: 0,
             tick_period_ns: 1_000_000,
         }
@@ -248,6 +256,7 @@ impl SimulationRunner {
                 states: Vec::new(),
                 active: Vec::new(),
                 next: Vec::new(),
+                manual: Vec::new(),
             });
         }
 
@@ -275,6 +284,8 @@ impl SimulationRunner {
             self.unit
                 .set_extern_stubs(extern_stubs_of(step, step_no + 1)?);
         }
+        // Ручной ввод - после шага сценария: на своём такте он побеждает.
+        let manual = self.apply_manual_inputs();
 
         // Выполняем шаг. В мягком режиме нарушения инвариантов не прерывают такт, а
         // записываются - сливаем их и тегируем шагом.
@@ -299,6 +310,7 @@ impl SimulationRunner {
                 states: Vec::new(),
                 active: Vec::new(),
                 next: Vec::new(),
+                manual,
             });
         }
         self.completed += 1;
@@ -331,6 +343,7 @@ impl SimulationRunner {
             states: self.unit.active_states(),
             active: self.unit.active_instances(),
             next,
+            manual,
         })
     }
 
@@ -353,6 +366,11 @@ impl SimulationRunner {
                 steps: self.completed,
             }
         }
+    }
+
+    /// Значения портов после последнего такта - те же, что в строке трассы.
+    pub fn port_values(&self) -> std::collections::BTreeMap<String, String> {
+        crate::trace::port_values(&self.unit, &self.port_names)
     }
 
     /// Возвращает ссылку на Unit для чтения состояния после завершения симуляции.
