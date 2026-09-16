@@ -679,7 +679,7 @@ function cache() {
     "whoami-bar",
     "signin-modal", "signin-cancel", "login", "password", "signin", "signup", "signout", "newname", "newproject",
     "projects", "conflict", "conflicttext", "reread", "overwrite",
-    "oauth", "pick", "picklogin", "pickok", "profile", "links", "newpass",
+    "oauth", "pick", "picklogin", "pickok", "profile", "usage", "links", "newpass",
     "setpass", "download", "upload", "doc", "sourcetitle", "openfilename",
     "scheme-notice", "scheme-notice-text", "scheme-drop",
     "tree", "treesplit", "diagnostics-head", "diagclear", "showtree",

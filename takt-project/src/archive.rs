@@ -142,10 +142,7 @@ pub fn unpack(bytes: &[u8], limits: Limits) -> Result<Import, Error> {
                 "в архиве нет '{MANIFEST}': без метаданных проект не восстановить"
             ))
         })?;
-        let mut text = String::new();
-        entry
-            .read_to_string(&mut text)
-            .map_err(|error| Error::Invalid(format!("'{MANIFEST}' не читается: {error}")))?;
+        let text = read_bounded(&mut entry, limits.file_bytes, MANIFEST)?;
         parse_manifest(&text)?
     };
 
@@ -163,17 +160,7 @@ pub fn unpack(bytes: &[u8], limits: Limits) -> Result<Import, Error> {
             continue;
         }
         let kind = check_file_name(name)?;
-        let mut text = String::new();
-        entry.read_to_string(&mut text).map_err(|error| {
-            Error::Invalid(format!("файл '{name}' не читается как текст: {error}"))
-        })?;
-        if text.len() > limits.file_bytes {
-            return Err(Error::exceeded(
-                "размер файла в байтах",
-                limits.file_bytes,
-                text.len(),
-            ));
-        }
+        let text = read_bounded(&mut entry, limits.file_bytes, name)?;
         total += text.len();
         if sources.len() >= limits.files {
             return Err(Error::exceeded(
@@ -212,6 +199,33 @@ pub fn unpack(bytes: &[u8], limits: Limits) -> Result<Import, Error> {
         }
     }
     Ok(Import { manifest, sources })
+}
+
+/// Читает запись архива, не беря в память больше предела и одного байта.
+///
+/// Размер записи в заголовке архива пишет отправитель, и верить ему нельзя: сжатые
+/// одинаковые байты занимают в архиве тысячную долю своего объёма, и запись,
+/// прочитанная целиком до сверки, задала бы расход памяти сервера чужой рукой.
+/// Лишний байт отличает файл ровно в предел от файла больше предела.
+///
+/// # Ошибки
+/// Запись больше предела либо не текст UTF-8.
+fn read_bounded(entry: &mut impl std::io::Read, limit: usize, name: &str) -> Result<String, Error> {
+    let cap = u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(1);
+    let mut bytes = Vec::new();
+    entry
+        .take(cap)
+        .read_to_end(&mut bytes)
+        .map_err(|error| Error::Invalid(format!("файл '{name}' не читается: {error}")))?;
+    if bytes.len() > limit {
+        return Err(Error::exceeded(
+            "размер файла в байтах",
+            limit,
+            format!("больше {limit}"),
+        ));
+    }
+    String::from_utf8(bytes)
+        .map_err(|error| Error::Invalid(format!("файл '{name}' не читается как текст: {error}")))
 }
 
 /// Разбирает манифест и судит версию формата.
@@ -309,6 +323,79 @@ mod tests {
         };
         assert!(matches!(
             unpack(&pack(&sample()).expect("архив"), one),
+            Err(Error::Limit(_))
+        ));
+    }
+
+    /// Архив с одной записью `src/a.takt` из `size` одинаковых байтов.
+    fn archive_with(size: usize) -> Vec<u8> {
+        let mut buffer = Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut buffer);
+            let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file(MANIFEST, options).expect("манифест");
+            zip.write_all(r#"{"format": 1, "name": "проба"}"#.as_bytes())
+                .expect("запись");
+            zip.start_file("src/a.takt", options).expect("файл");
+            zip.write_all(&vec![b'x'; size]).expect("запись");
+            zip.finish().expect("конец");
+        }
+        buffer.into_inner()
+    }
+
+    /// Читатель, считающий отданные байты.
+    struct Counting<R> {
+        inner: R,
+        read: usize,
+    }
+
+    impl<R: std::io::Read> std::io::Read for Counting<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let count = self.inner.read(buf)?;
+            self.read += count;
+            Ok(count)
+        }
+    }
+
+    #[test]
+    fn a_compressed_giant_is_refused_without_reading_it_whole() {
+        // Сжатый архив мал, распакованный велик: предел тела запроса его не ловит.
+        let limits = Limits {
+            file_bytes: 64 * 1024,
+            files: 32,
+            project_bytes: 512 * 1024,
+        };
+        let giant = archive_with(64 * 1024 * 1024);
+        assert!(
+            giant.len() < 1024 * 1024,
+            "архив меньше предела тела: {}",
+            giant.len()
+        );
+        let error = unpack(&giant, limits).expect_err("предел");
+        assert!(matches!(error, Error::Limit(_)), "{error}");
+        assert!(error.message().contains("65536"), "{error}");
+
+        let mut counting = Counting {
+            inner: std::io::repeat(b'x').take(u64::MAX),
+            read: 0,
+        };
+        let error = read_bounded(&mut counting, 1000, "a.takt").expect_err("предел");
+        assert!(matches!(error, Error::Limit(_)), "{error}");
+        assert!(counting.read <= 1001, "прочитано {} байт", counting.read);
+    }
+
+    #[test]
+    fn a_file_exactly_at_the_limit_is_accepted() {
+        let limits = Limits {
+            file_bytes: 1000,
+            files: 32,
+            project_bytes: 10_000,
+        };
+        let back = unpack(&archive_with(1000), limits).expect("ровно предел");
+        assert_eq!(back.sources[0].text.len(), 1000);
+        assert!(matches!(
+            unpack(&archive_with(1001), limits),
             Err(Error::Limit(_))
         ));
     }

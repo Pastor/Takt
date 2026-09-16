@@ -13,6 +13,7 @@
 // перезаписать чужую работу и потерять свою - одинаково плохо.
 
 import { pickScenario } from "./project.js";
+import { FILE_KINDS, accept, uploadRefusal } from "./file-kinds.js";
 import * as api from "./api.js";
 import * as draft from "./draft.js";
 import * as layoutFile from "./layout.js";
@@ -183,6 +184,7 @@ export function attach(nodes, callbacks) {
   dom.exportproject.addEventListener("click", () => download(state.chosen?.id, state.chosen?.name));
   dom.upload.addEventListener("change", (event) => upload(event.target.files?.[0]));
   dom.uploadfile.addEventListener("click", () => dom.filepick.click());
+  dom.filepick.accept = accept();
   dom.filepick.addEventListener("change", (event) => uploadFile(event.target.files?.[0]));
   dom.downloadfile.addEventListener("click", () => downloadFile());
   dom.setpass.addEventListener("click", () => setPassword());
@@ -502,6 +504,11 @@ async function uploadFile(file) {
       return;
     }
     const name = file.name;
+    const refusal = uploadRefusal(name, file.size);
+    if (refusal) {
+      host.say(t(refusal.key, refusal.params), "warning");
+      return;
+    }
     if (state.project.files?.some((item) => item.name === name)) {
       host.say(t("file.exists", { name }), "warning");
       return;
@@ -578,7 +585,12 @@ async function unlinkProvider(provider) {
   }
 }
 
-/** Наполняет раздел профиля: связанные площадки и "задать пароль". */
+/** Байты в кибибайтах с округлением вверх: занятый байт не показывается нулём. */
+function kibibytes(bytes) {
+  return Math.ceil(bytes / 1024);
+}
+
+/** Наполняет раздел профиля: занятое место, связанные площадки и "задать пароль". */
 async function fillProfile() {
   if (!api.signed()) {
     dom.profile.hidden = true;
@@ -592,6 +604,13 @@ async function fillProfile() {
     const needs = me !== null && me.has_password === false;
     dom.newpass.hidden = !needs;
     dom.setpass.hidden = !needs;
+    // Занятое показывается до отказа: иначе о квоте автор узнавал бы записью,
+    // которую сервер не принял.
+    const known = me !== null && Number.isFinite(me.used_bytes) && Number.isFinite(me.quota_bytes);
+    dom.usage.hidden = !known;
+    dom.usage.textContent = known
+      ? t("profile.usage", { used: kibibytes(me.used_bytes), quota: kibibytes(me.quota_bytes) })
+      : "";
     const list = await api.oauthIdentities();
     dom.links.replaceChildren();
     for (const item of list) {
@@ -932,15 +951,6 @@ export async function restoreLast() {
     return false;
   }
 }
-
-/** Роды файлов, которые автор вправе завести, и расширение каждого. */
-const FILE_KINDS = [
-  { kind: "takt", label: "file.kind.takt", extension: ".takt" },
-  { kind: "layout", label: "file.kind.layout", extension: layoutFile.EXTENSION },
-  { kind: "scenario", label: "file.kind.scenario", extension: ".json" },
-  { kind: "markdown", label: "file.kind.markdown", extension: ".md" },
-  { kind: "address_map", label: "file.kind.addressMap", extension: ".takt-map" },
-];
 
 /**
  * Рисует ряд родов файла.

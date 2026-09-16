@@ -38,6 +38,7 @@ use crate::db;
 use crate::error::ApiError;
 use crate::limits;
 use crate::projects::{self, ProjectJson};
+use crate::quota;
 use crate::routes::{AppState, current_user};
 use crate::showcase;
 
@@ -220,6 +221,19 @@ async fn fork(
             count + 1,
         ));
     }
+
+    // Копия растит объём копирующего на размер исходника.
+    let source_bytes: i64 = transaction
+        .query_one("SELECT size_bytes FROM projects WHERE id = $1", &[&id])
+        .await?
+        .get(0);
+    quota::check(
+        &transaction,
+        &user.id,
+        source_bytes,
+        state.config.user_bytes,
+    )
+    .await?;
 
     let copy = projects::new_id();
     let now = db::now();

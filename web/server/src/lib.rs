@@ -23,6 +23,7 @@ pub mod limits;
 pub mod module;
 pub mod oauth;
 pub mod projects;
+pub mod quota;
 pub mod rate;
 pub mod retention;
 pub mod routes;

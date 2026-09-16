@@ -16,6 +16,7 @@ use crate::projects::{
     FileJson, PutFileRequest, RenameFileRequest, WriteResponse, body_of, locked, require_level,
     resolve,
 };
+use crate::quota;
 use crate::routes::{AppState, current_user, optional_user};
 use crate::showcase;
 use crate::store::Store;
@@ -159,6 +160,14 @@ async fn write_file(
             others + size,
         ));
     }
+    // Квота - владельца проекта: правка редактора расходует его место.
+    quota::check(
+        &transaction,
+        &owner,
+        size - existing.unwrap_or(0),
+        state.config.user_bytes,
+    )
+    .await?;
 
     transaction
         .execute(

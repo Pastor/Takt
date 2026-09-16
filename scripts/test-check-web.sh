@@ -89,6 +89,9 @@ cp "$ROOT"/examples/*.takt "$TREE/examples/"
 mkdir -p "$TREE/takt-scheme/src" "$TREE/takt-scheme/tests/data"
 cp "$ROOT/takt-scheme/src/style.rs" "$TREE/takt-scheme/src/"
 cp "$ROOT/takt-scheme/tests/data/line.takt" "$TREE/takt-scheme/tests/data/"
+# Роды файлов проекта: сверка списка страницы читает таблицу крейта проекта.
+mkdir -p "$TREE/takt-project/src"
+cp "$ROOT/takt-project/src/kind.rs" "$TREE/takt-project/src/"
 cp "$WASM" "$TREE/target/precheck/wasm32-unknown-unknown/$PROFILE/"
 # Модуль экспорта лежит рядом с ядром: сборка статики кладёт оба, а сверка
 # паритета геометрии спрашивает рисунок у него.

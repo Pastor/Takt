@@ -60,6 +60,7 @@ services:
       TAKT_WEB_JWT_SECRET: "${TAKT_WEB_JWT_SECRET:?задайте секрет подписи: с умолчанием токен подпишет кто угодно}"
       TAKT_WEB_BASE_PATH: ${TAKT_WEB_BASE_PATH:-/}
       TAKT_WEB_RETENTION_DAYS: ${TAKT_WEB_RETENTION_DAYS:-90}
+      TAKT_WEB_USER_BYTES: ${TAKT_WEB_USER_BYTES:-10485760}
     ports:
       - "${TAKT_WEB_BIND:-127.0.0.1:8730}:8730"
     volumes:

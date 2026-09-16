@@ -206,6 +206,10 @@ struct MeResponse {
     /// есть, и узнавал бы человек об этом отказом. Само значение секретом не является -
     /// оно и так видно попыткой входа.
     has_password: bool,
+    /// Занятый объём исходников всех проектов владельца, байты.
+    used_bytes: i64,
+    /// Квота владельца, байты: без неё автор узнавал бы о пределе отказом записи.
+    quota_bytes: i64,
 }
 
 async fn register(
@@ -287,11 +291,14 @@ async fn me(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Re
         )
         .await?
         .get(0);
+    let used_bytes = crate::quota::used(&**client, &user.id).await?;
     Ok(Json(MeResponse {
         id: user.id,
         login: user.login,
         role: user.role,
         has_password,
+        used_bytes,
+        quota_bytes: state.config.user_bytes,
     })
     .into_response())
 }
