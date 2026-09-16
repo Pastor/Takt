@@ -475,6 +475,7 @@ async fn both_roads_lead_to_the_same_schema() {
              ALTER TABLE projects DROP COLUMN main_scenario;
              ALTER TABLE projects DROP COLUMN run_delays;
              ALTER TABLE projects DROP COLUMN run_frequencies;
+             ALTER TABLE projects DROP COLUMN run_watch;
              ALTER TABLE project_files DROP CONSTRAINT project_files_kind_check;
              ALTER TABLE project_files
                  ADD CONSTRAINT project_files_kind_check

@@ -93,6 +93,7 @@ pub fn manifest_of(
         build_args: project.build_args.clone(),
         run_delays: project.run_delays.clone(),
         run_frequencies: project.run_frequencies.clone(),
+        run_watch: project.run_watch.clone(),
     }
 }
 
@@ -139,6 +140,7 @@ mod tests {
             build_args: "--bus=apb".into(),
             run_delays: BTreeMap::from([("run.json".to_string(), 0.5)]),
             run_frequencies: BTreeMap::from([("run.json".to_string(), 2)]),
+            run_watch: BTreeMap::from([("model.takt".to_string(), vec!["speed".to_string()])]),
             revision: 1,
             size_bytes: 10,
             forked_from: None,

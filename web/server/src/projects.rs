@@ -40,6 +40,7 @@ use crate::limits;
 use crate::limits::Kind;
 use crate::retention;
 use crate::routes::{AppState, current_user, optional_user};
+use crate::run_settings;
 use crate::showcase;
 use crate::store::Store;
 
@@ -76,6 +77,8 @@ pub struct ProjectJson {
     /// Частота модельных часов прогона по сценариям, Гц; сценария нет в списке -
     /// частота из `clock` модели.
     pub run_frequencies: BTreeMap<String, u64>,
+    /// Наблюдаемые выходы прогона по моделям: имя файла модели - имена портов.
+    pub run_watch: BTreeMap<String, Vec<String>>,
     pub revision: i64,
     pub size_bytes: i64,
     pub forked_from: Option<String>,
@@ -167,6 +170,9 @@ pub struct PatchRequest {
     /// Частоты модельных часов прогона по сценариям, Гц - список целиком, как у задержек.
     #[serde(default)]
     pub run_frequencies: Option<BTreeMap<String, f64>>,
+    /// Наблюдаемые выходы прогона по моделям - список целиком, как у задержек.
+    #[serde(default)]
+    pub run_watch: Option<BTreeMap<String, Vec<String>>>,
     /// Подъём версии модуля - **явное действие владельца**: после него
     /// вывод целей может измениться.
     #[serde(default)]
@@ -262,7 +268,7 @@ async fn rename_project_files(
             )
             .await?;
         transaction
-            .execute(RENAME_RUN_SETTINGS, &[&id, name, &target])
+            .execute(run_settings::RENAME_RUN_SETTINGS, &[&id, name, &target])
             .await?;
     }
     Ok(())
@@ -310,7 +316,7 @@ async fn list(
         .query(
             "SELECT p.id, p.name, p.description, p.visibility, u.login AS owner,
                     p.takt_lang, p.language_version, p.main_file,
-                    p.main_scenario, p.build_target, p.build_args, p.run_delays, p.run_frequencies, p.revision,
+                    p.main_scenario, p.build_target, p.build_args, p.run_delays, p.run_frequencies, p.run_watch, p.revision,
                     p.size_bytes, p.forked_from, p.created_at, p.updated_at,
                     g.level AS granted
              FROM projects p
@@ -524,51 +530,7 @@ async fn patch(
             )
             .await?;
     }
-    if let Some(delays) = &request.run_delays {
-        // Задержка - свойство сценария: ключ, который сценарием не является, дал бы
-        // запись, которую страница не покажет никогда.
-        let delays = limits::check_run_delays(delays)?;
-        for name in delays.keys() {
-            has_kind(
-                &transaction,
-                &id,
-                name,
-                Kind::Scenario,
-                "сценарий задержки прогона",
-            )
-            .await?;
-        }
-        let stored =
-            serde_json::to_string(&delays).map_err(|error| ApiError::Internal(error.into()))?;
-        transaction
-            .execute(
-                "UPDATE projects SET run_delays = $1 WHERE id = $2",
-                &[&stored, &id],
-            )
-            .await?;
-    }
-    if let Some(frequencies) = &request.run_frequencies {
-        // Частота - свойство сценария по тому же правилу, что задержка.
-        let frequencies = limits::check_run_frequencies(frequencies)?;
-        for name in frequencies.keys() {
-            has_kind(
-                &transaction,
-                &id,
-                name,
-                Kind::Scenario,
-                "сценарий частоты прогона",
-            )
-            .await?;
-        }
-        let stored = serde_json::to_string(&frequencies)
-            .map_err(|error| ApiError::Internal(error.into()))?;
-        transaction
-            .execute(
-                "UPDATE projects SET run_frequencies = $1 WHERE id = $2",
-                &[&stored, &id],
-            )
-            .await?;
-    }
+    run_settings::patch(&transaction, &id, &request).await?;
     if let Some(takt_lang) = &request.takt_lang {
         transaction
             .execute(
@@ -818,7 +780,7 @@ pub(crate) fn require_level(level: Level, needed: Level) -> Result<(), ApiError>
 ///
 /// # Ошибки
 /// Файла нет либо он другого вида - `400` с названным именем.
-async fn has_kind(
+pub(crate) async fn has_kind(
     transaction: &tokio_postgres::Transaction<'_>,
     id: &str,
     name: &str,
@@ -867,7 +829,7 @@ pub(crate) fn check_build(
 
 pub(crate) const SELECT_PROJECT: &str = "SELECT p.id, p.name, p.description, p.visibility,
         u.login AS owner, p.takt_lang, p.language_version, p.main_file,
-        p.main_scenario, p.build_target, p.build_args, p.run_delays, p.run_frequencies, p.revision,
+        p.main_scenario, p.build_target, p.build_args, p.run_delays, p.run_frequencies, p.run_watch, p.revision,
         p.size_bytes, p.forked_from, p.created_at, p.updated_at, p.owner_id,
         p.touched_at, p.archived_at
     FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1";
@@ -885,8 +847,9 @@ pub(crate) fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
         main_scenario: row.get("main_scenario"),
         build_target: row.get("build_target"),
         build_args: row.get("build_args"),
-        run_delays: delays_of(row.get("run_delays")),
-        run_frequencies: frequencies_of(row.get("run_frequencies")),
+        run_delays: run_settings::delays_of(row.get("run_delays")),
+        run_frequencies: run_settings::frequencies_of(row.get("run_frequencies")),
+        run_watch: run_settings::watch_of(row.get("run_watch")),
         revision: row.get("revision"),
         size_bytes: row.get("size_bytes"),
         forked_from: row.get("forked_from"),
@@ -894,40 +857,6 @@ pub(crate) fn project_of(row: &tokio_postgres::Row) -> ProjectJson {
         updated_at: row.get("updated_at"),
     }
 }
-
-/// Задержки прогона из колонки: объект JSON "сценарий - секунды".
-///
-/// Негодный текст даёт пустой список: колонку пишет только сервер, и отказ чтения
-/// проекта из-за показа прогона стоил бы дороже потерянного темпа.
-pub(crate) fn delays_of(stored: String) -> BTreeMap<String, f64> {
-    serde_json::from_str(&stored).unwrap_or_default()
-}
-
-/// Частоты прогона из колонки: объект JSON "сценарий - герцы"; правило чтения то же,
-/// что у [`delays_of`].
-pub(crate) fn frequencies_of(stored: String) -> BTreeMap<String, u64> {
-    serde_json::from_str(&stored).unwrap_or_default()
-}
-
-/// Переносит задержку и частоту прогона на новое имя сценария: `$1` - проект, `$2` -
-/// прежнее имя, `$3` - новое. Ключ обеих - имя файла, и без переноса переименованный
-/// сценарий потерял бы свой темп. Колонка без ключа не трогается.
-pub(crate) const RENAME_RUN_SETTINGS: &str = "UPDATE projects
-    SET run_delays = CASE WHEN run_delays::jsonb ? $2::text
-            THEN ((run_delays::jsonb - $2::text)
-                || jsonb_build_object($3::text, run_delays::jsonb -> $2::text))::text
-            ELSE run_delays END,
-        run_frequencies = CASE WHEN run_frequencies::jsonb ? $2::text
-            THEN ((run_frequencies::jsonb - $2::text)
-                || jsonb_build_object($3::text, run_frequencies::jsonb -> $2::text))::text
-            ELSE run_frequencies END
-    WHERE id = $1 AND (run_delays::jsonb ? $2::text OR run_frequencies::jsonb ? $2::text)";
-
-/// Забывает задержку и частоту удалённого сценария: `$1` - проект, `$2` - имя.
-pub(crate) const FORGET_RUN_SETTINGS: &str = "UPDATE projects
-    SET run_delays = (run_delays::jsonb - $2::text)::text,
-        run_frequencies = (run_frequencies::jsonb - $2::text)::text
-    WHERE id = $1 AND (run_delays::jsonb ? $2::text OR run_frequencies::jsonb ? $2::text)";
 
 /// Идентификатор проекта: 16 случайных байт, base64url.
 ///

@@ -2637,3 +2637,15 @@ test("панель прогона: значение поля в форме сц�
     for (const key of used) assert.ok(dict[key], `в '${lang}' нет ключа ${key}`);
   }
 });
+
+test("панель прогона: набор выходов - свойство модели в проекте", async () => {
+  const account = await readFile(new URL("../static/account.js", import.meta.url), "utf8");
+  const app = await readFile(new URL("../static/app.js", import.meta.url), "utf8");
+  // Пишет владелец и только под файлом модели - правило задержки прогона.
+  assert.match(account, /export async function setWatch\(file, names\)[\s\S]{0,500}?if \(state\.level !== "owner"\) return;[\s\S]{0,200}?api\.patch\(state\.project\.id, \{ run_watch: values \}\)/,
+    "набор не пишется в проект либо пишет не владелец");
+  assert.match(app, /if \(state\.kind === "takt" && state\.file\) account\.setWatch\(state\.file, names\);/,
+    "смена набора не уходит в проект");
+  assert.match(app, /state\.simPanel\.setPorts\(message\.ports, message\.values, watchedNow\(\)\);/,
+    "открытие прогона не берёт набор проекта");
+});

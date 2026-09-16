@@ -212,6 +212,67 @@ pub fn check_run_frequencies(
     Ok(kept)
 }
 
+/// Наибольшее число наблюдаемых выходов у одной модели.
+pub const WATCH_PORTS: usize = 256;
+
+/// Наибольшая длина имени порта в наборе наблюдения, символов: квалифицированное имя -
+/// две части `Модель::порт`.
+pub const WATCH_NAME_CHARS: usize = NAME_CHARS * 2 + 2;
+
+/// Проверяет набор наблюдаемых выходов и отдаёт его в хранимом виде.
+///
+/// Ключ - файл модели, значение - имена портов. Повтор имени снимается с сохранением
+/// порядка, пустой список не хранится - по той же причине, что нулевая задержка. Что
+/// ключ - модель проекта, судит вызывающий: состав знает база. Порты модели сервер
+/// не знает - их знает модуль, - и лишнее имя страница отбрасывает при показе.
+pub fn check_run_watch(
+    watch: &BTreeMap<String, Vec<String>>,
+) -> Result<BTreeMap<String, Vec<String>>, ApiError> {
+    if watch.len() > FILES_PER_PROJECT as usize {
+        return Err(exceeded(
+            "число моделей с набором наблюдения",
+            FILES_PER_PROJECT,
+            watch.len(),
+        ));
+    }
+    let mut kept = BTreeMap::new();
+    for (model, names) in watch {
+        let mut unique: Vec<String> = Vec::new();
+        for name in names {
+            let length = name.chars().count();
+            let form = name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':');
+            if length == 0 || !form {
+                return Err(ApiError::BadRequest(format!(
+                    "набор наблюдения '{model}': имя порта '{name}' - латиница, цифры, '_' и '::'"
+                )));
+            }
+            if length > WATCH_NAME_CHARS {
+                return Err(exceeded(
+                    &format!("длина имени порта в наборе '{model}' в символах"),
+                    WATCH_NAME_CHARS,
+                    length,
+                ));
+            }
+            if !unique.contains(name) {
+                unique.push(name.clone());
+            }
+        }
+        if unique.len() > WATCH_PORTS {
+            return Err(exceeded(
+                &format!("число наблюдаемых выходов модели '{model}'"),
+                WATCH_PORTS,
+                unique.len(),
+            ));
+        }
+        if !unique.is_empty() {
+            kept.insert(model.clone(), unique);
+        }
+    }
+    Ok(kept)
+}
+
 /// Род файла проекта - тип крейта проекта: правило одно у сервера и командной
 /// строки.
 pub use takt_project::Kind;
@@ -319,6 +380,40 @@ mod tests {
             "список расширений у сервера:\n{}",
             found.join("\n")
         );
+    }
+
+    #[test]
+    fn watch_is_deduplicated_and_empty_lists_are_dropped() {
+        let watch = BTreeMap::from([
+            (
+                "pump.takt".to_string(),
+                vec!["speed".into(), "Pump::on".into(), "speed".into()],
+            ),
+            ("idle.takt".to_string(), Vec::new()),
+        ]);
+        let kept = check_run_watch(&watch).expect("годно");
+        assert_eq!(
+            kept,
+            BTreeMap::from([(
+                "pump.takt".to_string(),
+                vec!["speed".to_string(), "Pump::on".to_string()]
+            )])
+        );
+        let bad = BTreeMap::from([("pump.takt".to_string(), vec!["sp eed".to_string()])]);
+        assert!(check_run_watch(&bad).is_err(), "пробел в имени");
+        let long = BTreeMap::from([(
+            "pump.takt".to_string(),
+            vec!["x".repeat(WATCH_NAME_CHARS + 1)],
+        )]);
+        let (status, _) = check_run_watch(&long)
+            .expect_err("длинное")
+            .status_and_code();
+        assert_eq!(status, axum::http::StatusCode::PAYLOAD_TOO_LARGE);
+        let many = BTreeMap::from([(
+            "pump.takt".to_string(),
+            (0..=WATCH_PORTS).map(|i| format!("p{i}")).collect(),
+        )]);
+        assert!(check_run_watch(&many).is_err(), "сверх предела портов");
     }
 
     #[test]

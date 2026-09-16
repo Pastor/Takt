@@ -63,7 +63,7 @@ const state = {
   bridge: null,
   /** Панель входов и выходов прогона (`sim-panel.js`). */
   simPanel: null,
-  /** Наблюдаемые выходы: имена портов, отмеченные на вкладке выходов. */
+  /** Наблюдаемые выходы вне проекта: имена портов, отмеченные на вкладке выходов. */
   simWatch: [],
   /** Ручка справки (`help.js`): страница без входа держит её несъёмной. */
   help: null,
@@ -334,6 +334,8 @@ export async function main() {
       send: (request) => worker().postMessage({ type: "inputs", ...session(), ...request }),
       onWatch: (names) => {
         state.simWatch = names;
+        // Набор - свойство модели: в проект он ложится под её файлом.
+        if (state.kind === "takt" && state.file) account.setWatch(state.file, names);
       },
     },
   );
@@ -1760,6 +1762,14 @@ function stop() {
 }
 
 /**
+ * Наблюдаемые выходы открытой модели: набор проекта, а без него - отмеченное в сеансе.
+ */
+function watchedNow() {
+  const saved = state.kind === "takt" ? account.watchOf(state.file) : null;
+  return saved ?? state.simWatch;
+}
+
+/**
  * Открывает либо закрывает панель входов и выходов.
  *
  * Открытие открывает и сессию прогона без такта: поля строятся по портам модели, и
@@ -1799,7 +1809,7 @@ function onWorker(message) {
       // законченному прогону.
       dom.trace.replaceChildren();
       state.scheme.setRunning([]);
-      state.simPanel.setPorts(message.ports, message.values, state.simWatch);
+      state.simPanel.setPorts(message.ports, message.values, watchedNow());
       break;
     case "inputsSet":
       say(t("simPanel.set"), "ok");

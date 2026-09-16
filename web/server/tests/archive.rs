@@ -115,6 +115,10 @@ async fn the_archive_makes_a_round_trip_through_the_service() {
         manifest["run_frequencies"].is_object(),
         "частоты прогона — часть архива: {manifest}"
     );
+    assert!(
+        manifest["run_watch"].is_object(),
+        "набор наблюдения — часть архива: {manifest}"
+    );
     assert_eq!(manifest["name"], "Термореле");
     // Версия сверяется с той, что объявил стенд, а не с числом в тесте: вписанное число
     // отставало бы при каждом подъёме версии крейта, и проверка судила бы вчерашнее.

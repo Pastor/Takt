@@ -22,7 +22,7 @@ pub struct PortField {
     /// Тип, как его пишет автор модели.
     #[serde(rename = "type")]
     pub ty: String,
-    /// Род поля ввода - плоско рядом с именем: `{"kind": "integer", "min": …}`.
+    /// Род поля ввода - плоско рядом с именем: `{"kind": "integer", "min": "0"}`.
     #[serde(flatten)]
     pub kind: FieldKind,
 }
