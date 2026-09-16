@@ -11,7 +11,7 @@
 # тем, кто его занял.
 #
 # Что кладётся:
-# /etc/nginx/conf.d/takt-upstream.conf - апстрим (контекст `http`)
+# /etc/nginx/conf.d/takt-upstream.conf - апстримы сервиса и приёмника выкатки (контекст `http`)
 # /etc/nginx/snippets/takt-proxy.conf - заголовки проксирования
 # /etc/nginx/snippets/takt-locations.conf - локейшены `<ПРЕФИКС>`
 # и в сайт соседа дописывается одна строка `include` - идемпотентно.
@@ -42,6 +42,9 @@ set -euo pipefail
 
 SERVER_NAME="${SERVER_NAME:-pastor.axatel.ru}"
 BACKEND="${BACKEND:-127.0.0.1:8730}"
+# Приёмник уведомлений GitHub (`scripts/stand-hook.py serve`): служба systemd
+# вне стека, ставит её `scripts/setup-stand-hook.sh`.
+HOOK_BACKEND="${HOOK_BACKEND:-127.0.0.1:8739}"
 PREFIX="${PREFIX:-/takt}"                 # без завершающей косой черты
 BODY_LIMIT="${BODY_LIMIT:-2m}"
 # Сайт соседа, в чей `server`-блок дописывается включение.
@@ -75,6 +78,10 @@ cat <<CONF
 upstream takt_backend {
     server ${BACKEND};
     keepalive 16;
+}
+
+upstream takt_hook {
+    server ${HOOK_BACKEND};
 }
 CONF
 }
@@ -139,6 +146,21 @@ location ${PREFIX}/ {
     # не трогается: она его.
     proxy_intercept_errors on;
     error_page 502 503 504 = @takt_maintenance;
+}
+
+# Приёмник выкатки: точные адреса, а не префикс, - прочее под hooks остаётся
+# сервису и отвечает 404. Точное совпадение nginx выбирает раньше префикса, так
+# что уведомление не доходит до сервиса, который выкатка перезапускает.
+location = ${PREFIX}/hooks/github {
+    # Предел тела - тот же, что у приёмника: уведомление о пуше мало.
+    client_max_body_size 1m;
+    proxy_pass http://takt_hook;
+    include ${PROXY_SNIPPET};
+}
+
+location = ${PREFIX}/hooks/status {
+    proxy_pass http://takt_hook;
+    include ${PROXY_SNIPPET};
 }
 
 location @takt_maintenance {
@@ -245,6 +267,8 @@ log "Проверка"
 printf '  %-26s %s (ожидается 301)\n' "${PREFIX}"        "$(code "${BASE}${PREFIX}")"
 printf '  %-26s %s (ожидается 200)\n' "${PREFIX}/"       "$(code "${BASE}${PREFIX}/")"
 printf '  %-26s %s (ожидается 200)\n' "${PREFIX}/health" "$(code "${BASE}${PREFIX}/health")"
+# Приёмник выкатки ставится отдельно (`setup-stand-hook.sh`): без него здесь 502.
+printf '  %-26s %s (200, когда приёмник поставлен)\n' "${PREFIX}/hooks/status" "$(code "${BASE}${PREFIX}/hooks/status")"
 printf '  %-26s %s\n' "кеш страницы"     "$(header "${BASE}${PREFIX}/")"
 printf '  %-26s %s\n' "кеш version.json" "$(header "${BASE}${PREFIX}/version.json")"
 # Сосед обязан продолжать работать: проверка стоит здесь, потому что именно

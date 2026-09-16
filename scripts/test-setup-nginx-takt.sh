@@ -198,4 +198,22 @@ if [[ -n "$render_err" ]]; then
 fi
 echo "  OK: N10 печать конфигурации молчалива — подстановок в тексте нет"
 
-echo "  Сторож настройки nginx: все проверки пройдены (N1…N10)."
+# -- N11 ----------------------------------------------------------------------
+# Адреса приёмника выкатки - точные и уходят на свой апстрим: префиксный
+# локейшен отдал бы приёмнику чужие адреса, а апстрим сервиса - уведомление
+# сервису, который выкатка перезапускает.
+for needle in "upstream takt_hook {" "location = /takt/hooks/github {" "location = /takt/hooks/status {"; do
+  grep -qF "$needle" "$WORK/conf" || { echo "  ПРОВАЛ: N11 нет '$needle'"; exit 1; }
+done
+HOOKS="$(awk '/location = \/takt\/hooks\//,/^}/' "$WORK/conf")"
+if [[ "$(grep -c 'proxy_pass http://takt_hook;' <<<"$HOOKS")" != "2" ]] \
+   || grep -q 'takt_backend' <<<"$HOOKS"; then
+  echo "  ПРОВАЛ: N11 адреса приёмника уходят не на его апстрим:"
+  echo "$HOOKS" | sed 's/^/    /'
+  exit 1
+fi
+grep -q 'client_max_body_size 1m;' <<<"$HOOKS" \
+  || { echo "  ПРОВАЛ: N11 у уведомления нет своего предела тела"; exit 1; }
+echo "  OK: N11 приёмник выкатки - точные адреса на свой апстрим"
+
+echo "  Сторож настройки nginx: все проверки пройдены (N1…N11)."

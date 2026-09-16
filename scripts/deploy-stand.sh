@@ -6,7 +6,9 @@
 #   1. проверяет, что выкатывать есть что и что рабочее дерево чисто;
 #   2. толкает текущую ветку в `origin` (иначе `git pull` на стенде возьмёт
 #      вчерашнее, а выкатка отрапортует об успехе);
-#   3. на стенде: `git pull`, подъём стека (`scripts/stand.sh up`);
+#   3. на стенде: носитель выкатки `scripts/stand-hook.py deploy` той версии,
+#      которая выкатывается (замок, fetch, checkout, подъём стека) - тот же,
+#      что зовут уведомление GitHub и опрос;
 # 4. спрашивает `<адрес><префикс>/health` снаружи - через nginx.
 #
 # Шаг 4 обязателен и идёт через прокси, а не по `127.0.0.1`. Стек,
@@ -34,7 +36,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -p|--prefix) PREFIX="$2"; shift 2 ;;
     --dirty) ALLOW_DIRTY=1; shift ;;
-    -h|--help) sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "неизвестный ключ '$1'; см. --help" >&2; exit 2 ;;
     *) STAND="$1"; shift ;;
   esac
@@ -71,12 +73,13 @@ echo "  Поднимаем на стенде..."
 # сторона умерла, а локальный клиент этого не заметил.
 SSH=(ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15)
 
+# Носитель берётся из выкатываемой ветки, а не с диска стенда: скрипт, который
+# checkout переписывает посреди его же исполнения, исполнял бы смесь версий.
 "${SSH[@]}" "$STAND" "set -euo pipefail
   cd $DIR
   git fetch --prune origin
-  git checkout $BRANCH
-  git reset --hard origin/$BRANCH
-  TAKT_WEB_BASE_PATH=$PREFIX scripts/stand.sh up" || {
+  git show origin/$BRANCH:scripts/stand-hook.py \\
+    | TAKT_WEB_BASE_PATH=$PREFIX python3 - deploy --dir \"\$PWD\" --branch $BRANCH --force" || {
   echo "  ОШИБКА: подъём на стенде не удался"
   echo "  Журнал: ssh $STAND 'cd $DIR && scripts/stand.sh status'"
   exit 1
