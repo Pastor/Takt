@@ -33,6 +33,7 @@ pub(crate) mod expression;
 pub mod film;
 pub mod json_input;
 /// Реестр имён портов и переменных модели.
+pub mod port_fields;
 pub mod port_names;
 mod predicate;
 pub mod runner;

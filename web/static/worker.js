@@ -25,6 +25,13 @@ self.onmessage = async (event) => {
       case "step":
         await step(message);
         break;
+      case "open":
+        // Открытие без такта: панель входов строится по портам до пуска.
+        await ensure(message);
+        break;
+      case "inputs":
+        await inputs(message);
+        break;
       case "reset":
         // Сброс - не останов: сессия закрывается, и следующий пуск открывает её
         // заново, то есть автомат начинает с первого такта. Трассу сброс не трогает:
@@ -77,7 +84,7 @@ async function ensure({ wasmUrl, source, scenario, tickMs, tickHz, files, steps,
   session = opened.id;
   sessionKey = key;
   done = 0;
-  post({ type: "opened" });
+  post({ type: "opened", ports: opened.ports ?? [], values: opened.values ?? {} });
   if (opened.warnings?.length) post({ type: "warnings", items: opened.warnings });
   return true;
 }
@@ -99,7 +106,16 @@ function advance(count) {
   // порции: место сообщения в потоке совпадает с тем, что даёт эталон в консоли.
   if (ticked.warnings?.length) post({ type: "warnings", items: ticked.warnings });
   if (ticked.output?.length) post({ type: "output", lines: ticked.output });
-  post({ type: "lines", lines: ticked.lines, states: ticked.states ?? [], next: ticked.next ?? [], active: ticked.active ?? [], done });
+  post({
+    type: "lines",
+    lines: ticked.lines,
+    states: ticked.states ?? [],
+    next: ticked.next ?? [],
+    active: ticked.active ?? [],
+    manual: ticked.manual ?? [],
+    values: ticked.values ?? {},
+    done,
+  });
   if (ticked.done) {
     post({ type: "finished", info: ticked.info, errors: ticked.errors, steps: done });
     close_();
@@ -142,6 +158,22 @@ async function step(message) {
   if (!(await ensure(message))) return;
   const outcome = advance(1);
   if (outcome.ok && !outcome.finished) post({ type: "stepped", steps: done });
+}
+
+/**
+ * Ручной ввод: значения ложатся перед следующим тактом открытой сессии.
+ *
+ * Отказ эталона сессию не закрывает: негодное значение в поле - не ошибка
+ * прогона, и начинать автомат заново из-за опечатки несоразмерно.
+ */
+async function inputs(message) {
+  if (!(await ensure(message))) return;
+  const set = bridge.simInputs(session, message.in_ports, message.inout);
+  if (!set.ok) {
+    post({ type: "inputsRefused", message: set.error?.message });
+    return;
+  }
+  post({ type: "inputsSet", in_ports: message.in_ports ?? {}, inout: message.inout ?? {} });
 }
 
 /** Экспорт: отказ среды исполнения становится отказом ответа - страница его ждёт. */

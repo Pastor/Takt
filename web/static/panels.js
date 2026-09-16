@@ -42,6 +42,9 @@ export const PANELS = [
   { id: "run", home: "tl", when: "always", label: "scheme.panel.run" },
   { id: "view", home: "bl", when: "always", label: "scheme.panel.view" },
   { id: "sheet", home: "br", when: "wide", label: "scheme.panel.sheet" },
+  // Входы и выходы прогона открывает кнопка интерактивного режима: ступень
+  // видимости отвечает, можно ли её показывать, а кнопка - показывать ли сейчас.
+  { id: "io", home: "tr", when: "always", label: "scheme.panel.io", openable: true },
   { id: "legend", home: null, when: "always", label: "scheme.panel.legend" },
   // Миникарта углов не занимает и панелью кнопок не является, но вопрос к ней
   // тот же: показывать или нет. Умолчание "широкий экран" - прежнее поведение:
@@ -123,6 +126,8 @@ export class Panels {
     this.onChange = options.onChange ?? (() => {});
     this.narrowQuery = options.media ?? window.matchMedia(NARROW);
     this.state = stateOf(this.read());
+    // Открытые панели с кнопкой: открытость - жест текущего сеанса, в память не идёт.
+    this.opened = new Set();
     this.wire();
     this.apply();
   }
@@ -161,6 +166,19 @@ export class Panels {
     this.save();
   }
 
+  /** Открывает либо закрывает панель с кнопкой. */
+  setOpen(id, open) {
+    if (!panelOf(id)?.openable) return;
+    if (open) this.opened.add(id);
+    else this.opened.delete(id);
+    this.apply();
+  }
+
+  /** Открыта ли панель с кнопкой. */
+  isOpen(id) {
+    return this.opened.has(id);
+  }
+
   /** Снимок расстановки: окно настроек обещает отмену и обязана её сдержать. */
   snapshot() {
     return JSON.parse(JSON.stringify(this.state));
@@ -194,7 +212,8 @@ export class Panels {
       // `HTMLElement`, а миникарта - `<svg>`. Присвоение свойства такому узлу
       // заводит обычное поле объекта: страница отвечает "скрыта", атрибута нет,
       // и правило `[hidden]` не срабатывает - панель остаётся на экране.
-      node.toggleAttribute("hidden", !visible(when, this.narrow));
+      const shut = panel.openable && !this.opened.has(panel.id);
+      node.toggleAttribute("hidden", shut || !visible(when, this.narrow));
     }
     // У легенды, кроме неё самой, есть разделители: скрытая легенда, чья ручка
     // осталась на экране, тянулась бы в пустоту.

@@ -2329,6 +2329,44 @@ input[type="number"] { height: var(--h-dense); padding: 0 var(--gap-half); }
 .tool-panel.dragging { z-index: 4; cursor: grabbing; }
 .tool-panel.dragging .tool-grip { cursor: grabbing; }
 
+/* ── Панель входов и выходов прогона (`.sim-io`) ─────────────────────────
+ * Не полоса кнопок, а список полей: панель растёт вниз, а не вбок, и ширину
+ * держит по содержимому в разумных пределах, чтобы не отнимать лист. Значение
+ * порта набрано моноширинным: числа в столбце читаются, когда разряды стоят
+ * друг под другом. */
+.sim-io { align-items: flex-start; max-width: 100%; }
+.sim-io-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-half);
+  min-width: 0;
+}
+.sim-io-list {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: var(--gap-quarter) var(--gap-half);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.sim-io-list[hidden] { display: none; }
+.sim-io-row { display: contents; }
+.sim-io-name { font-size: var(--text-sm); white-space: nowrap; }
+.sim-io-value {
+  min-width: 6ch;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--on-surface-soft);
+}
+.sim-io-field {
+  width: 10ch;
+  height: var(--h-dense);
+  padding: 0 var(--gap-quarter);
+  font-size: var(--text-sm);
+}
+.sim-io-note { font-size: var(--text-xs); color: var(--on-surface-soft); }
+.sim-io-note[hidden] { display: none; }
+
 /* ── Панель инструментов схемы (`.scheme-tools`) ─────────────────────────
  * Вид панели - общий; здесь только то, чем панель схемы отличается: она стоит
  * на рисунке, поэтому не переносится внутри себя (рассыпавшись на три ряда, она

@@ -936,6 +936,7 @@ sim-037.positional-length = {count} values in the positional array `{field}`, bu
 sim.port-not-found = Error [{code}]: step {step}: port `{name}` not found in the model
 sim.port-ambiguous = Error [{code}]: step {step}: name `{name}` is declared by several models ({models}) — give a qualified name
 sim.port-not-in-direction = Error [{code}]: step {step}: port `{name}` not found among the ports of direction `{field}`
+sim.manual-value-unreadable = Error: tick {tick}: value `{name}={value}` is not a number, a boolean or an array
 sim.guard-port = Guard of step {step}: {field} ({name}): expected {expected}, got {actual}
 sim.guard-var = Guard of step {step}: vars[{name}]: expected {expected}, got {actual}
 sim.extern-value-unreadable = step {step}: the value of extern function '{name}' cannot be read

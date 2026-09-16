@@ -163,6 +163,10 @@ export class Bridge {
     return this.call("takt_sim_tick", { id, budget });
   }
 
+  simInputs(id, inPorts, inout) {
+    return this.call("takt_sim_inputs", { id, in_ports: inPorts ?? {}, inout: inout ?? {} });
+  }
+
   simClose(id) {
     return this.call("takt_sim_close", { id });
   }
