@@ -193,7 +193,7 @@ async fn fork(
     let source = transaction
         .query_one(
             "SELECT name, takt_lang, language_version, main_file, main_scenario,
-                    owner_id, build_target, build_args, run_delays, run_frequencies
+                    owner_id, build_target, build_args, run_delays, run_frequencies, run_watch
              FROM projects WHERE id = $1",
             &[&id],
         )
@@ -250,14 +250,16 @@ async fn fork(
     // Темп прогона - часть показа модели автором, и копия показывает её так же.
     let run_delays: String = source.get("run_delays");
     let run_frequencies: String = source.get("run_frequencies");
+    let run_watch: String = source.get("run_watch");
     transaction
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
                                   takt_lang, language_version, main_file, main_scenario,
                                   build_target, build_args, run_delays, run_frequencies,
-                                  revision, size_bytes, forked_from, created_at, updated_at,
-                                  touched_at)
-             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, $7, $8, $9, $10, $11, 0, 0, $12, $13, $13, $13)",
+                                  run_watch, revision, size_bytes, forked_from, created_at,
+                                  updated_at, touched_at)
+             VALUES ($1, $2, $3, '', 'private', $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, 0, $13,
+                     $14, $14, $14)",
             &[
                 &copy,
                 &user.id,
@@ -270,6 +272,7 @@ async fn fork(
                 &build_args,
                 &run_delays,
                 &run_frequencies,
+                &run_watch,
                 &id,
                 &now,
             ],

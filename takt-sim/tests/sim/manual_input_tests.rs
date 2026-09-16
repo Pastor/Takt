@@ -141,7 +141,7 @@ fn a_bad_setting_is_refused_at_once_and_sets_nothing() {
     assert_eq!(total(&run), 0);
 }
 
-/// M5: без ручного ввода прогон тот же, что и прежде: трасса совпадает строка в строку.
+/// M5: пустой ручной ввод трассу не меняет: она совпадает строка в строку.
 #[test]
 fn without_manual_input_the_trace_is_unchanged() {
     let scenario = r#"[{"in_ports": {"step": 1}}, {"in_ports": {"step": 3}}, {}]"#;

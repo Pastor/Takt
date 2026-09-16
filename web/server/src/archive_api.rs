@@ -272,6 +272,23 @@ async fn import(
     let run_frequencies = limits::check_run_frequencies(&run_frequencies).unwrap_or_default();
     let run_frequencies = serde_json::to_string(&run_frequencies)
         .map_err(|error| ApiError::Internal(error.into()))?;
+    // Набор наблюдения - только у моделей архива и только в пределе, по тому же
+    // правилу, что задержки: негодный набор не стоит отказа всей загрузки.
+    let run_watch: BTreeMap<String, Vec<String>> = parsed
+        .manifest
+        .run_watch
+        .iter()
+        .filter(|(name, _)| {
+            parsed
+                .sources
+                .iter()
+                .any(|file| &file.name == *name && file.kind == limits::Kind::Takt.as_str())
+        })
+        .map(|(name, ports)| (name.clone(), ports.clone()))
+        .collect();
+    let run_watch = limits::check_run_watch(&run_watch).unwrap_or_default();
+    let run_watch =
+        serde_json::to_string(&run_watch).map_err(|error| ApiError::Internal(error.into()))?;
 
     let id = projects::new_id();
     let now = db::now();
@@ -286,8 +303,10 @@ async fn import(
             "INSERT INTO projects(id, owner_id, name, description, visibility,
                                   takt_lang, language_version, main_file, main_scenario,
                                   build_target, build_args, run_delays, run_frequencies,
-                                  revision, size_bytes, created_at, updated_at, touched_at)
-             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, $8, $9, $10, $11, $12, 1, $13, $14, $14, $14)",
+                                  run_watch, revision, size_bytes, created_at, updated_at,
+                                  touched_at)
+             VALUES ($1, $2, $3, $4, 'private', $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14,
+                     $15, $15, $15)",
             &[
                 &id,
                 &user.id,
@@ -301,6 +320,7 @@ async fn import(
                 &build_args,
                 &run_delays,
                 &run_frequencies,
+                &run_watch,
                 &size,
                 &now,
             ],

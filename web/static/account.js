@@ -1667,6 +1667,32 @@ export function setFrequency(file, hz) {
   return setRunSetting("run_frequencies", file, hz);
 }
 
+/** Наблюдаемые выходы модели из проекта; `null` - набора у модели нет. */
+export function watchOf(file) {
+  return (file && state.project?.run_watch?.[file]) || null;
+}
+
+/**
+ * Ставит набор наблюдаемых выходов модели и записывает его в проект.
+ *
+ * Правило записи то же, что у задержки: пишет владелец, у прочих набор живёт до
+ * перезагрузки; пустой набор не хранится.
+ */
+export async function setWatch(file, names) {
+  if (!state.project || !file) return;
+  const values = { ...(state.project.run_watch ?? {}) };
+  if (names.length > 0) values[file] = [...names];
+  else delete values[file];
+  state.project = { ...state.project, run_watch: values };
+  if (state.level !== "owner") return;
+  try {
+    const updated = await api.patch(state.project.id, { run_watch: values });
+    state.project = { ...state.project, ...updated };
+  } catch (error) {
+    host.say(text(error), "warning");
+  }
+}
+
 /**
  * Ставит настройку прогона сценарию и записывает её в проект.
  *

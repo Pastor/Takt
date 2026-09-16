@@ -72,6 +72,10 @@ pub struct Manifest {
     /// сценария нет в списке - частота из `clock` модели, иначе 1 мс на такт.
     #[serde(default)]
     pub run_frequencies: BTreeMap<String, u64>,
+    /// Наблюдаемые выходы прогона по моделям: имя файла модели - имена портов;
+    /// пусто - наблюдать нечего.
+    #[serde(default)]
+    pub run_watch: BTreeMap<String, Vec<String>>,
 }
 
 /// Запись состава.

@@ -27,5 +27,6 @@ pub mod quota;
 pub mod rate;
 pub mod retention;
 pub mod routes;
+pub mod run_settings;
 pub mod showcase;
 pub mod store;
