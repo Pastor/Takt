@@ -433,6 +433,13 @@ impl Stand {
     /// Ждать девяносто дней проверка не может, а спать даже секунду - значит мерить не
     /// срок хранения, а терпение прогона. Двигается отметка: предмет проверки в том,
     /// что обход считает разницу.
+    /// Исполняет запрос в схеме стенда: состояние, которого ручками не добиться.
+    pub async fn execute(&self, sql: &str, params: &[&(dyn tokio_postgres::types::ToSql + Sync)]) {
+        let pool = db::pool(&self.scoped()).expect("пул");
+        let client = pool.get().await.expect("соединение");
+        client.execute(sql, params).await.expect("запрос");
+    }
+
     pub async fn age_project(&self, id: &str, seconds: i64) {
         let pool = db::pool(&self.scoped()).expect("пул");
         let client = pool.get().await.expect("соединение");

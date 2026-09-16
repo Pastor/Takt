@@ -63,7 +63,9 @@ export async function refreshMe() {
   session.role = me.role;
   session.has_password = me.has_password ?? true;
   remember(session);
-  return who();
+  // Занятое место в сеанс не кладётся: оно меняется каждой записью, и хранимое
+  // число врало бы до следующего вопроса.
+  return { ...who(), used_bytes: me.used_bytes, quota_bytes: me.quota_bytes };
 }
 
 /** Вошли ли мы. */

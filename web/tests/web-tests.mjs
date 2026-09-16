@@ -585,7 +585,7 @@ test("язык: порядок выбора — сохранённый, брау
  */
 const PAGE_SCRIPTS = [
   "account.js", "alerts.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js", "build-settings.js",
-  "draft.js", "editor.js", "export.js", "help.js", "i18n.js", "layout.js", "legend.js", "pick.js",
+  "draft.js", "editor.js", "export.js", "file-kinds.js", "help.js", "i18n.js", "layout.js", "legend.js", "pick.js",
   "panels.js", "project.js", "sample.js", "scheme.js", "scheme-geometry.js",
   "scheme-host.js", "scheme-run.js",
   "scheme-settings.js",
@@ -1257,20 +1257,23 @@ test("файлы проекта: полоса отвечает на один в�
 
   // Расширение ставит род файла, а не автор: правило проекта не перекладывается
   // на того, кто заводит файл.
-  assert.match(account, /const FILE_KINDS = \[[\s\S]{0,300}?extension: "\.takt"/, "родов файла нет");
+  const kinds = await readFile(new URL("../static/file-kinds.js", import.meta.url), "utf8");
+  assert.match(kinds, /export const FILE_KINDS = \[[\s\S]{0,300}?extension: "\.takt"/, "родов файла нет");
+  assert.match(account, /import \{ FILE_KINDS, accept, uploadRefusal \} from "\.\/file-kinds\.js";/,
+    "окно файла берёт роды не из общего списка");
   // Карта адресов - род наравне с прочими; её текст едет в состав проекта для
   // `--address-map`, а сама она моделью не собирается.
-  assert.match(account, /kind: "address_map", label: "file\.kind\.addressMap", extension: "\.takt-map"/);
+  assert.match(kinds, /kind: "address_map", label: "file\.kind\.addressMap", extension: "\.takt-map"/);
   assert.match(account, /file\.kind === "takt" \|\| file\.kind === "address_map"/, "карты не читаются в состав");
   const app = await readFile(new URL("../static/app.js", import.meta.url), "utf8");
   assert.match(app, /if \(state\.kind === "address_map"\) \{\s*state\.editor\.highlight\(state\.bridge\.tokens\(source\), \[\]\);/, "карта собирается как модель");
   // Цель с адресами без карты проекта не собирается - отказ словами.
   assert.match(app, /project\.ADDRESS_TARGETS\.includes\(state\.target\)[\s\S]{0,200}account\.addressMap\(\)/, "карта проекта не спрашивается");
-  assert.ok(account.includes('extension: ".json"') && account.includes('extension: ".md"'),
+  assert.ok(kinds.includes('extension: ".json"') && kinds.includes('extension: ".md"'),
     "род сценария или пояснения не заведён");
   // Раскладка стоит в ряду наравне с прочими: она появляется и сама, но завести
   // её заранее автор вправе.
-  assert.match(account, /extension: layoutFile\.EXTENSION/, "рода схемы нет в ряду");
+  assert.match(kinds, /extension: LAYOUT_EXTENSION/, "рода схемы нет в ряду");
   // Раскладка без своей модели - предупреждение, а не отказ: имя модели автор
   // допишет следом.
   assert.ok(account.includes('t("file.layoutWithoutModel"'), "о схеме без модели не сказано");
@@ -2552,4 +2555,38 @@ test("экспорт: модуль экспорта грузит поток пр
   const app = await readFile(new URL("../static/app.js", import.meta.url), "utf8");
   assert.ok(!/Bridge\.load\([^)]*export/i.test(app), "главный поток грузит модуль экспорта");
   assert.match(app, /exportUrl: exportUrl\(\)/, "адрес модуля экспорта не уходит потоку");
+});
+
+test("роды файлов: список страницы совпадает с крейтом проекта", async () => {
+  const { FILE_KINDS } = await import("../static/file-kinds.js");
+  const rust = await readFile(new URL("../../takt-project/src/kind.rs", import.meta.url), "utf8");
+  const table = /const EXTENSIONS: \[\(&str, Kind\); \d+\] = \[([\s\S]*?)\];/.exec(rust);
+  assert.ok(table, "таблица расширений крейта не найдена");
+  const names = /fn as_str\(self\)[\s\S]*?\n    \}/.exec(rust)?.[0] ?? "";
+  const crate = [...table[1].matchAll(/\("([^"]+)", Kind::(\w+)\)/g)].map(([, extension, variant]) => {
+    const kind = new RegExp(`Self::${variant} => "([a-z_]+)"`).exec(names)?.[1];
+    return `${kind}${extension}`;
+  });
+  assert.ok(crate.length >= 5, `разобрано родов крейта: ${crate.length}`);
+  const page = FILE_KINDS.map((item) => `${item.kind}${item.extension}`);
+  assert.deepEqual([...page].sort(), [...crate].sort(), "роды страницы и крейта разошлись");
+});
+
+test("загрузка файла: чужое расширение, имя и размер отвергаются до рейса", async () => {
+  const { accept, kindOf, uploadRefusal, NAME_CHARS } = await import("../static/file-kinds.js");
+  const { LIMIT_BYTES } = await import("../static/draft.js");
+  assert.equal(accept(), ".takt,.takt-ui,.json,.md,.takt-map", "фильтр поля выбора - все пять родов");
+  assert.equal(kindOf("board.takt-map").kind, "address_map");
+  assert.equal(kindOf("heater.takt-ui").kind, "layout", "раскладка не принимается за модель");
+  assert.equal(kindOf("heater.takt").kind, "takt");
+  assert.equal(uploadRefusal("heater.takt", 100), null, "годный файл");
+  assert.equal(uploadRefusal("board.takt-map", LIMIT_BYTES), null, "ровно предел");
+  assert.equal(uploadRefusal("notes.txt", 10).key, "file.badKind");
+  assert.equal(uploadRefusal("модель.takt", 10).key, "file.badUploadName", "кириллица");
+  assert.equal(uploadRefusal("my model.md", 10).key, "file.badUploadName", "пробел");
+  assert.equal(uploadRefusal(".takt", 10).key, "file.badUploadName", "пустая основа");
+  assert.equal(uploadRefusal(`${"x".repeat(NAME_CHARS)}.md`, 10).key, "file.badUploadName", "длинное");
+  assert.equal(uploadRefusal("big.json", LIMIT_BYTES + 1).key, "file.tooBig");
+  const html = await readFile(new URL("../static/index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /id="filepick"[^>]*accept=/, "второй список родов в разметке");
 });

@@ -36,6 +36,7 @@ use crate::db;
 use crate::error::ApiError;
 use crate::limits;
 use crate::projects::{self, ProjectJson};
+use crate::quota;
 use crate::routes::{AppState, current_user, optional_user};
 use crate::showcase;
 
@@ -279,6 +280,7 @@ async fn import(
         .iter()
         .map(|file| file.text.len() as i64)
         .sum();
+    quota::check(&transaction, &user.id, size, state.config.user_bytes).await?;
     transaction
         .execute(
             "INSERT INTO projects(id, owner_id, name, description, visibility,

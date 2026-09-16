@@ -41,6 +41,8 @@ pub struct Config {
     pub rate_window: Duration,
     /// Сколько попыток входа и регистраций допускается в окне с одного адреса.
     pub rate_limit: u32,
+    /// Квота владельца: наибольший суммарный объём исходников всех его проектов, байты.
+    pub user_bytes: i64,
     /// Каталог хранилища исходников: `<владелец>/<проект>/<файлы>`.
     pub projects_dir: PathBuf,
     /// Срок хранения без обращений: дольше - проект сворачивается в архив.
@@ -168,6 +170,27 @@ pub struct ConfigError {
 /// и в предупреждении при запуске.
 pub const DEV_SECRET: &str = "секрет-для-своей-машины-не-для-стенда";
 
+/// Квота владельца по умолчанию: 10 МиБ - двадцать проектов в полный предел.
+pub const USER_BYTES: &str = "10485760";
+
+/// Проверяет квоту владельца: она не меньше предела одного проекта.
+///
+/// Квота меньше проекта сделала бы законный проект невозможным, и узнал бы об этом
+/// автор отказом записи, а не администратор - отказом запуска.
+///
+/// # Ошибки
+/// [`ConfigError`] с ключом `TAKT_WEB_USER_BYTES`.
+pub fn check_user_bytes(bytes: i64) -> Result<i64, ConfigError> {
+    if bytes < crate::limits::PROJECT_BYTES {
+        return Err(ConfigError {
+            key: "TAKT_WEB_USER_BYTES",
+            value: bytes.to_string(),
+            what: "байты, не меньше предела проекта",
+        });
+    }
+    Ok(bytes)
+}
+
 /// Подключение по умолчанию - своя машина.
 ///
 /// Хранилище - **PostgreSQL**. Умолчание годится для запуска на своей машине; на стенде
@@ -196,6 +219,7 @@ impl Config {
             body_limit: parse("TAKT_WEB_BODY_LIMIT", "1048576", "байты")?,
             rate_window: Duration::from_secs(parse("TAKT_WEB_RATE_WINDOW", "60", "секунды")?),
             rate_limit: parse("TAKT_WEB_RATE_LIMIT", "10", "число")?,
+            user_bytes: check_user_bytes(parse("TAKT_WEB_USER_BYTES", USER_BYTES, "байты")?)?,
             projects_dir: var("TAKT_WEB_PROJECTS", "web/projects").into(),
             // 90 дней - а не круглое число: квартал без единого открытия - внятный
             // признак, что проект оставлен, и он же переживает перерыв между
@@ -272,5 +296,16 @@ mod tests {
             3600,
             "час — решение проработки"
         );
+        assert_eq!(config.user_bytes, 10 * 1024 * 1024, "квота по умолчанию");
+    }
+
+    #[test]
+    fn user_quota_is_not_below_a_project() {
+        let project = crate::limits::PROJECT_BYTES;
+        assert_eq!(check_user_bytes(project).expect("ровно проект"), project);
+        let error = check_user_bytes(project - 1).expect_err("меньше проекта");
+        let text = error.to_string();
+        assert!(text.contains("TAKT_WEB_USER_BYTES"), "{text}");
+        assert!(text.contains(&(project - 1).to_string()), "{text}");
     }
 }

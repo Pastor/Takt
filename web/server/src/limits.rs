@@ -60,6 +60,21 @@ pub fn exceeded(
     }
 }
 
+/// Судит объём владельца после записи.
+///
+/// Отказ - только когда запись **растит** объём и итог выше квоты. Владелец сверх
+/// квоты (квоту уменьшили после того, как он её занял) вправе сокращать файлы и
+/// удалять проекты: запрет любой записи оставил бы его без способа освободить место.
+///
+/// # Ошибки
+/// Рост объёма выше квоты - отказ предела с квотой и итогом.
+pub fn check_quota(before: i64, after: i64, quota: i64) -> Result<(), ApiError> {
+    if after > before && after > quota {
+        return Err(exceeded("объём данных владельца в байтах", quota, after));
+    }
+    Ok(())
+}
+
 /// Проверяет размер файла.
 pub fn check_file(text: &str) -> Result<(), ApiError> {
     let size = text.len();
@@ -304,6 +319,22 @@ mod tests {
             "список расширений у сервера:\n{}",
             found.join("\n")
         );
+    }
+
+    #[test]
+    fn quota_refuses_only_growth_beyond_it() {
+        assert!(check_quota(0, 100, 100).is_ok(), "ровно квота");
+        let text = check_quota(0, 101, 100).expect_err("сверх").to_string();
+        assert!(text.contains("100") && text.contains("101"), "{text}");
+        assert!(
+            check_quota(150, 120, 100).is_ok(),
+            "сверх квоты, но сокращение"
+        );
+        assert!(
+            check_quota(150, 150, 100).is_ok(),
+            "сверх квоты, объём прежний"
+        );
+        assert!(check_quota(150, 151, 100).is_err(), "сверх квоты и рост");
     }
 
     #[test]
