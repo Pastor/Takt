@@ -26,6 +26,9 @@ impl Palette {
     pub const WARN_BG: &str = "#F6EFDC";
     pub const YES: &str = "#DFE6D5";
     pub const YES_INK: &str = "#414A39";
+    pub const RUN: &str = "#D3E1F2";
+    pub const RUN_INK: &str = "#1F4573";
+    pub const RUN_LINE: &str = "#3E74B0";
     pub const SHEET: &str = "#F7F7F2";
 }
 

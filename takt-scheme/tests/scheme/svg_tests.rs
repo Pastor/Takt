@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use takt_scheme::run::{Active, Segment, Tick};
-use takt_scheme::style::View;
+use takt_scheme::style::{Palette, View};
 use takt_scheme::svg::{Options, render_all};
 
 fn root() -> PathBuf {
@@ -171,10 +171,15 @@ fn the_run_view_lights_the_instance_and_counts_them() {
             .expect("лист")
     };
     let composition = sheet("/#Line");
+    // Тон прогона берётся у палитры, а не переписывается числом: разъедься
+    // они, тест доказывал бы совпадение с самим собой.
+    let lit = format!(
+        r#"fill="{}" stroke="{}" stroke-width="2.5""#,
+        Palette::RUN,
+        Palette::RUN_LINE
+    );
     assert_eq!(
-        composition
-            .matches("fill=\"#DFE6D5\" stroke=\"#5F6E55\" stroke-width=\"2.5\"")
-            .count(),
+        composition.matches(lit.as_str()).count(),
         2,
         "горят две ветви параллели"
     );
