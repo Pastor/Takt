@@ -334,10 +334,10 @@ fn paint(node: &DrawNode, lit: &Lit, levels: &Levels, inks: &Inks) -> (String, &
         return (
             format!(
                 r#"fill="{}" stroke="{}" stroke-width="2.5""#,
-                Palette::YES,
-                Palette::ACCENT
+                Palette::RUN,
+                Palette::RUN_LINE
             ),
-            Palette::YES_INK,
+            Palette::RUN_INK,
         );
     }
     if lit.expected.contains(&node.name) {
@@ -432,13 +432,13 @@ fn node_svg(
                 num(x - width / 2.0),
                 num(y + h + 8.0),
                 num(width),
-                Palette::YES,
-                Palette::ACCENT,
+                Palette::RUN,
+                Palette::RUN_LINE,
                 num(x),
                 num(y + h + 22.0),
                 levels.state_face.css(),
                 num(px),
-                Palette::YES_INK,
+                Palette::RUN_INK,
                 runs(levels.state_face, &plate)
             );
         }
@@ -485,13 +485,13 @@ fn node_svg(
             r#"<circle cx="{}" cy="{}" r="9" fill="{}" stroke="{}" stroke-width="1"/><text x="{}" y="{}" font-family="{}" font-size="{}" fill="{}" text-anchor="middle">{count}</text>"#,
             num(x + edge),
             num(y - edge),
-            Palette::YES,
-            Palette::ACCENT,
+            Palette::RUN,
+            Palette::RUN_LINE,
             num(x + edge),
             num(y - edge + 4.0),
             levels.state_face.css(),
             num(text_px("xs")),
-            Palette::YES_INK
+            Palette::RUN_INK
         );
     }
 }

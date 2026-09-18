@@ -100,7 +100,7 @@ fn a_directory_project_exports_every_view_and_format() {
     let svg = std::fs::read_to_string(out.join("plant.run.svg")).expect("SVG");
     assert!(svg.contains("@font-face"), "SVG несёт шрифт");
     assert!(
-        svg.contains("#DFE6D5"),
+        svg.contains(takt_scheme::style::Palette::RUN),
         "цветной вид подсвечивает последний такт"
     );
     assert!(!svg.contains("наполнение"), "легенда выключена");

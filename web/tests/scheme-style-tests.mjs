@@ -37,6 +37,7 @@ test("оформление: палитра чертежа - светлая те�
     INK: "raw-ink", INK_SOFT: "raw-ink-soft", INK_OFF: "raw-ink-off", PAPER_RAISED: "raw-paper-raised",
     LINE: "raw-line", ACCENT: "raw-accent", ALARM: "raw-alarm", ALARM_INK: "raw-alarm-ink", ALARM_BG: "raw-alarm-bg",
     WARN: "raw-warn", WARN_INK: "raw-warn-ink", WARN_BG: "raw-warn-bg", YES: "raw-yes", YES_INK: "raw-yes-ink", SHEET: "raw-sheet",
+    RUN: "raw-run", RUN_INK: "raw-run-ink", RUN_LINE: "raw-run-line",
   };
   for (const [constant, variable] of Object.entries(pairs)) {
     assert.equal(rustConst(rust, constant).toUpperCase(), cssVar(css, variable).toUpperCase(), `${constant} против --${variable}`);

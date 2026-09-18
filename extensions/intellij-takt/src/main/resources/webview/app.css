@@ -76,6 +76,16 @@
    * были залиты насыщенным зелёным слишком громко. */
   --raw-yes: #DFE6D5;
   --raw-yes-ink: #414A39;
+  /* Прогон - холодный тон (постановка 2026-09-18: "текущее состояние имеет
+   * зелёный оттенок, он соответствует оттенку выделенного - это не наглядно").
+   * Текущее состояние и выбранное читателем стояли на одной заливке
+   * "выбранное" и различались только рамкой: на листе рядом они выглядели
+   * одним смыслом. Тон чужой зеленоватой палитре страницы намеренно - "здесь
+   * автомат сейчас" не принадлежит оформлению листа; жёлтый и красный заняты
+   * видами "возможен переход" и "ожидается переход". */
+  --raw-run: #D3E1F2;
+  --raw-run-ink: #1F4573;
+  --raw-run-line: #3E74B0;
   /* Поле листа схемы - единственная новая пара холста: лист лежит на
    * поверхности области и обязан отличаться и от неё, и от карточек узлов. */
   --raw-sheet: #F7F7F2;
@@ -122,6 +132,12 @@
   --alarm: var(--raw-alarm);
   --warn: var(--raw-warn);
   --yes: var(--raw-accent);
+  /* Прогон: заливка, чернила и тон рамки. Парой реестра книги они не
+   * являются - реестр сверяется по `background`/`color`, а на листе схемы
+   * фона нет вовсе: подсветка кладётся через `fill`/`stroke`. */
+  --run-fill: var(--raw-run);
+  --run-ink: var(--raw-run-ink);
+  --run: var(--raw-run-line);
   --border: var(--raw-line);
   --border-soft: var(--raw-line-soft);
 
@@ -308,6 +324,9 @@
     --raw-warn-bg: #3A3320;
     --raw-yes: #333D2E;
     --raw-yes-ink: #D8E0CE;
+    --raw-run: #1F3147;
+    --raw-run-ink: #CBDDF2;
+    --raw-run-line: #7BA6D8;
     /* Лист светлее фона области и темнее карточки: тот же порядок слоёв. */
     --raw-sheet: #20241C;
     --raw-sheet-ink: #E3E5DC;
@@ -2007,9 +2026,9 @@ input[type="number"] { height: var(--h-dense); padding: 0 var(--gap-half); }
 /* "В прогоне": рамка акцента с заливкой "выбранное". Несколько
  * активных узлов параллельных ветвей выглядят одинаково - вид принадлежит
  * состоянию шага, а не порядку ветвей. */
-.node.running .node-body { fill: var(--surface-yes); stroke: var(--accent); stroke-width: 2; }
-.node.running .node-mark { fill: var(--on-surface-yes); }
-/* Три тона прогона: текущее - акцент на заливке "выбранное";
+.node.running .node-body { fill: var(--run-fill); stroke: var(--run); stroke-width: 2; }
+.node.running .node-mark { fill: var(--run-ink); }
+/* Три тона прогона: текущее - своя пара прогона с рамкой тона `--run`;
  * "возможен переход" (из активного сюда ведёт ребро) - пара "предупреждение" со
  * штриховой рамкой тона `--warn`; "ожидается переход" (сюда автомат уйдёт при
  * нынешних значениях) - пара "тревога" со сплошной рамкой тона `--alarm`. Каждый вид
@@ -2022,7 +2041,7 @@ input[type="number"] { height: var(--h-dense); padding: 0 var(--gap-half); }
 .node.expected .node-comp { fill: var(--surface-alarm); stroke: var(--alarm); stroke-width: 2.5; }
 .node.expected .node-mark { fill: var(--on-surface-alarm); }
 .node.running .node-body { stroke-width: 2.5; }
-.node.running .node-comp { fill: var(--surface-yes); stroke: var(--accent); stroke-width: 2.5; }
+.node.running .node-comp { fill: var(--run-fill); stroke: var(--run); stroke-width: 2.5; }
 
 /* Композиция - квадрат со стороной `--comp-side` и миниатюрой листа внутри.
  * Форма отличает её от состояния без реализации сама по себе. */
@@ -2051,13 +2070,13 @@ input[type="number"] { height: var(--h-dense); padding: 0 var(--gap-half); }
 .mini-node.run { fill: var(--warn); }
 .mini-edge.hot { stroke: var(--warn); stroke-width: 2.5; }
 /* Счётчик экземпляров: кружок у правого верхнего края узла, когда одно
- * состояние несут два экземпляра модели и больше. Пара "выбранное", как у
- * плашки, - это тот же прогон. */
-.node-count-bg { fill: var(--surface-yes); stroke: var(--accent); stroke-width: 1; }
-.node-count-num { fill: var(--on-surface-yes); font-size: var(--text-xs); text-anchor: middle; dominant-baseline: central; }
+ * состояние несут два экземпляра модели и больше. Пара прогона, как у
+ * плашки, - это тот же прогон, и горит он рядом с горящим узлом. */
+.node-count-bg { fill: var(--run-fill); stroke: var(--run); stroke-width: 1; }
+.node-count-num { fill: var(--run-ink); font-size: var(--text-xs); text-anchor: middle; dominant-baseline: central; }
 .node-inner-box[hidden] { display: none; }
-.node-inner-bg { fill: var(--surface-yes); stroke: var(--accent); stroke-width: 1; }
-.node-inner { fill: var(--on-surface-yes); font-size: var(--text-xs); text-anchor: middle; dominant-baseline: central; }
+.node-inner-bg { fill: var(--run-fill); stroke: var(--run); stroke-width: 1; }
+.node-inner { fill: var(--run-ink); font-size: var(--text-xs); text-anchor: middle; dominant-baseline: central; }
 /* Кнопка входа на карточке - для касания: двойного щелчка на сенсорном
  * экране нет. */
 .node-enter { fill: var(--surface-raised); stroke: var(--on-surface-soft); stroke-width: 1.5; }
