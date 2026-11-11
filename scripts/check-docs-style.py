@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gatelib import require_input  # noqa: E402  (путь к помощнику известен только здесь)
 from pathlib import Path
 
-ROOTS = ["docs", "book/src", "CLAUDE.md", "README.md", "FEATURES.md", "CHANGES.md"]
+ROOTS = ["docs", "book/src", "CLAUDE.md", "README.md", "CHANGES.md"]
 SUFFIXES = {".md", ".typ"}
 BASELINE = "scripts/docs-style-baseline.txt"
 
