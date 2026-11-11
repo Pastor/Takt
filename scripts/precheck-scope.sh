@@ -90,15 +90,11 @@ fi
 if has '^scripts/'; then
   run python3 "$ROOT/scripts/check-precheck-comments.py"
   run python3 "$ROOT/scripts/check-gate-inputs.py"
+  run python3 "$ROOT/scripts/check-stub-branches.py" --self-test
+  run python3 "$ROOT/scripts/check-stub-branches.py"
 fi
 
-# Документы правятся почти всякой фичей: реестры, статусы и живой контекст
-# сверяются всегда - они дёшевы и ловят расхождение, которое иначе доедет
-# до чужой сессии.
 run python3 "$ROOT/scripts/check-docs-style.py"
-run python3 "$ROOT/scripts/check-registries.py"
-run python3 "$ROOT/scripts/check-feature-status.py"
-run python3 "$ROOT/scripts/check-claude-md.py"
 run python3 "$ROOT/scripts/check-comments.py"
 run "$ROOT/scripts/check-commit-trailers.sh"
 

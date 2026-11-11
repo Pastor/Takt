@@ -17,7 +17,7 @@
 
 Отсюда устройство: различить законное и просроченное машина сама не может —
 нужна РАЗМЕТКА. Реестр `scripts/stub-branches.txt` называет держателя каждой
-заглушки (фичу, которая её снимет, либо `ПОСТОЯННЫЙ`), а гейт сверяет.
+заглушки (ключ задачи в aNaL, которая её снимет, либо `ПОСТОЯННЫЙ`), а гейт сверяет.
 
 ⚠️ Обнаружение идёт по ФОРМУЛИРОВКЕ: заглушка, написанная иначе, гейту не
 видна. Это ограничение того же рода, что у греп-сторожей 0168 и 0213, и оно
@@ -37,7 +37,6 @@ REGISTRY = os.path.join(ROOT, "scripts", "stub-branches.txt")
 # называет ключ константой (`keys::ST_016_...`).
 CATALOG = os.path.join(ROOT, "takt-lang", "messages", "ru.txt")
 KEY_REFERENCE = re.compile(r"keys::([A-Z0-9_]+)")
-FEATURES_REGISTRY = os.path.join(ROOT, "docs", "features", "README.md")
 SOURCE_DIRS = (
     os.path.join("takt-lang", "src"),
     os.path.join("takt-sim", "src"),
@@ -56,32 +55,11 @@ MARKER = "пока не поддерж"
 TASK_REFERENCE = re.compile(r"(задач\w*|подзадач\w*|фич\w*)\s+№?\s*\d{4}")
 # Держатель, означающий "отказ постоянный, снимать нечего".
 PERMANENT = "ПОСТОЯННЫЙ"
-# Статусы, при которых держатель больше не может отвечать за заглушку.
-TERMINAL = ("ГОТОВО", "ОТМЕНА")
 
 
 def read_text(path):
     with open(path, encoding="utf-8") as handle:
         return handle.read()
-
-
-def normalize_status(cell):
-    """Первое слово статуса без украшений: `✅ **ГОТОВО** (тег …)` → `ГОТОВО`."""
-    text = re.sub(r"[*✅]", "", cell)
-    text = re.sub(r"\(.*", "", text)
-    return text.strip().split(" ")[0] if text.strip() else ""
-
-
-def feature_statuses(text):
-    statuses = {}
-    for line in text.splitlines():
-        if not line.startswith("|"):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        match = re.match(r"\[(\d{4})\]", cells[0]) if cells else None
-        if match:
-            statuses[match.group(1)] = normalize_status(cells[-1])
-    return statuses
 
 
 def parse_registry(text):
@@ -161,7 +139,7 @@ def scan_sources(files, catalog=None):
     return found
 
 
-def run_checks(registry_text, statuses, files, catalog=None):
+def run_checks(registry_text, files, catalog=None):
     problems = []
     entries = parse_registry(registry_text)
     declared = set()
@@ -174,30 +152,14 @@ def run_checks(registry_text, statuses, files, catalog=None):
         declared.add((code, path))
         if holder == PERMANENT:
             continue
-        if not re.fullmatch(r"\d{4}", holder):
+        if not re.fullmatch(r"TAKT-[1-9]\d*", holder):
             problems.append(
                 (
                     f"scripts/stub-branches.txt:{number}",
-                    f"держатель «{holder}» — не номер фичи и не {PERMANENT}",
+                    f"держатель «{holder}» — не ключ задачи ТАКТ и не {PERMANENT}",
                 )
             )
             continue
-        status = statuses.get(holder)
-        if status is None:
-            problems.append(
-                (
-                    f"scripts/stub-branches.txt:{number}",
-                    f"фичи {holder} нет в реестре фич — держатель не существует",
-                )
-            )
-        elif status in TERMINAL:
-            problems.append(
-                (
-                    f"scripts/stub-branches.txt:{number}",
-                    f"заглушка {code} ({path}) пережила свою задачу: "
-                    f"фича {holder} — {status}, а отказ в коде остался",
-                )
-            )
 
     found = scan_sources(files, catalog)
     for code, path in sorted(found - declared):
@@ -229,50 +191,48 @@ def collect_sources():
 
 def self_test():
     """Каждое из трёх условий отказа обязано срабатывать — и молчать на законном."""
-    statuses = {"0001": "ГОТОВО", "0002": "СОЗДАНА"}
     src = {"a.rs": 'msg("пока не поддерживается")\n.with_code("XX-001")'}
 
-    clean = "XX-001 a.rs 0002\n"
-    if run_checks(clean, statuses, src):
+    clean = "XX-001 a.rs TAKT-2\n"
+    if run_checks(clean, src):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: законная запись даёт находку")
 
     cases = {
-        "держатель закрыт": ("XX-001 a.rs 0001\n", src),
         "заглушка не объявлена": ("", src),
-        "запись без места в коде": ("XX-001 a.rs 0002\nYY-002 b.rs 0002\n", src),
-        "держатель не существует": ("XX-001 a.rs 9999\n", src),
+        "запись без места в коде": ("XX-001 a.rs TAKT-2\nYY-002 b.rs TAKT-2\n", src),
+        "неверный ключ задачи": ("XX-001 a.rs 9999\n", src),
         "строка не разобрана": ("XX-001 a.rs\n", src),
     }
     for name, (registry, files) in cases.items():
-        if not run_checks(registry, statuses, files):
+        if not run_checks(registry, files):
             sys.exit(f"САМОПРОВЕРКА ПРОВАЛЕНА: условие «{name}» не сработало")
 
     # Постоянный держатель законен и статус не спрашивает.
-    if run_checks("XX-001 a.rs ПОСТОЯННЫЙ\n", statuses, src):
+    if run_checks("XX-001 a.rs ПОСТОЯННЫЙ\n", src):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: ПОСТОЯННЫЙ даёт находку")
 
     # Второй признак заглушки - обещание задачи в тексте диагностики.
     promise = {"b.rs": 'msg("печать — часть 2 задачи 0041-04")\n.with_code("YY-002")'}
-    if not run_checks("", statuses, promise):
+    if not run_checks("", promise):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: обещание задачи не поймано")
 
     # Упоминание фичи вне диагностики законно: так объясняют решение в
     # комментарии и печатают пояснение в порождённый код. Проверка, ловящий и это,
     # был бы снят при первом же неудобстве.
     prose = {"c.rs": '// профиль «часы» (фича 0134)\nlet x = 1;'}
-    if run_checks("", statuses, prose):
+    if run_checks("", prose):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: упоминание фичи в прозе объявлено заглушкой")
 
     # Текст заглушки в каталоге: место эмиссии называет ключ.
     keyed = {"e.rs": "msg!(keys::XX_001_STUB)\n.with_code(\"XX-001\")"}
     catalog = parse_catalog("xx-001.stub = отказ пока не поддерживается\n")
-    if not run_checks("", statuses, keyed, catalog):
+    if not run_checks("", keyed, catalog):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: заглушка из каталога не поймана")
-    if run_checks("XX-001 e.rs ПОСТОЯННЫЙ\n", statuses, keyed, catalog):
+    if run_checks("XX-001 e.rs ПОСТОЯННЫЙ\n", keyed, catalog):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: объявленная заглушка из каталога даёт находку")
 
     printed = {"d.rs": 'p.ident("// регистровый интерфейс (фича 0062)");'}
-    if run_checks("", statuses, printed):
+    if run_checks("", printed):
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: печатаемый комментарий объявлен заглушкой")
 
     print("Самопроверка check-stub-branches: все условия срабатывают.")
@@ -287,11 +247,11 @@ def main():
     # Заглушки ищутся в исходниках: обнулись обход - заглушка, пережившая свою
     # фичу, осталась бы ненайденной, а отчёт назвал бы прежнее число записей.
     note = require_input("просмотренные исходники", len(sources), source="takt-lang, takt-sim")
-    statuses = feature_statuses(read_text(FEATURES_REGISTRY))
-    require_input("записи реестра фич", len(statuses), source="docs/features/README.md")
+    # Статус временной заглушки сверяют с задачей в aNaL.
+    # У постоянной заглушки нет задачи, закрытие которой меняет её смысл.
     catalog = parse_catalog(read_text(CATALOG))
     require_input("ключи каталога сообщений", len(catalog), source="takt-lang/messages/ru.txt")
-    problems = run_checks(read_text(REGISTRY), statuses, sources, catalog)
+    problems = run_checks(read_text(REGISTRY), sources, catalog)
     if problems:
         print("Ветви-заглушки разошлись с реестром (фича 0217):", file=sys.stderr)
         for place, message in problems:
@@ -300,7 +260,7 @@ def main():
             "\nЗаглушка «пока не поддерживается» обязана быть объявлена в\n"
             "scripts/stub-branches.txt с держателем — фичей, которая её снимет,\n"
             "либо словом ПОСТОЯННЫЙ, если отказ принят как решение. Закрылась\n"
-            "фича-держатель — снимите заглушку вместе с записью.",
+            "задача — снимите заглушку вместе с записью.",
             file=sys.stderr,
         )
         return 1

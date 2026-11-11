@@ -148,7 +148,7 @@ if [ "$failed" -ne 0 ]; then
 fi
 
 if [ "$warned" -ne 0 ]; then
-    echo "  ⚠ Жёлтая зона ($WARN_FROM…$LIMIT строк): $warned файлов — дробить их"
+    echo "  ⚠ Жёлтая зона (${WARN_FROM}…$LIMIT строк): $warned файлов — дробить их"
     echo "    лучше СЕЙЧАС, своей правкой, а не когда лимит упрётся посреди чужой."
     echo "    На код возврата это не влияет."
     printf '%s' "$warnings_list" | sort -rn | while read -r n f; do
