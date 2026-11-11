@@ -18,18 +18,14 @@
 # TAKT_PREFIX префикс установки (по умолчанию ~/.local)
 # CARGO_TARGET_DIR каталог сборки (по умолчанию <репозиторий>/target/install)
 #
-# Каталог сборки по умолчанию - Свой (`target/install`), а не общий `target`.
-# Причина измерена: накопленный рабочий каталог (десятки гигабайт,
-# сотни тысяч файлов в `debug/deps`) превращает минутную сборку в часы, потому
-# что cargo обходит его перед каждой единицей компиляции. Скрипт, который может
-# зависнуть на чужом мусоре, бесполезен; свой каталог - свойство инструмента, а
-# не дисциплина автора.
-#
+# В каталоге сборки по умолчанию после установки остаются готовые бинарники.
+# Каталог, заданный через CARGO_TARGET_DIR, может быть общим для других сборок.
+
 # Код возврата: 0 - успех, иначе - причина напечатана.
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 
 PREFIX="${TAKT_PREFIX:-$HOME/.local}"
 WITH_LSP=1
@@ -97,6 +93,11 @@ fi
 
 # Каталог сборки: свой, если вызывающий не назвал другой (см. врезку выше).
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target/install}"
+export CARGO_INCREMENTAL=0
+if [[ "$DRY_RUN" == 0 && "$CARGO_TARGET_DIR" == "$ROOT/target/install" ]]; then
+    . "$ROOT/scripts/build-artifacts.sh"
+    build_artifacts_start "$CARGO_TARGET_DIR"
+fi
 
 run() {
     if [ "$DRY_RUN" -eq 1 ]; then

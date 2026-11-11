@@ -56,19 +56,29 @@ rustup target list --installed 2>/dev/null | grep -qx "wasm32-unknown-unknown" \
 CARGO_CMD="${CARGO_CMD:-cargo}"
 # Ядро и модуль экспорта - отдельными вызовами: общий вызов объединил бы фичи, и
 # ядро получило бы графику эталона.
-$CARGO_CMD build -p takt-wasm --profile "$PROFILE" --target wasm32-unknown-unknown
-$CARGO_CMD build -p takt-wasm-export --profile "$PROFILE" --target wasm32-unknown-unknown
+mkdir -p -- "$TARGET_DIR"
+BUILD_TARGET="$(mktemp -d "$TARGET_DIR/.wasm-build.XXXXXX")"
+BUILD_TARGET="$(cd "$BUILD_TARGET" && pwd -P)"
+trap 'rm -rf -- "$BUILD_TARGET"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+CARGO_TARGET_DIR="$BUILD_TARGET" CARGO_INCREMENTAL=0 \
+  $CARGO_CMD build -p takt-wasm --profile "$PROFILE" --target wasm32-unknown-unknown
+CARGO_TARGET_DIR="$BUILD_TARGET" CARGO_INCREMENTAL=0 \
+  $CARGO_CMD build -p takt-wasm-export --profile "$PROFILE" --target wasm32-unknown-unknown
 
-[[ -f "$WASM" ]] || {
-  echo "  ОШИБКА: модуль не собран: $WASM"
+BUILT_WASM="$BUILD_TARGET/wasm32-unknown-unknown/$PROFILE/takt_wasm.wasm"
+BUILT_EXPORT_WASM="$BUILD_TARGET/wasm32-unknown-unknown/$PROFILE/takt_wasm_export.wasm"
+[[ -f "$BUILT_WASM" ]] || {
+  echo "  ОШИБКА: модуль не собран: $BUILT_WASM"
   exit 1
 }
-[[ -f "$EXPORT_WASM" ]] || {
-  echo "  ОШИБКА: модуль экспорта не собран: $EXPORT_WASM"
+[[ -f "$BUILT_EXPORT_WASM" ]] || {
+  echo "  ОШИБКА: модуль экспорта не собран: $BUILT_EXPORT_WASM"
   exit 1
 }
-size_kib=$(( $(wc -c < "$WASM") / 1024 ))
-export_kib=$(( $(wc -c < "$EXPORT_WASM") / 1024 ))
+size_kib=$(( $(wc -c < "$BUILT_WASM") / 1024 ))
+export_kib=$(( $(wc -c < "$BUILT_EXPORT_WASM") / 1024 ))
 echo "  модули собраны: ядро ${size_kib} КиБ, модуль экспорта ${export_kib} КиБ"
 if (( size_kib > CORE_LIMIT_KIB )); then
   echo "  ОШИБКА: ядро ${size_kib} КиБ сверх предела ${CORE_LIMIT_KIB} КиБ — в ядро вернулось то,"
@@ -85,4 +95,8 @@ for tool in "$TAKTC" "$TAKT_SIM"; do
   }
 done
 
-"$NODE" "$ROOT/scripts/check-wasm-identity.mjs" "$WASM" "$TAKTC" "$TAKT_SIM" "$EXPORT_WASM"
+"$NODE" "$ROOT/scripts/check-wasm-identity.mjs" \
+  "$BUILT_WASM" "$TAKTC" "$TAKT_SIM" "$BUILT_EXPORT_WASM"
+mkdir -p -- "$(dirname "$WASM")"
+mv -f -- "$BUILT_WASM" "$WASM"
+mv -f -- "$BUILT_EXPORT_WASM" "$EXPORT_WASM"
