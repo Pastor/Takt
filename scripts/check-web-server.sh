@@ -19,18 +19,21 @@
 # пропуск, под `PRECHECK_STRICT=1` - ошибка. Строка подключения -
 # `TAKT_WEB_TEST_DB`.
 #
-# Свой каталог сборки: `web/server` - Отдельный workspace, и без явного
-# `CARGO_TARGET_DIR` он писал бы в `target/precheck` корня, который предкоммит
-# чистит по размеру - то есть пересобирал бы полторы сотни крейтов на
-# каждом прогоне.
+# Сервер собирается в отдельном каталоге. Проверки могут передать свой
+# каталог через TAKT_WEB_SERVER_TARGET и управлять его содержимым сами.
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT/web/server"
 
 STRICT="${PRECHECK_STRICT:-0}"
 export CARGO_TARGET_DIR="${TAKT_WEB_SERVER_TARGET:-$ROOT/target/web-server}"
+export CARGO_INCREMENTAL=0
+if [[ -z "${TAKT_WEB_SERVER_TARGET:-}" ]]; then
+  . "$ROOT/scripts/build-artifacts.sh"
+  build_artifacts_start "$CARGO_TARGET_DIR"
+fi
 
 echo "Гейт сервера проектов (фича 0531)..."
 
