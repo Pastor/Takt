@@ -23,7 +23,7 @@ cargo fmt --check -p takt-sim
 git diff --check
 ```
 
-Строгий ST-гейт из `scripts/precheck.sh` запущен отдельно с
+Строгая проверка ST из `scripts/precheck.sh` запущена отдельно с
 `PRECHECK_STRICT=1`. После `cargo build --locked -p takt-lang --bin taktc`
 все 11 корневых примеров пересобраны командой `taktc compile … -t st -o …`
 во временный каталог. `iec2c -I "$IEC2C_PREFIX/share/matiec/lib" -T …`
