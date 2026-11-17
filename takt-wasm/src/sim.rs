@@ -162,8 +162,7 @@ pub fn open(
     // тот же приоритет, что у CLI: заданное читателем побеждает выведенное. Частота
     // пересчитывается так же, как `clock` модели; такт не короче наносекунды.
     if tick_hz > 0 {
-        let hz = i64::try_from(tick_hz).unwrap_or(i64::MAX);
-        runner.set_tick_period_ns((1_000_000_000 / hz).max(1));
+        runner.set_tick_frequency_hz(tick_hz);
     } else if tick_ms > 0 {
         runner.set_tick_period_ns(tick_ms.saturating_mul(1_000_000));
     } else if let Some(hz) = clock_hz.filter(|hz| *hz > 0) {
@@ -196,7 +195,7 @@ pub fn open(
 /// Возвращает строки трассы - те же, что печатает `takt-sim`, - и исход, если прогон
 /// окончен. Не окончен - страница зовёт снова: так вкладка остаётся отзывчивой на
 /// модели, которая не завершается никогда.
-pub fn tick(id: u32, budget: u32) -> String {
+pub fn tick(id: u32, budget: u32, record: bool, scenario: Option<&str>) -> String {
     #[derive(Serialize)]
     struct Reply {
         lines: Vec<String>,
@@ -216,9 +215,14 @@ pub fn tick(id: u32, budget: u32) -> String {
         /// Те же активные состояния с адресом экземпляра, по списку на строку: имя не
         /// различает экземпляры одной модели на листе композиции, адрес различает.
         active: Vec<Vec<ActiveJson>>,
-        /// Ручные значения, применённые перед тактом, по списку на строку: из них
-        /// страница пишет запись прогона.
+        /// Ручные значения, применённые перед тактом, по списку на строку.
         manual: Vec<Vec<takt_sim::runner::ManualInput>>,
+        /// Шаги в виде JSON-текста: числа сохраняют точность при пересылке через JS.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        recorded: Vec<String>,
+        /// Отказ после уже выполненных тактов. Запись отдаёт готовую часть порции.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        failure: Option<String>,
         /// Значения портов после последнего такта порции.
         values: std::collections::BTreeMap<String, String>,
     }
@@ -228,6 +232,12 @@ pub fn tick(id: u32, budget: u32) -> String {
         let Some(runner) = sessions.get_mut(&id) else {
             return reply::refused(msg!(keys::WASM_RUN_NOT_OPEN, id = id));
         };
+        if let Some(scenario) = scenario {
+            match serde_json::from_str(scenario) {
+                Ok(steps) => runner.replace_unplayed_steps(steps),
+                Err(e) => return reply::refused(msg!(keys::WASM_SCENARIO_UNREADABLE, error = e)),
+            }
+        }
         let mut lines = Vec::new();
         let mut warnings = Vec::new();
         let mut output = Vec::new();
@@ -235,6 +245,8 @@ pub fn tick(id: u32, budget: u32) -> String {
         let mut next = Vec::new();
         let mut active = Vec::new();
         let mut manual = Vec::new();
+        let mut recorded = Vec::new();
+        let mut failure = None;
         for _ in 0..budget {
             match runner.step() {
                 Ok(step) => {
@@ -245,6 +257,12 @@ pub fn tick(id: u32, budget: u32) -> String {
                         states.push(step.states);
                         next.push(step.next);
                         active.push(step.active.into_iter().map(ActiveJson::from).collect());
+                        if record {
+                            recorded.push(
+                                serde_json::to_string(&runner.recorded_step(&step.manual))
+                                    .expect("шаг сценария состоит из значений JSON"),
+                            );
+                        }
                         manual.push(step.manual);
                     }
                     if let Some(result) = step.result {
@@ -260,6 +278,8 @@ pub fn tick(id: u32, budget: u32) -> String {
                             next,
                             active,
                             manual,
+                            recorded,
+                            failure,
                             values: runner.port_values(),
                         });
                     }
@@ -267,6 +287,10 @@ pub fn tick(id: u32, budget: u32) -> String {
                 // Ошибка прогона (guard, чтение сценария) - отказ с текстом эталона:
                 // придумывать свой значило бы показать в браузере не то, что показывает
                 // инструмент.
+                Err(message) if record && !lines.is_empty() => {
+                    failure = Some(message);
+                    break;
+                }
                 Err(message) => return reply::refused(message),
             }
         }
@@ -281,6 +305,8 @@ pub fn tick(id: u32, budget: u32) -> String {
             next,
             active,
             manual,
+            recorded,
+            failure,
             values: runner.port_values(),
         })
     })
@@ -358,7 +384,7 @@ mod tests {
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
 
-        let reply = json(&tick(id, 3));
+        let reply = json(&tick(id, 3, true, None));
         let lines: Vec<&str> = reply["lines"]
             .as_array()
             .unwrap()
@@ -408,7 +434,7 @@ mod tests {
         let opened = json(&open(CHAIN, "", 0, 0, Default::default(), None));
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
-        let reply = json(&tick(id, 20));
+        let reply = json(&tick(id, 20, false, None));
         let states = reply["states"].as_array().unwrap();
         let active = reply["active"].as_array().unwrap();
         assert_eq!(active.len(), states.len(), "по списку на строку: {reply}");
@@ -443,7 +469,7 @@ mod tests {
         let opened = json(&open(COUNTER, "", 0, 0, Default::default(), None));
         let id = opened["id"].as_u64().unwrap() as u32;
         for _ in 0..3 {
-            let reply = json(&tick(id, 5));
+            let reply = json(&tick(id, 5, false, None));
             assert_eq!(reply["ok"], Value::Bool(true), "{reply}");
             assert_eq!(reply["done"], Value::Bool(false));
             assert_eq!(reply["lines"].as_array().unwrap().len(), 5);
@@ -456,7 +482,7 @@ mod tests {
     fn terminating_model_reports_outcome() {
         let opened = json(&open("start S;\n", "", 0, 0, Default::default(), None));
         let id = opened["id"].as_u64().unwrap() as u32;
-        let reply = json(&tick(id, 10));
+        let reply = json(&tick(id, 10, false, None));
         assert_eq!(reply["done"], Value::Bool(true), "{reply}");
         let info = reply["info"].as_array().unwrap();
         assert!(
@@ -475,7 +501,7 @@ mod tests {
         let opened = json(&open(model, scenario, 0, 0, Default::default(), None));
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
-        let reply = json(&tick(id, 1));
+        let reply = json(&tick(id, 1, false, None));
         assert!(
             reply["lines"][0].as_str().unwrap().contains("sensor=7"),
             "вход сценария обязан доехать: {reply}"
@@ -492,7 +518,7 @@ mod tests {
         let opened = json(&open(model, scenario, 0, 0, Default::default(), Some(5)));
         assert_eq!(opened["ok"], Value::Bool(true), "{opened}");
         let id = opened["id"].as_u64().unwrap() as u32;
-        let reply = json(&tick(id, 196));
+        let reply = json(&tick(id, 196, false, None));
         let lines = reply["lines"].as_array().unwrap();
         assert_eq!(lines.len(), 5, "длина прогона - пять тактов: {reply}");
         assert!(
@@ -521,7 +547,7 @@ mod tests {
     /// Неоткрытый прогон - отказ, а не пустая трасса.
     #[test]
     fn unknown_session_is_refused() {
-        let reply = json(&tick(4242, 1));
+        let reply = json(&tick(4242, 1, false, None));
         assert_eq!(reply["ok"], Value::Bool(false), "{reply}");
     }
 }

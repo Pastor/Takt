@@ -278,6 +278,9 @@ struct SimTickRequest {
     id: u32,
     /// Сколько тактов сделать за вызов - бюджет отзывчивости страницы.
     budget: u32,
+    #[serde(default)]
+    record: bool,
+    scenario: Option<String>,
 }
 
 /// Запрос ручного ввода значений портов.
@@ -314,7 +317,9 @@ pub extern "C" fn takt_sim_open(len: u32) -> u32 {
 /// Делает такты открытого прогона.
 #[unsafe(no_mangle)]
 pub extern "C" fn takt_sim_tick(len: u32) -> u32 {
-    call(len, |r: SimTickRequest| sim::tick(r.id, r.budget))
+    call(len, |r: SimTickRequest| {
+        sim::tick(r.id, r.budget, r.record, r.scenario.as_deref())
+    })
 }
 
 /// Ставит ручные значения портов перед следующим тактом.

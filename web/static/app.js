@@ -24,6 +24,9 @@ import * as project from "./project.js";
 import * as layoutFile from "./layout.js";
 import { Scheme } from "./scheme.js";
 import { SimPanel } from "./sim-panel.js";
+import { NAME_CHARS } from "./file-kinds.js";
+import { ScenarioPanel } from "./scenario-panel.js";
+import { readSteps, writeSteps } from "./scenario-steps.js";
 import * as api from "./api.js";
 import * as account from "./account.js";
 import * as alerts from "./alerts.js";
@@ -63,6 +66,9 @@ const state = {
   bridge: null,
   /** Панель входов и выходов прогона (`sim-panel.js`). */
   simPanel: null,
+  scenarioPanel: null,
+  scenarioEpoch: 0,
+  recording: null,
   /** Наблюдаемые выходы вне проекта: имена портов, отмеченные на вкладке выходов. */
   simWatch: [],
   /** Ручка справки (`help.js`): страница без входа держит её несъёмной. */
@@ -247,9 +253,10 @@ export async function main() {
   // Сценарий - такая же область кода: тот же носитель строк, те же номера. Красится он
   // Своим разбором (`json.js`), а не словами компилятора: это JSON, а не Takt.
   state.scenarioEditor = new Editor(dom.scenario, () => {
-    state.scenario = state.scenarioEditor.value();
-    paintScenario();
-    saveDraft();
+    const text = state.scenarioEditor.value();
+    if (text === state.scenario) return;
+    state.scenarioPanel?.invalidate();
+    updateScenario(text, false);
   });
   wire();
   state.scheme = new Scheme(
@@ -340,6 +347,34 @@ export async function main() {
     },
   );
   dom.simio.addEventListener("click", toggleSimPanel);
+  state.scenarioPanel = new ScenarioPanel(dom, {
+    t,
+    say,
+    text: () => state.scenario,
+    change: updateScenario,
+    writable: () => Boolean(state.scenarioFile) && account.canWrite(),
+    running: () => state.running,
+    save: account.saveScenario,
+    restart: resetRun,
+    stopRecording: () => stopRecording(),
+    modeChanged: () => { state.scenarioEpoch += 1; },
+  });
+  dom["sim-record"].addEventListener("click", toggleRecording);
+  dom["sim-record-download"].addEventListener("click", () => {
+    const take = state.recording;
+    download(take.name, writeSteps(take.steps), "application/json");
+  });
+  dom["sim-record-save"].addEventListener("click", async () => {
+    const take = state.recording;
+    dom["sim-record-save"].disabled = true;
+    try {
+      await account.saveRecording(take.name, writeSteps(take.steps), take.hz);
+    } finally {
+      dom["sim-record-save"].disabled = false;
+    }
+  });
+  dom["scenario-import-open"].addEventListener("click", () => dom["scenario-import"].click());
+  dom["scenario-import"].addEventListener("change", importScenario);
   // Экспорт схемы: окно на панели листа, рисует модуль в потоке прогона.
   attachExport(dom, {
     keep: keepForExport,
@@ -374,6 +409,8 @@ export async function main() {
     closed: () => {
       state.file = "";
       state.kind = "takt";
+      state.scenarioPanel.invalidate();
+      stopRecording();
       dom.openfilename.textContent = "";
       // Проект закрыт - показывать нечего: ни кода, ни сценария, ни схемы.
       // Оставшийся показ говорил бы о файле, которого больше не открыто.
@@ -394,6 +431,7 @@ export async function main() {
     // нет, и второй список разошёлся бы с деревом.
     scenarios: () => {},
     openScenario: (text, file) => {
+      state.scenarioPanel.invalidate();
       state.scenario = text;
       state.scenarioFile = file ?? "";
       // Задержка и частота - свои у каждого сценария: открыт другой - и темп его.
@@ -402,6 +440,13 @@ export async function main() {
       dom.tickhz.value = hz ? String(hz) : "";
       state.scenarioEditor.setValue(text);
       paintScenario();
+      // Сценарий задаёт исходный бюджет, который автор может изменить на панели.
+      try {
+        const count = readSteps(text).length;
+        if (count) dom.budget.value = String(count);
+      } catch {
+        // Неполный JSON остаётся доступен для правки обычным редактором.
+      }
       if (state.shown === "scenario") showSource("scenario");
     },
     // Дерево перерисовано: мерка его ширины считается по нарисованным именам.
@@ -723,6 +768,10 @@ function cache() {
     "project-modal", "drop-modal", "file-modal", "dropfile-modal",
     "rename-modal", "pickscenario", "scenario-modal", "scenarios",
     "scenarioload", "scenariocancel",
+    "show-simulation", "scenario-edit", "scenario-import", "scenario-import-open", "scenario-tools", "scenario-fields",
+    "scenario-prev", "scenario-next", "scenario-position", "scenario-progress", "scenario-apply",
+    "scenario-insert", "scenario-delete", "scenario-save", "scenario-restart", "simio-live",
+    "sim-record", "sim-record-count", "sim-record-download", "sim-record-save",
     "crumbs", "scheme-up", "stage", "scheme", "sheet", "nav", "map",
     "panel-run", "panel-view", "panel-sheet", "settings",
     "panel-io", "simio", "simio-in", "simio-out", "simio-empty", "simio-inputs", "simio-outputs",
@@ -786,6 +835,9 @@ function wire() {
     // входит, иначе переданная ссылка меняла бы язык у получателя.
     i18n.remember(localStorage, dom.lang.value);
     await useLanguage(dom.lang.value);
+  });
+  dom["show-simulation"].addEventListener("click", () => {
+    showSource(state.shown === "scheme" ? "code" : "scheme");
   });
   dom.format.addEventListener("click", format);
   // Прогон, шаг и стоп живут в строке уровня схемы: прогон смотрят на схеме -
@@ -886,7 +938,7 @@ const saveDraft = draft.debounce(() => {
   // его при появлении проектов незачем.
   const layout = state.scheme ? state.scheme.text() : "";
   const problem = account.editing()
-    ? account.keepDraft(state.editor.value(), state.scenario, state.target, state.args, layout)
+    ? account.keepDraft(state.editor.value(), state.target, state.args, layout)
     : draft.save(localStorage, {
         source: state.editor.value(),
         scenario: state.scenario,
@@ -1600,11 +1652,74 @@ function formatScenario() {
     say(t("editor.alreadyFormatted"), "ok");
     return;
   }
-  state.scenarioEditor.setValue(done.text);
-  state.scenario = done.text;
-  paintScenario();
-  saveDraft();
+  state.scenarioPanel.invalidate();
+  updateScenario(done.text);
   say(t("editor.formatted"), "ok");
+}
+
+/** Обновляет общий текст сценария и сохраняет его черновик. */
+function updateScenario(text, replace = true) {
+  state.scenario = text;
+  if (replace) state.scenarioEditor.setValue(text);
+  paintScenario();
+  const problem = account.keepScenarioDraft();
+  if (problem) say(t(problem.key, problem.params), "warning");
+  saveDraft();
+}
+
+async function importScenario(event) {
+  const input = event.currentTarget;
+  const file = input.files[0];
+  input.value = "";
+  if (!file || state.running || account.hasProject()) return;
+  try {
+    const text = await file.text();
+    const steps = readSteps(text);
+    if (state.running || account.hasProject()) return;
+    state.scenarioPanel.invalidate();
+    updateScenario(text);
+    if (steps.length) dom.budget.value = String(steps.length);
+    resetRun();
+  } catch (error) {
+    state.scenarioPanel.refuse(error);
+  }
+}
+
+/** Запись начинается с первого такта новой сессии, включая пустые шаги. */
+function toggleRecording() {
+  if (state.recording?.active) {
+    stopRecording();
+    return;
+  }
+  if (state.running) return;
+  const id = Date.now();
+  const stem = state.file.endsWith(".takt") ? state.file.slice(0, -5) : "model";
+  const suffix = `-run-${id.toString(36)}.json`;
+  state.recording = {
+    id, active: true, steps: [], file: state.file, project: account.projectId(),
+    name: stem.slice(0, NAME_CHARS - suffix.length) + suffix,
+    hz: project.tickHz(dom.tickhz.value),
+  };
+  paintRecording();
+}
+
+function stopRecording() {
+  if (state.recording) state.recording.active = false;
+  paintRecording();
+}
+
+function paintRecording() {
+  const take = state.recording;
+  const count = take?.steps.length ?? 0;
+  dom["sim-record"].setAttribute("aria-pressed", String(Boolean(take?.active)));
+  dom["sim-record"].disabled = state.running && !take?.active;
+  dom["sim-record-count"].textContent = !take ? "" : take.hz
+    ? t("simRecord.countHz", { n: count, hz: take.hz })
+    : t("simRecord.count", { n: count });
+  dom["sim-record-download"].hidden = count === 0;
+  dom["sim-record-save"].hidden = count === 0 || take?.active || !account.canWrite()
+    || account.projectId() !== take?.project || state.file !== take?.file;
+  dom["scenario-import-open"].hidden = account.hasProject();
 }
 
 /**
@@ -1623,10 +1738,19 @@ function worker() {
 
 /** Что нужно потоку, чтобы открыть либо продолжить сессию. */
 function session() {
+  const editor = state.scenarioPanel;
+  const take = state.recording;
+  if (take?.active && (take.project !== account.projectId() || take.file !== state.file)) {
+    stopRecording();
+  }
   return {
+    editScenario: editor?.open ? state.scenarioEpoch : null,
+    recordId: take?.id ?? null,
+    record: Boolean(state.recording?.active),
+
     wasmUrl: state.build?.wasm ?? new URL(WASM_DEFAULT, location.href).href,
     source: state.editor.value(),
-    scenario: state.scenario,
+    scenario: editor?.open ? editor.playText : state.scenario,
     tickMs: 0,
     // Частота модельных часов - как `clock` модели; пусто - часы модели.
     tickHz: project.tickHz(dom.tickhz.value),
@@ -1635,7 +1759,7 @@ function session() {
     lang: i18n.language(),
     // Длина прогона - ключ `-n`: сценарий задаёт входы, а не число тактов, и после
     // его последнего шага прогон идёт дальше с удержанными значениями.
-    steps: Number(dom.budget.value) || 10_000,
+    steps: editor?.open ? editor.playLength : Number(dom.budget.value) || 10_000,
   };
 }
 
@@ -1731,7 +1855,7 @@ function download(name, bytes, type) {
 
 /** Запускает прогон в отдельном потоке: до конца модели либо до бюджета. */
 function run() {
-  if (state.running) return;
+  if (state.running || !state.scenarioPanel.apply()) return;
   showRun();
   state.running = true;
   setRunButtons({ run: true, step: true, stop: false });
@@ -1740,8 +1864,10 @@ function run() {
 
 /** Один такт: продолжает открытую сессию либо открывает новую по текущему тексту. */
 function stepOnce() {
-  if (state.running) return;
+  if (state.running || !state.scenarioPanel.apply()) return;
   showRun();
+  state.running = true;
+  setRunButtons({ run: true, step: true, stop: true });
   worker().postMessage({ type: "step", ...session() });
 }
 
@@ -1779,7 +1905,11 @@ function toggleSimPanel() {
   const open = dom.simio.getAttribute("aria-pressed") !== "true";
   dom.simio.setAttribute("aria-pressed", String(open));
   state.scheme.panels?.setOpen("io", open);
-  if (open && !state.running) worker().postMessage({ type: "open", ...session() });
+  if (open) {
+    paintRecording();
+    state.scenarioPanel.render();
+    if (!state.running && !state.scenarioPanel.open) worker().postMessage({ type: "open", ...session() });
+  }
 }
 
 /**
@@ -1791,6 +1921,8 @@ function toggleSimPanel() {
  */
 function resetRun() {
   if (state.running) return;
+  stopRecording();
+  state.scenarioPanel.reset();
   state.worker?.postMessage({ type: "reset" });
   state.scheme?.setRunning([]);
 }
@@ -1805,6 +1937,11 @@ function onWorker(message) {
       state.exports.delete(message.id);
       break;
     case "opened":
+      if (state.recording?.active && message.recordId === state.recording.id) {
+        if (state.recording.steps.length) stopRecording();
+        else state.recording.hz = message.tickHz;
+      }
+      if (message.editScenario === state.scenarioEpoch) state.scenarioPanel.progress(0);
       // Новая сессия - новая трасса: прежние строки принадлежали другому тексту либо
       // законченному прогону.
       dom.trace.replaceChildren();
@@ -1820,6 +1957,7 @@ function onWorker(message) {
       say(message.message ?? "", "warning");
       break;
     case "stepped":
+      finish();
       break;
     case "reset":
       // Сессия закрыта: следующий пуск начнёт с первого такта. Трасса остаётся -
@@ -1827,6 +1965,13 @@ function onWorker(message) {
       say(t("trace.wasReset"), "ok");
       break;
     case "lines":
+      if (state.recording?.active && message.recordId === state.recording.id) {
+        for (const step of message.recorded) state.recording.steps.push(step);
+        paintRecording();
+      }
+      if (state.scenarioPanel.open && message.editScenario === state.scenarioEpoch) {
+        state.scenarioPanel.progress(message.done, message.lines.length > 0);
+      }
       for (const line of message.lines) dom.trace.appendChild(row(line, "trace"));
       dom.trace.scrollTop = dom.trace.scrollHeight;
       // Схема подсвечивает активные состояния последнего такта порции: список приходит
@@ -1850,6 +1995,7 @@ function onWorker(message) {
       for (const line of message.lines) dom.trace.appendChild(row(line, "output"));
       break;
     case "finished":
+      stopRecording();
       for (const line of message.info ?? []) dom.trace.appendChild(row(line, "ok"));
       for (const line of message.errors ?? []) dom.trace.appendChild(row(line, "error"));
       // По завершении подсветка прогона снимается: узел "в прогоне" говорит о текущем
@@ -1865,6 +2011,7 @@ function onWorker(message) {
       finish();
       break;
     case "failed":
+      stopRecording();
       // Текст модуля сильнее ключа оболочки: он называет причину точнее, чем общее
       // "такт не выполнен", и это его язык, а не наш.
       dom.trace.appendChild(row(message.message ?? t(message.key, message.params), "error"));
@@ -2058,6 +2205,8 @@ function showTree(show) {
  */
 function showSource(what) {
   const scheme = panel("scheme");
+  dom["show-simulation"].hidden = state.kind !== "takt";
+  dom["show-simulation"].setAttribute("aria-pressed", String(what === "scheme"));
   state.shown = what;
   // "none" - показывать нечего (проект закрыт): все показы гаснут разом, и
   // подпись области молчит вместе с ними.
@@ -2209,6 +2358,10 @@ function alarm(error) {
  * @param {{run: boolean, step: boolean, stop: boolean}} off какие погасить
  */
 function setRunButtons(off) {
+  dom["scenario-edit"].disabled = state.running;
+  dom["scenario-import-open"].disabled = state.running;
+  paintRecording();
+  state.scenarioPanel.render();
   for (const [name, disabled] of Object.entries(off)) {
     for (const button of document.querySelectorAll(`[data-run="${name}"]`)) button.disabled = disabled;
   }

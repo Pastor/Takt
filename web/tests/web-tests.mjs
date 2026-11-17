@@ -586,7 +586,7 @@ test("язык: порядок выбора — сохранённый, брау
 const PAGE_SCRIPTS = [
   "account.js", "alerts.js", "api.js", "app.js", "boot.js", "bridge.js", "build.js", "build-settings.js",
   "draft.js", "editor.js", "export.js", "file-kinds.js", "help.js", "i18n.js", "layout.js", "legend.js", "pick.js",
-  "panels.js", "project.js", "sample.js", "scheme.js", "scheme-geometry.js",
+  "panels.js", "project.js", "sample.js", "scenario-panel.js", "scenario-steps.js", "scheme.js", "scheme-geometry.js",
   "scheme-host.js", "scheme-run.js", "sim-panel.js",
   "scheme-settings.js",
   "flags.js", "json.js",
@@ -2651,4 +2651,17 @@ test("панель прогона: набор выходов - свойство 
     "смена набора не уходит в проект");
   assert.match(app, /state\.simPanel\.setPorts\(message\.ports, message\.values, watchedNow\(\)\);/,
     "открытие прогона не берёт набор проекта");
+});
+
+test("scenario step edits preserve large JSON numbers and untouched fields", async () => {
+  const { readSteps, readFields, writeFields, writeSteps } = await import("../static/scenario-steps.js");
+  const steps = readSteps('[{"guard":{"vars":{"x":18446744073709551615}},"_step":"a,b","time_ms":9},{}]');
+  const fields = readFields(steps[0]);
+  fields.set("_step", JSON.stringify("b"));
+  steps[0] = writeFields(fields);
+  assert.match(writeSteps(steps), /18446744073709551615/);
+  assert.deepEqual(JSON.parse(steps[0]), {
+    guard: { vars: { x: Number(18446744073709551615n) } }, _step: "b", time_ms: 9,
+  });
+  assert.throws(() => readSteps('[null]'));
 });

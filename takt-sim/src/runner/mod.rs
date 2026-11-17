@@ -12,6 +12,7 @@ use takt_lang::diagnostics::lang::keys;
 use takt_lang::msg;
 
 mod manual;
+mod recording;
 pub use manual::ManualInput;
 
 // -- Результат симуляции ------------------------------------------------------
@@ -181,6 +182,14 @@ impl SimulationRunner {
     /// вызывающим: `1 с / f`.
     pub fn set_tick_period_ns(&mut self, period_ns: i64) {
         self.tick_period_ns = period_ns.max(0);
+    }
+
+    /// Задаёт явную частоту прогона. Ноль оставляет прежний период такта.
+    pub fn set_tick_frequency_hz(&mut self, hz: u64) {
+        if hz > 0 {
+            let hz = i64::try_from(hz).unwrap_or(i64::MAX);
+            self.set_tick_period_ns((1_000_000_000 / hz).max(1));
+        }
     }
 
     /// Текущее модельное время прогона (наносекунды).

@@ -14,6 +14,7 @@ let sessionKey = null;
 // Сделано тактов с открытия сессии: бюджет прогона считается от него.
 let done = 0;
 let stopped = false;
+let scenarioText = null;
 
 self.onmessage = async (event) => {
   const message = event.data ?? {};
@@ -36,6 +37,7 @@ self.onmessage = async (event) => {
         // Сброс - не останов: сессия закрывается, и следующий пуск открывает её
         // заново, то есть автомат начинает с первого такта. Трассу сброс не трогает:
         // её показывает страница, и старый прогон рядом с новым - её решение.
+        stopped = true;
         close_();
         post({ type: "reset" });
         break;
@@ -63,7 +65,7 @@ self.onmessage = async (event) => {
  *
  * @returns {Promise<boolean>} сессия готова к тактам
  */
-async function ensure({ wasmUrl, source, scenario, tickMs, tickHz, files, steps, lang }) {
+async function ensure({ wasmUrl, source, scenario, tickMs, tickHz, files, steps, lang, editScenario, recordId }) {
   if (!bridge) bridge = await Bridge.load(wasmUrl);
   // Язык - не часть ключа сессии: модель от него не меняется, а каждый такт несёт
   // язык сам.
@@ -73,18 +75,19 @@ async function ensure({ wasmUrl, source, scenario, tickMs, tickHz, files, steps,
   // Длина прогона - тоже: эталон заканчивает прогон по ней, и сессия, открытая под
   // другое число шагов, остановилась бы не там, где просит автор. Частота часов -
   // тоже: выдержка по времени считается от неё, и старая сессия шла бы в чужом темпе.
-  const key = JSON.stringify([source, scenario ?? "", tickMs ?? 0, tickHz ?? 0, files ?? {}, steps ?? null]);
+  const key = JSON.stringify([source, editScenario ? null : scenario ?? "", tickMs ?? 0, tickHz ?? 0, files ?? {}, editScenario ? null : steps ?? null, editScenario, recordId]);
   if (session !== null && sessionKey === key) return true;
   close_();
-  const opened = bridge.simOpen(source, scenario ?? "", tickMs ?? 0, files ?? {}, steps ?? null, tickHz ?? 0);
+  const opened = bridge.simOpen(source, scenario ?? "", tickMs ?? 0, files ?? {}, editScenario ? null : steps ?? null, tickHz ?? 0);
   if (!opened.ok) {
     post({ type: "failed", message: opened.error?.message, key: "trace.notOpened", error: opened.error });
     return false;
   }
+  scenarioText = scenario;
   session = opened.id;
   sessionKey = key;
   done = 0;
-  post({ type: "opened", ports: opened.ports ?? [], values: opened.values ?? {} });
+  post({ type: "opened", editScenario, recordId, tickHz, ports: opened.ports ?? [], values: opened.values ?? {} });
   if (opened.warnings?.length) post({ type: "warnings", items: opened.warnings });
   return true;
 }
@@ -94,13 +97,17 @@ async function ensure({ wasmUrl, source, scenario, tickMs, tickHz, files, steps,
  *
  * @returns {{ok: boolean, finished: boolean}} исход порции
  */
-function advance(count) {
-  const ticked = bridge.simTick(session, count);
+function advance(count, message) {
+  const scenario = message.editScenario && message.scenario !== scenarioText
+    ? message.scenario
+    : undefined;
+  const ticked = bridge.simTick(session, count, { record: message.record, scenario });
   if (!ticked.ok) {
     post({ type: "failed", message: ticked.error?.message, key: "trace.tickFailed", error: ticked.error });
     close_();
     return { ok: false, finished: false };
   }
+  if (scenario !== undefined) scenarioText = scenario;
   done += ticked.lines.length;
   // Предупреждения такта и вывод модели отправляются до строк трассы своей
   // порции: место сообщения в потоке совпадает с тем, что даёт эталон в консоли.
@@ -113,9 +120,17 @@ function advance(count) {
     next: ticked.next ?? [],
     active: ticked.active ?? [],
     manual: ticked.manual ?? [],
+    recorded: ticked.recorded ?? [],
+    recordId: message.recordId,
+    editScenario: message.editScenario,
     values: ticked.values ?? {},
     done,
   });
+  if (ticked.failure) {
+    post({ type: "failed", message: ticked.failure, key: "trace.tickFailed" });
+    close_();
+    return { ok: false, finished: false };
+  }
   if (ticked.done) {
     post({ type: "finished", info: ticked.info, errors: ticked.errors, steps: done });
     close_();
@@ -136,12 +151,12 @@ async function run(message) {
   const delay = Math.max(0, Number(message.delay) || 0);
   const portion = delay > 0 ? 1 : Math.max(1, Math.min(message.chunk ?? 256, limit));
   while (!stopped && done < limit) {
-    const outcome = advance(Math.min(portion, limit - done));
+    const outcome = advance(Math.min(portion, limit - done), message);
     if (!outcome.ok || outcome.finished) return;
     // Отдаём поток: пришедшая команда "стоп" разбирается между порциями и во время
     // паузы.
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay * 1000));
-    else await Promise.resolve();
+    else await new Promise((resolve) => setTimeout(resolve, 0));
   }
   // Остановленная сессия остаётся открытой: автор вправе продолжить её шагами.
   post({
@@ -156,7 +171,11 @@ async function run(message) {
 async function step(message) {
   stopped = false;
   if (!(await ensure(message))) return;
-  const outcome = advance(1);
+  if (message.editScenario && done >= message.steps) {
+    post({ type: "halted", key: "trace.budgetSpent", params: { steps: message.steps }, steps: done });
+    return;
+  }
+  const outcome = advance(1, message);
   if (outcome.ok && !outcome.finished) post({ type: "stepped", steps: done });
 }
 

@@ -1,5 +1,5 @@
 use crate::eval::value::Value;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use takt_lang::diagnostics::lang::keys;
@@ -22,7 +22,7 @@ use takt_lang::msg;
 ///
 /// Формы не пересекаются по представлению (массив против объекта), поэтому `untagged`
 /// разбирает их однозначно.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum PortValues {
     /// Значения по порядку портов (историческая форма).
@@ -39,16 +39,19 @@ pub enum PortValues {
 /// ```json
 /// { "in_ports": {"btn": 1}, "inout": [8], "guard": { "out": {"lamp": 0}, "vars": {"M::x": 1} } }
 /// ```
-#[derive(Deserialize, Default, Clone)]
+#[derive(Deserialize, Serialize, Default, Clone)]
 pub struct SimStep {
     #[serde(rename = "in_ports")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub in_ports: Option<PortValues>,
     /// На сколько продвинуть модельные часы перед этим тактом, в миллисекундах. `None` -
     /// на период такта прогона (умолчание 1 мс).
     ///
     /// Поле необязательно, поэтому все существующие сценарии читаются без правки: время
     /// появляется только там, где о нём попросили.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub time_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub inout: Option<PortValues>,
     /// Стенд внешних функций на этот такт.
     ///
@@ -60,12 +63,14 @@ pub struct SimStep {
     /// значением отвечает прежним `SIM-019`. Ноль по умолчанию сделал бы прогон зелёным
     /// там, где эталон и прошивка расходятся.
     #[serde(rename = "extern")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub extern_stubs: Option<BTreeMap<String, ExternValue>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub guard: Option<Guard>,
 }
 
 /// Чем сценарий подменяет одну внешнюю функцию.
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(untagged)]
 pub enum ExternValue {
     /// Таблица "первый аргумент -> значение". Ключ - строка: в JSON ключом объекта
@@ -76,10 +81,13 @@ pub enum ExternValue {
 }
 
 /// Проверка состояния модели после шага.
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Guard {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub out: Option<PortValues>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub inout: Option<PortValues>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vars: Option<HashMap<String, serde_json::Value>>,
 }
 

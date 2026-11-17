@@ -74,6 +74,9 @@ const state = {
   scenarioFile: null,
   /** Текст сценария, каким его отдал сервер: по нему видно, правил ли автор. */
   scenarioRead: "",
+  scenarioRevision: null,
+  scenarioRequest: 0,
+  scenarioProject: null,
 };
 
 /**
@@ -296,18 +299,13 @@ export function editing() {
  * несохранённый выбор терялся бы при каждой перезагрузке, тогда как текст
  * переживал бы её.
  */
-export function keepDraft(source, scenario, target, args, layout) {
+export function keepDraft(source, target, args, layout) {
   if (!editing()) return null;
   return draft.saveFile(localStorage, {
     project: state.project.id,
     file: state.file,
     revision: state.revision,
     source,
-    scenario,
-    // Имя сценария хранится вместе с его текстом: сценариев несколько, и текст одного
-    // под именем другого - это не черновик, а подмена. Разошлись - черновик сценария
-    // просто не берётся.
-    scenarioFile: state.scenarioFile,
     target,
     args,
     // Раскладка схемы - авторская работа того же рода, что текст: она переживает
@@ -915,6 +913,8 @@ async function closeProject(say = true) {
   state.level = "none";
   state.scenarioFile = null;
   state.scenarioRead = "";
+  state.scenarioRevision = null;
+  state.scenarioRequest += 1;
   state.doomed = null;
   // Проект закрыт - закрыто и всё, что о нём говорило: текст, сценарий, схема,
   // состав файлов. Остаться на экране им нельзя: показанное принадлежит проекту,
@@ -1348,7 +1348,7 @@ async function openProjectFiles(id) {
     ? state.scenarioFile
     : (scenarios.includes(opened.main_scenario) ? opened.main_scenario : scenarios[0] ?? null);
   host.scenarios(scenarios, chosen);
-  if (chosen !== state.scenarioFile) await chooseScenario(chosen);
+  if (chosen !== state.scenarioFile || state.scenarioProject !== id) await chooseScenario(chosen);
 }
 
 /**
@@ -1388,16 +1388,75 @@ async function readProjectTexts() {
  * его автор, и надо ли записывать сценарий при сохранении.
  */
 export async function chooseScenario(name) {
-  state.scenarioFile = name;
-  if (!name || !state.project) {
-    state.scenarioRead = "";
-    host.openScenario("", null);
-    return;
-  }
+  const id = state.project?.id;
+  const request = ++state.scenarioRequest;
   try {
-    const body = await api.file(state.project.id, name);
-    state.scenarioRead = body.text ?? "";
-    host.openScenario(state.scenarioRead, name);
+    const body = name && id ? await api.file(id, name) : null;
+    if (request !== state.scenarioRequest || id !== state.project?.id) return;
+    if (id === state.scenarioProject && name !== state.scenarioFile) keepScenarioDraft();
+    const kept = name && id ? draft.loadFile(localStorage, id, name) : null;
+    state.scenarioProject = id;
+    state.scenarioFile = name;
+    state.scenarioRead = body?.text ?? "";
+    state.scenarioRevision = body?.revision ?? null;
+    if (state.conflict?.scenario) hideConflict();
+    if (kept && kept.source !== state.scenarioRead) {
+      state.scenarioRevision = kept.revision;
+      if (kept.revision !== body.revision) {
+        scenarioConflict(body.revision, t("account.draftDiffers", {
+          saved: when(kept.savedAt), revision: body.revision,
+        }));
+      }
+    }
+    host.openScenario(kept?.source ?? state.scenarioRead, name);
+  } catch (error) {
+    if (request === state.scenarioRequest) fail(error);
+  }
+}
+
+export function hasProject() {
+  return state.project !== null;
+}
+
+export function projectId() {
+  return state.project?.id ?? null;
+}
+
+/** Проверяет серверное право записи открытого проекта. */
+export function canWrite() {
+  return hasProject() && (state.level === "edit" || state.level === "owner");
+}
+
+/** Хранит черновик под самим файлом сценария, даже если открыта другая модель. */
+export function keepScenarioDraft() {
+  if (!canWrite() || state.scenarioProject !== state.project.id || !state.scenarioFile) return null;
+  const source = host.scenario();
+  if (source === state.scenarioRead) {
+    draft.clearFile(localStorage, state.project.id, state.scenarioFile);
+    return null;
+  }
+  return draft.saveFile(localStorage, {
+    project: state.project.id,
+    file: state.scenarioFile,
+    revision: state.scenarioRevision,
+    source,
+  });
+}
+
+/** Новая запись создаёт файл штатной операцией с защитой занятого имени. */
+export async function saveRecording(name, source, hz) {
+  if (!canWrite()) return;
+  const id = state.project.id;
+  try {
+    const written = await api.write(id, name, source, null);
+    if (state.project?.id !== id) return;
+    if (state.revision === written.revision - 1) state.revision = written.revision;
+    if (state.scenarioRevision === written.revision - 1) state.scenarioRevision = written.revision;
+    if (hz > 0 && state.level === "owner") await setFrequency(name, hz);
+    await openProjectFiles(id);
+    await chooseScenario(name);
+    refresh();
+    host.say(t("file.created", { name }), "ok");
   } catch (error) {
     fail(error);
   }
@@ -1513,13 +1572,8 @@ async function openFile(id, name) {
         layout: kept.layout ?? state.layoutRead,
         layoutFile: state.layoutFile,
       });
-      // Черновик сценария берётся, только если он от того же файла: текст одного
-      // сценария под именем другого - подмена, а не сохранность.
-      if (kept.scenarioFile && kept.scenarioFile === state.scenarioFile) {
-        host.openScenario(kept.scenario ?? "", state.scenarioFile);
-      }
     } else {
-      hideConflict();
+      if (!state.conflict?.scenario) hideConflict();
       // Текст модели тот же, а раскладка черновика своя: автор двигал узлы и не
       // сохранил. Без этой ветви черновик читался только при правленом тексте, и
       // перезагрузка стирала расстановку, хотя черновик её хранил.
@@ -1542,31 +1596,60 @@ async function openFile(id, name) {
       const chosen = pickScenario(own, state.scenarioFile, state.project?.main_scenario ?? null);
       if (chosen !== state.scenarioFile) await chooseScenario(chosen);
     }
+    // У старого черновика модели сценарий ещё лежит вместе с исходником.
+    if (kept?.scenarioFile && kept.scenarioFile === state.scenarioFile
+        && kept.scenario !== state.scenarioRead && !draft.loadFile(localStorage, id, state.scenarioFile)) {
+      const actual = state.scenarioRevision;
+      state.scenarioRevision = kept.revision;
+      host.openScenario(kept.scenario, state.scenarioFile);
+      keepScenarioDraft();
+      if (kept.revision !== actual) {
+        scenarioConflict(actual, t("account.draftDiffers", {
+          saved: when(kept.savedAt), revision: actual,
+        }));
+      }
+    }
     refresh();
   } catch (error) {
     fail(error);
   }
 }
 
-/**
- * Записывает выбранный сценарий, если автор его правил.
- *
- * Возвращает новую ревизию проекта либо `null` - сценарий не менялся.
- *
- * Признак - расхождение с текстом, отданным сервером, а не "трогали ли
- * область": набранное и стёртое обратно - это не правка, и запись ради неё
- * подняла бы ревизию у всех, кто держит проект открытым.
- *
- * # Ошибки
- * Отказ записи поднимается вызывающему.
- */
-async function keepScenario(revision) {
-  const text = host.scenario();
-  if (!state.scenarioFile || text === state.scenarioRead) return null;
-  const written = await api.write(state.project.id, state.scenarioFile, text, revision);
-  state.revision = written.revision;
-  state.scenarioRead = text;
-  return written.revision;
+/** Пишет именно прочитанную ревизию сценария, с разбором конфликта. */
+export async function saveScenario() {
+  if (!canWrite() || state.scenarioProject !== state.project.id
+      || !state.scenarioFile || state.conflict?.scenario) return false;
+  const id = state.project.id;
+  const file = state.scenarioFile;
+  const revision = state.scenarioRevision;
+  const source = host.scenario();
+  if (source === state.scenarioRead) return true;
+  const problem = keepScenarioDraft();
+  if (problem) host.say(t(problem.key, problem.params), "warning");
+  try {
+    const written = await api.write(id, file, source, revision);
+    if (state.project?.id !== id || state.scenarioFile !== file) return true;
+    if (state.revision === revision) state.revision = written.revision;
+    state.scenarioRevision = written.revision;
+    state.scenarioRead = source;
+    keepScenarioDraft();
+    host.say(t("account.saved", { revision: written.revision }), "ok");
+    refresh();
+    return true;
+  } catch (error) {
+    if (state.project?.id !== id || state.scenarioFile !== file) return false;
+    if (error?.code === "revision_conflict") {
+      scenarioConflict(error.revision, t("account.conflict", { mine: revision, theirs: error.revision }));
+    } else {
+      fail(error);
+    }
+    return false;
+  }
+}
+
+function scenarioConflict(actual, message) {
+  state.conflict = { scenario: state.scenarioFile, actual };
+  showConflict(`${state.scenarioFile} · ${message}`);
 }
 
 /**
@@ -1587,6 +1670,7 @@ async function keepLayout() {
   if (current === state.layoutRead) return;
   if (!state.layoutFile && current === layoutFile.canonical(layoutFile.empty())) return;
   const written = await api.write(state.project.id, pair, current, state.layoutFile ? state.revision : null);
+  if (state.scenarioRevision === written.revision - 1) state.scenarioRevision = written.revision;
   state.revision = written.revision;
   state.layoutFile = pair;
   state.layoutRead = current;
@@ -1726,7 +1810,9 @@ async function save() {
     host.say(t("account.readOnly"), "warning");
     return;
   }
+  if (state.scenarioFile && !await saveScenario()) return;
   try {
+    const seen = state.revision;
     const written = await api.write(
       state.project.id,
       state.file,
@@ -1736,10 +1822,7 @@ async function save() {
     state.revision = written.revision;
     draft.clearFile(localStorage, state.project.id, state.file);
     hideConflict();
-    // Правленый сценарий записывается вместе с файлом и называется в сообщении: он
-    // живёт в другой области экрана, и молча записанный чужой файл - это работа, о
-    // которой автор не просил.
-    const also = await keepScenario(written.revision);
+    if (state.scenarioRevision === seen) state.scenarioRevision = written.revision;
     // Раскладка схемы пишется своим файлом рядом с моделью - и только когда она
     // изменилась: пустой файл ради пустой раскладки проекту не нужен.
     try {
@@ -1747,12 +1830,7 @@ async function save() {
     } catch (error) {
       host.say(t("scheme.layoutNotSaved", { error: text(error) }), "warning");
     }
-    host.say(
-      also
-        ? t("account.savedWith", { revision: also, file: state.scenarioFile })
-        : t("account.saved", { revision: written.revision }),
-      "ok",
-    );
+    host.say(t("account.saved", { revision: state.revision }), "ok");
     // Выбор сборки пишется после текста и своим отказом: сервер вправе отвергнуть
     // ключи, а текст к тому времени уже сохранён - общий отказ сказал бы автору, что
     // работа не записана, и он записал бы её ещё раз поверх своей же.
@@ -1782,6 +1860,29 @@ async function save() {
 /** Разрешает конфликт выбором автора. */
 async function resolveConflict(choice) {
   if (!state.conflict || !editing()) return;
+  if (state.conflict.scenario) {
+    if (choice === "reread") {
+      const id = state.project.id;
+      const file = state.scenarioFile;
+      try {
+        const body = await api.file(id, file);
+        if (state.project?.id !== id || state.scenarioFile !== file) return;
+        draft.clearFile(localStorage, id, file);
+        state.scenarioRead = body.text;
+        state.scenarioRevision = body.revision;
+        host.openScenario(body.text, file);
+        hideConflict();
+        host.say(t("account.rereadDone", { revision: body.revision }), "ok");
+      } catch (error) {
+        fail(error);
+      }
+    } else {
+      state.scenarioRevision = state.conflict.actual;
+      hideConflict();
+      await saveScenario();
+    }
+    return;
+  }
   try {
     if (choice === "reread") {
       const body = await api.file(state.project.id, state.file);

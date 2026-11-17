@@ -84,7 +84,7 @@ fn ports_carry_the_field_kind() {
 #[test]
 fn inputs_reach_the_next_tick() {
     let (id, _) = opened();
-    let first = json_of(&tick(id, 1));
+    let first = json_of(&tick(id, 1, false, None));
     assert_eq!(first["values"]["speed"], "0");
     assert_eq!(first["manual"], json!([[]]));
     let set = json_of(&inputs(
@@ -93,7 +93,7 @@ fn inputs_reach_the_next_tick() {
         &named(json!({"bus": 7})),
     ));
     assert_eq!(set, json!({"ok": true, "set": 3}));
-    let second = json_of(&tick(id, 2));
+    let second = json_of(&tick(id, 2, false, None));
     assert_eq!(second["values"]["speed"], "42", "{second}");
     assert_eq!(second["values"]["bus"], "7", "{second}");
     assert_eq!(
@@ -129,4 +129,94 @@ fn a_bad_input_is_refused_by_the_reference() {
         &Default::default(),
     ));
     assert_eq!(closed["ok"], false, "{closed}");
+}
+
+#[test]
+fn recorded_ticks_replay_inputs_and_guards() {
+    let scenario = r#"[{"in_ports":{"Pump::on":1,"level":7}},
+        {"guard":{"out":{"speed":42}},"time_ms":9},{}]"#;
+    let open_run = |scenario| {
+        let reply = json_of(&open(PLANT, scenario, 0, 0, Default::default(), Some(3)));
+        assert_eq!(reply["ok"], true, "{reply}");
+        reply["id"].as_u64().unwrap() as u32
+    };
+    let id = open_run(scenario);
+    assert_eq!(
+        json_of(&inputs(
+            id,
+            &named(json!({"Pump::level":42})),
+            &Default::default()
+        ))["ok"],
+        true
+    );
+    let run = json_of(&tick(id, 3, true, None));
+    let recorded = run["recorded"].as_array().expect("записанные шаги");
+    assert_eq!(recorded.len(), 3);
+    assert_eq!(
+        json_of(recorded[0].as_str().unwrap())["in_ports"]["level"],
+        42
+    );
+    let scenario = format!(
+        "[{}]",
+        recorded
+            .iter()
+            .map(|step| step.as_str().unwrap())
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    let replay = open_run(&scenario);
+    let again = json_of(&tick(replay, 3, true, None));
+    assert_eq!(again["lines"], run["lines"]);
+    close(id);
+    close(replay);
+}
+
+#[test]
+fn edits_replace_only_unplayed_ticks() {
+    let source = "in x: u8; out y: u8; start Read { always { y := x; } ref Read; }";
+    let scenario = r#"[{"in_ports":{"x":3}},{},{}]"#;
+    let edited = r#"[{"in_ports":{"x":9}},{},{"in_ports":{"x":8}}]"#;
+    let opened = json_of(&open(source, scenario, 0, 0, Default::default(), Some(3)));
+    let id = opened["id"].as_u64().unwrap() as u32;
+    assert_eq!(json_of(&tick(id, 1, false, None))["values"]["y"], "3");
+    assert_eq!(
+        json_of(&tick(id, 1, false, Some(edited)))["values"]["y"],
+        "3"
+    );
+    assert_eq!(json_of(&tick(id, 1, false, None))["values"]["y"], "8");
+    close(id);
+
+    let opened = json_of(&open(source, edited, 0, 0, Default::default(), Some(3)));
+    let id = opened["id"].as_u64().unwrap() as u32;
+    assert_eq!(json_of(&tick(id, 1, false, None))["values"]["y"], "9");
+    close(id);
+}
+
+#[test]
+fn recording_keeps_completed_ticks_before_a_guard_failure() {
+    let source = "out x: u8; start Read { ref Read; }";
+    let scenario = r#"[{},{"guard":{"out":{"x":42}}}]"#;
+    let opened = json_of(&open(source, scenario, 0, 0, Default::default(), Some(2)));
+    let id = opened["id"].as_u64().unwrap() as u32;
+    let reply = json_of(&tick(id, 2, true, None));
+    assert_eq!(reply["recorded"], json!(["{}"]));
+    assert_eq!(reply["lines"].as_array().unwrap().len(), 1);
+    assert!(reply["failure"].is_string());
+    close(id);
+}
+
+#[test]
+fn recorded_ticks_keep_the_external_stub_beyond_the_scenario() {
+    let source =
+        "extern fn read() -> u8; out x: u8; start Read { always { x := read(); } ref Read; }";
+    let scenario = r#"[{"extern":{"read":42}}]"#;
+    let opened = json_of(&open(source, scenario, 0, 0, Default::default(), Some(2)));
+    let id = opened["id"].as_u64().unwrap() as u32;
+    let reply = json_of(&tick(id, 2, true, None));
+    assert_eq!(reply["values"]["x"], "42", "{reply}");
+    let recorded = reply["recorded"].as_array().unwrap();
+    assert_eq!(recorded.len(), 2);
+    assert_eq!(recorded[0], recorded[1]);
+    assert_eq!(json_of(recorded[1].as_str().unwrap())["extern"]["read"], 42);
+    close(id);
 }

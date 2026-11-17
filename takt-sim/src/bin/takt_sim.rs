@@ -103,9 +103,18 @@ struct Args {
         long = "tick-ms",
         value_name = "MS",
         help = msg!(keys::CLI_SIM_ARG_TICK_MS),
-        long_help = msg!(keys::CLI_SIM_ARG_TICK_MS_LONG)
+        long_help = msg!(keys::CLI_SIM_ARG_TICK_MS_LONG),
+        conflicts_with = "tick_hz"
     )]
     tick_ms: Option<i64>,
+
+    #[arg(
+        long = "tick-hz",
+        value_name = "HZ",
+        value_parser = clap::value_parser!(u64).range(1..),
+        help = msg!(keys::CLI_SIM_ARG_TICK_HZ)
+    )]
+    tick_hz: Option<u64>,
 }
 
 // -- Точка входа ---------------------------------------------------------------
@@ -281,7 +290,9 @@ fn run(args: Args) -> Result<RunResult, RunError> {
     runner.set_invariant_soft(args.invariant_soft);
     // Период такта модельных часов: флаг > частота модели > умолчание 1 мс. Приоритет
     // тот же, что у профиля времени в компиляторе: явно заданное побеждает выведенное.
-    if let Some(ms) = args.tick_ms {
+    if let Some(hz) = args.tick_hz {
+        runner.set_tick_frequency_hz(hz);
+    } else if let Some(ms) = args.tick_ms {
         runner.set_tick_period_ns(ms.saturating_mul(1_000_000));
     } else if let Some(hz) = clock_hz.filter(|hz| *hz > 0) {
         runner.set_tick_period_ns(1_000_000_000 / i64::try_from(hz).unwrap_or(i64::MAX));

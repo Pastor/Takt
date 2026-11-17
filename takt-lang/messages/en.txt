@@ -1089,6 +1089,7 @@ cli.sim.arg.sim-file = JSON file with inputs and checks
 cli.sim.arg.load-state = Load the model state from a JSON file before the simulation
 cli.sim.arg.save-state = Save the model state to a JSON file after the simulation
 cli.sim.arg.invariant-soft = Soft invariant mode: a violation is recorded and the run goes on instead of stopping. For debugging - it has no conformance check against C
+cli.sim.arg.tick-hz = Explicit model clock frequency, in hertz
 cli.sim.arg.tick-ms = How much model time passes per tick, in milliseconds
 cli.sim.arg.tick-ms-long = How much model time passes per tick, in milliseconds.\n\nDefault - 1 ms.
 cli.sim.graphics-config-removed = the `--graphics-config` key has been removed: run frames are drawn from the layout file `<model>.takt-ui` next to the model, and it defines the scheme view

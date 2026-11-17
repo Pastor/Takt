@@ -159,8 +159,8 @@ export class Bridge {
     return this.call("takt_sim_open", { source, scenario, tick_ms: tickMs ?? 0, tick_hz: tickHz ?? 0, files, steps });
   }
 
-  simTick(id, budget) {
-    return this.call("takt_sim_tick", { id, budget });
+  simTick(id, budget, { record = false, scenario } = {}) {
+    return this.call("takt_sim_tick", { id, budget, record, scenario });
   }
 
   simInputs(id, inPorts, inout) {
