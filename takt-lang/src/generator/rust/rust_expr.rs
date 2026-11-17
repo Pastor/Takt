@@ -566,7 +566,7 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
 
         ExpressionNode::ConditionalOperator(cond, then_, else_) => Ok(format!(
             "if {} {{ {} }} else {{ {} }}",
-            print_expression(cond, scope)?,
+            unwrap_outer(&print_expression(cond, scope)?),
             print_expression(then_, scope)?,
             print_expression(else_, scope)?
         )),
