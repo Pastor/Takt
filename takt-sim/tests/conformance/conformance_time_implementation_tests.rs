@@ -1,10 +1,7 @@
-//! Потактовая сверка времени внутри модели, реализующей состояние: эталон против
-//! порождённого C. Профиль "часы": тестбенч ведёт `now_ms` 1 мс на такт, эталон -
-//! `set_time_ns` с тем же шагом. Наблюдение - оба выходных порта через колбэк
-//! `write_numeric`; выход держит последнее записанное значение, как регистр.
-//!
-//! Сверка держит эталон и цель вместе: разойдись часы эталона в реализации, трассы
-//! разъедутся на такте срабатывания выдержки.
+//! Потактовая сверка времени внутри модели, реализующей состояние.
+//! В профиле «часы» первый такт начинается в 0 мс, шаг равен 1 мс.
+//! После каждого такта наблюдаем два выходных порта. Порт, в который
+//! не записали новое значение, сохраняет предыдущее.
 
 use std::path::Path;
 use std::process::Command;
@@ -140,11 +137,92 @@ int main(void) {{
     );
     let run = Command::new(&bin).output().expect("запуск");
     assert!(run.status.success(), "собранный C упал");
-    String::from_utf8_lossy(&run.stdout)
+    parse_trace(&run.stdout)
+}
+
+fn generated_rust(case: &Case, dir: &Path) -> Vec<[i128; 2]> {
+    let source = std::fs::read_to_string(case.fixture).expect("фикстура");
+    takt_lang::compile_to_rust(
+        "impl_time",
+        &source,
+        dir.to_str().expect("путь"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение Rust");
+
+    let [first, second] = case.ports.map(|(name, _)| name.to_ascii_uppercase());
+    let driver = format!(
+        r#"#[path = "impl_time.rs"]
+mod generated;
+use generated::{{Hal, OutU8Port, ImplTime}};
+use std::cell::Cell;
+
+#[derive(Default)]
+struct Probe {{
+    now: Cell<u64>,
+    first: Cell<u8>,
+    second: Cell<u8>,
+}}
+
+impl Hal for &Probe {{
+    fn write_u8(&mut self, port: OutU8Port, value: u8) {{
+        match port {{
+            OutU8Port::{first} => self.first.set(value),
+            OutU8Port::{second} => self.second.set(value),
+        }}
+    }}
+
+    fn now_ms(&mut self) -> u64 {{ self.now.get() }}
+}}
+
+fn main() {{
+    let probe = Probe::default();
+    let mut model = ImplTime::new(&probe);
+    model.init();
+    for step in 0..{TICKS} {{
+        probe.now.set(step);
+        model.tick();
+        println!("TICK {{}} {{}}", probe.first.get(), probe.second.get());
+    }}
+}}
+"#
+    );
+    std::fs::write(dir.join("driver.rs"), driver).expect("драйвер");
+    let build = Command::new("rustc")
+        .current_dir(dir)
+        .args(["--edition", "2021", "driver.rs", "-o", "driver"])
+        .output()
+        .expect("запуск rustc");
+    assert!(
+        build.status.success(),
+        "rustc не собрал драйвер:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("driver"))
+        .output()
+        .expect("запуск драйвера");
+    assert!(run.status.success(), "драйвер Rust завершился с ошибкой");
+    parse_trace(&run.stdout)
+}
+
+fn parse_trace(stdout: &[u8]) -> Vec<[i128; 2]> {
+    String::from_utf8_lossy(stdout)
         .lines()
-        .filter_map(|line| {
-            let mut it = line.strip_prefix("TICK ")?.split_whitespace();
-            Some([it.next()?.parse().ok()?, it.next()?.parse().ok()?])
+        .map(|line| {
+            let mut values = line
+                .strip_prefix("TICK ")
+                .expect("строка трассы")
+                .split_whitespace();
+            let pair = std::array::from_fn(|_| {
+                values
+                    .next()
+                    .expect("значение порта")
+                    .parse()
+                    .expect("целое число")
+            });
+            assert!(values.next().is_none(), "лишнее значение: {line}");
+            pair
         })
         .collect()
 }
@@ -185,4 +263,29 @@ fn every_in_state_implementation_matches_generated_c() {
         .map(|(i, &t)| [t, if i >= 10 { 3 } else { 1 }])
         .collect();
     check(&EVERY, &expected);
+}
+
+fn check_rust(case: &Case) {
+    if !Command::new("rustc")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        eprintln!("[ПРОПУСК] {}: `rustc` не найден", case.fixture);
+        return;
+    }
+    let dir = tempfile::tempdir().expect("временный каталог");
+    let expected = simulate(case);
+    let actual = generated_rust(case, dir.path());
+    assert_eq!(actual, expected, "трасса Rust, {}", case.fixture);
+}
+
+#[test]
+fn after_in_state_implementation_matches_generated_rust() {
+    check_rust(&AFTER);
+}
+
+#[test]
+fn every_in_state_implementation_matches_generated_rust() {
+    check_rust(&EVERY);
 }
