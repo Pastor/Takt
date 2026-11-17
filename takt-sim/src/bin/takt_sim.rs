@@ -149,7 +149,10 @@ fn main() -> ExitCode {
             }
         }
         Err(e) => {
-            eprintln!("{}", msg!(keys::CLI_ERROR, error = e));
+            match e {
+                RunError::General(error) => eprintln!("{}", msg!(keys::CLI_ERROR, error = error)),
+                RunError::Scenario(diagnostic) => eprintln!("{diagnostic}"),
+            }
             ExitCode::FAILURE
         }
     }
@@ -171,11 +174,22 @@ fn early_language(argv: &[std::ffi::OsString]) -> Result<(), String> {
     takt_lang::diagnostics::lang::take_flag(&mut args)
 }
 
-fn run(args: Args) -> Result<RunResult, String> {
+enum RunError {
+    General(String),
+    Scenario(String),
+}
+
+impl From<String> for RunError {
+    fn from(error: String) -> Self {
+        Self::General(error)
+    }
+}
+
+fn run(args: Args) -> Result<RunResult, RunError> {
     // Снятый ключ - отказ словами, а не молчание: прежний вызов со своими
     // настройками получил бы другую картинку и не узнал бы об этом.
     if args.graphics_config.is_some() {
-        return Err(msg!(keys::CLI_SIM_GRAPHICS_CONFIG_REMOVED));
+        return Err(msg!(keys::CLI_SIM_GRAPHICS_CONFIG_REMOVED).into());
     }
 
     // 1. Читаем исходный файл модели
@@ -225,7 +239,7 @@ fn run(args: Args) -> Result<RunResult, String> {
                 message: note,
             });
         }
-        return Err(format_diagnostic(&d, &files));
+        return Err(format_diagnostic(&d, &files).into());
     }
 
     // 4. Извлекаем имена портов и объявленную частоту
@@ -250,7 +264,7 @@ fn run(args: Args) -> Result<RunResult, String> {
 
     // 6. Загружаем шаги симуляции (если указан файл)
     let sim_steps = if let Some(path) = &args.sim_file {
-        load_sim_steps(path)?
+        load_sim_steps(path).map_err(RunError::Scenario)?
     } else {
         vec![]
     };
@@ -273,12 +287,14 @@ fn run(args: Args) -> Result<RunResult, String> {
         runner.set_tick_period_ns(1_000_000_000 / i64::try_from(hz).unwrap_or(i64::MAX));
     }
 
-    let result = runner.run_with(|step| {
-        if let Some(film) = &mut film {
-            film.record(step);
-        }
-        Ok(())
-    })?;
+    let result = runner
+        .run_with(|step| {
+            if let Some(film) = &mut film {
+                film.record(step);
+            }
+            Ok(())
+        })
+        .map_err(RunError::Scenario)?;
 
     // 8. Сохраняем состояние модели (если указано)
     if let Some(path) = &args.save_state {
