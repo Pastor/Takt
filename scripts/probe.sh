@@ -162,13 +162,16 @@ IEC2C_LIB="${IEC2C_PREFIX:-$HOME/.local}/share/matiec/lib"
 # `POUS.c` напрямую значит получить "call to undeclared function
 # __GET_GLOBAL_..." - ложную тревогу на любом входе. Контроль (`examples/regulator.takt`,
 # проходящий проверка) её и показал: тест, кричащий всегда, замолкает навсегда.
-iec_c_unit() {
-    for cfg in "$1"/*Config.c; do
+iec_compile_c() {
+    iec_dir="$1"
+    shift
+    for cfg in "$iec_dir"/*Config.c; do
         [ -e "$cfg" ] || continue
-        printf '%s\n' "$cfg"
-        return 0
+        cc "$@" "$cfg"
+        return $?
     done
-    printf '%s\n' "-include POUS.h $1/POUS.c"
+    # POUS.h подключает iec_std_FB.h, которому нужны макросы accessor.h.
+    cc "$@" -include iec_std_lib.h -include accessor.h -include POUS.h "$iec_dir/POUS.c"
 }
 
 tool_say()  { printf '  %-9s %s\n' "$1" "$2"; }
@@ -201,7 +204,7 @@ for t in c c-hal st st-at rust sv sv-mmio; do
                     tool_say "$t" "iec2c ОТВЕРГ:"; tool_show "$ERR"
                 elif [ ! -f "$IEC_OUT/POUS.c" ] || [ ! -d "$IEC2C_LIB/C" ]; then
                     tool_say "$t" "iec2c принял (сборка C пропущена: нет $IEC2C_LIB/C)"
-                elif cc -c -w -I "$IEC2C_LIB/C" -I "$IEC_OUT" $(iec_c_unit "$IEC_OUT") \
+                elif iec_compile_c "$IEC_OUT" -c -w -I "$IEC2C_LIB/C" -I "$IEC_OUT" \
                         -o /dev/null 2>"$ERR"; then
                     tool_say "$t" "iec2c принял · cc собрал"
                 else

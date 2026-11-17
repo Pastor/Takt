@@ -30,10 +30,16 @@ git diff --check
 принял все 11 файлов. Журналы: `/private/tmp/takt-715-conformance-full.log`
 и `/private/tmp/takt-715-st-gate.log`.
 
-У `scripts/probe.sh` отдельный способ сборки C. На `examples/regulator.takt`
-конфигурационная единица цели `st-at` собирается. Для `st` вызов с
-`-include POUS.h` падает в `iec_std_FB.h`. Этот путь находится вне
-драйверов conformance. Журнал: `/private/tmp/takt-715-probe.log`.
+На базе `ae1ccb1e` обязательный `scripts/test-probe.sh` обнаружил
+такой же отказ в `scripts/probe.sh`. При сборке C для ST без
+`CONFIGURATION` скрипт теперь подключает `iec_std_lib.h`, `accessor.h`
+и `POUS.h` в этом порядке. Конфигурационный путь `st-at` по-прежнему
+собирает `*Config.c`.
+
+`PRECHECK_STRICT=1 ./scripts/test-probe.sh` прошёл с MatIEC, Verilator
+и Yosys. На `examples/regulator.takt` для обеих целей, `st` и `st-at`,
+MatIEC принял ST, а `cc` собрал порождённый C. Журнал проверки примера
+сохранён в `/private/tmp/takt-715-regulator.4VkOq4`.
 
 ## TAKT-714. Архив WASM при Docker-выкатке
 
