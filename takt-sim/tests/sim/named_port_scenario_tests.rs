@@ -198,6 +198,28 @@ fn unknown_port_name_is_an_error() {
     assert!(message.contains("start_bttn"), "{message}");
 }
 
+#[test]
+fn cli_prints_scenario_diagnostic_with_one_error_prefix() {
+    let scenario = tempfile::NamedTempFile::new().expect("файл сценария");
+    std::fs::write(scenario.path(), r#"[{"in_ports": {"start_bttn": 1}}]"#)
+        .expect("запись сценария");
+
+    for (language, expected) in [
+        ("ru", "Ошибка [SIM-030]: шаг 1: порт `start_bttn`"),
+        ("en", "Error [SIM-030]: step 1: port `start_bttn`"),
+    ] {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_takt-sim"))
+            .args(["--lang", language, "tests/data/named0132/panel.takt", "-s"])
+            .arg(scenario.path())
+            .args(["--steps", "1"])
+            .output()
+            .expect("запуск симулятора");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(1), "{language}: {stderr}");
+        assert!(stderr.starts_with(expected), "{language}: {stderr}");
+    }
+}
+
 /// Имя порта **другого направления** - тоже ошибка.
 ///
 /// Задать выход из сценария нельзя; без отказа такая запись молча не делает ничего.
