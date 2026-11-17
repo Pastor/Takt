@@ -166,3 +166,62 @@ fn constants_excluded_from_snapshot() {
         "переменная n должна быть в снимке:\n{json}"
     );
 }
+
+#[test]
+fn cli_load_publishes_nested_implementation_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let model = dir.path().join("model.takt");
+    let snapshot = dir.path().join("state.json");
+    std::fs::write(
+        &model,
+        r#"
+model Feeder {
+    start Idle { ref Done: 1 = 1; }
+    state Done;
+}
+model Wrapper {
+    start Run = Feeder;
+    state Spare;
+}
+start Main = Wrapper {
+    ref Seen: S(Feeder) = Done;
+}
+state Seen;
+"#,
+    )
+    .unwrap();
+
+    let run = |args: &[&str]| {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_takt-sim"))
+            .arg(&model)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+
+    run(&["-n", "1", "--save-state", snapshot.to_str().unwrap()]);
+    let saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&snapshot).unwrap()).unwrap();
+    assert_eq!(saved["current_state"], "Main");
+    assert_eq!(
+        saved["state_impls"]["Main"]["state_impls"]["Run"]["current_state"],
+        "Done"
+    );
+
+    run(&[
+        "-n",
+        "1",
+        "--load-state",
+        snapshot.to_str().unwrap(),
+        "--save-state",
+        snapshot.to_str().unwrap(),
+    ]);
+    let resumed: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&snapshot).unwrap()).unwrap();
+    assert_eq!(resumed["current_state"], "Seen");
+}
