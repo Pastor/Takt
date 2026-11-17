@@ -243,8 +243,15 @@ export class Scheme {
   /** Принимает граф модуля; `null` - модель не разбирается. */
   setGraph(graph) {
     this.graph = graph?.ok ? graph : null;
-    this.trail = this.trail.filter((level) => this.sheetOf(level) !== null);
-    if (this.trail.length === 0) this.trail = [{ kind: "model", path: "/" }];
+    const trail = [{ kind: "model", path: "/" }];
+    for (const old of this.trail.slice(1)) {
+      const parent = this.sheetOf(trail[trail.length - 1]);
+      const node = parent?.nodes.find((n) => n.name === old.via);
+      const level = node ? this.target(parent, node) : null;
+      if (!level || level.kind !== old.kind || level.path !== old.path || !this.sheetOf(level)) break;
+      trail.push(level);
+    }
+    this.trail = trail;
     if (this.selected && !this.current().nodes.some((n) => n.name === this.selected)) this.selected = null;
     this.draw();
     this.checkStale();
@@ -385,14 +392,21 @@ export class Scheme {
   /** Данные листа по записи уровня; `null` - уровня больше нет. */
   sheetOf(level) {
     if (!this.graph) return null;
+    let sheet;
     if (level.kind === "model") {
       const found = this.graphSheet(level.path);
-      return found ? this.modelSheet(found) : null;
+      if (!found) return null;
+      sheet = this.modelSheet(found);
+    } else {
+      const owner = this.graphSheet(level.sheetPath);
+      const node = owner?.nodes.find((n) => n.name === level.node);
+      if (!node?.implements) return null;
+      sheet = this.compositionSheet(node, level.sheetPath);
     }
-    const owner = this.graphSheet(level.sheetPath);
-    const node = owner?.nodes.find((n) => n.name === level.node);
-    if (!node?.implements) return null;
-    return this.compositionSheet(node, level.sheetPath);
+    // Адрес экземпляра берётся из пути входа. Ключ раскладки общий у всех
+    // экземпляров этого листа.
+    sheet.instancePath = level.instancePath;
+    return sheet;
   }
 
   /** Активный лист; без графа - пустой. */
@@ -509,8 +523,7 @@ export class Scheme {
     const size = geo.sheetSize(nodes, [...edges.flatMap((e) => e.points), ...corners]);
     return {
       key,
-      // Пути модели у листа композиции нет: во вложенную композицию с него не
-      // входят, а запись идёт по ключу листа.
+      // Лист композиции хранится по своему ключу, путь модели есть у владельца.
       path: null,
       // Чей лист: состояние-владелец и лист, где оно стоит, - по ним прогон
       // находит экземпляры шагов.
@@ -529,9 +542,18 @@ export class Scheme {
   target(sheet, node) {
     const impl = node.implements;
     if (!impl) return null;
-    if (impl.model) return impl.model.path ? { kind: "model", path: impl.model.path } : null;
+    const prefix = sheet.instancePath ?? [];
+    if (impl.model) {
+      if (!impl.model.path) return null;
+      const onComposition = sheet.path === null;
+      const owner = onComposition ? sheet.owner : node.name;
+      // Эталон нумерует все листья выражения слева направо, независимо от модели.
+      const step = onComposition ? sheet.nodes.indexOf(node) + 1 : 1;
+      const instancePath = [...prefix, { owner, step, model: impl.model.name }];
+      return { kind: "model", path: impl.model.path, via: node.name, instancePath };
+    }
     if (sheet.path === null) return null;
-    return { kind: "composition", sheetPath: sheet.path, node: node.name };
+    return { kind: "composition", sheetPath: sheet.path, node: node.name, via: node.name, instancePath: prefix };
   }
 
   /** Вход в композицию узла активного листа. */
@@ -1145,18 +1167,24 @@ export class Scheme {
         sep.setAttribute("aria-hidden", "true");
         crumbs.appendChild(sep);
       }
-      const title = index === this.trail.length - 1 ? sheet.title : (this.sheetOf(level)?.title ?? "");
+      const leaf = index === this.trail.length - 1 ? sheet : this.sheetOf(level);
+      const title = leaf?.title ?? "";
+      // Шаг уже назван моделью и номером. При прямом входе показываем
+      // состояние-владельца вместе с названием модели.
+      const label = level.kind !== "model" || !level.via || level.via === title
+        ? title
+        : this.trail[index - 1]?.kind === "composition" ? level.via : `${level.via} (${title})`;
       if (index === this.trail.length - 1) {
         const current = document.createElement("span");
         current.className = "crumb crumb-current";
         current.setAttribute("aria-current", "page");
-        current.textContent = title;
+        current.textContent = label;
         crumbs.appendChild(current);
       } else {
         const button = document.createElement("button");
         button.className = "crumb";
         button.type = "button";
-        button.textContent = title;
+        button.textContent = label;
         button.addEventListener("click", () => {
           this.focusEdge(null);
           this.trail = this.trail.slice(0, index + 1);

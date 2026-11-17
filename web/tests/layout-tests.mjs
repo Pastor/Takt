@@ -827,6 +827,76 @@ async function bareScheme(graph, stored = layout.empty()) {
   return scheme;
 }
 
+test("холст: крошки и прогон вложенной композиции различают экземпляры владельца", async (t) => {
+  const pump = { model: { name: "Pump", path: "Pump" } };
+  const graph = {
+    sheets: [...COMPOSED.sheets, {
+      path: "Heater",
+      name: "Heater",
+      nodes: [{ name: "Load", kind: "composition", implements: { chain: [pump, pump] } }],
+      edges: [],
+    }],
+  };
+  const scheme = await bareScheme(graph);
+  const at = (ownerStep, step, done = false) => ({
+    path: [...stepAt(ownerStep, "Heater", "Load").path, { owner: "Load", step, model: "Pump" }],
+    model: "Pump",
+    state: "On",
+    done,
+  });
+  const active = [at(1, 1, true), at(4, 2)];
+  scheme.run = { active, next: [] };
+  scheme.focusEdge = () => {};
+  const crumbs = [];
+  scheme.dom = {
+    crumbs: { replaceChildren: () => { crumbs.length = 0; }, appendChild: (node) => crumbs.push(node) },
+    crumbsUp: {},
+  };
+  t.after(() => { delete globalThis.document; });
+  globalThis.document = {
+    createElement: () => ({
+      setAttribute() {},
+      addEventListener(event, listener) { this[event] = listener; },
+    }),
+  };
+
+  scheme.enter("Heater#1");
+  scheme.enter("Load");
+  const key = scheme.current().key;
+  scheme.computeRun(scheme.current());
+  assert.deepEqual([...scheme.running], ["Pump#1"]);
+  assert.deepEqual([...scheme.expected], ["Pump#2"]);
+  assert.deepEqual([...scheme.nextEdges], ["Pump#1>Pump#2:0"]);
+
+  scheme.drawCrumbs(scheme.current());
+  assert.equal(crumbs[4].textContent, "Heater#1");
+  assert.equal(crumbs[6].textContent, "Load");
+  crumbs[4].click();
+  assert.equal(scheme.current().path, "Heater");
+  scheme.enter("Load");
+  scheme.computeRun(scheme.current());
+  assert.deepEqual([...scheme.running], ["Pump#1"]);
+
+  scheme.drawCrumbs(scheme.current());
+  crumbs[2].click();
+  scheme.enter("Heater#2");
+  scheme.enter("Load");
+  assert.equal(scheme.current().key, key, "раскладка у экземпляров общая");
+  scheme.drawCrumbs(scheme.current());
+  assert.equal(crumbs[4].textContent, "Heater#2");
+  scheme.computeRun(scheme.current());
+  assert.deepEqual([...scheme.running], ["Pump#2"]);
+  assert.deepEqual([...scheme.expected], []);
+  assert.deepEqual([...scheme.nextEdges], []);
+
+  scheme.run = { active: [at(1, 1), at(4, 1)], next: [] };
+  scheme.computeRun(scheme.current());
+  assert.equal(scheme.counts.get("Pump#1"), 1, "второй владелец не прибавляет число к шагу");
+  scheme.run = { active: [at(1, 1)], next: [] };
+  scheme.computeRun(scheme.current());
+  assert.equal(scheme.running.size, 0, "неактивный экземпляр не загорается");
+});
+
 test("холст: лист композиции читает запись и правится по её ключу", async () => {
   const key = layout.compositionKey("/", "Main");
   const scheme = await bareScheme(COMPOSED);
