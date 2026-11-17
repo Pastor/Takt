@@ -258,6 +258,7 @@ fn st_trace(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i128> {
     let harness = format!(
         r#"#include <stdio.h>
 #include "iec_std_lib.h"
+#include "accessor.h"
 TIME __CURRENT_TIME;
 BOOL __DEBUG = 0;
 #include "POUS.h"

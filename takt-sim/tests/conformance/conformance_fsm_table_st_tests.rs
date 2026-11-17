@@ -151,6 +151,7 @@ fn st_trace(
     let harness = format!(
         r#"#include <stdio.h>
 #include "iec_std_lib.h"
+#include "accessor.h"
 TIME __CURRENT_TIME;
 BOOL __DEBUG = 0;
 #include "POUS.h"

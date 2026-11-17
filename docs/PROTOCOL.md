@@ -1,5 +1,40 @@
 # Протокол Takt
 
+## TAKT-715. Заголовки MatIEC в драйверах conformance
+
+В 27 C-драйверах из 23 файлов `takt-sim/tests/conformance/` заголовок
+`accessor.h` подключается сразу после `iec_std_lib.h` и до `POUS.h`.
+Так макросы MatIEC уже определены к моменту, когда `POUS.h` включает
+`iec_std_FB.h`. На базе `144aacc3` сборка драйверов давала 28 отказов.
+Ожидаемые трассы сохранены.
+
+Полный прогон на MatIEC 0.1 (`c316fe57`), Apple Clang 21.0.0,
+Rust 1.97.1 и Verilator 5.055 devel (`2d6aba6ed`) завершился
+с результатом 308/308, без пропусков и расхождений трасс. Четыре теста
+ищут MatIEC по стандартному пути `~/.local`. На время прогона этот
+путь указывал на ту же установку.
+
+```bash
+export IEC2C_PREFIX=/private/tmp/takt-matiec.MDxe4h/install
+export CARGO_TARGET_DIR=/private/tmp/takt-715-target
+export PATH="/private/tmp/takt-oss-cad.kWvgCT/oss-cad-suite/bin:$IEC2C_PREFIX/bin:$PATH"
+CC=/usr/bin/clang cargo test --locked -p takt-sim --test conformance -- --nocapture
+cargo fmt --check -p takt-sim
+git diff --check
+```
+
+Строгий ST-гейт из `scripts/precheck.sh` запущен отдельно с
+`PRECHECK_STRICT=1`. После `cargo build --locked -p takt-lang --bin taktc`
+все 11 корневых примеров пересобраны командой `taktc compile … -t st -o …`
+во временный каталог. `iec2c -I "$IEC2C_PREFIX/share/matiec/lib" -T …`
+принял все 11 файлов. Журналы: `/private/tmp/takt-715-conformance-full.log`
+и `/private/tmp/takt-715-st-gate.log`.
+
+У `scripts/probe.sh` отдельный способ сборки C. На `examples/regulator.takt`
+конфигурационная единица цели `st-at` собирается. Для `st` вызов с
+`-include POUS.h` падает в `iec_std_FB.h`. Этот путь находится вне
+драйверов conformance. Журнал: `/private/tmp/takt-715-probe.log`.
+
 ## TAKT-714. Архив WASM при Docker-выкатке
 
 Разработка начата от `origin/v2` (`02b9ef92`), интеграция выполнена с
