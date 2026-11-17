@@ -563,3 +563,32 @@ start Main = M;",
         "встроенная функция в условии отвергается громко"
     );
 }
+
+/// Числовые ветви тернарника в битовом выходе печатаются как булевы.
+#[test]
+fn ternary_to_bit_port_coerces_branches() {
+    let src = "model T {
+        var n: u32 := 7;
+        out late: bit := 0;
+        out early: bit := 0;
+        start Idle {
+            always {
+                late := (n > 5) ? 1 : 0;
+                early := ((n > 5) ? (0) : (n < 4));
+            }
+            ref Idle: false;
+        }
+    }
+    start Main = T;";
+    let text = emit("ternary_bit", src);
+    assert_has(
+        &text,
+        "hal.write_bit(OutBitPort::Late, self.n > 5);",
+        "ветви 1 и 0 сводятся к условию",
+    );
+    assert_has(
+        &text,
+        "hal.write_bit(OutBitPort::Early, if self.n > 5 { false } else { self.n < 4 });",
+        "ветви должны иметь тип bool, условие if — без внешних скобок",
+    );
+}

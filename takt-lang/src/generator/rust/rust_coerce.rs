@@ -50,6 +50,25 @@ pub(crate) fn coerce_to(
             1 => Ok("true".to_string()),
             other => Err(unsupported(&msg!(keys::RS_WHAT_BOOL_VALUE, value = other))),
         },
+        (TypeNode::Bit | TypeNode::Bool, ExpressionNode::Parenthesis(inner)) => {
+            coerce_to(inner, target, scope)
+        }
+        (TypeNode::Bit | TypeNode::Bool, ExpressionNode::ConditionalOperator(cond, yes, no)) => {
+            let condition = print_expression(cond, scope)?;
+            let yes = coerce_to(yes, target, scope)?;
+            let no = coerce_to(no, target, scope)?;
+            // Булев тернарник с противоположными константами сводится к условию.
+            match (yes.as_str(), no.as_str()) {
+                ("true", "false") => Ok(condition),
+                ("false", "true") => Ok(format!("!({})", unwrap_outer(&condition))),
+                _ => Ok(format!(
+                    "if {} {{ {} }} else {{ {} }}",
+                    unwrap_outer(&condition),
+                    unwrap_outer(&yes),
+                    unwrap_outer(&no)
+                )),
+            }
+        }
         // Вещественному полю целый литерал не подходит: `1` не является литералом f64.
         (TypeNode::Rational, ExpressionNode::Number(n)) => Ok(format!("{}.0", n)),
         // Массив: Каждый элемент печатается по типу элемента.
