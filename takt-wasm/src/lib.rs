@@ -61,12 +61,12 @@ pub extern "C" fn takt_io_reserve(len: u32) -> u32 {
     takt_wasm_io::reserve(len)
 }
 
-/// Версия языка и крейтов моста.
+/// Версии языка и компилятора, языки диагностики и цели сборки.
 #[unsafe(no_mangle)]
 pub extern "C" fn takt_version() -> u32 {
     let reply = reply::ok(serde_json::json!({
         "language": takt_lang::LANGUAGE_VERSION,
-        "takt_lang": env!("CARGO_PKG_VERSION"),
+        "takt_lang": takt_lang::version::COMPILER_VERSION,
         "languages": takt_wasm_io::languages(),
         "targets": takt_lang::compile::Target::ALL
             .iter()
@@ -444,6 +444,7 @@ mod tests {
             reply["language"],
             Value::String(takt_lang::LANGUAGE_VERSION.to_string())
         );
+        assert_eq!(reply["takt_lang"], takt_lang::version::COMPILER_VERSION);
         assert_eq!(reply["targets"].as_array().unwrap().len(), 7);
         assert_eq!(reply["languages"], serde_json::json!(["en", "ru"]));
     }

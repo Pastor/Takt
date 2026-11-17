@@ -27,6 +27,9 @@ use crate::msg;
 /// `README.md` обязан ей соответствовать (проверка `check-language-version.sh`).
 pub const LANGUAGE_VERSION: &str = "0.19.0";
 
+/// Версия крейта компилятора Takt.
+pub const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Печать версий инструмента - подкоманда `taktc version`.
 ///
 /// **Логика здесь, а не в бинарнике** - образец `address-map`: так проверяется
@@ -56,7 +59,7 @@ fn version_text_for(tool: &str) -> String {
     format!(
         "{} {}\n{}",
         tool,
-        env!("CARGO_PKG_VERSION"),
+        COMPILER_VERSION,
         msg!(keys::CLI_VERSION_LANGUAGE, version = LANGUAGE_VERSION)
     )
 }

@@ -42,12 +42,12 @@ pub extern "C" fn takt_io_reserve(len: u32) -> u32 {
     takt_wasm_io::reserve(len)
 }
 
-/// Версия языка модуля: модули одной выкладки собраны из одного дерева, и версия у
-/// них одна.
+/// Версии языка и компилятора, языки диагностики.
 #[unsafe(no_mangle)]
 pub extern "C" fn takt_version() -> u32 {
     write_reply(&reply::ok(serde_json::json!({
         "language": takt_lang::LANGUAGE_VERSION,
+        "takt_lang": takt_lang::version::COMPILER_VERSION,
         "languages": takt_wasm_io::languages(),
     })))
 }
@@ -155,6 +155,7 @@ mod tests {
             reply["language"],
             Value::String(takt_lang::LANGUAGE_VERSION.to_string())
         );
+        assert_eq!(reply["takt_lang"], takt_lang::version::COMPILER_VERSION);
         assert_eq!(reply["languages"], serde_json::json!(["en", "ru"]));
     }
 }
