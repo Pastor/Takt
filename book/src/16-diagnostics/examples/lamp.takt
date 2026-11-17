@@ -1,0 +1,10 @@
+// Лампа включается по сигналу датчика.
+in sensor: bit;
+out lamp_on: bit;
+var spare: bit := 0; // (1) неиспользуемая переменная
+
+start Run {
+    always {
+        lamp_on := sensor; // (2) чтение входа
+    }
+}
