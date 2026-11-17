@@ -118,12 +118,13 @@ export function stateOf(saved) {
 export class Panels {
   /**
    * @param {object} dom узлы: холст, панели по имени, легенда и её разделители
-   * @param {object} options `store` - хранилище, `onChange` - после правки
+   * @param {object} options `store` - хранилище, `onChange` - после правки, `onApply` - после расстановки
    */
   constructor(dom, options = {}) {
     this.dom = dom;
     this.store = options.store ?? safeStorage();
     this.onChange = options.onChange ?? (() => {});
+    this.onApply = options.onApply;
     this.narrowQuery = options.media ?? window.matchMedia(NARROW);
     this.state = stateOf(this.read());
     // Открытые панели с кнопкой: открытость - жест текущего сеанса, в память не идёт.
@@ -226,6 +227,7 @@ export class Panels {
     if (this.dom.scheme) {
       this.dom.scheme.dataset.map = visible(this.whenOf("map"), this.narrow) ? "on" : "off";
     }
+    this.onApply?.();
   }
 
   /** Подключает перемещение и слежение за шириной. */

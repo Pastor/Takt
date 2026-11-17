@@ -93,6 +93,8 @@ export function readyMessage() {
 export function attach(dom, options = {}) {
   const post = options.post ?? ((message) => window.parent?.postMessage(message, "*"));
   const subscribe = options.subscribe ?? ((handler) => window.addEventListener("message", (e) => handler(e.data)));
+  const { exportButton, exportBar } = dom;
+  const sheetPanel = dom.panels?.sheet;
 
   const scheme = new Scheme(dom, {
     t,
@@ -106,9 +108,13 @@ export function attach(dom, options = {}) {
       if (message) post(message);
     },
     who: () => options.who ?? "",
+    onPanelsApply: () => {
+      if (!exportButton || !exportBar || !sheetPanel) return;
+      const target = sheetPanel.hidden ? exportBar : sheetPanel;
+      if (exportButton.parentElement !== target) target.appendChild(exportButton);
+    },
   });
 
-  const { exportButton } = dom;
   if (exportButton) {
     exportButton.disabled = true;
     exportButton.addEventListener("click", () => {
@@ -173,6 +179,7 @@ export async function main() {
       nav: dom.nav,
       tools: dom.scheme,
       exportButton: dom["scheme-export"],
+      exportBar: dom.crumbs.parentElement,
       empty: dom["scheme-empty"],
       notice: dom["scheme-notice"],
       noticeText: dom["scheme-notice-text"],

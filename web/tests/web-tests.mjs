@@ -1824,25 +1824,55 @@ test("холст панели: наружу уходит правка раскл
   assert.deepEqual(host.readyMessage(), { type: "ready" });
 });
 
-test("холст панели: кнопка сообщает хосту об экспорте только при наличии графа", ({ mock }) => {
+test("холст IntelliJ: кнопка экспорта доступна при смене ширины", ({ mock }) => {
   mock.method(Scheme.prototype, "wire", () => {});
   mock.method(Scheme.prototype, "draw", () => {});
   mock.method(Scheme.prototype, "checkStale", () => {});
+  const media = new EventTarget();
+  const previousWindow = globalThis.window;
+  globalThis.window = { matchMedia: () => media };
+  function container() {
+    return Object.assign(new EventTarget(), {
+      querySelector: () => null,
+      toggleAttribute(name, value) { this[name] = value; },
+      appendChild(child) { child.parentElement = this; },
+    });
+  }
+  const sheet = container();
+  const bar = container();
   const button = new EventTarget();
+  sheet.appendChild(button);
+
   let receive;
   const messages = [];
-  host.attach({ exportButton: button }, {
-    post: (message) => messages.push(message),
-    subscribe: (handler) => { receive = handler; },
-  });
-  assert.equal(button.disabled, true);
-  button.dispatchEvent(new Event("click"));
-  receive({ type: "graph", graph: { sheets: [] } });
-  assert.equal(button.disabled, false);
-  button.dispatchEvent(new Event("click"));
-  assert.deepEqual(messages, [{ type: "ready" }, { type: "export" }]);
-  receive({ type: "graph", graph: null });
-  assert.equal(button.disabled, true);
+  try {
+    media.matches = true;
+    host.attach({ exportButton: button, exportBar: bar, panels: { sheet } }, {
+      post: (message) => messages.push(message),
+      subscribe: (handler) => { receive = handler; },
+    });
+    assert.equal(sheet.hidden, true);
+    assert.equal(button.parentElement, bar);
+    assert.equal(button.disabled, true);
+    button.dispatchEvent(new Event("click"));
+
+    receive({ type: "graph", graph: { sheets: [] } });
+    assert.equal(button.disabled, false);
+    button.dispatchEvent(new Event("click"));
+
+    media.matches = false;
+    media.dispatchEvent(new Event("change"));
+    assert.equal(sheet.hidden, false);
+    assert.equal(button.parentElement, sheet);
+    button.dispatchEvent(new Event("click"));
+    assert.deepEqual(messages, [{ type: "ready" }, { type: "export" }, { type: "export" }]);
+
+    receive({ type: "graph", graph: null });
+    assert.equal(button.disabled, true);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
 
 test("панели: место набирает их в линию, а не в столбец", async () => {

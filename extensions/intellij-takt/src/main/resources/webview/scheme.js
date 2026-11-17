@@ -226,7 +226,7 @@ export class Scheme {
     this.panels = dom.panels
       ? new Panels(
           { scheme: dom.scheme, panels: dom.panels, docks: dom.docks, legendSplits: dom.legendSplits },
-          { store: options.store },
+          { store: options.store, onApply: options.onPanelsApply },
         )
       : null;
     this.kinds = {
