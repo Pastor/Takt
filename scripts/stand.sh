@@ -43,6 +43,8 @@ PREFIX="${TAKT_WEB_BASE_PATH:-$(env_value TAKT_WEB_BASE_PATH)}"
 PREFIX="${PREFIX:-/}"
 [[ "$PREFIX" == "/" ]] && PREFIX=""
 HEALTH="http://$BIND${PREFIX}/health"
+PROJECT="${COMPOSE_PROJECT_NAME:-takt}"
+export TAKT_WEB_IMAGE="${TAKT_WEB_IMAGE:-$PROJECT-server:stand}"
 
 compose() {
   # `docker compose` (плагин) либо `docker-compose` (старый бинарник): на
@@ -51,9 +53,9 @@ compose() {
   # Имя проекта - `takt`, и оно задано и здесь, и в файле стека: на стенде
   # рядом работает другой сервис, а имя по умолчанию берётся у каталога.
   if docker compose version >/dev/null 2>&1; then
-    docker compose -p takt --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
+    docker compose -p "$PROJECT" --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
   elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose -p takt --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
+    docker-compose -p "$PROJECT" --project-directory "$DEPLOY" -f "$DEPLOY/docker-compose.yml" "$@"
   else
     echo "ОШИБКА: не найден ни 'docker compose', ни 'docker-compose'" >&2
     exit 1
@@ -86,23 +88,83 @@ check_nginx_include() {
   return 1
 }
 
+wait_for_release() {
+  local index="$1"
+  for _ in $(seq 1 60); do
+    if curl -fsS --max-time 2 "$HEALTH" >/dev/null 2>&1 &&
+       curl -fsS --max-time 2 "http://$BIND${PREFIX}/wasm/index.json" | cmp -s "$index" -; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+up() (
+  local release_image="$TAKT_WEB_IMAGE"
+  local work previous old_image="" source="" raw_container="" archive_container=""
+  work="$(mktemp -d)"
+  local raw_image="takt-server-build:${work##*/}" prepared_image="takt-server-prepared:${work##*/}"
+  cleanup() {
+    if [[ -n "$raw_container" ]]; then docker rm -v "$raw_container" >/dev/null || true; fi
+    if [[ -n "$archive_container" ]]; then docker rm -v "$archive_container" >/dev/null || true; fi
+    docker image rm "$raw_image" "$prepared_image" >/dev/null 2>&1 || true
+    rm -rf "$work"
+  }
+  trap cleanup EXIT
+
+  # Берём архив даже из остановленного контейнера. После down источником
+  # служит локальный тег последнего образа.
+  previous="$(compose ps -a -q server)"
+  if [[ -n "$previous" ]]; then
+    old_image="$(docker inspect --format '{{.Image}}' "$previous")"
+    source="$previous"
+  else
+    old_image="$(docker image ls --no-trunc -q "$release_image")"
+    if [[ -n "$old_image" ]]; then
+      archive_container="$(docker create "$old_image")"
+      source="$archive_container"
+    fi
+  fi
+  if [[ -n "$source" ]]; then
+    docker cp "$source:/srv/takt/static/wasm" "$work/published"
+  fi
+
+  TAKT_WEB_IMAGE="$raw_image" compose build server
+  raw_container="$(docker create "$raw_image")"
+  docker cp "$raw_container:/srv/takt/static/wasm" "$work/wasm"
+  python3 "$ROOT/scripts/merge-wasm.py" "$work/wasm" "$work/published"
+
+  # Слой содержит только проверенный архив. Статика прежнего контейнера
+  # остаётся в его образе до переключения.
+  printf 'FROM %s\nCOPY wasm/ /srv/takt/static/wasm/\n' "$raw_image" > "$work/Dockerfile"
+  printf 'published\n' > "$work/.dockerignore"
+  docker build -t "$prepared_image" "$work"
+  docker image tag "$prepared_image" "$release_image"
+
+  if compose up -d --no-build && wait_for_release "$work/wasm/index.json"; then
+    echo "  Стенд поднят: http://$BIND${PREFIX}/"
+    return 0
+  fi
+
+  echo "  ОШИБКА: новый контейнер не подтвердил /health и готовый индекс WASM" >&2
+  compose logs --tail=40 server >&2 || true
+  if [[ -n "$old_image" ]]; then
+    echo "  Возвращаем прежний образ..." >&2
+    if docker image tag "$old_image" "$release_image" &&
+       compose up -d --no-build --no-deps server && wait_for_release "$work/published/index.json"; then
+      echo "  Прежний образ снова обслуживает запросы." >&2
+    else
+      echo "  ОШИБКА: прежний образ не прошёл проверку после отката" >&2
+    fi
+  fi
+  return 1
+)
+
 case "${1:-}" in
   up)
     echo "Стенд Takt: подъём..."
-    compose up -d --build
-    echo "  Ждём готовности сервиса..."
-    for _ in $(seq 1 60); do
-      if curl -fsS "$HEALTH" >/dev/null 2>&1; then
-        echo "  Стенд поднят: http://$BIND${PREFIX}/"
-        exit 0
-      fi
-      sleep 2
-    done
-    # Молчаливого "наверное, поднялся" здесь нет: подъём, о котором нельзя
-    # сказать, удался ли он, - это отказ, о котором узнают позже и хуже.
-    echo "  ОШИБКА: сервис не ответил на /health за две минуты"
-    compose logs --tail=40 server
-    exit 1
+    up
     ;;
   down)
     echo "Стенд Takt: гашение..."

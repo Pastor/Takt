@@ -1,5 +1,112 @@
 # Протокол Takt
 
+## TAKT-714. Архив WASM при Docker-выкатке
+
+Разработка начата от `origin/v2` (`02b9ef92`), интеграция выполнена с
+локальным TAKT-713 (`151bdcd8`). Эти два изменения предназначены для одной
+выкатки.
+
+Под замком `stand-hook.py` скрипт `stand.sh up` переносит каталог `wasm`
+из прежнего контейнера во временный каталог. После `down` архив берётся
+из локального тега последнего образа. Новый образ собирается под временным
+тегом. `merge-wasm.py` проверяет структуру индексов, размер и SHA-256 модулей
+по описям и отклоняет новые байты для занятого URL. Эту же проверку вызывает
+`deploy-web.sh`. Прежние каталоги версий копируются целиком, включая описи и
+предсжатые файлы. Последней индекс объявляет версию новой сборки.
+
+Проверенный архив добавляется слоем к новому образу до переключения Compose.
+Ошибка подготовки оставляет старый контейнер обслуживающим запросы.
+После смены контейнера скрипт ждёт `/health` и сверяет `wasm/index.json` с
+подготовленным индексом. При отказе он возвращает прежний образ через
+Compose и проверяет прежний индекс и `/health`. Отказ новой выкатки
+сохраняется в статусе hook даже при успешном откате.
+
+### Локальная проверка
+
+```bash
+./scripts/test-stand-hook.sh
+CARGO_TARGET_DIR=/private/tmp/takt-713.WkCYbm/new-target ./scripts/test-deploy-web.sh
+./scripts/test-stand-wasm.sh /private/tmp/takt-713.WkCYbm/old-dist /private/tmp/takt-713.WkCYbm/final-dist
+```
+
+Последняя команда создаёт отдельный проект Compose с временной БД и
+локальным портом 18730. Ей нужны локальные образы `postgres:18-alpine`
+и `nginx:latest`. С `TAKT_TEST_SERVER_IMAGE` вместо nginx используется
+локальный образ Takt и тест проверяет открытие и выгрузку архива проекта,
+созданного до переключения.
+
+```bash
+docker build -f web/deploy/Dockerfile -t takt-714-runtime:local .
+TAKT_TEST_SERVER_IMAGE=takt-714-runtime:local ./scripts/test-stand-wasm.sh \
+  /private/tmp/takt-713.WkCYbm/old-dist /private/tmp/takt-713.WkCYbm/final-dist
+```
+
+Для пересборки локальных каталогов запустите в деревьях
+`02b9ef92` и `151bdcd8` последовательно, с отдельным путём вывода
+для каждой версии:
+
+```bash
+cargo build --locked --profile wasm --target wasm32-unknown-unknown -p takt-wasm
+cargo build --locked --profile wasm --target wasm32-unknown-unknown -p takt-wasm-export
+TAKT_WEB_DIST=/абсолютный/путь ./scripts/build-web.sh
+```
+
+Штатные самопроверки `test-stand-hook.sh` и `test-deploy-web.sh` прошли.
+В локальном Compose с PostgreSQL 18 использовался Linux-сервер,
+собранный из проверяемого дерева в отдельном тестовом образе, и статика
+из двух локальных сборок. Ядро, экспорт и опись обеих версий
+отдавались с `immutable`. Прежние файлы совпали побайтно, индекс объявил обе версии и
+`latest: 0.62.3`. Повтор сохранил индекс и файлы. Подмена экспорта при
+согласованной с ним SHA-256 в описи остановила замену контейнера.
+При неверном индексе после замены прежний образ вернулся и прошёл
+проверку. После `down` обе версии восстановились из тега образа.
+Архив проекта 0.62.2 содержал сгенерированный код C. Версия,
+ревизия и список файлов проекта сохранились.
+
+В отдельной проверке Chromium открыл файл `Pump.takt` из проекта с
+`takt_lang=0.62.2` после переключения статики. Ревизия проекта осталась
+`1`, редактор загрузил 0.62.3, а запрос 0.62.2 вернул исходные байты.
+
+### Сверка выкатчиком
+
+Перед выкаткой сохраните три опубликованных файла для сравнения. После
+штатной выкатки обоих коммитов повторите запросы и сверьте байты и индекс.
+
+```bash
+base=https://pastor.axatel.ru/takt
+before=$(mktemp -d)
+for file in takt.wasm takt-export.wasm manifest.json; do
+  curl -fsS "$base/wasm/0.62.2/$file" -o "$before/$file" || exit 1
+done
+shasum -a 256 "$before/"*.wasm
+# Здесь выкатчик выполняет штатную выкатку.
+after=$(mktemp -d)
+curl -fsS "$base/health" || exit 1
+curl -fsS "$base/wasm/index.json" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data["latest"] == "0.62.3"
+assert {"0.62.2", "0.62.3"} <= set(data["versions"])
+' || exit 1
+for version in 0.62.2 0.62.3; do
+  mkdir -p "$after/$version"
+  for file in takt.wasm takt-export.wasm manifest.json; do
+    curl -fsS -D "$after/headers" "$base/wasm/$version/$file" \
+      -o "$after/$version/$file" || exit 1
+    grep -qi '^cache-control: .*immutable' "$after/headers" || exit 1
+  done
+  shasum -a 256 "$after/$version/"*.wasm
+done
+for file in takt.wasm takt-export.wasm manifest.json; do
+  cmp "$before/$file" "$after/0.62.2/$file" || exit 1
+done
+```
+
+Затем откройте проект, сохранённый с версией 0.62.2, и скачайте его архив
+с целью C. В архиве должны быть файлы C в `generated/`. Сервер выбирает
+ядро по `takt_lang` проекта. Браузерный редактор загружает текущий модуль
+из `version.json`.
+
 ## TAKT-713. Версия WASM 0.62.3
 
 Ветка `codex/TAKT-713` от `origin/v2` (`02b9ef92`).
@@ -7,14 +114,9 @@
 обоих модулей и трёх описей. Ядро и модуль экспорта берут ту же версию
 из крейта компилятора для ответа `takt_version`. Версия языка — 0.19.0.
 
-Штатная выкатка через `stand-hook.py` запускает `stand.sh up`.
-Compose пересобирает образ, в который Dockerfile кладёт статику
-только текущей версии. Тома Compose сохраняют данные PostgreSQL
-и проекты. По этой конфигурации замена образа убирает адреса 0.62.2.
-`deploy-web.sh` проверяет SHA-256 обоих модулей при повторе версии,
-сохраняет предыдущие версии и перечисляет их в `wasm/index.json`.
-Штатная Docker-выкатка этот скрипт не вызывает. Для сохранения
-0.62.2 требуется отдельное решение выкатчика.
+До TAKT-714 штатная выкатка через `stand-hook.py` заменяла образ
+Docker Compose, в который попадала статика только текущей версии.
+Сохранение прежней статики при такой выкатке описано в TAKT-714.
 
 Сервер берёт версию новых проектов по умолчанию из `version.json`.
 Генерация при выгрузке архива запрашивает модуль по сохранённой версии

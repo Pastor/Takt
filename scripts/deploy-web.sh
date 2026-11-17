@@ -45,7 +45,9 @@ done
 echo "Выкладка статики (фича 0531)..."
 
 # -- 1. Сборка ----------------------------------------------------------------
-DIST="$(mktemp -d)/dist"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+DIST="$WORK/dist"
 TAKT_WEB_DIST="$DIST" "$ROOT/scripts/build-web.sh" >/dev/null
 VERSION="$(sed -n 's/.*"takt_lang": "\([^"]*\)".*/\1/p' "$DIST/version.json" | head -1)"
 BUNDLE="$(sed -n 's/.*"bundle": "\([^"]*\)".*/\1/p' "$DIST/version.json" | head -1)"
@@ -55,51 +57,26 @@ BUNDLE="$(sed -n 's/.*"bundle": "\([^"]*\)".*/\1/p' "$DIST/version.json" | head 
 }
 echo "  собрано: бандл $BUNDLE, модуль $VERSION"
 
-# -- 2. Отказ на подмене модуля -----------------------------------------------
-# Модулей два - ядро и модуль экспорта, - и правило одно у обоих: адрес с
-# версией обещает неизменность.
-for module in takt.wasm takt-export.wasm; do
-  [[ -f "$DIST/wasm/$VERSION/$module" ]] || continue
-  NEW_SUM="$(shasum -a 256 "$DIST/wasm/$VERSION/$module" | cut -d' ' -f1)"
-  OLD="$STAND/wasm/$VERSION/$module"
-  if [[ -f "$OLD" ]]; then
-    OLD_SUM="$(shasum -a 256 "$OLD" | cut -d' ' -f1)"
-    if [[ "$OLD_SUM" != "$NEW_SUM" ]]; then
-      echo "  ОШИБКА: под адресом wasm/$VERSION/$module уже лежит ДРУГОЙ модуль"
-      echo "    на стенде: $OLD_SUM"
-      echo "    собранный: $NEW_SUM"
-      echo "  Адрес с версией обещает неизменность, и выложить под ним другой файл —"
-      echo "  молчаливая порча у каждого, кто уже кешировал. Поднимите версию крейта"
-      echo "  takt-lang (Cargo.toml) и соберите заново."
-      exit 1
-    fi
-    echo "  модуль $module $VERSION уже выложен и совпадает — не трогаем"
-  fi
-done
+# -- 2. Архив WASM ------------------------------------------------------------
+# Подготавливаем архив в свежей сборке, пока выложенные файлы ещё не менялись.
+python3 "$ROOT/scripts/merge-wasm.py" --index-only "$DIST/wasm" "$STAND/wasm"
 
 if [[ "$DRY" == "1" ]]; then
   echo "  --dry-run: на стенд ничего не положено"
-  rm -rf "$(dirname "$DIST")"
   exit 0
 fi
 
 # -- 3. Раскладка -------------------------------------------------------------
-mkdir -p "$STAND"
-# Копируется добавлением, а не заменой каталога: прежние бандлы и прежние
-# версии модуля обязаны остаться - у читателя открыта вкладка.
+mkdir -p "$STAND/wasm"
+# Опубликованный каталог остаётся на месте: его URL уже обслуживает запросы.
+if [[ ! -d "$STAND/wasm/$VERSION" ]]; then
+  cp -R "$DIST/wasm/$VERSION" "$STAND/wasm/"
+fi
+cp "$DIST/wasm/index.json" "$STAND/wasm/index.json"
+rm -rf "$DIST/wasm"
+# Прежние бандлы пока остаются - у читателя может быть открыта вкладка.
 cp -R "$DIST/." "$STAND/"
 echo "  разложено в $STAND"
-
-# `wasm/index.json` перечисляет все версии, что лежат на стенде, а не только
-# свежую: страница по нему узнаёт, чем открыть старый проект.
-VERSIONS="$(find "$STAND/wasm" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort -V)"
-LIST="$(printf '%s\n' "$VERSIONS" | sed 's/.*/"&"/' | paste -sd, -)"
-cat > "$STAND/wasm/index.json" <<JSON
-{
-  "latest": "$VERSION",
-  "versions": [$LIST]
-}
-JSON
 
 # -- 4. Прежние бандлы: сколько-то держим, остальные снимаем ------------------
 # Ни `mapfile`, ни `stat -f`: первого нет в bash 3.2 (он стоит на macOS
@@ -118,5 +95,4 @@ for stale in $(ls -td "$STAND"/b/*/ 2>/dev/null); do
 done
 echo "  бандлов на стенде: $(find "$STAND/b" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
 
-rm -rf "$(dirname "$DIST")"
 echo "  Выкладка завершена. ⚠️ Откройте страницу: гейта на браузер в проекте нет."
