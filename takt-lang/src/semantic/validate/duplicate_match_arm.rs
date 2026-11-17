@@ -27,7 +27,7 @@ use crate::semantic::{FunctionDefinitionNode, MatchArmNode, ModelNode, StateNode
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Собирает предупреждения о недостижимых ветвях `match` модели и вложенных.
+/// Собирает предупреждения о повторяющихся образцах `match` модели и вложенных.
 pub fn check_duplicate_match_arms(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let mut warnings = Vec::new();
     check_model(&model, &mut warnings);
@@ -105,15 +105,24 @@ fn check_stmt(stmt: &StatementNode, warnings: &mut Vec<Diagnostic>) {
     }
 }
 
-/// Одна диагностика на недостижимую ветвь, накопительно.
 fn check_arms(arms: &[MatchArmNode], warnings: &mut Vec<Diagnostic>) {
-    for index in 0..arms.len() {
-        if !crate::semantic::match_arms::pattern_repeats_above(arms, index) {
-            continue;
+    for (index, arm) in arms.iter().enumerate() {
+        if crate::semantic::match_arms::pattern_repeats_above(arms, index) {
+            warnings.push(
+                Diagnostic::warning(arm.loc, msg!(keys::SE_131_DUPLICATE_MATCH_ARM))
+                    .with_code("SE-131"),
+            );
         }
-        warnings.push(
-            Diagnostic::warning(arms[index].loc, msg!(keys::SE_131_DUPLICATE_MATCH_ARM))
-                .with_code("SE-131"),
-        );
+        if arm
+            .patterns
+            .iter()
+            .enumerate()
+            .any(|(index, pattern)| arm.patterns[..index].contains(pattern))
+        {
+            warnings.push(
+                Diagnostic::warning(arm.loc, msg!(keys::SE_131_DUPLICATE_PATTERN_IN_ARM))
+                    .with_code("SE-131"),
+            );
+        }
     }
 }

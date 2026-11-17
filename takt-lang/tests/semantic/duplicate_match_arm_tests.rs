@@ -52,6 +52,19 @@ fn duplicate_pattern_is_reported() {
     );
 }
 
+#[test]
+fn duplicate_pattern_within_arm_is_reported() {
+    let src = TWO_SAME.replace("1 => { acc := acc + 1; } 1 =>", "1, 1 =>");
+    let found = duplicate_codes(&src);
+
+    assert_eq!(found.len(), 1, "ожидалось одно предупреждение: {found:?}");
+    assert!(found[0].message.contains("повторяется внутри"));
+    assert!(!matches!(
+        found[0].loc,
+        takt_lang::diagnostics::Location::Builtin
+    ));
+}
+
 /// Высказываются все недостижимые ветви, а не первая.
 #[test]
 fn every_unreachable_arm_is_reported() {
@@ -90,7 +103,7 @@ fn distinct_patterns_are_silent() {
                start Run {\n\
                \x20   always {\n\
                \x20       op := op + 1;\n\
-               \x20       match op { 1 => { acc := 1; } 2 => { acc := 2; } _ => { acc := 3; } }\n\
+               \x20       match op { 1, 2 => { acc := 1; } 3 => { acc := 2; } _ => { acc := 3; } }\n\
                \x20   }\n\
                \x20   ref Run;\n\
                }\n";
