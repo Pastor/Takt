@@ -230,7 +230,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample-diff", action="store_true")
     args = parser.parse_args()
-    if not Path("tasks").is_dir():
+    if not Path("scripts/check-links.py").is_file():
         parser.error("Запустите из корня Takt")
     writer = csv.writer(sys.stdout, delimiter="\t", lineterminator="\n")
     writer.writerow(("card", "anal_id", "export_version", "export_path", "line", "column",
