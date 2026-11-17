@@ -4,7 +4,7 @@
 //! переменных/портов.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use crate::context::Context;
@@ -24,6 +24,8 @@ pub enum UnitSnapshot {
     Node {
         current_state: Option<String>,
         variables: HashMap<String, serde_json::Value>,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        state_impls: BTreeMap<String, UnitSnapshot>,
     },
     Parallel {
         children: Vec<UnitSnapshot>,
@@ -74,12 +76,18 @@ pub fn snapshot(unit: &Unit) -> UnitSnapshot {
         UnitKind::None => UnitSnapshot::None,
         // Значения берутся из контекста модели через `Context::dump`: он и есть единый
         // источник истины о них.
-        UnitKind::Node { state, .. } => UnitSnapshot::Node {
+        UnitKind::Node {
+            state, state_impls, ..
+        } => UnitSnapshot::Node {
             current_state: state.clone(),
             variables: unit
                 .dump()
                 .iter()
                 .map(|(k, v)| (k.clone(), value_to_json(v)))
+                .collect(),
+            state_impls: state_impls
+                .iter()
+                .map(|(name, implementation)| (name.clone(), snapshot(&implementation.borrow())))
                 .collect(),
         },
         UnitKind::Parallel { units, .. } => UnitSnapshot::Parallel {
@@ -113,7 +121,19 @@ fn publish_tree(unit: &Unit) {
                 publish_tree(&child.borrow());
             }
         }
-        UnitKind::Node { .. } | UnitKind::None => {}
+        UnitKind::Node {
+            state, state_impls, ..
+        } => {
+            let mut implementations: Vec<_> = state_impls.iter().collect();
+            // Активная реализация публикуется последней, если одна модель
+            // используется в нескольких состояниях-реализациях.
+            implementations
+                .sort_unstable_by_key(|(name, _)| (state.as_ref() == Some(*name), *name));
+            for (_, implementation) in implementations {
+                publish_tree(&implementation.borrow());
+            }
+        }
+        UnitKind::None => {}
     }
 }
 
@@ -124,11 +144,13 @@ fn restore_kind(unit: &mut Unit, snap: &UnitSnapshot) {
                 state,
                 context,
                 entered_initial,
+                state_impls,
                 ..
             },
             UnitSnapshot::Node {
                 current_state,
                 variables: vars,
+                state_impls: snap_impls,
             },
         ) => {
             *state = current_state.clone();
@@ -142,6 +164,11 @@ fn restore_kind(unit: &mut Unit, snap: &UnitSnapshot) {
                     if let Some(val) = json_to_value(v) {
                         ctx.borrow_mut().set_value(k, val);
                     }
+                }
+            }
+            for (name, snap_impl) in snap_impls {
+                if let Some(implementation) = state_impls.get(name) {
+                    restore_kind(&mut implementation.borrow_mut(), snap_impl);
                 }
             }
         }
@@ -293,6 +320,7 @@ mod tests {
         let snap = UnitSnapshot::Node {
             current_state: Some("Idle".to_string()),
             variables: HashMap::new(),
+            state_impls: BTreeMap::new(),
         };
         restore(&mut unit, &snap);
         assert_eq!(unit.current_state(), Some("Idle"));
