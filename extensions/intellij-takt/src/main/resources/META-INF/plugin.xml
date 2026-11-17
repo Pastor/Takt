@@ -29,6 +29,8 @@
     <depends optional="true" config-file="takt-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Takt Scheme" anchor="right"
+                    factoryClass="org.takt.intellij.scheme.TaktSchemeToolWindowFactory"/>
         <!-- Настройки LSP-слоя (путь к `takt-lsp`). Класс не зависит от
              LSP4IJ, поэтому сервис регистрируется всегда (не в опциональном
              config-file) — путь можно хранить независимо от наличия LSP4IJ. -->

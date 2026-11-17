@@ -7,6 +7,8 @@ import com.redhat.devtools.lsp4ij.LanguageServerFactory
 import com.redhat.devtools.lsp4ij.server.OSProcessStreamConnectionProvider
 import com.redhat.devtools.lsp4ij.server.StreamConnectionProvider
 
+internal const val TAKT_LSP_ID = "lamLsp"
+
 /**
  * Фабрика языкового сервера Takt для LSP4IJ.
  *
@@ -16,11 +18,10 @@ import com.redhat.devtools.lsp4ij.server.StreamConnectionProvider
  * форматирование, hover и пр. отдаёт он, дублирования семантики на Kotlin нет
  * (единый источник - крейт `takt-lang`, драйвер 2 ADR).
  *
- * Реализуется только обязательный [createConnectionProvider]; `createLanguageClient`
- * и `getServerInterface` берутся из умолчаний LSP4IJ (стандартный клиент,
- * интерфейс `org.eclipse.lsp4j.services.LanguageServer`).
+ * Интерфейс сервера добавляет к стандартным запросам граф модели для панели схемы.
  */
 class TaktLspServerFactory : LanguageServerFactory {
+    override fun getServerInterface() = TaktGraphLanguageServer::class.java
 
     override fun createConnectionProvider(project: Project): StreamConnectionProvider =
         TaktLspConnectionProvider()

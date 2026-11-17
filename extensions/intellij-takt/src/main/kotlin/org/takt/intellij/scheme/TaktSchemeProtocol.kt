@@ -1,5 +1,9 @@
 package org.takt.intellij.scheme
 
+import com.google.gson.JsonObject
+import com.google.gson.JsonParseException
+import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
 import java.io.File
 
 /**
@@ -45,29 +49,19 @@ object TaktSchemeProtocol {
     /** Сообщение холсту: язык оболочки. */
     fun langMessage(lang: String): String = """{"type":"lang","lang":${quote(lang)}}"""
 
-    /**
-     * Строка в форме JSON.
-     *
-     * Своя, а не библиотечная: панель шлёт четыре сообщения, и зависимость ради
-     * них дороже пятнадцати строк. Экранируются кавычка, косая черта, перевод
-     * строки и управляющие знаки - раскладка приходит текстом файла.
-     */
-    fun quote(text: String): String {
-        val out = StringBuilder(text.length + 2)
-        out.append('"')
-        for (ch in text) {
-            when {
-                ch == '"' -> out.append("\\\"")
-                ch == '\\' -> out.append("\\\\")
-                ch == '\n' -> out.append("\\n")
-                ch == '\r' -> out.append("\\r")
-                ch == '\t' -> out.append("\\t")
-                ch < ' ' -> out.append("\\u%04x".format(ch.code))
-                else -> out.append(ch)
-            }
-        }
-        out.append('"')
-        return out.toString()
+    /** Сообщение холсту: текущая тема IDE. */
+    fun themeMessage(dark: Boolean): String =
+        """{"type":"theme","theme":"${if (dark) "dark" else "light"}"}"""
+
+    fun quote(text: String): String = JsonPrimitive(text).toString()
+
+    fun graphObject(json: String): JsonObject? =
+        parseObject(json)?.takeIf { it.get("sheets")?.isJsonArray == true }
+
+    fun parseObject(json: String): JsonObject? = try {
+        JsonParser.parseString(json).takeIf { it.isJsonObject }?.asJsonObject
+    } catch (_: JsonParseException) {
+        null
     }
 
     /** Разобранное сообщение холста. */
@@ -82,15 +76,9 @@ object TaktSchemeProtocol {
         data class Select(val line: Int, val character: Int) : Incoming
     }
 
-    /**
-     * Разбирает сообщение холста.
-     *
-     * Разбор ручной по той же причине, что и сборка: сообщений три, формы их
-     * известны, а неизвестное сообщение - не отказ, а `null`.
-     */
-    fun parse(message: String): Incoming? = when (field(message, "type")) {
+    fun parse(message: JsonObject): Incoming? = when (string(message, "type")) {
         "ready" -> Incoming.Ready
-        "layout" -> Incoming.Layout(field(message, "text") ?: "")
+        "layout" -> string(message, "text")?.let { Incoming.Layout(it) }
         "select" -> {
             val line = number(message, "line")
             val character = number(message, "character")
@@ -99,51 +87,10 @@ object TaktSchemeProtocol {
         else -> null
     }
 
-    /** Строковое поле объекта JSON; `null` - поля нет. */
-    fun field(message: String, name: String): String? {
-        val at = message.indexOf("\"$name\"")
-        if (at < 0) return null
-        var i = message.indexOf(':', at)
-        if (i < 0) return null
-        i++
-        while (i < message.length && message[i].isWhitespace()) i++
-        if (i >= message.length || message[i] != '"') return null
-        i++
-        val out = StringBuilder()
-        while (i < message.length) {
-            val ch = message[i]
-            if (ch == '"') return out.toString()
-            if (ch == '\\' && i + 1 < message.length) {
-                i++
-                when (val esc = message[i]) {
-                    'n' -> out.append('\n')
-                    'r' -> out.append('\r')
-                    't' -> out.append('\t')
-                    'u' -> {
-                        val code = message.substring(i + 1, i + 5).toInt(16)
-                        out.append(code.toChar())
-                        i += 4
-                    }
-                    else -> out.append(esc)
-                }
-            } else {
-                out.append(ch)
-            }
-            i++
-        }
-        return null
-    }
+    fun string(message: JsonObject, name: String): String? =
+        message.get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
 
-    /** Числовое поле объекта JSON; `null` - поля нет или оно не целое. */
-    fun number(message: String, name: String): Int? {
-        val at = message.indexOf("\"$name\"")
-        if (at < 0) return null
-        var i = message.indexOf(':', at)
-        if (i < 0) return null
-        i++
-        while (i < message.length && message[i].isWhitespace()) i++
-        val start = i
-        while (i < message.length && (message[i].isDigit() || (i == start && message[i] == '-'))) i++
-        return message.substring(start, i).toIntOrNull()
-    }
+    private fun number(message: JsonObject, name: String): Int? =
+        message.get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
+            ?.asString?.toIntOrNull()?.takeIf { it >= 0 }
 }

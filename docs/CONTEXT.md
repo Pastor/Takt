@@ -49,6 +49,12 @@
 листа (TAKT-700). Ресурсы панели IntelliJ собираются из веб-исходников
 скриптом `scripts/build-plugin-webview.py`.
 
+Панель Takt Scheme для IntelliJ реализована в рабочей ветке
+`codex/TAKT-540`. Общий `precheck` доходит до проверки ссылок в
+перенесённых карточках `tasks/` и останавливается на ней. Результаты
+проверок панели зафиксированы в [протоколе](PROTOCOL.md) и карточке
+`TAKT-540`.
+
 Архивные материалы доступны в Git на момент переноса.
 [Прежний контекст](https://github.com/Pastor/Takt/blob/3c154a13d979b18312a1250ebfbe3db2fa5247d3/CLAUDE.md) ·
 [Карточки фич](https://github.com/Pastor/Takt/tree/3c154a13d979b18312a1250ebfbe3db2fa5247d3/docs/features) ·

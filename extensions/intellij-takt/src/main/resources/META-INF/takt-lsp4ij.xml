@@ -3,6 +3,11 @@
          при наличии плагина com.redhat.devtools.lsp4ij (`<depends optional=…>` в
          plugin.xml): без LSP4IJ плагин грузится и работает как 0.4.0 (лексический
          слой 0022, навигация 0023) — семантический слой просто не включается. -->
+    <extensions defaultExtensionNs="com.intellij">
+        <projectService serviceInterface="org.takt.intellij.scheme.TaktSchemeGraphSource"
+                        serviceImplementation="org.takt.intellij.lsp.TaktLspSchemeGraphSource"/>
+    </extensions>
+
     <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
         <!-- Языковой сервер Takt: поднимает `takt-lsp` по stdio. -->
         <server

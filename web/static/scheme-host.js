@@ -18,7 +18,7 @@
 //
 // Сообщения ходят через `postMessage`. Снаружи внутрь: `graph` - граф модели в
 // форме `takt/graph`, `layout` - содержимое файла раскладки, `cursor` - позиция
-// курсора в редакторе, `lang` - язык оболочки. Изнутри наружу: `layout` -
+// курсора в редакторе, `lang` - язык оболочки, `theme` - тема IDE. Изнутри наружу: `layout` -
 // раскладка изменилась, `select` - выбран узел, `ready` - холст готов.
 
 import * as i18n from "./i18n.js";
@@ -28,7 +28,7 @@ import { Scheme } from "./scheme.js";
 import * as tip from "./tip.js";
 
 /** Виды сообщений снаружи внутрь. */
-export const INCOMING = ["graph", "layout", "cursor", "lang"];
+export const INCOMING = ["graph", "layout", "cursor", "lang", "theme"];
 
 /** Виды сообщений изнутри наружу. */
 export const OUTGOING = ["ready", "layout", "select"];
@@ -54,6 +54,9 @@ export function parseIncoming(data) {
     const { line, character } = data;
     if (!Number.isInteger(line) || !Number.isInteger(character)) return null;
     return { type, line, character };
+  }
+  if (type === "theme") {
+    return data.theme === "light" || data.theme === "dark" ? { type, theme: data.theme } : null;
   }
   return { type, lang: typeof data.lang === "string" ? data.lang : "" };
 }
@@ -114,6 +117,7 @@ export function attach(dom, options = {}) {
     else if (message.type === "layout") scheme.setLayout(layoutFile.parse(message.text).layout);
     else if (message.type === "cursor") scheme.highlight(message.line, message.character);
     else if (message.type === "lang") applyLanguage(message.lang);
+    else if (message.type === "theme") document.documentElement.dataset.theme = message.theme;
   });
 
   post(readyMessage());
@@ -137,6 +141,8 @@ export async function main() {
   ]) {
     dom[id] = document.getElementById(id);
   }
+  const colorScheme = matchMedia("(prefers-color-scheme: dark)");
+  document.documentElement.dataset.theme = colorScheme.matches ? "dark" : "light";
   await i18n.load(i18n.pick(i18n.stored(localStorage), navigator.languages ?? []));
   i18n.apply(document);
   tip.attach(document);
@@ -174,6 +180,18 @@ export async function main() {
       docks,
       legendSplits: [dom.legendrows, dom.legendcols],
     },
-    {},
+    {
+      post: (message) => {
+        if (typeof window.taktSchemePost === "function") window.taktSchemePost(message);
+        else window.parent?.postMessage(message, "*");
+      },
+      subscribe: (handler) => {
+        window.addEventListener("message", (event) => {
+          if (event.source === window.parent) handler(event.data);
+        });
+        // JCEF может подключить мост до или после загрузки словаря.
+        window.addEventListener("takt-scheme-connect", () => window.taktSchemePost?.(readyMessage()));
+      },
+    },
   );
 }

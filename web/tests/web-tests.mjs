@@ -1798,6 +1798,9 @@ test("холст панели: чужое сообщение пропускае�
   // В окне редактора соседствуют свои источники сообщений: панель обязана
   // пропускать то, что адресовано не ей, а не падать и не рисовать пустоту.
   assert.equal(host.parseIncoming(null), null);
+  assert.deepEqual(host.parseIncoming({ type: "theme", theme: "dark" }), { type: "theme", theme: "dark" });
+  assert.deepEqual(host.parseIncoming({ type: "theme", theme: "light" }), { type: "theme", theme: "light" });
+  assert.equal(host.parseIncoming({ type: "theme", theme: "auto" }), null);
   assert.equal(host.parseIncoming({ type: "чужое" }), null);
   assert.deepEqual(host.parseIncoming({ type: "layout", text: "x" }), { type: "layout", text: "x" });
   assert.deepEqual(host.parseIncoming({ type: "layout" }), { type: "layout", text: "" });

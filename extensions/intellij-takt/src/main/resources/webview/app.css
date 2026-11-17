@@ -300,45 +300,43 @@
 /* ── Сырьё: тёмная тема ─────────────────────────────────────────────────── */
 /* Подменяется только сырьё: роли объявлены выше и остаются теми же - иначе
  * тема накрывает страницу наполовину. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Тёмной темы у образца нет вовсе. Она наша, и
-     * это ожидание, а не украшение: код читают долго. Тон взят у той же
-     * чертёжной бумаги - тёплый серо-зелёный, а не синий. */
-    --raw-ink: #E3E5DC;
-    --raw-ink-soft: #9AA093;
-    --raw-ink-off: #5F6559;
-    --raw-paper: #1C1F1A;
-    --raw-paper-sunken: #171A15;
-    --raw-paper-raised: #24281F;
-    --raw-field: #24281F;
-    --raw-line: #333829;
-    --raw-line-soft: #2A2E24;
-    --raw-accent: #8FA37F;
-    --raw-accent-ink: #171A15;
-    --raw-alarm: #D89279;
-    --raw-alarm-ink: #EFC3B1;
-    --raw-alarm-bg: #3A2620;
-    --raw-warn: #D9BC6A;
-    --raw-warn-ink: #EBD79B;
-    --raw-warn-bg: #3A3320;
-    --raw-yes: #333D2E;
-    --raw-yes-ink: #D8E0CE;
-    --raw-run: #1F3147;
-    --raw-run-ink: #CBDDF2;
-    --raw-run-line: #7BA6D8;
-    /* Лист светлее фона области и темнее карточки: тот же порядок слоёв. */
-    --raw-sheet: #20241C;
-    --raw-sheet-ink: #E3E5DC;
+:root[data-theme="dark"] {
+  /* Тёмной темы у образца нет вовсе. Она наша, и
+   * это ожидание, а не украшение: код читают долго. Тон взят у той же
+   * чертёжной бумаги - тёплый серо-зелёный, а не синий. */
+  --raw-ink: #E3E5DC;
+  --raw-ink-soft: #9AA093;
+  --raw-ink-off: #5F6559;
+  --raw-paper: #1C1F1A;
+  --raw-paper-sunken: #171A15;
+  --raw-paper-raised: #24281F;
+  --raw-field: #24281F;
+  --raw-line: #333829;
+  --raw-line-soft: #2A2E24;
+  --raw-accent: #8FA37F;
+  --raw-accent-ink: #171A15;
+  --raw-alarm: #D89279;
+  --raw-alarm-ink: #EFC3B1;
+  --raw-alarm-bg: #3A2620;
+  --raw-warn: #D9BC6A;
+  --raw-warn-ink: #EBD79B;
+  --raw-warn-bg: #3A3320;
+  --raw-yes: #333D2E;
+  --raw-yes-ink: #D8E0CE;
+  --raw-run: #1F3147;
+  --raw-run-ink: #CBDDF2;
+  --raw-run-line: #7BA6D8;
+  /* Лист светлее фона области и темнее карточки: тот же порядок слоёв. */
+  --raw-sheet: #20241C;
+  --raw-sheet-ink: #E3E5DC;
 
-    --tok-keyword: #c58af9;
-    --tok-type: #7cb7e8;
-    --tok-number: #e0a06a;
-    --tok-constant: #e79bc4;
-    --tok-string: #86d6a4;
-    --tok-comment: #7E827C;
-    --tok-function: #7cb7e8;
-  }
+  --tok-keyword: #c58af9;
+  --tok-type: #7cb7e8;
+  --tok-number: #e0a06a;
+  --tok-constant: #e79bc4;
+  --tok-string: #86d6a4;
+  --tok-comment: #7E827C;
+  --tok-function: #7cb7e8;
 }
 
 * { box-sizing: border-box; }

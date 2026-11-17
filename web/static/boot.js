@@ -11,6 +11,13 @@ import { t } from "./i18n.js";
 import * as alerts from "./alerts.js";
 import { registerOffline } from "./offline.js";
 
+const colorScheme = matchMedia("(prefers-color-scheme: dark)");
+const applyTheme = () => {
+  document.documentElement.dataset.theme = colorScheme.matches ? "dark" : "light";
+};
+applyTheme();
+colorScheme.addEventListener("change", applyTheme);
+
 main().catch((error) => {
   // Отказ загрузки модуля обязан быть виден: пустая страница неотличима от работающей,
   // пока автор не начнёт печатать. Сказано в двух местах: строка шапки называет
