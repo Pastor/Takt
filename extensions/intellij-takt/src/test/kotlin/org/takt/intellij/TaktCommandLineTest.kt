@@ -49,6 +49,14 @@ class TaktCommandLineTest : TestCase() {
         )
     }
 
+    fun testExportUsesSimulatorAndPreservesPathsWithSpaces() {
+        val model = "/p with spaces/модель.takt"
+        val output = "/p with spaces/export"
+        val command = ready(TaktCommandLine.build(Mode.EXPORT, Params(filePath = model, outputDir = output), tools))
+        assertEquals(listOf("/opt/takt/takt-sim", "export", "-I", "/lib/a", "-I", "/lib/b", "-o", output, model), command)
+        assertTrue(TaktCommandLine.build(Mode.EXPORT, Params(filePath = model), Tools()) is Result.Refused)
+    }
+
     /** Симуляция: свой набор флагов. */
     fun testSimulateCommandLine() {
         val command = ready(

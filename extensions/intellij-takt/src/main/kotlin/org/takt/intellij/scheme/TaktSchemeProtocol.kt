@@ -69,6 +69,9 @@ object TaktSchemeProtocol {
         /** Холст готов принимать данные. */
         data object Ready : Incoming
 
+        /** Запрошен экспорт модели, привязанной к текущей сессии панели. */
+        data object Export : Incoming
+
         /** Раскладка изменилась: записать текст в файл рядом с моделью. */
         data class Layout(val text: String) : Incoming
 
@@ -78,6 +81,7 @@ object TaktSchemeProtocol {
 
     fun parse(message: JsonObject): Incoming? = when (string(message, "type")) {
         "ready" -> Incoming.Ready
+        "export" -> Incoming.Export
         "layout" -> string(message, "text")?.let { Incoming.Layout(it) }
         "select" -> {
             val line = number(message, "line")

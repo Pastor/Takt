@@ -40,6 +40,7 @@ import * as flags from "../static/flags.js";
 import * as md from "../static/md.js";
 import * as panels from "../static/panels.js";
 import * as host from "../static/scheme-host.js";
+import { Scheme } from "../static/scheme.js";
 import * as build from "../static/build.js";
 import * as project from "../static/project.js";
 import * as api from "../static/api.js";
@@ -1821,6 +1822,27 @@ test("холст панели: наружу уходит правка раскл
   // Узел без позиции курсор не двигает: чужая координата хуже отсутствующей.
   assert.equal(host.selectMessage({}), null);
   assert.deepEqual(host.readyMessage(), { type: "ready" });
+});
+
+test("холст панели: кнопка сообщает хосту об экспорте только при наличии графа", ({ mock }) => {
+  mock.method(Scheme.prototype, "wire", () => {});
+  mock.method(Scheme.prototype, "draw", () => {});
+  mock.method(Scheme.prototype, "checkStale", () => {});
+  const button = new EventTarget();
+  let receive;
+  const messages = [];
+  host.attach({ exportButton: button }, {
+    post: (message) => messages.push(message),
+    subscribe: (handler) => { receive = handler; },
+  });
+  assert.equal(button.disabled, true);
+  button.dispatchEvent(new Event("click"));
+  receive({ type: "graph", graph: { sheets: [] } });
+  assert.equal(button.disabled, false);
+  button.dispatchEvent(new Event("click"));
+  assert.deepEqual(messages, [{ type: "ready" }, { type: "export" }]);
+  receive({ type: "graph", graph: null });
+  assert.equal(button.disabled, true);
 });
 
 test("панели: место набирает их в линию, а не в столбец", async () => {

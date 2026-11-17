@@ -1825,6 +1825,20 @@ input[type="number"] { height: var(--h-dense); padding: 0 var(--gap-half); }
 .tool-dock:empty { display: none; }
 .tool-dock-tl { left: var(--gap); top: var(--gap); }
 .tool-dock-tr { right: calc(var(--h-control) + var(--gap) * 2); top: var(--gap); justify-content: flex-end; }
+/* Панель прогона занимает верхнюю строку, редактор прокручивается под ней. */
+.tool-dock-tr:has(> .sim-io:not([hidden])):not(:has(> #panel-run)) {
+  top: calc(var(--h-control) + var(--gap) * 2);
+  bottom: var(--gap);
+  align-items: flex-start;
+  z-index: 4;
+  pointer-events: none;
+}
+.tool-dock-tr > .sim-io {
+  max-height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  pointer-events: auto;
+}
 .tool-dock-bl { left: var(--gap); bottom: var(--gap); }
 /* Нижний правый угол отступает от миникарты ровно тогда, когда она видна: её
  * показ - выбор читателя, и отступ, привязанный к ширине окна, оставлял бы
@@ -2383,6 +2397,28 @@ input[type="number"] { height: var(--h-dense); padding: 0 var(--gap-half); }
 }
 .sim-io-note { font-size: var(--text-xs); color: var(--on-surface-soft); }
 .sim-io-note[hidden] { display: none; }
+
+.sim-io-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gap-quarter);
+}
+#simio-live > * + *, #scenario-tools > * + * { margin-top: var(--gap-half); }
+#scenario-tools { width: min(38ch, 62vw); }
+#scenario-fields label {
+  display: grid;
+  margin-bottom: var(--gap-quarter);
+  font-size: var(--text-sm);
+}
+#scenario-fields textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: var(--font-code);
+  user-select: text;
+  -webkit-user-select: text;
+}
 
 /* ── Панель инструментов схемы (`.scheme-tools`) ─────────────────────────
  * Вид панели - общий; здесь только то, чем панель схемы отличается: она стоит

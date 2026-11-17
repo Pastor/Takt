@@ -6,7 +6,7 @@
 // В панели редактора компилятор уже есть - это `takt-lsp`, - а раскладка лежит
 // файлом рядом с моделью. Поэтому здесь холст не считает ничего: граф, текст
 // раскладки и положение курсора приходят снаружи, а наружу уходят правка
-// раскладки и выбор узла.
+// раскладки, выбор узла и запрос экспорта.
 //
 // # Разметка у холста одна
 //
@@ -19,7 +19,8 @@
 // Сообщения ходят через `postMessage`. Снаружи внутрь: `graph` - граф модели в
 // форме `takt/graph`, `layout` - содержимое файла раскладки, `cursor` - позиция
 // курсора в редакторе, `lang` - язык оболочки, `theme` - тема IDE. Изнутри наружу: `layout` -
-// раскладка изменилась, `select` - выбран узел, `ready` - холст готов.
+// раскладка изменилась, `select` - выбран узел, `ready` - холст готов,
+// `export` - нажатие кнопки экспорта.
 
 import * as i18n from "./i18n.js";
 import { t } from "./i18n.js";
@@ -31,7 +32,7 @@ import * as tip from "./tip.js";
 export const INCOMING = ["graph", "layout", "cursor", "lang", "theme"];
 
 /** Виды сообщений изнутри наружу. */
-export const OUTGOING = ["ready", "layout", "select"];
+export const OUTGOING = ["ready", "layout", "select", "export"];
 
 /**
  * Разбирает сообщение хоста.
@@ -107,14 +108,24 @@ export function attach(dom, options = {}) {
     who: () => options.who ?? "",
   });
 
+  const { exportButton } = dom;
+  if (exportButton) {
+    exportButton.disabled = true;
+    exportButton.addEventListener("click", () => {
+      if (!exportButton.disabled) post({ type: "export" });
+    });
+  }
+
   subscribe((data) => {
     const message = parseIncoming(data);
     if (!message) return;
     // Признак успеха у моста браузера лежит в самом ответе (`ok`), а у сервера
     // отказ приходит кодом протокола - до холста доезжает либо граф, либо
     // ничего. Признак ставится здесь, чтобы у графа осталась одна форма.
-    if (message.type === "graph") scheme.setGraph(message.graph ? { ok: true, ...message.graph } : null);
-    else if (message.type === "layout") scheme.setLayout(layoutFile.parse(message.text).layout);
+    if (message.type === "graph") {
+      scheme.setGraph(message.graph ? { ok: true, ...message.graph } : null);
+      if (exportButton) exportButton.disabled = !message.graph;
+    } else if (message.type === "layout") scheme.setLayout(layoutFile.parse(message.text).layout);
     else if (message.type === "cursor") scheme.highlight(message.line, message.character);
     else if (message.type === "lang") applyLanguage(message.lang);
     else if (message.type === "theme") document.documentElement.dataset.theme = message.theme;
@@ -137,7 +148,7 @@ export async function main() {
     "scheme", "sheet", "map", "stage", "legend", "crumbs", "scheme-up", "nav",
     "scheme-empty", "scheme-notice", "scheme-notice-text", "scheme-drop", "zoom",
     "scheme-modal", "scheme-tabs", "scheme-settings", "scheme-save", "scheme-cancel",
-    "panel-run", "panel-view", "panel-sheet", "legendrows", "legendcols",
+    "panel-run", "panel-view", "panel-sheet", "legendrows", "legendcols", "scheme-export",
   ]) {
     dom[id] = document.getElementById(id);
   }
@@ -161,6 +172,7 @@ export async function main() {
       crumbsUp: dom["scheme-up"],
       nav: dom.nav,
       tools: dom.scheme,
+      exportButton: dom["scheme-export"],
       empty: dom["scheme-empty"],
       notice: dom["scheme-notice"],
       noticeText: dom["scheme-notice-text"],

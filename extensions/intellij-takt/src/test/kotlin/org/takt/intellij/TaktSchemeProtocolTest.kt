@@ -28,6 +28,11 @@ class TaktSchemeProtocolTest {
     }
 
     @Test
+    fun exportRequestUsesOnlyTheActiveEditorContext() {
+        assertEquals(Incoming.Export, parse("""{"type":"export","path":"/ignored.takt","args":["--format","mp4"]}"""))
+    }
+
+    @Test
     fun graphRequiresSheets() {
         assertNotNull(TaktSchemeProtocol.graphObject("""{"sheets":[]}"""))
         assertNull(TaktSchemeProtocol.graphObject("""{"sheets":null}"""))

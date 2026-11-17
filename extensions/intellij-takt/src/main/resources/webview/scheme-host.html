@@ -70,6 +70,34 @@
                data-i18n-attr="aria-label:scheme.panel.io" aria-label="Входы и выходы">
             <span class="tool-grip" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5v11M14.5 6.5v11"/></svg></span>
             <div class="sim-io-body">
+              <div class="sim-io-actions">
+                <button id="scenario-edit" type="button" aria-pressed="false" data-i18n="scenarioEdit.toggle">Правка сценария</button>
+                <button id="scenario-import-open" type="button" data-i18n="scenarioEdit.import">Открыть JSON</button>
+                <input id="scenario-import" type="file" accept=".json,application/json" hidden
+                       data-i18n-attr="aria-label:scenarioEdit.import" aria-label="Открыть JSON">
+              </div>
+              <div id="scenario-tools" hidden>
+                <div class="sim-io-actions">
+                  <button id="scenario-prev" type="button" data-i18n="scenarioEdit.prev">Назад</button>
+                  <output id="scenario-position"></output>
+                  <button id="scenario-next" type="button" data-i18n="scenarioEdit.next">Далее</button>
+                </div>
+                <output id="scenario-progress" class="sim-io-note"></output>
+                <form id="scenario-fields">
+                  <label>in_ports<textarea name="in_ports" rows="2" spellcheck="false"></textarea></label>
+                  <label>guard<textarea name="guard" rows="2" spellcheck="false"></textarea></label>
+                  <label>extern<textarea name="extern" rows="2" spellcheck="false"></textarea></label>
+                  <label>_step<textarea name="_step" rows="1" spellcheck="false"></textarea></label>
+                  <div class="sim-io-actions">
+                    <button id="scenario-apply" type="submit" data-i18n="scenarioEdit.apply">Применить</button>
+                    <button id="scenario-insert" type="button" data-i18n="scenarioEdit.insert">Вставить шаг</button>
+                    <button id="scenario-delete" type="button" data-i18n="scenarioEdit.delete">Удалить шаг</button>
+                    <button id="scenario-save" type="button" data-i18n="account.save">Сохранить</button>
+                    <button id="scenario-restart" type="button" data-i18n="scenarioEdit.restart">Сбросить прогон</button>
+                  </div>
+                </form>
+              </div>
+              <div id="simio-live">
               <div class="seg">
                 <button id="simio-in" type="button" aria-pressed="true" data-i18n="simPanel.inputs">Входы</button>
                 <button id="simio-out" type="button" aria-pressed="false" data-i18n="simPanel.outputs">Выходы</button>
@@ -77,6 +105,13 @@
               <div id="simio-empty" class="sim-io-note" data-i18n="simPanel.empty">Порты появятся после открытия прогона</div>
               <div id="simio-inputs" class="sim-io-list"></div>
               <div id="simio-outputs" class="sim-io-list" hidden></div>
+              <div class="sim-io-actions">
+                <button id="sim-record" type="button" aria-pressed="false" data-i18n="simRecord.record">Запись</button>
+                <output id="sim-record-count" class="sim-io-note"></output>
+                <button id="sim-record-download" type="button" hidden data-i18n="simRecord.download">Скачать JSON</button>
+                <button id="sim-record-save" type="button" hidden data-i18n="simRecord.save">Сохранить в проект</button>
+              </div>
+              </div>
             </div>
           </div>
           <!-- Вид листа: масштаб, вписать, к началу, раскладка заново -->
@@ -102,6 +137,9 @@
             <button class="icon-btn" type="button" data-act="legend-float" aria-pressed="false" data-i18n-attr="aria-label:scheme.legend.float;data-tip:scheme.legend.float" aria-label="" data-tip=""><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 3.5h17v17h-17z"/><path d="M8.5 8.5h9v6h-9z"/></svg></button>
             <button class="icon-btn" type="button" data-act="pin-add" data-i18n-attr="aria-label:scheme.pinAdd;data-tip:scheme.pinAdd" aria-label="" data-tip=""><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20v-8h8"/><circle cx="12" cy="12" r="2.5"/><path d="M16.5 6.5h5M19 4v5"/></svg></button>
             <button class="icon-btn" type="button" data-act="nav" aria-pressed="false" data-i18n-attr="aria-label:scheme.navigator;data-tip:scheme.navigatorHint" aria-label="" data-tip=""><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 4.5h17v15h-17z"/><path d="M9 4.5v15"/><path d="M12 9h6M12 12h6M12 15h4"/></svg></button>
+            <!-- Экспорт: картинка листа, модели или проекта и видео прогона. Рисует
+                 модуль по файлу раскладки - тем же носителем, что командная строка. -->
+            <button id="scheme-export" class="icon-btn" type="button" data-i18n-attr="aria-label:scheme.export;data-tip:scheme.export" aria-label="" data-tip=""><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 13.5v6h15v-6"/><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/></svg></button>
           </div>
           </div>
           <div id="nav" class="scheme-nav" hidden></div>

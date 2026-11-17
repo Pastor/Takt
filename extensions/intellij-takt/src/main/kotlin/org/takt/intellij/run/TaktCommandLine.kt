@@ -20,6 +20,9 @@ object TaktCommandLine {
 
         /** `takt-sim` - прогон модели по тактам. */
         SIMULATE,
+
+        /** `takt-sim export` - выгрузка схемы проекта. */
+        EXPORT,
     }
 
     /** Параметры конкретного запуска (то, что задал пользователь в конфигурации). */
@@ -65,12 +68,12 @@ object TaktCommandLine {
     fun build(mode: Mode, params: Params, tools: Tools): Result {
         val binary = when (mode) {
             Mode.COMPILE -> tools.compilerPath
-            Mode.SIMULATE -> tools.simulatorPath
+            Mode.SIMULATE, Mode.EXPORT -> tools.simulatorPath
         }.trim()
         if (binary.isEmpty()) {
             val what = if (mode == Mode.COMPILE) "компилятора taktc" else "симулятора takt-sim"
             return Result.Refused(
-                "Путь к $what не задан. Укажите его в «Settings | Languages & Frameworks | Takt»."
+                "Путь к $what не задан. Укажите его в «Settings | Tools | Takt Language Server»."
             )
         }
         val file = params.filePath.trim()
@@ -92,6 +95,11 @@ object TaktCommandLine {
                 addFlag(command, "-s", params.scenario)
                 addFlag(command, "-n", params.steps)
                 command += splitArgs(params.extraArgs)
+                addFlag(command, "-o", params.outputDir)
+            }
+            Mode.EXPORT -> {
+                command += "export"
+                addIncludeDirs(command, tools.includeDirs)
                 addFlag(command, "-o", params.outputDir)
             }
         }

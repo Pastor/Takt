@@ -61,16 +61,6 @@ class TaktRunConfiguration(
         extraArgs = options.extraArgs,
     )
 
-    /** Пути к инструментам и каталоги импортов - из общих настроек плагина. */
-    private fun tools(): TaktCommandLine.Tools {
-        val settings = TaktLspSettings.getInstance()
-        return TaktCommandLine.Tools(
-            compilerPath = settings.compilerPath,
-            simulatorPath = settings.simulatorPath,
-            includeDirs = settings.includeDirs,
-        )
-    }
-
     fun mutableOptions(): Options = options
 
     fun runMode(): TaktCommandLine.Mode = mode
@@ -83,14 +73,14 @@ class TaktRunConfiguration(
      * исключением в логе (драйвер 4 ADR).
      */
     override fun checkConfiguration() {
-        when (val result = TaktCommandLine.build(mode, params(), tools())) {
+        when (val result = TaktCommandLine.build(mode, params(), configuredTaktTools())) {
             is TaktCommandLine.Result.Refused -> throw RuntimeConfigurationError(result.message)
             is TaktCommandLine.Result.Ready -> {}
         }
     }
 
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState? {
-        val built = TaktCommandLine.build(mode, params(), tools())
+        val built = TaktCommandLine.build(mode, params(), configuredTaktTools())
         val command = when (built) {
             is TaktCommandLine.Result.Ready -> built.command
             is TaktCommandLine.Result.Refused -> throw RuntimeConfigurationError(built.message)
@@ -135,4 +125,14 @@ class SimulateFactory(type: ConfigurationType) : ConfigurationFactory(type) {
     override fun getName(): @NlsActions.ActionText String = "Simulate"
     override fun createTemplateConfiguration(project: Project): RunConfiguration =
         TaktRunConfiguration(project, this, "Takt Simulate", TaktCommandLine.Mode.SIMULATE)
+}
+
+/** Общие пути запуска для конфигураций и панели схемы. */
+internal fun configuredTaktTools(): TaktCommandLine.Tools {
+    val settings = TaktLspSettings.getInstance()
+    return TaktCommandLine.Tools(
+        compilerPath = settings.compilerPath,
+        simulatorPath = settings.simulatorPath,
+        includeDirs = settings.includeDirs,
+    )
 }

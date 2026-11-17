@@ -18,7 +18,10 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.SafeWriteRequestor
 import com.intellij.openapi.vfs.VFileProperty
@@ -73,6 +76,7 @@ private class TaktSchemePanel(
     private val refresh = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
     private var disposed = false
     private var ready = false
+    private var exporting = false
     private var target: Target? = null
     private var session = 0L
     private var revision = 0L
@@ -146,11 +150,52 @@ private class TaktSchemePanel(
         ) return
         when (message) {
             TaktSchemeProtocol.Incoming.Ready -> Unit
+            TaktSchemeProtocol.Incoming.Export -> export(active)
             is TaktSchemeProtocol.Incoming.Layout -> saveLayout(active, message.text)
             is TaktSchemeProtocol.Incoming.Select -> {
                 if (paintedRevision == revision) select(active.editor, message)
             }
         }
+    }
+
+    private fun export(active: Target) {
+        if (exporting) return
+        val documents = FileDocumentManager.getInstance()
+        val path = active.file.path
+        val directory = active.directory.path
+        exporting = true
+        documents.saveAllDocuments()
+        if (documents.isDocumentUnsaved(active.editor.document) ||
+            active.layout()?.let(documents::getCachedDocument)?.let(documents::isDocumentUnsaved) == true
+        ) {
+            exporting = false
+            Messages.showErrorDialog(project, "Сохраните модель и раскладку перед экспортом.", "Экспорт схемы Takt")
+            return
+        }
+
+        val output = File(directory, "export")
+        val workDirectory = project.basePath ?: directory
+        object : Task.Backgroundable(project, "Экспорт схемы Takt", true) {
+            override fun run(indicator: ProgressIndicator) {
+                exportScheme(path, output, workDirectory, indicator)
+            }
+
+            override fun onSuccess() {
+                if (disposed || project.isDisposed) return
+                VirtualFileManager.getInstance().asyncRefresh(null)
+                Messages.showInfoMessage(project, "Схема выгружена в $output", title)
+            }
+
+            override fun onThrowable(error: Throwable) {
+                if (disposed || project.isDisposed) return
+                val message = error.localizedMessage ?: error.javaClass.simpleName
+                Messages.showErrorDialog(project, message.replace('<', '‹'), title)
+            }
+
+            override fun onFinished() {
+                exporting = false
+            }
+        }.queue()
     }
 
     private fun bindEditor(force: Boolean = false) {
